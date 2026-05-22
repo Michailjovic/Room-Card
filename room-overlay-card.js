@@ -218,7 +218,7 @@ class RoomOverlayCardEditor extends HTMLElement {
 
   _fire(config) {
     this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config },
+      detail: { config: { type: 'custom:room-overlay-card', ...config } },
       bubbles: true, composed: true,
     }));
   }
