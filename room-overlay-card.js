@@ -378,6 +378,10 @@ class RoomOverlayCardEditor extends HTMLElement {
   }
 
   _render() {
+    // Save which <details> panels are open before wiping innerHTML
+    const openPanels = new Set();
+    this.querySelectorAll('details').forEach((d, i) => { if (d.open) openPanels.add(i); });
+
     const c = this._config;
     const e = this._e.bind(this);
     const ov = c.overlays ?? [];
@@ -409,7 +413,7 @@ room-overlay-card-editor input[type=checkbox]{width:auto;margin-right:6px;}
 room-overlay-card-editor .cb-row{display:flex;align-items:center;font-size:14px;color:var(--primary-text-color,#000);}
 </style>
 
-<details open>
+<details>
   <summary>Základní nastavení ▸</summary>
   <div class="body">
     <label>Obrázek místnosti (base_image) *<br>
@@ -463,6 +467,11 @@ room-overlay-card-editor .cb-row{display:flex;align-items:center;font-size:14px;
 </details>`;
 
     this._listen();
+
+    // Restore open panels (first panel open by default on first render)
+    this.querySelectorAll('details').forEach((d, i) => {
+      d.open = openPanels.size > 0 ? openPanels.has(i) : i === 0;
+    });
   }
 
   _listen() {
