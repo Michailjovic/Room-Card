@@ -224,12 +224,14 @@ class RoomOverlayCardEditor extends HTMLElement {
   }
 
   _collectConfig() {
-    const c = {};
+    // Start with a copy of existing config to preserve unmanaged keys (grid_options, etc.)
+    const c = { ...this._config };
 
     // Skalární pole
     this.querySelectorAll('[data-key]').forEach(el => {
       const v = el.type === 'checkbox' ? el.checked : el.value;
       if (v !== '' && v !== false) c[el.dataset.key] = v;
+      else delete c[el.dataset.key];
     });
 
     // filter_conditions jako JSON
