@@ -1,6 +1,6 @@
 {
   "name": "Room Overlay Card",
-  "description": "Lovelace karta pro vizualizaci místností — obrazkové vrstvy, podmíněné CSS přechody, klikatelné zóny, embedded HA karty. GUI editor.",
+  "description": "Lovelace card for room visualization — image overlay layers, conditional CSS transitions, clickable zones, embedded HA cards. Includes GUI editor.",
   "render_readme": true,
   "homeassistant": "2023.9.0",
   "filename": "room-overlay-card.js"

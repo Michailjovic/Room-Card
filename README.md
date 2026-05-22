@@ -3,44 +3,44 @@
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/Michailjovic/Room-Card.svg)](https://github.com/Michailjovic/Room-Card/releases)
 
-Lovelace karta pro vizualizaci místností — základní obrázek s obrazkovými vrstvami, podmíněnými CSS přechody, klikatelnými zónami, plovoucími status chipy a embedded HA kartami. Plný GUI editor.
+A Home Assistant Lovelace card for room visualization — base image with conditional CSS filters, overlay image layers, clickable zones, floating status badges, and embedded HA cards. Includes a full GUI editor.
 
 ![Room Overlay Card preview](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/preview.png)
 
 ---
 
-## Funkce
+## Features
 
-- **Základní obrázek** — libovolný poměr stran, border-radius
-- **CSS filter engine** — brightness, saturate, sepia, … řízené stavem entit s plynulou animací
-- **Overlay vrstvy** — průhledné PNG vrstvy s podmíněnou `opacity` a `filter`; dynamický výběr obrázku dle stavu entity
-- **Klikatelné zóny** — neviditelné oblasti nad obrázkem; navigate / more-info / call-service / toggle / browser-mod-popup
-- **Status chipy (badges)** — plovoucí čipy v rozích s MDI ikonou, podmíněnou barvou ikony a podmíněným textem
-- **Embedded HA karty** — libovolná HA karta umístěná na souřadnicích (tile, gauge, custom:mini-graph-card, …)
-- **Test mód** — červené ohraničení zón + modré ohraničení elementů pro ladění pozic
-- **GUI editor** — kompletní nastavení bez YAML
-
----
-
-## Instalace
-
-### Přes HACS (doporučeno)
-
-1. Otevři HACS → Frontend → ⋮ → **Custom repositories**
-2. Přidej `https://github.com/Michailjovic/Room-Card` jako **Lovelace**
-3. Vyhledej **Room Overlay Card** a nainstaluj
-4. Obnov prohlížeč (Ctrl+F5)
-
-### Manuální instalace
-
-1. Stáhni `room-overlay-card.js` z [nejnovějšího release](https://github.com/Michailjovic/Room-Card/releases/latest)
-2. Ulož do `/config/www/room-overlay-card.js`
-3. V HA: Nastavení → Dashboardy → ⋮ → **Spravovat prostředky** → přidej `/local/room-overlay-card.js` (typ: JavaScript modul)
-4. Obnov prohlížeč
+- **Base image** — any aspect ratio, configurable border-radius
+- **CSS filter engine** — brightness, saturate, sepia, … driven by entity states with smooth transitions
+- **Overlay layers** — transparent PNG layers with conditional `opacity` and `filter`; dynamic image selection based on entity state
+- **Clickable zones** — invisible hit areas over the image; navigate / more-info / call-service / toggle / browser-mod-popup
+- **Status badges** — floating chips in card corners with MDI icon, conditional icon color and conditional label text
+- **Embedded HA cards** — any HA card placed at absolute coordinates (tile, gauge, custom:mini-graph-card, …)
+- **Test mode** — red outlines on zones + blue outlines on elements for debugging positions
+- **GUI editor** — full configuration without writing YAML
 
 ---
 
-## Základní konfigurace
+## Installation
+
+### Via HACS (recommended)
+
+1. Open HACS → Frontend → ⋮ → **Custom repositories**
+2. Add `https://github.com/Michailjovic/Room-Card` as type **Lovelace**
+3. Search for **Room Overlay Card** and install
+4. Hard-refresh your browser (Ctrl+F5)
+
+### Manual installation
+
+1. Download `room-overlay-card.js` from the [latest release](https://github.com/Michailjovic/Room-Card/releases/latest)
+2. Copy to `/config/www/room-overlay-card.js`
+3. In HA: Settings → Dashboards → ⋮ → **Manage resources** → add `/local/room-overlay-card.js` (type: JavaScript module)
+4. Hard-refresh your browser
+
+---
+
+## Basic configuration
 
 ```yaml
 type: custom:room-overlay-card
@@ -51,45 +51,45 @@ border_radius: 12px
 
 ---
 
-## Kompletní konfigurace
+## Full configuration reference
 
-### Hlavní parametry
+### Top-level options
 
-| Klíč | Typ | Výchozí | Popis |
-|------|-----|---------|-------|
-| `base_image` | `string` | **povinný** | Cesta k základnímu obrázku |
-| `aspect_ratio` | `string` | `16/9` | Poměr stran (`šířka/výška`) |
-| `border_radius` | `string` | `12px` | Zaoblení rohů karty |
-| `filter_transition` | `string` | `2s ease` | CSS transition pro filter základního obrázku |
-| `filter_conditions` | `list` | `[]` | CSS filtry řízené stavem entit |
-| `overlays` | `list` | `[]` | Overlay vrstvy |
-| `zones` | `list` | `[]` | Klikatelné zóny |
-| `badges` | `list` | `[]` | Status chipy |
-| `elements` | `list` | `[]` | Embedded HA karty |
-| `test_mode` | `bool` | `false` | Zobrazí ohraničení zón a elementů |
-| `tap_action` | `action` | — | Akce při kliknutí na kartu |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `base_image` | `string` | **required** | Path to the base room image |
+| `aspect_ratio` | `string` | `16/9` | Card aspect ratio (`width/height`) |
+| `border_radius` | `string` | `12px` | Card corner radius |
+| `filter_transition` | `string` | `2s ease` | CSS transition for the base image filter |
+| `filter_conditions` | `list` | `[]` | CSS filters driven by entity states |
+| `overlays` | `list` | `[]` | Overlay image layers |
+| `zones` | `list` | `[]` | Clickable zones |
+| `badges` | `list` | `[]` | Status badge chips |
+| `elements` | `list` | `[]` | Embedded HA cards |
+| `test_mode` | `bool` | `false` | Show zone and element outlines for debugging |
+| `tap_action` | `action` | — | Action when clicking the card background |
 
 ---
 
-### Podmínky (`StateCondition`)
+### Conditions (`StateCondition`)
 
-Podmínky se používají v mnoha místech konfigurace.
+Conditions are used throughout the configuration to drive visual state.
 
 ```yaml
-# Přesná shoda stavu
+# Exact state match
 entity: binary_sensor.window
 state: "on"
 
-# Stav nesmí být roven
+# State must not equal
 entity: light.bedroom
 state_not: "unavailable"
 
-# Numerické porovnání
+# Numeric comparison
 entity: sensor.temperature
 operator: ">"
 value: 25
 
-# Zřetězení AND / OR
+# AND / OR chaining
 entity: sensor.temperature
 operator: ">"
 value: 22
@@ -98,11 +98,11 @@ and:
   state: "off"
 ```
 
-Podporované operátory: `<` `>` `<=` `>=` `==` `!=`
+Supported operators: `<` `>` `<=` `>=` `==` `!=`
 
 ---
 
-### CSS filtry základního obrázku
+### Base image CSS filters
 
 ```yaml
 filter_conditions:
@@ -110,12 +110,12 @@ filter_conditions:
       entity: binary_sensor.night_mode
       state: "on"
     filter: brightness(0.3) saturate(0.2)
-  - filter: brightness(1.0)   # výchozí (bez condition)
+  - filter: brightness(1.0)   # default (no condition)
 ```
 
 ---
 
-### Overlay vrstvy
+### Overlay layers
 
 ```yaml
 overlays:
@@ -128,14 +128,14 @@ overlays:
             entity: light.bedroom
             state: "on"
           value: 1
-        - value: 0   # výchozí
-  
+        - value: 0   # default
+
   - id: fan_state
     state_images:
       - entity: fan.bedroom
         state: "on"
         image: /local/images/fan_on.png
-      - image: /local/images/fan_off.png   # výchozí
+      - image: /local/images/fan_off.png   # default
     conditions:
       opacity:
         - value: 1
@@ -143,7 +143,7 @@ overlays:
 
 ---
 
-### Klikatelné zóny
+### Clickable zones
 
 ```yaml
 zones:
@@ -165,7 +165,7 @@ zones:
       action: more-info
       entity: media_player.tv
 
-  # Podmíněná akce
+  # Conditional action
   - id: smart_switch
     top: "70%"
     left: "5%"
@@ -183,20 +183,20 @@ zones:
         entity: light.bedroom_main
 ```
 
-#### Typy akcí
+#### Action types
 
-| Akce | Parametry | Popis |
-|------|-----------|-------|
-| `navigate` | `path` | Přejde na danou cestu |
-| `more-info` | `entity` | Otevře dialog entity |
-| `call-service` | `service`, `service_data` | Zavolá HA službu |
-| `toggle` | `entity` | Přepne entitu |
-| `browser-mod-popup` | `title`, `size`, `content` | Browser-mod popup |
-| `none` | — | Nic neudělá |
+| Action | Parameters | Description |
+|--------|------------|-------------|
+| `navigate` | `path` | Navigate to a dashboard path |
+| `more-info` | `entity` | Open entity more-info dialog |
+| `call-service` | `service`, `service_data` | Call a HA service |
+| `toggle` | `entity` | Toggle an entity |
+| `browser-mod-popup` | `title`, `size`, `content` | Open a browser-mod popup |
+| `none` | — | Do nothing |
 
 ---
 
-### Status chipy (badges)
+### Status badges
 
 ```yaml
 badges:
@@ -211,12 +211,11 @@ badges:
         value: "orange"
       - value: "white"
     label:
-      - value_template: "{{ states('sensor.temperature') }}°C"  # přímo hodnota
       - condition:
           entity: sensor.temperature
           operator: ">"
           value: 26
-        value: "Horko!"
+        value: "Hot!"
       - value: "OK"
     visible:
       entity: binary_sensor.someone_home
@@ -228,7 +227,7 @@ badges:
 
 ---
 
-### Embedded HA karty (elements)
+### Embedded HA cards (elements)
 
 ```yaml
 elements:
@@ -266,7 +265,7 @@ elements:
 
 ---
 
-## Kompletní příklad
+## Full example
 
 ```yaml
 type: custom:room-overlay-card
@@ -310,7 +309,7 @@ badges:
     position: bottom-left
     icon: mdi:water-percent
     label:
-      - value: "Vlhkost"
+      - value: "Humidity"
     visible:
       entity: sensor.bedroom_humidity
       state_not: "unavailable"
@@ -329,27 +328,27 @@ elements:
 
 ---
 
-## Vývoj
+## Development
 
 ```bash
-# Instalace závislostí
+# Install dependencies
 npm install
 
-# Dev build se source mapou
+# Development build with source map
 npm run build
 
-# Produkční build (minifikovaný)
+# Production build (minified)
 npm run build:prod
 
-# Watch mód
+# Watch mode
 npm run watch
 ```
 
-Zdrojový kód v `src/room-overlay-card.ts` (TypeScript + LitElement).  
-Distribuovaný soubor `room-overlay-card.js` je vanilla JS bez externích závislostí.
+Source code is in `src/room-overlay-card.ts` (TypeScript).  
+The distributed `room-overlay-card.js` is vanilla JS with no external runtime dependencies.
 
 ---
 
-## Licence
+## License
 
 MIT © 2024 Michailjovic
