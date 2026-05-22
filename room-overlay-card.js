@@ -3,7 +3,7 @@
  * https://github.com/yourusername/room-overlay-card
  */
 window.customCards=window.customCards||[];
-window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Vizualizace místnosti s vrstvami, přechody a zónami',preview:true});
+window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones',preview:true});
 
 function evalCond(c,s){
   const e=s[c.entity];if(!e)return false;
@@ -48,6 +48,7 @@ class RoomOverlayCard extends HTMLElement{
     this._config=null;this._hass=null;this._rendered=false;
     this._baseEl=null;this._ovEls={};this._zoneEls={};
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
+    this._rafPending=false;this._relevantEntities=null;this._prevStates={};
   }
 
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],test_mode:false};}
@@ -59,10 +60,65 @@ class RoomOverlayCard extends HTMLElement{
 
   set hass(h){
     this._hass=h;if(!this._config)return;
-    this._rendered?this._update():this._render();
+    if(!this._rendered){this._render();return;}
+    // Dirty check — skip if none of the relevant entities changed
+    if(this._relevantEntities){
+      const s=h.states,p=this._prevStates;
+      if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))return;
+    }
+    // rAF batching — at most one _update() per animation frame
+    if(!this._rafPending){
+      this._rafPending=true;
+      requestAnimationFrame(()=>{
+        this._rafPending=false;
+        if(this._hass&&this._rendered)this._update();
+      });
+    }
+  }
+
+  // Recursively collect all entity IDs referenced in the config
+  _extractEntities(obj,ids=new Set()){
+    if(!obj||typeof obj!=='object')return ids;
+    if(typeof obj.entity==='string')ids.add(obj.entity);
+    for(const v of Object.values(obj)){
+      if(Array.isArray(v))v.forEach(i=>this._extractEntities(i,ids));
+      else if(v&&typeof v==='object')this._extractEntities(v,ids);
+    }
+    return ids;
   }
 
   getCardSize(){return 4;}
+
+  _addZoneListeners(el,tapAction,holdAction){
+    let timer=null,held=false;
+    // Touch (mobile/tablet)
+    el.addEventListener('touchstart',()=>{
+      held=false;clearTimeout(timer);
+      if(holdAction)timer=setTimeout(()=>{held=true;},500);
+    },{passive:true});
+    el.addEventListener('touchend',e=>{
+      clearTimeout(timer);
+      e.stopPropagation();e.preventDefault();
+      if(held){if(holdAction)this._exec(holdAction,e);}
+      else{if(tapAction)this._exec(tapAction,e);}
+      held=false;
+    });
+    el.addEventListener('touchmove',()=>clearTimeout(timer),{passive:true});
+    el.addEventListener('touchcancel',()=>{clearTimeout(timer);held=false;});
+    // Mouse (desktop)
+    el.addEventListener('mousedown',()=>{
+      held=false;clearTimeout(timer);
+      if(holdAction)timer=setTimeout(()=>{held=true;},500);
+    });
+    el.addEventListener('click',e=>{
+      clearTimeout(timer);
+      e.stopPropagation();e.preventDefault();
+      if(held){if(holdAction)this._exec(holdAction,e);}
+      else{if(tapAction)this._exec(tapAction,e);}
+      held=false;
+    });
+    el.addEventListener('mouseleave',()=>{clearTimeout(timer);held=false;});
+  }
 
   _pad(r){
     const p=(r||'16/9').split('/');
@@ -75,9 +131,9 @@ class RoomOverlayCard extends HTMLElement{
     const c=this._config,tm=c.test_mode??false;
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
 
-    const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity;"></div>`).join('');
+    const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
 
-    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${z.tap_action?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}×${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
+    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}×${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
 
     const bHtml=(c.badges||[]).map(b=>`<div class="badge" data-b="${b.id}" style="${BPOS[b.position||'bottom-left']};cursor:${b.tap_action?'pointer':'default'};-webkit-tap-highlight-color:transparent;">${b.icon?`<ha-icon data-bi="${b.id}" icon="${b.icon}" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>`:''} ${b.label!==undefined?`<span class="blabel" data-bl="${b.id}"></span>`:''}</div>`).join('');
 
@@ -95,7 +151,7 @@ ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius
 .elcont>*{width:100%!important;height:100%!important;display:block;}
 </style>
 <ha-card><div class="wrap"><div class="content">
-<div class="layer base" style="background-image:url('${c.base_image}');transition:filter ${c.filter_transition??'2s ease'};will-change:filter;"></div>
+<div class="layer base" style="background-image:url('${c.base_image}');transition:filter ${c.filter_transition??'2s ease'};will-change:filter,transform;transform:translateZ(0);"></div>
 ${ovHtml}${zHtml}${bHtml}
 </div></div></ha-card>`;
 
@@ -107,7 +163,7 @@ ${ovHtml}${zHtml}${bHtml}
     for(const z of(c.zones||[])){
       const el=this.shadowRoot.querySelector(`[data-z="${z.id}"]`);
       if(!el)continue;this._zoneEls[z.id]=el;
-      if(z.tap_action){el.addEventListener('click',e=>this._exec(z.tap_action,e));el.addEventListener('touchend',e=>this._exec(z.tap_action,e));}
+      if(z.tap_action||z.hold_action)this._addZoneListeners(el,z.tap_action,z.hold_action);
     }
     this._biconEls={};this._blabelEls={};
     for(const b of(c.badges||[])){
@@ -132,6 +188,9 @@ ${ovHtml}${zHtml}${bHtml}
         if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')))this._exec(c.tap_action,e);
       });
     }
+    // Cache the list of entity IDs this card cares about
+    this._relevantEntities=[...this._extractEntities(this._config)];
+    this._prevStates={};
     this._rendered=true;this._update();
   }
 
@@ -164,6 +223,10 @@ ${ovHtml}${zHtml}${bHtml}
       const card=this._cardEls[el.id],cont=this._contEls[el.id];
       if(card)try{card.hass=this._hass;}catch(_){}
       if(cont&&el.visible)cont.style.display=evalCond(el.visible,s)?'block':'none';
+    }
+    // Snapshot current states for next dirty check
+    if(this._relevantEntities){
+      for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
     }
   }
 
@@ -261,6 +324,8 @@ class RoomOverlayCardEditor extends HTMLElement {
       item.querySelectorAll('[data-field]').forEach(f => { if (f.value !== '') o[f.dataset.field] = f.value; });
       const actionEl = item.querySelector('[data-action]');
       if (actionEl?.value?.trim()) { try { o.tap_action = JSON.parse(actionEl.value); } catch(_) {} }
+      const holdEl = item.querySelector('[data-hold-action]');
+      if (holdEl?.value?.trim()) { try { o.hold_action = JSON.parse(holdEl.value); } catch(_) {} }
       const visEl = item.querySelector('[data-visible]');
       if (visEl?.value?.trim()) { try { o.visible = JSON.parse(visEl.value); } catch(_) {} }
       if (o.id) c.zones.push(o);
@@ -299,15 +364,15 @@ class RoomOverlayCardEditor extends HTMLElement {
     const e = this._e.bind(this);
     return `<div class="item ov-item">
       <div class="ihead"><b>Overlay: ${e(ov.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-ov="${i}">✕ Odebrat</button></div>
+        <button type="button" class="rm-btn" data-rm-ov="${i}">✕ Remove</button></div>
       <div class="row2">
         <label>ID *<br><input data-field="id" value="${e(ov.id ?? '')}"></label>
         <label>Transition<br><input data-field="transition" value="${e(ov.transition ?? '2s ease')}"></label>
       </div>
-      <label>Obrázek (image)<br><input data-field="image" value="${e(ov.image ?? '')}"></label>
-      <label>State images – JSON pole <small>[{entity,state,image},{image}]</small><br>
+      <label>Image (image)<br><input data-field="image" value="${e(ov.image ?? '')}"></label>
+      <label>State images – JSON array <small>[{entity,state,image},{image}]</small><br>
         <textarea data-si>${ov.state_images ? JSON.stringify(ov.state_images, null, 2) : ''}</textarea></label>
-      <label>Podmínky – JSON <small>{opacity:[{condition:{...},value:1},{value:0}],filter:[...]}</small><br>
+      <label>Conditions – JSON <small>{opacity:[{condition:{...},value:1},{value:0}],filter:[...]}</small><br>
         <textarea data-cond>${ov.conditions ? JSON.stringify(ov.conditions, null, 2) : ''}</textarea></label>
     </div>`;
   }
@@ -315,21 +380,23 @@ class RoomOverlayCardEditor extends HTMLElement {
   _zoneItem(z, i) {
     const e = this._e.bind(this);
     return `<div class="item zone-item">
-      <div class="ihead"><b>Zóna: ${e(z.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-zone="${i}">✕ Odebrat</button></div>
+      <div class="ihead"><b>Zone: ${e(z.id || i+1)}</b>
+        <button type="button" class="rm-btn" data-rm-zone="${i}">✕ Remove</button></div>
       <div class="row2">
         <label>ID *<br><input data-field="id" value="${e(z.id ?? '')}"></label>
-        <label>Label (test mód)<br><input data-field="label" value="${e(z.label ?? '')}"></label>
+        <label>Label (test mode)<br><input data-field="label" value="${e(z.label ?? '')}"></label>
       </div>
       <div class="row4">
         <label>Top %<br><input data-field="top" value="${e(z.top ?? '0%')}"></label>
         <label>Left %<br><input data-field="left" value="${e(z.left ?? '0%')}"></label>
-        <label>Šířka %<br><input data-field="width" value="${e(z.width ?? '10%')}"></label>
-        <label>Výška %<br><input data-field="height" value="${e(z.height ?? '10%')}"></label>
+        <label>Width %<br><input data-field="width" value="${e(z.width ?? '10%')}"></label>
+        <label>Height %<br><input data-field="height" value="${e(z.height ?? '10%')}"></label>
       </div>
-      <label>Akce – JSON <small>{"action":"navigate","path":"/..."}</small> nebo podmíněná <small>{"condition":{...},"then":{...},"else":{...}}</small><br>
+      <label>Tap action – JSON <small>{"action":"navigate","path":"/..."}</small> or conditional <small>{"condition":{...},"then":{...},"else":{...}}</small><br>
         <textarea data-action>${z.tap_action ? JSON.stringify(z.tap_action, null, 2) : ''}</textarea></label>
-      <label>Podmínka zobrazení – JSON <small>{"entity":"input_boolean.x","state":"on"}</small><br>
+      <label>Hold action – JSON <small>{"action":"more-info","entity":"..."}</small> or conditional<br>
+        <textarea data-hold-action>${z.hold_action ? JSON.stringify(z.hold_action, null, 2) : ''}</textarea></label>
+      <label>Visibility condition – JSON <small>{"entity":"input_boolean.x","state":"on"}</small><br>
         <textarea data-visible>${z.visible ? JSON.stringify(z.visible, null, 2) : ''}</textarea></label>
     </div>`;
   }
@@ -340,17 +407,17 @@ class RoomOverlayCardEditor extends HTMLElement {
     const opts = pos.map(p => `<option value="${p}"${b.position===p?' selected':''}>${p}</option>`).join('');
     return `<div class="item badge-item">
       <div class="ihead"><b>Badge: ${e(b.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-badge="${i}">✕ Odebrat</button></div>
+        <button type="button" class="rm-btn" data-rm-badge="${i}">✕ Remove</button></div>
       <div class="row3">
         <label>ID *<br><input data-field="id" value="${e(b.id ?? '')}"></label>
-        <label>Pozice<br><select data-field="position">${opts}</select></label>
-        <label>Ikona (mdi:...)<br><input data-field="icon" value="${e(b.icon ?? '')}"></label>
+        <label>Position<br><select data-field="position">${opts}</select></label>
+        <label>Icon (mdi:...)<br><input data-field="icon" value="${e(b.icon ?? '')}"></label>
       </div>
-      <label>Barva ikony – JSON pole <small>[{condition:{...},value:"#e74c3c"},{value:"#2ecc71"}]</small><br>
+      <label>Icon color – JSON array <small>[{condition:{...},value:"#e74c3c"},{value:"#2ecc71"}]</small><br>
         <textarea data-icon-color>${b.icon_color ? JSON.stringify(b.icon_color, null, 2) : ''}</textarea></label>
-      <label>Text (label) – JSON pole <small>[{condition:{...},value:"Uklízí"},{value:"Připraveni"}]</small><br>
+      <label>Label text – JSON array <small>[{condition:{...},value:"Cleaning"},{value:"Ready"}]</small><br>
         <textarea data-label>${b.label ? JSON.stringify(b.label, null, 2) : ''}</textarea></label>
-      <label>Akce – JSON<br>
+      <label>Tap action – JSON<br>
         <textarea data-tap-action>${b.tap_action ? JSON.stringify(b.tap_action, null, 2) : ''}</textarea></label>
     </div>`;
   }
@@ -359,22 +426,22 @@ class RoomOverlayCardEditor extends HTMLElement {
     const e = this._e.bind(this);
     return `<div class="item element-item">
       <div class="ihead"><b>Element: ${e(el.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-el="${i}">✕ Odebrat</button></div>
+        <button type="button" class="rm-btn" data-rm-el="${i}">✕ Remove</button></div>
       <label>ID *<br><input data-field="id" value="${e(el.id ?? '')}"></label>
       <div class="row4">
         <label>Top %<br><input data-field="top" value="${e(el.top ?? '0%')}"></label>
         <label>Left %<br><input data-field="left" value="${e(el.left ?? '0%')}"></label>
-        <label>Šířka %<br><input data-field="width" value="${e(el.width ?? '20%')}"></label>
-        <label>Výška %<br><input data-field="height" value="${e(el.height ?? '20%')}"></label>
+        <label>Width %<br><input data-field="width" value="${e(el.width ?? '20%')}"></label>
+        <label>Height %<br><input data-field="height" value="${e(el.height ?? '20%')}"></label>
       </div>
       <div class="row3">
         <label>Z-index<br><input data-field="z_index" type="number" value="${e(el.z_index ?? 4)}"></label>
         <label>Overflow<br><input data-field="overflow" value="${e(el.overflow ?? 'hidden')}"></label>
         <label>Border-radius<br><input data-field="border_radius" value="${e(el.border_radius ?? '0')}"></label>
       </div>
-      <label>Karta – JSON <small>{"type":"custom:atmospheric-weather-card","weather_entity":"..."}</small><br>
+      <label>Card config – JSON <small>{"type":"custom:atmospheric-weather-card","weather_entity":"..."}</small><br>
         <textarea data-card-cfg style="min-height:100px">${el.card ? JSON.stringify(el.card, null, 2) : ''}</textarea></label>
-      <label>Podmínka zobrazení – JSON<br>
+      <label>Visibility condition – JSON<br>
         <textarea data-visible>${el.visible ? JSON.stringify(el.visible, null, 2) : ''}</textarea></label>
     </div>`;
   }
@@ -416,39 +483,39 @@ room-overlay-card-editor .cb-row{display:flex;align-items:center;font-size:14px;
 </style>
 
 <details>
-  <summary>Základní nastavení ▸</summary>
+  <summary>Basic settings ▸</summary>
   <div class="body">
-    <label>Obrázek místnosti (base_image) *<br>
+    <label>Room image (base_image) *<br>
       <input data-key="base_image" value="${e(c.base_image ?? '')}"></label>
     <div class="row2">
-      <label>Poměr stran (aspect_ratio)<br>
-        <input data-key="aspect_ratio" value="${e(c.aspect_ratio ?? '16/9')}" placeholder="1720/783 nebo 16/9"></label>
-      <label>Zaoblení rohů (border_radius)<br>
+      <label>Aspect ratio (aspect_ratio)<br>
+        <input data-key="aspect_ratio" value="${e(c.aspect_ratio ?? '16/9')}" placeholder="1720/783 or 16/9"></label>
+      <label>Corner radius (border_radius)<br>
         <input data-key="border_radius" value="${e(c.border_radius ?? '12px')}"></label>
     </div>
-    <label>Filter přechod (filter_transition)<br>
+    <label>Filter transition (filter_transition)<br>
       <input data-key="filter_transition" value="${e(c.filter_transition ?? '2.0s ease')}"></label>
-    <label>Filter podmínky – JSON pole
+    <label>Filter conditions – JSON array
       <small>[{condition:{entity:"light.x",state:"on"},filter:"brightness(2.6) sepia(0.35)"},…,{filter:"brightness(0.6)"}]</small><br>
       <textarea data-filter-conds style="min-height:80px">${c.filter_conditions?.length ? JSON.stringify(c.filter_conditions, null, 2) : ''}</textarea></label>
     <label class="cb-row"><input type="checkbox" data-key="test_mode" ${c.test_mode ? 'checked' : ''}>
-      Test mód (červené bordery zón, modré bordery elementů)</label>
+      Test mode (red zone borders, blue element borders)</label>
   </div>
 </details>
 
 <details>
-  <summary>Overlay vrstvy (${ov.length}) ▸</summary>
+  <summary>Overlay layers (${ov.length}) ▸</summary>
   <div class="body">
     ${ov.map((o, i) => this._ovItem(o, i)).join('')}
-    <button type="button" class="add-btn" id="add-ov">+ Přidat overlay</button>
+    <button type="button" class="add-btn" id="add-ov">+ Add overlay</button>
   </div>
 </details>
 
 <details>
-  <summary>Klikatelné zóny (${zones.length}) ▸</summary>
+  <summary>Clickable zones (${zones.length}) ▸</summary>
   <div class="body">
     ${zones.map((z, i) => this._zoneItem(z, i)).join('')}
-    <button type="button" class="add-btn" id="add-zone">+ Přidat zónu</button>
+    <button type="button" class="add-btn" id="add-zone">+ Add zone</button>
   </div>
 </details>
 
@@ -456,15 +523,15 @@ room-overlay-card-editor .cb-row{display:flex;align-items:center;font-size:14px;
   <summary>Status badges (${badges.length}) ▸</summary>
   <div class="body">
     ${badges.map((b, i) => this._badgeItem(b, i)).join('')}
-    <button type="button" class="add-btn" id="add-badge">+ Přidat badge</button>
+    <button type="button" class="add-btn" id="add-badge">+ Add badge</button>
   </div>
 </details>
 
 <details>
-  <summary>Embedded karty (${els.length}) ▸</summary>
+  <summary>Embedded cards (${els.length}) ▸</summary>
   <div class="body">
     ${els.map((el, i) => this._elItem(el, i)).join('')}
-    <button type="button" class="add-btn" id="add-el">+ Přidat embedded kartu</button>
+    <button type="button" class="add-btn" id="add-el">+ Add embedded card</button>
   </div>
 </details>`;
 
