@@ -1,0 +1,19 @@
+{
+  "name": "room-overlay-card",
+  "version": "0.2.0",
+  "description": "Home Assistant Lovelace karta pro vizualizaci místností s obrazkovými vrstvami, podmíněnými přechody, klikatelnými zónami a embedded HA kartami.",
+  "keywords": ["home-assistant", "lovelace", "custom-card", "hacs"],
+  "license": "MIT",
+  "scripts": {
+    "build": "npx esbuild src/room-overlay-card.ts --bundle --format=esm --outfile=room-overlay-card.js --sourcemap",
+    "build:prod": "npx esbuild src/room-overlay-card.ts --bundle --format=esm --outfile=room-overlay-card.js --minify",
+    "watch": "npx esbuild src/room-overlay-card.ts --bundle --format=esm --outfile=room-overlay-card.js --sourcemap --watch"
+  },
+  "dependencies": {
+    "lit": "^3.1.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.0",
+    "typescript": "^5.4.5"
+  }
+}
