@@ -1,6 +1,6 @@
 /**
- * room-overlay-card v0.2.0 — MIT License
- * https://github.com/yourusername/room-overlay-card
+ * room-overlay-card v0.3.0 — MIT License
+ * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones',preview:true});
@@ -54,19 +54,17 @@ class RoomOverlayCard extends HTMLElement{
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],test_mode:false};}
 
   setConfig(cfg){
-    if(!cfg.base_image)throw new Error('[room-overlay-card] base_image je povinný');
+    if(!cfg.base_image)throw new Error('[room-overlay-card] base_image is required');
     this._config=cfg;this._rendered=false;if(this._hass)this._render();
   }
 
   set hass(h){
     this._hass=h;if(!this._config)return;
     if(!this._rendered){this._render();return;}
-    // Dirty check — skip if none of the relevant entities changed
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
       if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))return;
     }
-    // rAF batching — at most one _update() per animation frame
     if(!this._rafPending){
       this._rafPending=true;
       requestAnimationFrame(()=>{
@@ -76,7 +74,6 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
-  // Recursively collect all entity IDs referenced in the config
   _extractEntities(obj,ids=new Set()){
     if(!obj||typeof obj!=='object')return ids;
     if(typeof obj.entity==='string')ids.add(obj.entity);
@@ -91,7 +88,6 @@ class RoomOverlayCard extends HTMLElement{
 
   _addZoneListeners(el,tapAction,holdAction){
     let timer=null,held=false;
-    // Touch (mobile/tablet)
     el.addEventListener('touchstart',()=>{
       held=false;clearTimeout(timer);
       if(holdAction)timer=setTimeout(()=>{held=true;},500);
@@ -105,7 +101,6 @@ class RoomOverlayCard extends HTMLElement{
     });
     el.addEventListener('touchmove',()=>clearTimeout(timer),{passive:true});
     el.addEventListener('touchcancel',()=>{clearTimeout(timer);held=false;});
-    // Mouse (desktop)
     el.addEventListener('mousedown',()=>{
       held=false;clearTimeout(timer);
       if(holdAction)timer=setTimeout(()=>{held=true;},500);
@@ -132,52 +127,34 @@ class RoomOverlayCard extends HTMLElement{
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
 
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
-
-    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}×${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
-
+    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
     const bHtml=(c.badges||[]).map(b=>`<div class="badge" data-b="${b.id}" style="${BPOS[b.position||'bottom-left']};cursor:${b.tap_action?'pointer':'default'};-webkit-tap-highlight-color:transparent;">${b.icon?`<ha-icon data-bi="${b.id}" icon="${b.icon}" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>`:''} ${b.label!==undefined?`<span class="blabel" data-bl="${b.id}"></span>`:''}</div>`).join('');
 
-    this.shadowRoot.innerHTML=`<style>
-:host{display:block;}
-ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:${br};}
-.wrap{position:relative;width:100%;padding-bottom:${pad};overflow:hidden;}
-.content{position:absolute;inset:0;overflow:hidden;}
-.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}
-.zone{position:absolute;}
-.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}
-.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}
-.blabel{font-size:12px;color:white;font-weight:500;}
-.elcont{position:absolute;pointer-events:auto;}
-.elcont>*{width:100%!important;height:100%!important;display:block;}
-</style>
-<ha-card><div class="wrap"><div class="content">
-<div class="layer base" style="background-image:url('${c.base_image}');transition:filter ${c.filter_transition??'2s ease'};will-change:filter,transform;transform:translateZ(0);"></div>
-${ovHtml}${zHtml}${bHtml}
-</div></div></ha-card>`;
+    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._ovEls={};
-    for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector(`[data-ov="${ov.id}"]`);}
+    for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+ov.id+'"]');}
     this._zoneEls={};
     for(const z of(c.zones||[])){
-      const el=this.shadowRoot.querySelector(`[data-z="${z.id}"]`);
+      const el=this.shadowRoot.querySelector('[data-z="'+z.id+'"]');
       if(!el)continue;this._zoneEls[z.id]=el;
       if(z.tap_action||z.hold_action)this._addZoneListeners(el,z.tap_action,z.hold_action);
     }
     this._biconEls={};this._blabelEls={};
     for(const b of(c.badges||[])){
-      this._biconEls[b.id]=this.shadowRoot.querySelector(`[data-bi="${b.id}"]`);
-      this._blabelEls[b.id]=this.shadowRoot.querySelector(`[data-bl="${b.id}"]`);
-      const bel=this.shadowRoot.querySelector(`[data-b="${b.id}"]`);
+      this._biconEls[b.id]=this.shadowRoot.querySelector('[data-bi="'+b.id+'"]');
+      this._blabelEls[b.id]=this.shadowRoot.querySelector('[data-bl="'+b.id+'"]');
+      const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
       if(bel&&b.tap_action){bel.addEventListener('click',e=>this._exec(b.tap_action,e));bel.addEventListener('touchend',e=>this._exec(b.tap_action,e));}
     }
     this._cardEls={};this._contEls={};
     for(const el of(c.elements||[])){
       const cont=document.createElement('div');
       cont.className='elcont';cont.setAttribute('data-el',el.id);
-      cont.style.cssText=`top:${el.top};left:${el.left};width:${el.width};height:${el.height};z-index:${el.z_index??4};overflow:${el.overflow??'hidden'};border-radius:${el.border_radius??'0'};${tm?'outline:2px dashed blue;':''}`;
-      if(tm)cont.title=`[element] ${el.id}`;
+      cont.style.cssText='top:'+el.top+';left:'+el.left+';width:'+el.width+';height:'+el.height+';z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(tm?'outline:2px dashed blue;':'');
+      if(tm)cont.title='[element] '+el.id;
       const card=makeHACard(el.card);
       if(card){if(this._hass)card.hass=this._hass;cont.appendChild(card);this._cardEls[el.id]=card;}
       this._contEls[el.id]=cont;if(content)content.appendChild(cont);
@@ -188,7 +165,6 @@ ${ovHtml}${zHtml}${bHtml}
         if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')))this._exec(c.tap_action,e);
       });
     }
-    // Cache the list of entity IDs this card cares about
     this._relevantEntities=[...this._extractEntities(this._config)];
     this._prevStates={};
     this._rendered=true;this._update();
@@ -203,7 +179,7 @@ ${ovHtml}${zHtml}${bHtml}
     for(const ov of(c.overlays||[])){
       const el=this._ovEls[ov.id];if(!el)continue;
       const img=this._ovImg(ov);
-      if(img){const bg=`url('${img}')`;if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
+      if(img){const bg='url(\''+img+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
       el.style.opacity=ov.conditions?.opacity?String(resolveVal(ov.conditions.opacity,s,0)):'1';
       el.style.filter=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
     }
@@ -212,7 +188,7 @@ ${ovHtml}${zHtml}${bHtml}
       if(el&&z.visible)el.style.display=evalCond(z.visible,s)?'block':'none';
     }
     for(const b of(c.badges||[])){
-      const bel=this.shadowRoot.querySelector(`[data-b="${b.id}"]`);
+      const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
       if(bel&&b.visible)bel.style.display=evalCond(b.visible,s)?'flex':'none';
       const iel=this._biconEls[b.id];
       if(iel&&b.icon_color)iel.style.color=resolveVal(b.icon_color,s,'white');
@@ -224,7 +200,6 @@ ${ovHtml}${zHtml}${bHtml}
       if(card)try{card.hass=this._hass;}catch(_){}
       if(cont&&el.visible)cont.style.display=evalCond(el.visible,s)?'block':'none';
     }
-    // Snapshot current states for next dirty check
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
     }
@@ -260,321 +235,478 @@ ${ovHtml}${zHtml}${bHtml}
 
 customElements.define('room-overlay-card',RoomOverlayCard);
 
-// ─── GUI Editor ───────────────────────────────────────────────────────────────
 
-class RoomOverlayCardEditor extends HTMLElement {
-  constructor() {
-    super();
-    this._config = {};
+
+const _yaml={
+  s:function(o){try{return window.YAML?window.YAML.stringify(o):JSON.stringify(o,null,2);}catch(_){return '';}},
+  p:function(s){try{return window.YAML?window.YAML.parse(s):JSON.parse(s);}catch(_){return null;}}
+};
+
+const FILTER_PROPS=[
+  {key:'brightness', label:'Brightness', min:0,max:4,  step:0.05,dflt:1,unit:''},
+  {key:'sepia',      label:'Sepia',      min:0,max:1,  step:0.05,dflt:0,unit:''},
+  {key:'saturate',   label:'Saturate',   min:0,max:3,  step:0.05,dflt:1,unit:''},
+  {key:'hue-rotate', label:'Hue rotate', min:0,max:360,step:1,   dflt:0,unit:'deg'},
+  {key:'contrast',   label:'Contrast',   min:0,max:3,  step:0.05,dflt:1,unit:''},
+  {key:'blur',       label:'Blur',       min:0,max:20, step:0.5, dflt:0,unit:'px'},
+];
+
+function parseFilterStr(str){
+  const r={};
+  FILTER_PROPS.forEach(function(p){r[p.key]=p.dflt;});
+  if(!str||str==='none')return r;
+  FILTER_PROPS.forEach(function(p){
+    const esc=p.key.replace('-','\\-');
+    const m=str.match(new RegExp(esc+'\\(([\\d.]+)'+p.unit+'\\)'));
+    if(m)r[p.key]=parseFloat(m[1]);
+  });
+  return r;
+}
+
+function buildFilterStr(obj){
+  const parts=FILTER_PROPS
+    .filter(function(p){return obj[p.key]!==undefined&&Math.abs(obj[p.key]-p.dflt)>0.001;})
+    .map(function(p){return p.key+'('+obj[p.key]+p.unit+')';});
+  return parts.length?parts.join(' '):'none';
+}
+
+class RoomOverlayCardEditor extends HTMLElement{
+  constructor(){super();this._config=null;this._hass=null;}
+
+  setConfig(cfg){this._config=cfg;this._render();}
+
+  set hass(h){
+    this._hass=h;
+    this.querySelectorAll('ha-entity-picker').forEach(function(ep){ep.hass=h;});
   }
 
-  setConfig(config) {
-    this._config = { ...config };
-    this._render();
+  _e(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+  _fire(c){
+    this.dispatchEvent(new CustomEvent('config-changed',{bubbles:true,composed:true,detail:{config:Object.assign({type:'custom:room-overlay-card'},c)}}));
   }
 
-  set hass(h) { this._hass = h; }
+  _collectConfig(){
+    const c=Object.assign({},this._config);
+    const q=function(s){return this.querySelector(s);}.bind(this);
+    const v=function(id,fb){const el=q('#'+id);return el?el.value:fb;};
+    c.base_image=v('base_image',c.base_image||'');
+    c.aspect_ratio=v('aspect_ratio','16/9');
+    c.border_radius=v('border_radius','12px');
+    c.filter_transition=v('filter_transition','2s ease');
+    const tm=q('#test_mode');c.test_mode=tm?tm.checked:false;
+    const ta=q('#tap_action_yaml');
+    if(ta&&ta.value.trim()){const p=_yaml.p(ta.value);if(p)c.tap_action=p;else delete c.tap_action;}
+    else delete c.tap_action;
 
-  _e(s) {
-    return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-  }
-
-  _fire(config) {
-    this.dispatchEvent(new CustomEvent('config-changed', {
-      detail: { config: { type: 'custom:room-overlay-card', ...config } },
-      bubbles: true, composed: true,
-    }));
-  }
-
-  _collectConfig() {
-    // Start with a copy of existing config to preserve unmanaged keys (grid_options, etc.)
-    const c = { ...this._config };
-
-    // Skalární pole
-    this.querySelectorAll('[data-key]').forEach(el => {
-      const v = el.type === 'checkbox' ? el.checked : el.value;
-      if (v !== '' && v !== false) c[el.dataset.key] = v;
-      else delete c[el.dataset.key];
-    });
-
-    // filter_conditions jako JSON
-    const fcEl = this.querySelector('[data-filter-conds]');
-    if (fcEl?.value?.trim()) {
-      try { c.filter_conditions = JSON.parse(fcEl.value); } catch(_) {}
-    } else {
-      c.filter_conditions = this._config.filter_conditions ?? [];
-    }
-
-    // Overlays
-    c.overlays = [];
-    this.querySelectorAll('.ov-item').forEach(item => {
-      const o = {};
-      item.querySelectorAll('[data-field]').forEach(f => { if (f.value !== '') o[f.dataset.field] = f.value; });
-      const condEl = item.querySelector('[data-cond]');
-      if (condEl?.value?.trim()) { try { o.conditions = JSON.parse(condEl.value); } catch(_) {} }
-      const siEl = item.querySelector('[data-si]');
-      if (siEl?.value?.trim()) { try { o.state_images = JSON.parse(siEl.value); } catch(_) {} }
-      if (o.id) c.overlays.push(o);
-    });
-
-    // Zóny
-    c.zones = [];
-    this.querySelectorAll('.zone-item').forEach(item => {
-      const o = {};
-      item.querySelectorAll('[data-field]').forEach(f => { if (f.value !== '') o[f.dataset.field] = f.value; });
-      const actionEl = item.querySelector('[data-action]');
-      if (actionEl?.value?.trim()) { try { o.tap_action = JSON.parse(actionEl.value); } catch(_) {} }
-      const holdEl = item.querySelector('[data-hold-action]');
-      if (holdEl?.value?.trim()) { try { o.hold_action = JSON.parse(holdEl.value); } catch(_) {} }
-      const visEl = item.querySelector('[data-visible]');
-      if (visEl?.value?.trim()) { try { o.visible = JSON.parse(visEl.value); } catch(_) {} }
-      if (o.id) c.zones.push(o);
-    });
-
-    // Badges
-    c.badges = [];
-    this.querySelectorAll('.badge-item').forEach(item => {
-      const o = {};
-      item.querySelectorAll('[data-field]').forEach(f => { if (f.value !== '') o[f.dataset.field] = f.value; });
-      const jFields = { label: '[data-label]', icon_color: '[data-icon-color]', tap_action: '[data-tap-action]' };
-      Object.entries(jFields).forEach(([key, sel]) => {
-        const el = item.querySelector(sel);
-        if (el?.value?.trim()) { try { o[key] = JSON.parse(el.value); } catch(_) {} }
+    c.filter_conditions=[];
+    const self=this;
+    this.querySelectorAll('.filter-block').forEach(function(block,i){
+      const entry={};
+      const epEl=block.querySelector('ha-entity-picker');
+      const phEl=block.querySelector('.ep-placeholder');
+      const entity=epEl?epEl.value:(phEl?phEl.dataset.epVal:'');
+      if(entity){
+        const opEl=block.querySelector('[data-filter-state-op="'+i+'"]');
+        const valEl=block.querySelector('[data-filter-state-val="'+i+'"]');
+        const op=opEl?opEl.value:'state';
+        const val=valEl?valEl.value:'';
+        const cond={entity:entity};
+        if(op==='state')cond.state=val;
+        else if(op==='state_not')cond.state_not=val;
+        else{cond.operator=op;cond.value=parseFloat(val)||val;}
+        entry.condition=cond;
+      }
+      const filters={};
+      FILTER_PROPS.forEach(function(p){
+        const el=block.querySelector('[data-fp="'+i+'-'+p.key+'"][data-fp-num]');
+        if(el)filters[p.key]=parseFloat(el.value);
       });
-      if (o.id) c.badges.push(o);
+      entry.filter=buildFilterStr(filters);
+      c.filter_conditions.push(entry);
     });
 
-    // Elements
-    c.elements = [];
-    this.querySelectorAll('.element-item').forEach(item => {
-      const o = {};
-      item.querySelectorAll('[data-field]').forEach(f => { if (f.value !== '') o[f.dataset.field] = f.value; });
-      if (o.z_index) o.z_index = parseInt(o.z_index);
-      const cardEl = item.querySelector('[data-card-cfg]');
-      if (cardEl?.value?.trim()) { try { o.card = JSON.parse(cardEl.value); } catch(_) {} }
-      const visEl = item.querySelector('[data-visible]');
-      if (visEl?.value?.trim()) { try { o.visible = JSON.parse(visEl.value); } catch(_) {} }
-      if (o.id) c.elements.push(o);
+    c.overlays=(c.overlays||[]).map(function(ov,i){
+      const o=Object.assign({},ov);
+      const idEl=q('[data-ov-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const imgEl=q('[data-ov-img="'+i+'"]');if(imgEl){if(imgEl.value)o.image=imgEl.value;else delete o.image;}
+      const trEl=q('[data-ov-tr="'+i+'"]');if(trEl)o.transition=trEl.value;
+      const yaEl=q('[data-ov-yaml="'+i+'"]');
+      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)o.conditions=p;}
+      return o;
+    });
+
+    c.zones=(c.zones||[]).map(function(z,i){
+      const o=Object.assign({},z);
+      const idEl=q('[data-z-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const topEl=q('[data-z-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const lefEl=q('[data-z-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
+      const wEl=q('[data-z-w="'+i+'"]');if(wEl)o.width=wEl.value;
+      const hEl=q('[data-z-h="'+i+'"]');if(hEl)o.height=hEl.value;
+      const tapEl=q('[data-z-tap="'+i+'"]');
+      if(tapEl&&tapEl.value.trim()){const p=_yaml.p(tapEl.value);if(p)o.tap_action=p;else delete o.tap_action;}
+      else delete o.tap_action;
+      const holdEl=q('[data-z-hold="'+i+'"]');
+      if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}
+      else delete o.hold_action;
+      const visEl=q('[data-z-vis="'+i+'"]');
+      if(visEl&&visEl.value.trim()){const p=_yaml.p(visEl.value);if(p)o.visible=p;else delete o.visible;}
+      else delete o.visible;
+      return o;
+    });
+
+    c.badges=(c.badges||[]).map(function(b,i){
+      const o=Object.assign({},b);
+      const idEl=q('[data-b-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const posEl=q('[data-b-pos="'+i+'"]');if(posEl)o.position=posEl.value;
+      const iconEl=q('[data-b-icon="'+i+'"]');if(iconEl){if(iconEl.value)o.icon=iconEl.value;else delete o.icon;}
+      const yaEl=q('[data-b-yaml="'+i+'"]');
+      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      return o;
+    });
+
+    c.elements=(c.elements||[]).map(function(el,i){
+      const o=Object.assign({},el);
+      const idEl=q('[data-el-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const topEl=q('[data-el-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const lefEl=q('[data-el-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
+      const wEl=q('[data-el-w="'+i+'"]');if(wEl)o.width=wEl.value;
+      const hEl=q('[data-el-h="'+i+'"]');if(hEl)o.height=hEl.value;
+      const yaEl=q('[data-el-yaml="'+i+'"]');
+      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p){if(p.card)o.card=p.card;if(p.visible!==undefined)o.visible=p.visible;if(p.z_index!==undefined)o.z_index=p.z_index;if(p.border_radius)o.border_radius=p.border_radius;if(p.overflow)o.overflow=p.overflow;}}
+      return o;
     });
 
     return c;
   }
 
-  _ovItem(ov, i) {
-    const e = this._e.bind(this);
-    return `<div class="item ov-item">
-      <div class="ihead"><b>Overlay: ${e(ov.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-ov="${i}">✕ Remove</button></div>
-      <div class="row2">
-        <label>ID *<br><input data-field="id" value="${e(ov.id ?? '')}"></label>
-        <label>Transition<br><input data-field="transition" value="${e(ov.transition ?? '2s ease')}"></label>
-      </div>
-      <label>Image (image)<br><input data-field="image" value="${e(ov.image ?? '')}"></label>
-      <label>State images – JSON array <small>[{entity,state,image},{image}]</small><br>
-        <textarea data-si>${ov.state_images ? JSON.stringify(ov.state_images, null, 2) : ''}</textarea></label>
-      <label>Conditions – JSON <small>{opacity:[{condition:{...},value:1},{value:0}],filter:[...]}</small><br>
-        <textarea data-cond>${ov.conditions ? JSON.stringify(ov.conditions, null, 2) : ''}</textarea></label>
-    </div>`;
+  _inp(s){return ' style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;'+s+'"';}
+
+  _filterBlock(fc,i){
+    const cond=fc.condition||null;
+    const entity=cond&&cond.entity?cond.entity:'';
+    const op=cond?(cond.state!==undefined?'state':cond.state_not!==undefined?'state_not':cond.operator||'state'):'state';
+    const val=cond?(cond.state!==undefined?String(cond.state):cond.state_not!==undefined?String(cond.state_not):cond.value!==undefined?String(cond.value):''):'';
+    const fv=parseFilterStr(fc.filter||'');
+    const isDefault=!cond;
+    let h='<div class="filter-block" style="border:1px solid var(--divider-color,#e0e0e0);border-radius:8px;padding:12px;margin-bottom:8px;">';
+    h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">';
+    h+='<span style="font-weight:500;font-size:13px;">Filter #'+(i+1)+(isDefault?' (default)':'')+'</span>';
+    h+='<button data-rm-filter="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0 4px;" title="Remove">&#x2715;</button>';
+    h+='</div>';
+    h+='<div style="margin-bottom:8px;"><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Condition entity (leave empty for default)</label>';
+    h+='<span class="ep-placeholder" data-ep-idx="fc-'+i+'" data-ep-val="'+this._e(entity)+'" style="display:block;width:100%;"></span></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">';
+    h+='<div><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Operator</label>';
+    h+='<select data-filter-state-op="'+i+'"'+this._inp('')+'>';
+    ['state','state_not','<','>','<=','>=','==','!='].forEach(function(o){h+='<option value="'+o+'"'+(op===o?' selected':'')+'>'+o+'</option>';});
+    h+='</select></div>';
+    h+='<div><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Value</label>';
+    h+='<input data-filter-state-val="'+i+'" type="text" value="'+this._e(val)+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div><label style="font-size:12px;color:var(--secondary-text-color);font-weight:500;display:block;margin-bottom:6px;">Filter values</label>';
+    const self=this;
+    FILTER_PROPS.forEach(function(p){
+      const vv=fv[p.key];
+      h+='<div style="display:grid;grid-template-columns:90px 1fr 64px;gap:6px;align-items:center;margin-bottom:4px;">';
+      h+='<label style="font-size:12px;">'+p.label+'</label>';
+      h+='<input type="range" data-fp="'+i+'-'+p.key+'" data-fp-range min="'+p.min+'" max="'+p.max+'" step="'+p.step+'" value="'+vv+'" style="width:100%;cursor:pointer;">';
+      h+='<input type="number" data-fp="'+i+'-'+p.key+'" data-fp-num min="'+p.min+'" max="'+p.max+'" step="'+p.step+'" value="'+vv+'"'+self._inp('font-size:12px;')+'>';
+      h+='</div>';
+    });
+    h+='</div></div>';
+    return h;
   }
 
-  _zoneItem(z, i) {
-    const e = this._e.bind(this);
-    return `<div class="item zone-item">
-      <div class="ihead"><b>Zone: ${e(z.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-zone="${i}">✕ Remove</button></div>
-      <div class="row2">
-        <label>ID *<br><input data-field="id" value="${e(z.id ?? '')}"></label>
-        <label>Label (test mode)<br><input data-field="label" value="${e(z.label ?? '')}"></label>
-      </div>
-      <div class="row4">
-        <label>Top %<br><input data-field="top" value="${e(z.top ?? '0%')}"></label>
-        <label>Left %<br><input data-field="left" value="${e(z.left ?? '0%')}"></label>
-        <label>Width %<br><input data-field="width" value="${e(z.width ?? '10%')}"></label>
-        <label>Height %<br><input data-field="height" value="${e(z.height ?? '10%')}"></label>
-      </div>
-      <label>Tap action – JSON <small>{"action":"navigate","path":"/..."}</small> or conditional <small>{"condition":{...},"then":{...},"else":{...}}</small><br>
-        <textarea data-action>${z.tap_action ? JSON.stringify(z.tap_action, null, 2) : ''}</textarea></label>
-      <label>Hold action – JSON <small>{"action":"more-info","entity":"..."}</small> or conditional<br>
-        <textarea data-hold-action>${z.hold_action ? JSON.stringify(z.hold_action, null, 2) : ''}</textarea></label>
-      <label>Visibility condition – JSON <small>{"entity":"input_boolean.x","state":"on"}</small><br>
-        <textarea data-visible>${z.visible ? JSON.stringify(z.visible, null, 2) : ''}</textarea></label>
-    </div>`;
+  _ovItem(ov,i){
+    const condYaml=ov.conditions?_yaml.s(ov.conditions):'';
+    let h='<details style="margin-bottom:6px;" data-panel="ov-'+i+'">';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Overlay: '+this._e(ov.id||'ov_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-ov-id="'+i+'" type="text" value="'+this._e(ov.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Image URL</label><input data-ov-img="'+i+'" type="text" value="'+this._e(ov.image||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Transition</label><input data-ov-tr="'+i+'" type="text" value="'+this._e(ov.transition||'2s ease')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Conditions YAML (opacity / filter / state_images)</label>';
+    h+='<textarea data-ov-yaml="'+i+'" rows="5"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(condYaml)+'</textarea></div>';
+    h+='<button data-rm-ov="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove overlay</button>';
+    h+='</div></details>';
+    return h;
   }
 
-  _badgeItem(b, i) {
-    const e = this._e.bind(this);
-    const pos = ['bottom-left','bottom-right','top-left','top-right'];
-    const opts = pos.map(p => `<option value="${p}"${b.position===p?' selected':''}>${p}</option>`).join('');
-    return `<div class="item badge-item">
-      <div class="ihead"><b>Badge: ${e(b.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-badge="${i}">✕ Remove</button></div>
-      <div class="row3">
-        <label>ID *<br><input data-field="id" value="${e(b.id ?? '')}"></label>
-        <label>Position<br><select data-field="position">${opts}</select></label>
-        <label>Icon (mdi:...)<br><input data-field="icon" value="${e(b.icon ?? '')}"></label>
-      </div>
-      <label>Icon color – JSON array <small>[{condition:{...},value:"#e74c3c"},{value:"#2ecc71"}]</small><br>
-        <textarea data-icon-color>${b.icon_color ? JSON.stringify(b.icon_color, null, 2) : ''}</textarea></label>
-      <label>Label text – JSON array <small>[{condition:{...},value:"Cleaning"},{value:"Ready"}]</small><br>
-        <textarea data-label>${b.label ? JSON.stringify(b.label, null, 2) : ''}</textarea></label>
-      <label>Tap action – JSON<br>
-        <textarea data-tap-action>${b.tap_action ? JSON.stringify(b.tap_action, null, 2) : ''}</textarea></label>
-    </div>`;
+  _zoneItem(z,i){
+    const tapYaml=z.tap_action?_yaml.s(z.tap_action):'';
+    const holdYaml=z.hold_action?_yaml.s(z.hold_action):'';
+    const visYaml=z.visible?_yaml.s(z.visible):'';
+    let h='<details style="margin-bottom:6px;" data-panel="z-'+i+'">';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Zone: '+this._e(z.id||'zone_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-z-id="'+i+'" type="text" value="'+this._e(z.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-z-top="'+i+'" type="text" value="'+this._e(z.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-z-left="'+i+'" type="text" value="'+this._e(z.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-z-w="'+i+'" type="text" value="'+this._e(z.width||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-z-h="'+i+'" type="text" value="'+this._e(z.height||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea data-z-tap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
+    h+='</div>';
+    h+='<button data-rm-z="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove zone</button>';
+    h+='</div></details>';
+    return h;
   }
 
-  _elItem(el, i) {
-    const e = this._e.bind(this);
-    return `<div class="item element-item">
-      <div class="ihead"><b>Element: ${e(el.id || i+1)}</b>
-        <button type="button" class="rm-btn" data-rm-el="${i}">✕ Remove</button></div>
-      <label>ID *<br><input data-field="id" value="${e(el.id ?? '')}"></label>
-      <div class="row4">
-        <label>Top %<br><input data-field="top" value="${e(el.top ?? '0%')}"></label>
-        <label>Left %<br><input data-field="left" value="${e(el.left ?? '0%')}"></label>
-        <label>Width %<br><input data-field="width" value="${e(el.width ?? '20%')}"></label>
-        <label>Height %<br><input data-field="height" value="${e(el.height ?? '20%')}"></label>
-      </div>
-      <div class="row3">
-        <label>Z-index<br><input data-field="z_index" type="number" value="${e(el.z_index ?? 4)}"></label>
-        <label>Overflow<br><input data-field="overflow" value="${e(el.overflow ?? 'hidden')}"></label>
-        <label>Border-radius<br><input data-field="border_radius" value="${e(el.border_radius ?? '0')}"></label>
-      </div>
-      <label>Card config – JSON <small>{"type":"custom:atmospheric-weather-card","weather_entity":"..."}</small><br>
-        <textarea data-card-cfg style="min-height:100px">${el.card ? JSON.stringify(el.card, null, 2) : ''}</textarea></label>
-      <label>Visibility condition – JSON<br>
-        <textarea data-visible>${el.visible ? JSON.stringify(el.visible, null, 2) : ''}</textarea></label>
-    </div>`;
+  _badgeItem(b,i){
+    const bCopy=Object.assign({},b);delete bCopy.id;delete bCopy.icon;delete bCopy.position;
+    const bYaml=Object.keys(bCopy).length?_yaml.s(bCopy):'';
+    let h='<details style="margin-bottom:6px;" data-panel="b-'+i+'">';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Badge: '+this._e(b.id||'badge_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-b-id="'+i+'" type="text" value="'+this._e(b.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Icon (mdi:...)</label><input data-b-icon="'+i+'" type="text" value="'+this._e(b.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Position</label>';
+    h+='<select data-b-pos="'+i+'"'+this._inp('')+'>';
+    const bp=b.position||'bottom-left';
+    ['bottom-left','bottom-right','top-left','top-right'].forEach(function(p){h+='<option value="'+p+'"'+(bp===p?' selected':'')+'>'+p+'</option>';});
+    h+='</select></div></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">label / visible / icon_color / tap_action (YAML)</label>';
+    h+='<textarea data-b-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(bYaml)+'</textarea></div>';
+    h+='<button data-rm-b="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove badge</button>';
+    h+='</div></details>';
+    return h;
   }
 
-  _render() {
-    // Save which <details> panels are open before wiping innerHTML
-    const openPanels = new Set();
-    this.querySelectorAll('details').forEach((d, i) => { if (d.open) openPanels.add(i); });
+  _elItem(el,i){
+    const elCopy={};
+    if(el.card)elCopy.card=el.card;
+    if(el.visible!==undefined)elCopy.visible=el.visible;
+    if(el.z_index!==undefined)elCopy.z_index=el.z_index;
+    if(el.border_radius)elCopy.border_radius=el.border_radius;
+    if(el.overflow)elCopy.overflow=el.overflow;
+    const elYaml=Object.keys(elCopy).length?_yaml.s(elCopy):'';
+    let h='<details style="margin-bottom:6px;" data-panel="el-'+i+'">';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Element: '+this._e(el.id||'el_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-el-id="'+i+'" type="text" value="'+this._e(el.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-el-top="'+i+'" type="text" value="'+this._e(el.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-el-left="'+i+'" type="text" value="'+this._e(el.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-el-w="'+i+'" type="text" value="'+this._e(el.width||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-el-h="'+i+'" type="text" value="'+this._e(el.height||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">card / visible / z_index / border_radius (YAML)</label>';
+    h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
+    h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
+    h+='</div></details>';
+    return h;
+  }
 
-    const c = this._config;
-    const e = this._e.bind(this);
-    const ov = c.overlays ?? [];
-    const zones = c.zones ?? [];
-    const badges = c.badges ?? [];
-    const els = c.elements ?? [];
+  _render(){
+    if(!this._config)return;
+    const c=this._config;
+    const open=new Set();
+    this.querySelectorAll('details[data-panel]').forEach(function(d){if(d.open)open.add(d.dataset.panel);});
+    const firstRender=open.size===0;
 
-    this.innerHTML = `
-<style>
-room-overlay-card-editor*{box-sizing:border-box;}
-room-overlay-card-editor{display:block;padding:16px;font-family:var(--paper-font-body1_-_font-family,inherit);}
-room-overlay-card-editor details{border:1px solid var(--divider-color,#e0e0e0);border-radius:8px;margin-bottom:8px;overflow:hidden;}
-room-overlay-card-editor summary{padding:12px 16px;background:var(--secondary-background-color,#f5f5f5);cursor:pointer;font-weight:500;list-style:none;display:flex;justify-content:space-between;user-select:none;}
-room-overlay-card-editor summary::-webkit-details-marker{display:none;}
-room-overlay-card-editor .body{padding:16px;display:flex;flex-direction:column;gap:10px;}
-room-overlay-card-editor label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--secondary-text-color,#666);}
-room-overlay-card-editor label small{font-size:10px;opacity:.7;}
-room-overlay-card-editor input,room-overlay-card-editor select,room-overlay-card-editor textarea{width:100%;padding:7px 9px;border:1px solid var(--divider-color,#ccc);border-radius:4px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#000);font-size:13px;}
-room-overlay-card-editor textarea{font-family:monospace;font-size:12px;min-height:55px;resize:vertical;}
-room-overlay-card-editor .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-room-overlay-card-editor .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-room-overlay-card-editor .row4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;}
-room-overlay-card-editor .item{border:1px solid var(--divider-color,#e0e0e0);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--secondary-background-color,#fafafa);}
-room-overlay-card-editor .ihead{display:flex;justify-content:space-between;align-items:center;}
-room-overlay-card-editor button{padding:6px 12px;border:none;border-radius:4px;cursor:pointer;font-size:12px;font-weight:500;}
-room-overlay-card-editor .rm-btn{background:var(--error-color,#f44336);color:#fff;}
-room-overlay-card-editor .add-btn{background:var(--primary-color,#03a9f4);color:#fff;margin-top:4px;align-self:flex-start;}
-room-overlay-card-editor input[type=checkbox]{width:auto;margin-right:6px;}
-room-overlay-card-editor .cb-row{display:flex;align-items:center;font-size:14px;color:var(--primary-text-color,#000);}
-</style>
+    const tapYaml=c.tap_action?_yaml.s(c.tap_action):'';
+    const sec=function(id,label,count,inner){
+      const isOpen=open.has(id)||(firstRender&&id==='basic');
+      return '<details data-panel="'+id+'"'+(isOpen?' open':'')+' style="margin-bottom:8px;">'
+        +'<summary style="cursor:pointer;padding:10px 12px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;justify-content:space-between;">'
+        +'<span>'+label+(count!==undefined?' ('+count+')':'')+'</span>'
+        +'<ha-icon icon="mdi:chevron-down" style="--mdc-icon-size:18px;"></ha-icon>'
+        +'</summary>'
+        +'<div style="padding:12px;border:1px solid var(--divider-color);border-top:none;border-radius:0 0 6px 6px;margin-top:-1px;">'+inner+'</div>'
+        +'</details>';
+    };
 
-<details>
-  <summary>Basic settings ▸</summary>
-  <div class="body">
-    <label>Room image (base_image) *<br>
-      <input data-key="base_image" value="${e(c.base_image ?? '')}"></label>
-    <div class="row2">
-      <label>Aspect ratio (aspect_ratio)<br>
-        <input data-key="aspect_ratio" value="${e(c.aspect_ratio ?? '16/9')}" placeholder="1720/783 or 16/9"></label>
-      <label>Corner radius (border_radius)<br>
-        <input data-key="border_radius" value="${e(c.border_radius ?? '12px')}"></label>
-    </div>
-    <label>Filter transition (filter_transition)<br>
-      <input data-key="filter_transition" value="${e(c.filter_transition ?? '2.0s ease')}"></label>
-    <label>Filter conditions – JSON array
-      <small>[{condition:{entity:"light.x",state:"on"},filter:"brightness(2.6) sepia(0.35)"},…,{filter:"brightness(0.6)"}]</small><br>
-      <textarea data-filter-conds style="min-height:80px">${c.filter_conditions?.length ? JSON.stringify(c.filter_conditions, null, 2) : ''}</textarea></label>
-    <label class="cb-row"><input type="checkbox" data-key="test_mode" ${c.test_mode ? 'checked' : ''}>
-      Test mode (red zone borders, blue element borders)</label>
-  </div>
-</details>
+    const btnStyle='padding:6px 14px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:13px;';
 
-<details>
-  <summary>Overlay layers (${ov.length}) ▸</summary>
-  <div class="body">
-    ${ov.map((o, i) => this._ovItem(o, i)).join('')}
-    <button type="button" class="add-btn" id="add-ov">+ Add overlay</button>
-  </div>
-</details>
+    let basicInner='<div style="display:grid;gap:8px;">';
+    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Base image URL *</label><input id="base_image" type="text" value="'+this._e(c.base_image||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Aspect ratio</label><input id="aspect_ratio" type="text" value="'+this._e(c.aspect_ratio||'16/9')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Border radius</label><input id="border_radius" type="text" value="'+this._e(c.border_radius||'12px')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
+    basicInner+='</div>';
+    basicInner+='<div style="display:flex;align-items:center;gap:8px;"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="test_mode">Test mode (show zone &amp; element outlines)</label></div>';
+    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    basicInner+='</div>';
 
-<details>
-  <summary>Clickable zones (${zones.length}) ▸</summary>
-  <div class="body">
-    ${zones.map((z, i) => this._zoneItem(z, i)).join('')}
-    <button type="button" class="add-btn" id="add-zone">+ Add zone</button>
-  </div>
-</details>
+    let filterInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Conditions are evaluated in order — first match wins. A block without an entity is the default (fallback).</p>';
+    filterInner+='<div id="filter-blocks">';
+    const self=this;
+    (c.filter_conditions||[]).forEach(function(fc,i){filterInner+=self._filterBlock(fc,i);});
+    filterInner+='</div>';
+    filterInner+='<button id="add-filter" style="'+btnStyle+'">+ Add filter condition</button>';
 
-<details>
-  <summary>Status badges (${badges.length}) ▸</summary>
-  <div class="body">
-    ${badges.map((b, i) => this._badgeItem(b, i)).join('')}
-    <button type="button" class="add-btn" id="add-badge">+ Add badge</button>
-  </div>
-</details>
+    let ovInner='<div id="ov-list">';
+    (c.overlays||[]).forEach(function(ov,i){ovInner+=self._ovItem(ov,i);});
+    ovInner+='</div><button id="add-ov" style="'+btnStyle+'margin-top:4px;">+ Add overlay</button>';
 
-<details>
-  <summary>Embedded cards (${els.length}) ▸</summary>
-  <div class="body">
-    ${els.map((el, i) => this._elItem(el, i)).join('')}
-    <button type="button" class="add-btn" id="add-el">+ Add embedded card</button>
-  </div>
-</details>`;
+    let zInner='<div id="z-list">';
+    (c.zones||[]).forEach(function(z,i){zInner+=self._zoneItem(z,i);});
+    zInner+='</div><button id="add-z" style="'+btnStyle+'margin-top:4px;">+ Add zone</button>';
+
+    let bInner='<div id="b-list">';
+    (c.badges||[]).forEach(function(b,i){bInner+=self._badgeItem(b,i);});
+    bInner+='</div><button id="add-b" style="'+btnStyle+'margin-top:4px;">+ Add badge</button>';
+
+    let elInner='<div id="el-list">';
+    (c.elements||[]).forEach(function(el,i){elInner+=self._elItem(el,i);});
+    elInner+='</div><button id="add-el" style="'+btnStyle+'margin-top:4px;">+ Add element</button>';
+
+    this.innerHTML='<div style="padding:8px;">'
+      +sec('basic','Basic settings',undefined,basicInner)
+      +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
+      +sec('overlays','Overlay layers',(c.overlays||[]).length,ovInner)
+      +sec('zones','Clickable zones',(c.zones||[]).length,zInner)
+      +sec('badges','Status badges',(c.badges||[]).length,bInner)
+      +sec('elements','Embedded HA cards',(c.elements||[]).length,elInner)
+      +'</div>';
 
     this._listen();
+    this._bindHassComponents();
+  }
 
-    // Restore open panels (first panel open by default on first render)
-    this.querySelectorAll('details').forEach((d, i) => {
-      d.open = openPanels.size > 0 ? openPanels.has(i) : i === 0;
+  _bindHassComponents(){
+    const self=this;
+    this.querySelectorAll('.ep-placeholder').forEach(function(span){
+      const val=span.dataset.epVal||'';
+      const picker=document.createElement('ha-entity-picker');
+      picker.style.cssText='width:100%;display:block;';
+      if(self._hass)picker.hass=self._hass;
+      picker.value=val;
+      picker.allowCustomEntity=true;
+      picker.addEventListener('value-changed',function(e){
+        picker.value=e.detail.value||'';
+        self._fire(self._collectConfig());
+      });
+      span.replaceWith(picker);
+    });
+    this.querySelectorAll('[data-fp-range]').forEach(function(range){
+      const num=self.querySelector('[data-fp="'+range.dataset.fp+'"][data-fp-num]');
+      if(!num)return;
+      range.addEventListener('input',function(){num.value=range.value;self._fire(self._collectConfig());});
+      num.addEventListener('change',function(){range.value=num.value;self._fire(self._collectConfig());});
     });
   }
 
-  _listen() {
-    const onChange = () => this._fire(this._collectConfig());
-    this.querySelectorAll('input, select, textarea').forEach(el => el.addEventListener('change', onChange));
+  _listen(){
+    const self=this;
+    const fire=function(){self._fire(self._collectConfig());};
 
-    const addRemove = (addId, listKey, defaultItem) => {
-      this.querySelector(addId)?.addEventListener('click', () => {
-        const c = this._collectConfig();
-        c[listKey] = [...(c[listKey] ?? []), defaultItem];
-        this._config = c; this._fire(c); this._render();
+    ['base_image','aspect_ratio','border_radius','filter_transition'].forEach(function(id){
+      const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
+    });
+    const tm=this.querySelector('#test_mode');if(tm)tm.addEventListener('change',fire);
+    const ta=this.querySelector('#tap_action_yaml');if(ta)ta.addEventListener('change',fire);
+
+    // Filter conditions
+    const addF=this.querySelector('#add-filter');
+    if(addF)addF.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.filter_conditions)c.filter_conditions=[];
+      c.filter_conditions.push({filter:'none'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-filter]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmFilter);
+        const c=self._collectConfig();
+        if(c.filter_conditions)c.filter_conditions.splice(i,1);
+        self._config=c;self._render();self._fire(c);
       });
-    };
+    });
+    this.querySelectorAll('[data-filter-state-op],[data-filter-state-val]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
 
-    addRemove('#add-ov', 'overlays', { id: `overlay_${Date.now()}`, image: '', transition: '2s ease' });
-    addRemove('#add-zone', 'zones', { id: `zona_${Date.now()}`, top: '0%', left: '0%', width: '20%', height: '20%' });
-    addRemove('#add-badge', 'badges', { id: `badge_${Date.now()}`, position: 'bottom-left', icon: 'mdi:information' });
-    addRemove('#add-el', 'elements', { id: `element_${Date.now()}`, top: '10%', left: '10%', width: '30%', height: '30%', z_index: 4, card: { type: 'tile', entity: '' } });
-
-    const rmMap = { 'rm-ov': 'overlays', 'rm-zone': 'zones', 'rm-badge': 'badges', 'rm-el': 'elements' };
-    Object.entries(rmMap).forEach(([attr, key]) => {
-      this.querySelectorAll(`[data-${attr}]`).forEach(btn => {
-        btn.addEventListener('click', () => {
-          const c = this._collectConfig();
-          c[key].splice(parseInt(btn.dataset[attr.replace('-','')]), 1);
-          this._config = c; this._fire(c); this._render();
-        });
+    // Overlays
+    const addOv=this.querySelector('#add-ov');
+    if(addOv)addOv.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.overlays)c.overlays=[];
+      c.overlays.push({id:'overlay_'+(c.overlays.length+1),image:'',transition:'2s ease'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-ov]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmOv);
+        const c=self._collectConfig();
+        if(c.overlays)c.overlays.splice(i,1);
+        self._config=c;self._render();self._fire(c);
       });
+    });
+    this.querySelectorAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Zones
+    const addZ=this.querySelector('#add-z');
+    if(addZ)addZ.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.zones)c.zones=[];
+      c.zones.push({id:'zone_'+(c.zones.length+1),top:'0%',left:'0%',width:'10%',height:'10%'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-z]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmZ);
+        const c=self._collectConfig();
+        if(c.zones)c.zones.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-vis]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Badges
+    const addB=this.querySelector('#add-b');
+    if(addB)addB.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.badges)c.badges=[];
+      c.badges.push({id:'badge_'+(c.badges.length+1),position:'bottom-left'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-b]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmB);
+        const c=self._collectConfig();
+        if(c.badges)c.badges.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-b-id],[data-b-icon],[data-b-pos],[data-b-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Elements
+    const addEl=this.querySelector('#add-el');
+    if(addEl)addEl.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.elements)c.elements=[];
+      c.elements.push({id:'el_'+(c.elements.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-el]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmEl);
+        const c=self._collectConfig();
+        if(c.elements)c.elements.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
     });
   }
 }
 
-customElements.define('room-overlay-card-editor', RoomOverlayCardEditor);
-
-// Zaregistrovat editor na hlavní kartě
-customElements.get('room-overlay-card').getConfigElement = () =>
-  document.createElement('room-overlay-card-editor');
+customElements.define('room-overlay-card-editor',RoomOverlayCardEditor);
+customElements.get('room-overlay-card').getConfigElement=function(){return document.createElement('room-overlay-card-editor');};
