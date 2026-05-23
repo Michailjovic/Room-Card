@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.9 — MIT License
+ * room-overlay-card v0.3.10 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -329,7 +329,21 @@ function buildFilterStr(obj){
 class RoomOverlayCardEditor extends HTMLElement{
   constructor(){super();this._config=null;this._hass=null;}
 
-  setConfig(cfg){this._config=cfg;this._render();}
+  setConfig(cfg){
+    const prev=this._config;
+    this._config=cfg;
+    if(prev&&this.innerHTML.trim()){
+      const same=
+        (prev.overlays||[]).length===(cfg.overlays||[]).length&&
+        (prev.zones||[]).length===(cfg.zones||[]).length&&
+        (prev.badges||[]).length===(cfg.badges||[]).length&&
+        (prev.elements||[]).length===(cfg.elements||[]).length&&
+        (prev.icons||[]).length===(cfg.icons||[]).length&&
+        (prev.filter_conditions||[]).length===(cfg.filter_conditions||[]).length;
+      if(same)return;
+    }
+    this._render();
+  }
 
   set hass(h){
     this._hass=h;
@@ -420,6 +434,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       const holdEl=q('[data-z-hold="'+i+'"]');
       if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}
       else delete o.hold_action;
+      const dtapEl=q('[data-z-dtap="'+i+'"]');
+      if(dtapEl&&dtapEl.value.trim()){const p=_yaml.p(dtapEl.value);if(p)o.double_tap_action=p;else delete o.double_tap_action;}
+      else delete o.double_tap_action;
+      const hdelEl=q('[data-z-hdelay="'+i+'"]');
+      if(hdelEl&&hdelEl.value&&parseInt(hdelEl.value)!==500)o.hold_delay=parseInt(hdelEl.value);else delete o.hold_delay;
       const visEl=q('[data-z-vis="'+i+'"]');
       if(visEl&&visEl.value.trim()){const p=_yaml.p(visEl.value);if(p)o.visible=p;else delete o.visible;}
       else delete o.visible;
@@ -431,6 +450,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const idEl=q('[data-b-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const posEl=q('[data-b-pos="'+i+'"]');if(posEl)o.position=posEl.value;
       const iconEl=q('[data-b-icon="'+i+'"]');if(iconEl){if(iconEl.value)o.icon=iconEl.value;else delete o.icon;}
+      const bxEl=q('[data-b-x="'+i+'"]');if(bxEl){if(bxEl.value.trim())o.x=bxEl.value.trim();else delete o.x;}
+      const byEl=q('[data-b-y="'+i+'"]');if(byEl){if(byEl.value.trim())o.y=byEl.value.trim();else delete o.y;}
       const yaEl=q('[data-b-yaml="'+i+'"]');
       if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
       return o;
@@ -536,7 +557,8 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _ovItem(ov,i){
     const condYaml=ov.conditions?_yaml.s(ov.conditions):'';
-    let h='<details style="margin-bottom:6px;" data-panel="ov-'+i+'">';
+    const ovOpen=this._openPanels&&this._openPanels.has('ov-'+i);
+    let h='<details style="margin-bottom:6px;" data-panel="ov-'+i+'"'+(ovOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Overlay: '+this._e(ov.id||'ov_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
@@ -556,7 +578,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     const holdYaml=z.hold_action?_yaml.s(z.hold_action):'';
     const dtapYaml=z.double_tap_action?_yaml.s(z.double_tap_action):'';
     const visYaml=z.visible?_yaml.s(z.visible):'';
-    let h='<details style="margin-bottom:6px;" data-panel="z-'+i+'">';
+    const zOpen=this._openPanels&&this._openPanels.has('z-'+i);
+    let h='<details style="margin-bottom:6px;" data-panel="z-'+i+'"'+(zOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Zone: '+this._e(z.id||'zone_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
@@ -581,7 +604,8 @@ class RoomOverlayCardEditor extends HTMLElement{
   _badgeItem(b,i){
     const bCopy=Object.assign({},b);delete bCopy.id;delete bCopy.icon;delete bCopy.position;
     const bYaml=Object.keys(bCopy).length?_yaml.s(bCopy):'';
-    let h='<details style="margin-bottom:6px;" data-panel="b-'+i+'">';
+    const bOpen=this._openPanels&&this._openPanels.has('b-'+i);
+    let h='<details style="margin-bottom:6px;" data-panel="b-'+i+'"'+(bOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Badge: '+this._e(b.id||'badge_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
@@ -610,7 +634,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(el.border_radius)elCopy.border_radius=el.border_radius;
     if(el.overflow)elCopy.overflow=el.overflow;
     const elYaml=Object.keys(elCopy).length?_yaml.s(elCopy):'';
-    let h='<details style="margin-bottom:6px;" data-panel="el-'+i+'">';
+    const elOpen=this._openPanels&&this._openPanels.has('el-'+i);
+    let h='<details style="margin-bottom:6px;" data-panel="el-'+i+'"'+(elOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Element: '+this._e(el.id||'el_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
@@ -633,7 +658,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     const dtapYaml=ico.double_tap_action?_yaml.s(ico.double_tap_action):'';
     const colorYaml=ico.color?_yaml.s(ico.color):'';
     const visYaml=ico.visible?_yaml.s(ico.visible):'';
-    let h='<details style="margin-bottom:6px;" data-panel="ico-'+i+'">';
+    const icoOpen=this._openPanels&&this._openPanels.has('ico-'+i);
+    let h='<details style="margin-bottom:6px;" data-panel="ico-'+i+'"'+(icoOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Icon: '+this._e(ico.id||'ico_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
@@ -664,6 +690,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const c=this._config;
     const open=new Set();
     this.querySelectorAll('details[data-panel]').forEach(function(d){if(d.open)open.add(d.dataset.panel);});
+    this._openPanels=open;
     const firstRender=open.size===0;
 
     const tapYaml=c.tap_action?_yaml.s(c.tap_action):'';
