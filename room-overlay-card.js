@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.8 — MIT License
+ * room-overlay-card v0.3.9 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -32,6 +32,11 @@ function resolveFilter(conds,states){
 
 const BPOS={'bottom-left':'bottom:10px;left:10px','bottom-right':'bottom:10px;right:10px','top-left':'top:10px;left:10px','top-right':'top:10px;right:10px'};
 
+function makeBadgePos(b){
+  if(b.position==='custom')return 'top:'+(b.y||'auto')+';left:'+(b.x||'auto')+';';
+  return BPOS[b.position||'bottom-left']||BPOS['bottom-left'];
+}
+
 function makeHACard(cfg){
   if(!cfg?.type)return null;
   const name=cfg.type.startsWith('custom:')?cfg.type.substring(7):`hui-${cfg.type}-card`;
@@ -48,10 +53,12 @@ class RoomOverlayCard extends HTMLElement{
     this._config=null;this._hass=null;this._rendered=false;
     this._baseEl=null;this._ovEls={};this._zoneEls={};
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
+    this._icoEls={};
     this._rafPending=false;this._relevantEntities=null;this._prevStates={};
+    this._io=null;this._visible=true;
   }
 
-  static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],test_mode:false};}
+  static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false};}
 
   setConfig(cfg){
     if(!cfg.base_image)throw new Error('[room-overlay-card] base_image is required');
@@ -61,6 +68,7 @@ class RoomOverlayCard extends HTMLElement{
   set hass(h){
     this._hass=h;if(!this._config)return;
     if(!this._rendered){this._render();return;}
+    if(!this._visible)return;
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
       if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))return;
@@ -86,33 +94,42 @@ class RoomOverlayCard extends HTMLElement{
 
   getCardSize(){return 4;}
 
-  _addZoneListeners(el,tapAction,holdAction){
-    let timer=null,held=false;
-    el.addEventListener('touchstart',()=>{
-      held=false;clearTimeout(timer);
-      if(holdAction)timer=setTimeout(()=>{held=true;},500);
+  _addZoneListeners(el,tapAction,holdAction,doubleTapAction,holdDelay){
+    const delay=holdDelay??500;
+    let holdTimer=null,held=false,tapTimer=null,lastTapTime=0;
+    const self=this;
+    const onTap=function(e){
+      if(held){if(holdAction)self._exec(holdAction,e);held=false;return;}
+      if(doubleTapAction){
+        const now=Date.now();
+        if(now-lastTapTime<350&&tapTimer){
+          clearTimeout(tapTimer);tapTimer=null;lastTapTime=0;
+          self._exec(doubleTapAction,e);
+        }else{
+          lastTapTime=now;
+          if(tapAction)tapTimer=setTimeout(function(){tapTimer=null;self._exec(tapAction,e);},350);
+        }
+      }else{
+        if(tapAction)self._exec(tapAction,e);
+      }
+    };
+    el.addEventListener('touchstart',function(){
+      held=false;clearTimeout(holdTimer);
+      if(holdAction)holdTimer=setTimeout(function(){held=true;},delay);
     },{passive:true});
-    el.addEventListener('touchend',e=>{
-      clearTimeout(timer);
-      e.stopPropagation();e.preventDefault();
-      if(held){if(holdAction)this._exec(holdAction,e);}
-      else{if(tapAction)this._exec(tapAction,e);}
-      held=false;
+    el.addEventListener('touchend',function(e){
+      clearTimeout(holdTimer);e.stopPropagation();e.preventDefault();onTap(e);
     });
-    el.addEventListener('touchmove',()=>clearTimeout(timer),{passive:true});
-    el.addEventListener('touchcancel',()=>{clearTimeout(timer);held=false;});
-    el.addEventListener('mousedown',()=>{
-      held=false;clearTimeout(timer);
-      if(holdAction)timer=setTimeout(()=>{held=true;},500);
+    el.addEventListener('touchmove',function(){clearTimeout(holdTimer);},{passive:true});
+    el.addEventListener('touchcancel',function(){clearTimeout(holdTimer);held=false;});
+    el.addEventListener('mousedown',function(){
+      held=false;clearTimeout(holdTimer);
+      if(holdAction)holdTimer=setTimeout(function(){held=true;},delay);
     });
-    el.addEventListener('click',e=>{
-      clearTimeout(timer);
-      e.stopPropagation();e.preventDefault();
-      if(held){if(holdAction)this._exec(holdAction,e);}
-      else{if(tapAction)this._exec(tapAction,e);}
-      held=false;
+    el.addEventListener('click',function(e){
+      clearTimeout(holdTimer);e.stopPropagation();e.preventDefault();onTap(e);
     });
-    el.addEventListener('mouseleave',()=>{clearTimeout(timer);held=false;});
+    el.addEventListener('mouseleave',function(){clearTimeout(holdTimer);held=false;});
   }
 
   _pad(r){
@@ -121,16 +138,27 @@ class RoomOverlayCard extends HTMLElement{
     return'56.25%';
   }
 
+  _preloadImages(){
+    const c=this._config,urls=new Set();
+    if(c.base_image)urls.add(c.base_image);
+    for(const ov of(c.overlays||[])){
+      if(ov.image)urls.add(ov.image);
+      if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
+    }
+    urls.forEach(function(url){const img=new Image();img.src=url;});
+  }
+
   _render(){
     if(!this._config)return;
     const c=this._config,tm=c.test_mode??false;
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
 
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
-    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
-    const bHtml=(c.badges||[]).map(b=>`<div class="badge" data-b="${b.id}" style="${BPOS[b.position||'bottom-left']};cursor:${b.tap_action?'pointer':'default'};-webkit-tap-highlight-color:transparent;">${b.icon?`<ha-icon data-bi="${b.id}" icon="${b.icon}" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>`:''} ${b.label!==undefined?`<span class="blabel" data-bl="${b.id}"></span>`:''}</div>`).join('');
+    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action||z.double_tap_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
+    const bHtml=(c.badges||[]).map(b=>`<div class="badge" data-b="${b.id}" style="${makeBadgePos(b)};cursor:${b.tap_action?'pointer':'default'};-webkit-tap-highlight-color:transparent;">${b.icon?`<ha-icon data-bi="${b.id}" icon="${b.icon}" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>`:''} ${b.label!==undefined?`<span class="blabel" data-bl="${b.id}"></span>`:''}</div>`).join('');
+    const icoHtml=(c.icons||[]).map(ico=>{const sz=ico.size||'20px';return'<div class="ico" data-ico="'+ico.id+'" style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;"><ha-icon data-icoicon="'+ico.id+'" icon="'+(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:white;pointer-events:none;"></ha-icon></div>';}).join('');
 
-    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+'</div></div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+icoHtml+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -140,7 +168,8 @@ class RoomOverlayCard extends HTMLElement{
     for(const z of(c.zones||[])){
       const el=this.shadowRoot.querySelector('[data-z="'+z.id+'"]');
       if(!el)continue;this._zoneEls[z.id]=el;
-      if(z.tap_action||z.hold_action)this._addZoneListeners(el,z.tap_action,z.hold_action);
+      if(z.tap_action||z.hold_action||z.double_tap_action)
+        this._addZoneListeners(el,z.tap_action,z.hold_action,z.double_tap_action,z.hold_delay);
     }
     this._biconEls={};this._blabelEls={};
     for(const b of(c.badges||[])){
@@ -148,6 +177,12 @@ class RoomOverlayCard extends HTMLElement{
       this._blabelEls[b.id]=this.shadowRoot.querySelector('[data-bl="'+b.id+'"]');
       const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
       if(bel&&b.tap_action){bel.addEventListener('click',e=>this._exec(b.tap_action,e));bel.addEventListener('touchend',e=>this._exec(b.tap_action,e));}
+    }
+    this._icoEls={};
+    for(const ico of(c.icons||[])){
+      const el=this.shadowRoot.querySelector('[data-ico="'+ico.id+'"]');
+      if(!el)continue;this._icoEls[ico.id]=el;
+      if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
     this._cardEls={};this._contEls={};
     for(const el of(c.elements||[])){
@@ -162,12 +197,24 @@ class RoomOverlayCard extends HTMLElement{
     const hacard=this.shadowRoot.querySelector('ha-card');
     if(hacard&&c.tap_action){
       hacard.addEventListener('click',e=>{
-        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')))this._exec(c.tap_action,e);
+        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')))this._exec(c.tap_action,e);
       });
+    }
+    // IntersectionObserver — zastav updates když karta není ve viewportu
+    if(this._io)this._io.disconnect();
+    if(typeof IntersectionObserver!=='undefined'){
+      const self=this;
+      this._io=new IntersectionObserver(function(entries){
+        self._visible=entries[0].isIntersecting;
+        if(self._visible&&self._hass&&self._rendered)self._update();
+      },{threshold:0});
+      this._io.observe(this);
     }
     this._relevantEntities=[...this._extractEntities(this._config)];
     this._prevStates={};
-    this._rendered=true;this._update();
+    this._rendered=true;
+    this._preloadImages();
+    this._update();
   }
 
   _update(){
@@ -195,10 +242,19 @@ class RoomOverlayCard extends HTMLElement{
       const lel=this._blabelEls[b.id];
       if(lel&&b.label){const t=resolveVal(b.label,s,'');if(lel.textContent!==t)lel.textContent=t;}
     }
+    for(const ico of(c.icons||[])){
+      const el=this._icoEls[ico.id];if(!el)continue;
+      if(ico.visible)el.style.display=evalCond(ico.visible,s)?'flex':'none';
+      if(ico.color){
+        const haicon=el.querySelector('ha-icon');
+        if(haicon)haicon.style.color=resolveVal(ico.color,s,'white');
+      }
+    }
     for(const el of(c.elements||[])){
       const card=this._cardEls[el.id],cont=this._contEls[el.id];
-      if(card)try{card.hass=this._hass;}catch(_){}
-      if(cont&&el.visible)cont.style.display=evalCond(el.visible,s)?'block':'none';
+      let vis=true;
+      if(cont&&el.visible){vis=evalCond(el.visible,s);cont.style.display=vis?'block':'none';}
+      if(card&&vis)try{card.hass=this._hass;}catch(_){}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
@@ -392,6 +448,28 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
+    c.icons=(c.icons||[]).map(function(ico,i){
+      const o=Object.assign({},ico);
+      const idEl=q('[data-ico-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const iconEl=q('[data-ico-icon="'+i+'"]');if(iconEl)o.icon=iconEl.value;
+      const sizeEl=q('[data-ico-size="'+i+'"]');if(sizeEl)o.size=sizeEl.value||'20px';
+      const zEl=q('[data-ico-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value);
+      const topEl=q('[data-ico-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const lefEl=q('[data-ico-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
+      const hdelEl=q('[data-ico-hdelay="'+i+'"]');
+      if(hdelEl&&hdelEl.value&&parseInt(hdelEl.value)!==500)o.hold_delay=parseInt(hdelEl.value);else delete o.hold_delay;
+      const colorEl=q('[data-ico-color="'+i+'"]');
+      if(colorEl&&colorEl.value.trim()){const p=_yaml.p(colorEl.value);if(p)o.color=p;else delete o.color;}else delete o.color;
+      const visEl=q('[data-ico-vis="'+i+'"]');
+      if(visEl&&visEl.value.trim()){const p=_yaml.p(visEl.value);if(p)o.visible=p;else delete o.visible;}else delete o.visible;
+      const tapEl=q('[data-ico-tap="'+i+'"]');
+      if(tapEl&&tapEl.value.trim()){const p=_yaml.p(tapEl.value);if(p)o.tap_action=p;else delete o.tap_action;}else delete o.tap_action;
+      const dtapEl=q('[data-ico-dtap="'+i+'"]');
+      if(dtapEl&&dtapEl.value.trim()){const p=_yaml.p(dtapEl.value);if(p)o.double_tap_action=p;else delete o.double_tap_action;}else delete o.double_tap_action;
+      const holdEl=q('[data-ico-hold="'+i+'"]');
+      if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}else delete o.hold_action;
+      return o;
+    });
     return c;
   }
 
@@ -476,6 +554,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   _zoneItem(z,i){
     const tapYaml=z.tap_action?_yaml.s(z.tap_action):'';
     const holdYaml=z.hold_action?_yaml.s(z.hold_action):'';
+    const dtapYaml=z.double_tap_action?_yaml.s(z.double_tap_action):'';
     const visYaml=z.visible?_yaml.s(z.visible):'';
     let h='<details style="margin-bottom:6px;" data-panel="z-'+i+'">';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Zone: '+this._e(z.id||'zone_'+i)+'</summary>';
@@ -486,11 +565,13 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-z-left="'+i+'" type="text" value="'+this._e(z.left||'')+'"'+this._inp('')+'></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-z-w="'+i+'" type="text" value="'+this._e(z.width||'')+'"'+this._inp('')+'></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-z-h="'+i+'" type="text" value="'+this._e(z.height||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_delay (ms)</label><input data-z-hdelay="'+i+'" type="number" value="'+this._e(String(z.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea data-z-tap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea data-z-tap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">double_tap_action (YAML)</label><textarea data-z-dtap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
     h+='</div>';
     h+='<button data-rm-z="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove zone</button>';
     h+='</div></details>';
@@ -509,8 +590,11 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Position</label>';
     h+='<select data-b-pos="'+i+'"'+this._inp('')+'>';
     const bp=b.position||'bottom-left';
-    ['bottom-left','bottom-right','top-left','top-right'].forEach(function(p){h+='<option value="'+p+'"'+(bp===p?' selected':'')+'>'+p+'</option>';});
-    h+='</select></div></div>';
+    ['bottom-left','bottom-right','top-left','top-right','custom'].forEach(function(p){h+='<option value="'+p+'"'+(bp===p?' selected':'')+'>'+p+'</option>';});
+    h+='</select></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">X (custom pos)</label><input data-b-x="'+i+'" type="text" placeholder="e.g. 30%" value="'+this._e(b.x||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Y (custom pos)</label><input data-b-y="'+i+'" type="text" placeholder="e.g. 15%" value="'+this._e(b.y||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">label / visible / icon_color / tap_action (YAML)</label>';
     h+='<textarea data-b-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(bYaml)+'</textarea></div>';
     h+='<button data-rm-b="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove badge</button>';
@@ -539,6 +623,38 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">card / visible / z_index / border_radius (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
     h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
+    h+='</div></details>';
+    return h;
+  }
+
+  _icoItem(ico,i){
+    const tapYaml=ico.tap_action?_yaml.s(ico.tap_action):'';
+    const holdYaml=ico.hold_action?_yaml.s(ico.hold_action):'';
+    const dtapYaml=ico.double_tap_action?_yaml.s(ico.double_tap_action):'';
+    const colorYaml=ico.color?_yaml.s(ico.color):'';
+    const visYaml=ico.visible?_yaml.s(ico.visible):'';
+    let h='<details style="margin-bottom:6px;" data-panel="ico-'+i+'">';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Icon: '+this._e(ico.id||'ico_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-ico-id="'+i+'" type="text" value="'+this._e(ico.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Icon (mdi:...)</label><input data-ico-icon="'+i+'" type="text" value="'+this._e(ico.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Size</label><input data-ico-size="'+i+'" type="text" placeholder="20px" value="'+this._e(ico.size||'20px')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">z-index</label><input data-ico-z="'+i+'" type="number" value="'+this._e(String(ico.z_index||6))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-ico-top="'+i+'" type="text" value="'+this._e(ico.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-ico-left="'+i+'" type="text" value="'+this._e(ico.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_delay (ms)</label><input data-ico-hdelay="'+i+'" type="number" value="'+this._e(String(ico.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">color (YAML condition list)</label><textarea data-ico-color="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(colorYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML condition)</label><textarea data-ico-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea data-ico-tap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">double_tap_action (YAML)</label><textarea data-ico-dtap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
+    h+='</div>';
+    h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
     h+='</div></details>';
     return h;
   }
@@ -598,6 +714,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     (c.elements||[]).forEach(function(el,i){elInner+=self._elItem(el,i);});
     elInner+='</div><button id="add-el" style="'+btnStyle+'margin-top:4px;">+ Add element</button>';
 
+    let icoInner='<div id="ico-list">';
+    (c.icons||[]).forEach(function(ico,i){icoInner+=self._icoItem(ico,i);});
+    icoInner+='</div><button id="add-ico" style="'+btnStyle+'margin-top:4px;">+ Add icon</button>';
+
     this.innerHTML='<div style="padding:8px;">'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
@@ -605,6 +725,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +sec('zones','Clickable zones',(c.zones||[]).length,zInner)
       +sec('badges','Status badges',(c.badges||[]).length,bInner)
       +sec('elements','Embedded HA cards',(c.elements||[]).length,elInner)
+      +sec('icons','Icon overlays',(c.icons||[]).length,icoInner)
       +'</div>';
 
     this._listen();
@@ -700,7 +821,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-vis]').forEach(function(el){
+    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-dtap],[data-z-hdelay],[data-z-vis]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
@@ -720,7 +841,27 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-b-id],[data-b-icon],[data-b-pos],[data-b-yaml]').forEach(function(el){
+    this.querySelectorAll('[data-b-id],[data-b-icon],[data-b-pos],[data-b-x],[data-b-y],[data-b-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Icons
+    const addIco=this.querySelector('#add-ico');
+    if(addIco)addIco.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.icons)c.icons=[];
+      c.icons.push({id:'icon_'+(c.icons.length+1),icon:'mdi:help',top:'10%',left:'10%',size:'24px'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-ico]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmIco);
+        const c=self._collectConfig();
+        if(c.icons)c.icons.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
