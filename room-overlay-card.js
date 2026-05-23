@@ -305,6 +305,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       const entry={};
       const entEl=block.querySelector('[data-filter-entity="'+i+'"]');
       const entity=entEl?entEl.value.trim():'';
+      const buildSubCond=function(prefix){
+        const eEl=block.querySelector('[data-filter-'+prefix+'-entity="'+i+'"]');
+        const ent=eEl?eEl.value.trim():'';
+        if(!ent)return null;
+        const oEl=block.querySelector('[data-filter-'+prefix+'-op="'+i+'"]');
+        const vEl=block.querySelector('[data-filter-'+prefix+'-val="'+i+'"]');
+        const o=oEl?oEl.value:'state';
+        const v=vEl?vEl.value:'';
+        const sc={entity:ent};
+        if(o==='state')sc.state=v;
+        else if(o==='state_not')sc.state_not=v;
+        else{sc.operator=o;sc.value=parseFloat(v)||v;}
+        return sc;
+      };
       if(entity){
         const opEl=block.querySelector('[data-filter-state-op="'+i+'"]');
         const valEl=block.querySelector('[data-filter-state-val="'+i+'"]');
@@ -314,6 +328,8 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(op==='state')cond.state=val;
         else if(op==='state_not')cond.state_not=val;
         else{cond.operator=op;cond.value=parseFloat(val)||val;}
+        const andCond=buildSubCond('and');if(andCond)cond.and=andCond;
+        const orCond=buildSubCond('or');if(orCond)cond.or=orCond;
         entry.condition=cond;
       }
       const filters={};
@@ -381,6 +397,21 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _inp(s){return ' style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;'+s+'"';}
 
+  _condFields(prefix,i,c){
+    // renders entity + op + val fields for a sub-condition (and/or)
+    const entity=c&&c.entity?c.entity:'';
+    const op=c?(c.state!==undefined?'state':c.state_not!==undefined?'state_not':c.operator||'state'):'state';
+    const val=c?(c.state!==undefined?String(c.state):c.state_not!==undefined?String(c.state_not):c.value!==undefined?String(c.value):''):'';
+    let h='<div style="display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:end;margin-bottom:6px;">';
+    h+='<div><input type="text" data-filter-'+prefix+'-entity="'+i+'" placeholder="entity_id (optional)" value="'+this._e(entity)+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><select data-filter-'+prefix+'-op="'+i+'"'+this._inp('font-size:12px;width:auto;')+'>';
+    ['state','state_not','<','>','<=','>=','==','!='].forEach(function(o){h+='<option value="'+o+'"'+(op===o?' selected':'')+'>'+o+'</option>';});
+    h+='</select></div>';
+    h+='<div><input type="text" data-filter-'+prefix+'-val="'+i+'" placeholder="value" value="'+this._e(val)+'"'+this._inp('font-size:12px;width:90px;')+'></div>';
+    h+='</div>';
+    return h;
+  }
+
   _filterBlock(fc,i){
     const cond=fc.condition||null;
     const entity=cond&&cond.entity?cond.entity:'';
@@ -393,15 +424,23 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<span style="font-weight:500;font-size:13px;">Filter #'+(i+1)+(isDefault?' (default)':'')+'</span>';
     h+='<button data-rm-filter="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0 4px;" title="Remove">&#x2715;</button>';
     h+='</div>';
-    h+='<div style="margin-bottom:8px;"><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Condition entity (leave empty for default)</label>';
+    h+='<div style="margin-bottom:6px;"><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Condition entity (leave empty for default)</label>';
     h+='<input type="text" data-filter-entity="'+i+'" placeholder="e.g. light.bedroom" value="'+this._e(entity)+'"'+this._inp('')+'></div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
     h+='<div><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Operator</label>';
     h+='<select data-filter-state-op="'+i+'"'+this._inp('')+'>';
     ['state','state_not','<','>','<=','>=','==','!='].forEach(function(o){h+='<option value="'+o+'"'+(op===o?' selected':'')+'>'+o+'</option>';});
     h+='</select></div>';
     h+='<div><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Value</label>';
     h+='<input data-filter-state-val="'+i+'" type="text" value="'+this._e(val)+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
+    h+='<label style="font-size:11px;color:var(--secondary-text-color);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">AND condition (optional — must also be true)</label>';
+    h+=this._condFields('and',i,cond?cond.and:null);
+    h+='</div>';
+    h+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
+    h+='<label style="font-size:11px;color:var(--secondary-text-color);font-weight:500;text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:4px;">OR condition (optional — fallback if main fails)</label>';
+    h+=this._condFields('or',i,cond?cond.or:null);
     h+='</div>';
     h+='<div><label style="font-size:12px;color:var(--secondary-text-color);font-weight:500;display:block;margin-bottom:6px;">Filter values</label>';
     const self=this;
@@ -621,7 +660,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-filter-entity],[data-filter-state-op],[data-filter-state-val]').forEach(function(el){
+    this.querySelectorAll('[data-filter-entity],[data-filter-state-op],[data-filter-state-val],[data-filter-and-entity],[data-filter-and-op],[data-filter-and-val],[data-filter-or-entity],[data-filter-or-op],[data-filter-or-val]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
@@ -642,6 +681,74 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Zones
+    const addZ=this.querySelector('#add-z');
+    if(addZ)addZ.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.zones)c.zones=[];
+      c.zones.push({id:'zone_'+(c.zones.length+1),top:'0%',left:'0%',width:'10%',height:'10%'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-z]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmZ);
+        const c=self._collectConfig();
+        if(c.zones)c.zones.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-vis]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Badges
+    const addB=this.querySelector('#add-b');
+    if(addB)addB.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.badges)c.badges=[];
+      c.badges.push({id:'badge_'+(c.badges.length+1),position:'bottom-left'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-b]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmB);
+        const c=self._collectConfig();
+        if(c.badges)c.badges.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-b-id],[data-b-icon],[data-b-pos],[data-b-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Elements
+    const addEl=this.querySelector('#add-el');
+    if(addEl)addEl.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.elements)c.elements=[];
+      c.elements.push({id:'el_'+(c.elements.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-el]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmEl);
+        const c=self._collectConfig();
+        if(c.elements)c.elements.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+  }
+}
+
+customElements.define('room-overlay-card-editor',RoomOverlayCardEditor);
+customElements.get('room-overlay-card').getConfigElement=function(){return document.createElement('room-overlay-card-editor');};
+rAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
