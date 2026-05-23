@@ -303,9 +303,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     this.querySelectorAll('.filter-block').forEach(function(block,i){
       const entry={};
-      const epEl=block.querySelector('ha-entity-picker');
-      const phEl=block.querySelector('.ep-placeholder');
-      const entity=epEl?epEl.value:(phEl?phEl.dataset.epVal:'');
+      const entEl=block.querySelector('[data-filter-entity="'+i+'"]');
+      const entity=entEl?entEl.value.trim():'';
       if(entity){
         const opEl=block.querySelector('[data-filter-state-op="'+i+'"]');
         const valEl=block.querySelector('[data-filter-state-val="'+i+'"]');
@@ -395,7 +394,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<button data-rm-filter="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0 4px;" title="Remove">&#x2715;</button>';
     h+='</div>';
     h+='<div style="margin-bottom:8px;"><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Condition entity (leave empty for default)</label>';
-    h+='<span class="ep-placeholder" data-ep-idx="fc-'+i+'" data-ep-val="'+this._e(entity)+'" style="display:block;width:100%;"></span></div>';
+    h+='<input type="text" data-filter-entity="'+i+'" placeholder="e.g. light.bedroom" value="'+this._e(entity)+'"'+this._inp('')+'></div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">';
     h+='<div><label style="font-size:12px;color:var(--secondary-text-color);display:block;margin-bottom:4px;">Operator</label>';
     h+='<select data-filter-state-op="'+i+'"'+this._inp('')+'>';
@@ -622,7 +621,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-filter-state-op],[data-filter-state-val]').forEach(function(el){
+    this.querySelectorAll('[data-filter-entity],[data-filter-state-op],[data-filter-state-val]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
