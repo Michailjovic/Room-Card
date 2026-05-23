@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.0 — MIT License
+ * room-overlay-card v0.3.8 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -681,74 +681,6 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml]').forEach(function(el){
-      el.addEventListener('change',fire);
-    });
-
-    // Zones
-    const addZ=this.querySelector('#add-z');
-    if(addZ)addZ.addEventListener('click',function(){
-      const c=self._collectConfig();
-      if(!c.zones)c.zones=[];
-      c.zones.push({id:'zone_'+(c.zones.length+1),top:'0%',left:'0%',width:'10%',height:'10%'});
-      self._config=c;self._render();self._fire(c);
-    });
-    this.querySelectorAll('[data-rm-z]').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        const i=parseInt(btn.dataset.rmZ);
-        const c=self._collectConfig();
-        if(c.zones)c.zones.splice(i,1);
-        self._config=c;self._render();self._fire(c);
-      });
-    });
-    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-vis]').forEach(function(el){
-      el.addEventListener('change',fire);
-    });
-
-    // Badges
-    const addB=this.querySelector('#add-b');
-    if(addB)addB.addEventListener('click',function(){
-      const c=self._collectConfig();
-      if(!c.badges)c.badges=[];
-      c.badges.push({id:'badge_'+(c.badges.length+1),position:'bottom-left'});
-      self._config=c;self._render();self._fire(c);
-    });
-    this.querySelectorAll('[data-rm-b]').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        const i=parseInt(btn.dataset.rmB);
-        const c=self._collectConfig();
-        if(c.badges)c.badges.splice(i,1);
-        self._config=c;self._render();self._fire(c);
-      });
-    });
-    this.querySelectorAll('[data-b-id],[data-b-icon],[data-b-pos],[data-b-yaml]').forEach(function(el){
-      el.addEventListener('change',fire);
-    });
-
-    // Elements
-    const addEl=this.querySelector('#add-el');
-    if(addEl)addEl.addEventListener('click',function(){
-      const c=self._collectConfig();
-      if(!c.elements)c.elements=[];
-      c.elements.push({id:'el_'+(c.elements.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
-      self._config=c;self._render();self._fire(c);
-    });
-    this.querySelectorAll('[data-rm-el]').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        const i=parseInt(btn.dataset.rmEl);
-        const c=self._collectConfig();
-        if(c.elements)c.elements.splice(i,1);
-        self._config=c;self._render();self._fire(c);
-      });
-    });
-    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
-      el.addEventListener('change',fire);
-    });
-  }
-}
-
-customElements.define('room-overlay-card-editor',RoomOverlayCardEditor);
-customElements.get('room-overlay-card').getConfigElement=function(){return document.createElement('room-overlay-card-editor');};
-rAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
