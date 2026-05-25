@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.14 — MIT License
+ * room-overlay-card v0.3.15 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -65,10 +65,10 @@ class RoomOverlayCard extends HTMLElement{
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
     this._icoEls={};
     this._rafPending=false;this._relevantEntities=null;this._prevStates={};
-    this._io=null;this._visible=true;this._testFlipped=false;
+    this._io=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
   }
 
-  static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false};}
+  static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
 
   setConfig(cfg){
     if(!cfg.base_image)throw new Error('[room-overlay-card] base_image is required');
@@ -158,6 +158,10 @@ class RoomOverlayCard extends HTMLElement{
     urls.forEach(function(url){const img=new Image();img.src=url;});
   }
 
+  _lblItem(lbl,i){const cp=Object.assign({},lbl);delete cp.id;delete cp.top;delete cp.left;delete cp.entity;delete cp.attribute;delete cp.suffix;delete cp.unit;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('lbl-'+i);let h='<details style="margin-bottom:6px;" data-panel="lbl-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Label: '+this._e(lbl.id||'lbl_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-lbl-id="'+i+'" type="text" value="'+this._e(lbl.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-lbl-top="'+i+'" type="text" value="'+this._e(lbl.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-lbl-left="'+i+'" type="text" value="'+this._e(lbl.left||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input data-lbl-entity="'+i+'" type="text" value="'+this._e(lbl.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional)</label><input data-lbl-attr="'+i+'" type="text" value="'+this._e(lbl.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Suffix</label><input data-lbl-suffix="'+i+'" type="text" value="'+this._e(lbl.suffix||lbl.unit||'')+'"'+this._inp('')+'></div>';h+='</div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">color / font_size / font_weight / visible / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
+
+  _gaugeItem(g,i){const cp=Object.assign({},g);delete cp.id;delete cp.top;delete cp.left;delete cp.width;delete cp.height;delete cp.entity;delete cp.attribute;delete cp.min;delete cp.max;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('g-'+i);let h='<details style="margin-bottom:6px;" data-panel="g-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Gauge: '+this._e(g.id||'gauge_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-g-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-g-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-g-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-g-w="'+i+'" type="text" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-g-h="'+i+'" type="text" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input data-g-entity="'+i+'" type="text" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute</label><input data-g-attr="'+i+'" type="text" value="'+this._e(g.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min</label><input data-g-min="'+i+'" type="number" value="'+this._e(String(g.min??0))+'"'+this._inp('font-size:12px;')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max</label><input data-g-max="'+i+'" type="number" value="'+this._e(String(g.max??100))+'"'+this._inp('font-size:12px;')+'></div>';h+='</div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">color / background / border_radius / transition / z_index (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
+
   _render(){
     if(!this._config)return;
     const c=this._config,tm=c.test_mode??false;
@@ -168,7 +172,9 @@ class RoomOverlayCard extends HTMLElement{
     const bHtml=(c.badges||[]).map(b=>`<div class="badge" data-b="${b.id}" style="${makeBadgePos(b)};cursor:${b.tap_action?'pointer':'default'};-webkit-tap-highlight-color:transparent;">${b.icon?`<ha-icon data-bi="${b.id}" icon="${b.icon}" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>`:''} ${b.label!==undefined?`<span class="blabel" data-bl="${b.id}"></span>`:''}</div>`).join('');
     const icoHtml=(c.icons||[]).map(ico=>{const sz=ico.size||'20px';return'<div class="ico" data-ico="'+ico.id+'" style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;"><ha-icon data-icoicon="'+ico.id+'" icon="'+(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:white;pointer-events:none;"></ha-icon></div>';}).join('');
 
-    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+icoHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>':'')+'</div></div></ha-card>';
+    const lblHtml=(c.labels||[]).map(lbl=>{const fs=lbl.font_size||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';return'<div class="lbl" data-lbl="'+lbl.id+'" style="position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:white;text-shadow:0 1px 3px rgba(0,0,0,0.8);"></div>';}).join('');
+    const gaugeHtml=(c.gauges||[]).map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const tr=g.transition||'height 1s ease,background 1s ease';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';"></div></div>';}).join('');
+    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>':'')+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -194,6 +200,8 @@ class RoomOverlayCard extends HTMLElement{
       if(!el)continue;this._icoEls[ico.id]=el;
       if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
+    this._lblEls={};for(const lbl of(c.labels||[])){this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+lbl.id+'"]');}
+    this._gaugeEls={};for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');}
     this._cardEls={};this._contEls={};
     for(const el of(c.elements||[])){
       const cont=document.createElement('div');
@@ -281,6 +289,27 @@ class RoomOverlayCard extends HTMLElement{
       if(cont&&el.visible){vis=evalCond(el.visible,s);cont.style.display=vis?'block':'none';}
       if(card&&vis)try{card.hass=this._hass;}catch(_){}
     }
+    for(const lbl of(c.labels||[])){
+      const el=this._lblEls[lbl.id];if(!el)continue;
+      if(lbl.visible!==undefined)el.style.display=evalCond(lbl.visible,s)?'block':'none';
+      const ent=s[lbl.entity];if(!ent)continue;
+      const rawVal=lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state;
+      const numVal=parseFloat(rawVal);
+      const dispVal=!isNaN(numVal)?(lbl.decimals!==undefined?numVal.toFixed(lbl.decimals):String(Math.round(numVal))):String(rawVal??'');
+      const text=(lbl.prefix||'')+dispVal+(lbl.suffix||lbl.unit||'');
+      if(el.textContent!==text)el.textContent=text;
+      if(lbl.color)el.style.color=resolveVal(lbl.color,s,'white');
+    }
+    for(const g of(c.gauges||[])){
+      const el=this._gaugeEls[g.id];if(!el)continue;
+      const ent=s[g.entity];if(!ent)continue;
+      const val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
+      if(isNaN(val))continue;
+      const mn=g.min??0,mx=g.max??100;
+      const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+      const fill=el.querySelector('.gfill');
+      if(fill){fill.style.height=Math.round(pct*100)+'%';if(g.color)fill.style.background=resolveVal(g.color,s,'white');}
+    }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
     }
@@ -364,7 +393,9 @@ class RoomOverlayCardEditor extends HTMLElement{
         (prev.badges||[]).length===(cfg.badges||[]).length&&
         (prev.elements||[]).length===(cfg.elements||[]).length&&
         (prev.icons||[]).length===(cfg.icons||[]).length&&
-        (prev.filter_conditions||[]).length===(cfg.filter_conditions||[]).length;
+        (prev.filter_conditions||[]).length===(cfg.filter_conditions||[]).length&&
+        (prev.labels||[]).length===(cfg.labels||[]).length&&
+        (prev.gauges||[]).length===(cfg.gauges||[]).length;
       if(same)return;
     }
     this._render();
@@ -514,6 +545,36 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(dtapEl&&dtapEl.value.trim()){const p=_yaml.p(dtapEl.value);if(p)o.double_tap_action=p;else delete o.double_tap_action;}else delete o.double_tap_action;
       const holdEl=q('[data-ico-hold="'+i+'"]');
       if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}else delete o.hold_action;
+      return o;
+    });
+
+
+    c.labels=(c.labels||[]).map(function(lbl,i){
+      const o=Object.assign({},lbl);
+      const idEl=q('[data-lbl-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const topEl=q('[data-lbl-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const lefEl=q('[data-lbl-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
+      const entEl=q('[data-lbl-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
+      const atEl=q('[data-lbl-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
+      const sfxEl=q('[data-lbl-suffix="'+i+'"]');if(sfxEl){if(sfxEl.value)o.suffix=sfxEl.value;else delete o.suffix;}
+      const yaEl=q('[data-lbl-yaml="'+i+'"]');
+      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      return o;
+    });
+
+    c.gauges=(c.gauges||[]).map(function(g,i){
+      const o=Object.assign({},g);
+      const idEl=q('[data-g-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const topEl=q('[data-g-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const lefEl=q('[data-g-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
+      const wEl=q('[data-g-w="'+i+'"]');if(wEl)o.width=wEl.value;
+      const hEl=q('[data-g-h="'+i+'"]');if(hEl)o.height=hEl.value;
+      const entEl=q('[data-g-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
+      const atEl=q('[data-g-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
+      const minEl=q('[data-g-min="'+i+'"]');if(minEl)o.min=parseFloat(minEl.value)||0;
+      const maxEl=q('[data-g-max="'+i+'"]');if(maxEl)o.max=parseFloat(maxEl.value)||100;
+      const yaEl=q('[data-g-yaml="'+i+'"]');
+      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
       return o;
     });
     return c;
@@ -710,6 +771,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     return h;
   }
 
+  _lblItem(lbl,i){const cp=Object.assign({},lbl);delete cp.id;delete cp.top;delete cp.left;delete cp.entity;delete cp.attribute;delete cp.suffix;delete cp.unit;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('lbl-'+i);let h='<details style="margin-bottom:6px;" data-panel="lbl-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Label: '+this._e(lbl.id||'lbl_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-lbl-id="'+i+'" type="text" value="'+this._e(lbl.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-lbl-top="'+i+'" type="text" value="'+this._e(lbl.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-lbl-left="'+i+'" type="text" value="'+this._e(lbl.left||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input data-lbl-entity="'+i+'" type="text" value="'+this._e(lbl.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional)</label><input data-lbl-attr="'+i+'" type="text" value="'+this._e(lbl.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Suffix</label><input data-lbl-suffix="'+i+'" type="text" value="'+this._e(lbl.suffix||lbl.unit||'')+'"'+this._inp('')+'></div>';h+='</div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">color / font_size / font_weight / visible / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
+
+  _gaugeItem(g,i){const cp=Object.assign({},g);delete cp.id;delete cp.top;delete cp.left;delete cp.width;delete cp.height;delete cp.entity;delete cp.attribute;delete cp.min;delete cp.max;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('g-'+i);let h='<details style="margin-bottom:6px;" data-panel="g-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Gauge: '+this._e(g.id||'gauge_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-g-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-g-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-g-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-g-w="'+i+'" type="text" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-g-h="'+i+'" type="text" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input data-g-entity="'+i+'" type="text" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute</label><input data-g-attr="'+i+'" type="text" value="'+this._e(g.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min</label><input data-g-min="'+i+'" type="number" value="'+this._e(String(g.min??0))+'"'+this._inp('font-size:12px;')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max</label><input data-g-max="'+i+'" type="number" value="'+this._e(String(g.max??100))+'"'+this._inp('font-size:12px;')+'></div>';h+='</div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">color / background / border_radius / transition / z_index (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
+
   _render(){
     if(!this._config)return;
     const c=this._config;
@@ -770,6 +835,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     (c.icons||[]).forEach(function(ico,i){icoInner+=self._icoItem(ico,i);});
     icoInner+='</div><button id="add-ico" style="'+btnStyle+'margin-top:4px;">+ Add icon</button>';
 
+    let lblInner='<div id="lbl-list">';
+    (c.labels||[]).forEach(function(lbl,i){lblInner+=self._lblItem(lbl,i);});
+    lblInner+='</div><button id="add-lbl" style="'+btnStyle+'margin-top:4px;">+ Add label</button>';
+
+    let gInner='<div id="g-list">';
+    (c.gauges||[]).forEach(function(g,i){gInner+=self._gaugeItem(g,i);});
+    gInner+='</div><button id="add-g" style="'+btnStyle+'margin-top:4px;">+ Add gauge</button>';
+
     this.innerHTML='<div style="padding:8px;">'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
@@ -777,7 +850,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +sec('zones','Clickable zones',(c.zones||[]).length,zInner)
       +sec('badges','Status badges',(c.badges||[]).length,bInner)
       +sec('elements','Embedded HA cards',(c.elements||[]).length,elInner)
-      +sec('icons','Icon overlays',(c.icons||[]).length,icoInner)
+      +sec('icons','Icon overlays',(c.icons||[]).length,icoInner)+sec('labels','Value labels',(c.labels||[]).length,lblInner)+sec('gauges','Gauge bars',(c.gauges||[]).length,gInner)
       +'</div>';
 
     this._listen();
@@ -916,6 +989,42 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
       el.addEventListener('change',fire);
     });
+
+    // Labels
+    const addLbl=this.querySelector('#add-lbl');
+    if(addLbl)addLbl.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.labels)c.labels=[];
+      c.labels.push({id:'label_'+(c.labels.length+1),top:'10%',left:'10%',entity:''});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-lbl]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmLbl);
+        const c=self._collectConfig();
+        if(c.labels)c.labels.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-lbl-id],[data-lbl-top],[data-lbl-left],[data-lbl-entity],[data-lbl-attr],[data-lbl-suffix],[data-lbl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+
+    // Gauges
+    const addG=this.querySelector('#add-g');
+    if(addG)addG.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.gauges)c.gauges=[];
+      c.gauges.push({id:'gauge_'+(c.gauges.length+1),top:'10%',left:'10%',width:'2%',height:'20%',entity:'',min:0,max:100});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-g]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmG);
+        const c=self._collectConfig();
+        if(c.gauges)c.gauges.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-g-id],[data-g-top],[data-g-left],[data-g-w],[data-g-h],[data-g-entity],[data-g-attr],[data-g-min],[data-g-max],[data-g-yaml]').forEach(function(el){el.addEventListener('change',fire);});
 
     // Elements
     const addEl=this.querySelector('#add-el');
