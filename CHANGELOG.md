@@ -1,5 +1,62 @@
 # Changelog
 
+## [0.5.0] – 2026-05-26
+
+### Added
+- **Redesigned `brightness_model`** – replaced the v0.4.3 additive brightness approach with a
+  full **filter gradient interpolator** that blends between any number of named CSS filter stops
+  (brightness, contrast, saturate, sepia, hue-rotate, blur, opacity, grayscale, invert) based
+  on a normalised 0–100 % sensor value.  
+  When `brightness_model` is active it **replaces** `filter_conditions` entirely — no stacking,
+  no multiplicative conflicts.
+  ```yaml
+  brightness_model:
+    source:
+      - condition:                          # optional — use this source only when…
+          entity: light.living_room
+          operator: "="
+          value: "on"
+        entity: light.living_room
+        attribute: brightness               # 0–255
+        min_input: 0
+        max_input: 255
+      - entity: sensor.living_room_lux      # fallback (no condition = always matches)
+        min_input: 0
+        max_input: 800
+    filter_gradient:
+      - value: 0                            # 0 % → very dark / blue-ish
+        filter: "brightness(0.25) sepia(0.3) hue-rotate(200deg)"
+      - value: 50                           # 50 % → natural daylight
+        filter: "brightness(1.0)"
+      - value: 100                          # 100 % → overexposed / warm
+        filter: "brightness(1.15) saturate(1.2)"
+  ```
+- **`source[]` array with per-entry conditions** – define multiple sensor/attribute sources;
+  the first source whose `condition` evaluates to `true` (or whose condition is omitted) is
+  used to derive the percentage.  Supports both light entity brightness attributes and
+  arbitrary numeric sensors (lux, CO₂, temperature, …).
+- **`lerpFilterGradient(stops, pct)`** – new module-level helper that parses each filter stop
+  with the existing `parseFilterStr` / `buildFilterStr` / `FILTER_PROPS` infrastructure and
+  linearly interpolates every CSS filter component between the two surrounding stops.
+- **GUI editor for the redesigned `brightness_model`** – two collapsible sub-sections:
+  - *Value sources* – entity, optional attribute, min/max input range, optional condition YAML
+    (add/remove rows dynamically).
+  - *Filter gradient stops* – value (0–100 %), filter string, add/remove rows.
+
+### Changed
+- `brightness_model` no longer adds a `brightness()` filter on top of `filter_conditions`.
+  It now **replaces** `filter_conditions` when at least one source entity and one gradient
+  stop are configured.  Leaving `brightness_model` empty (or unconfigured) falls back to the
+  normal `filter_conditions` behaviour.
+
+### Removed
+- The v0.4.3 `brightness_model` fields (`entity`, `attribute`, `min_input`, `max_input`,
+  `min_brightness`, `max_brightness`) are superseded by the new `source[]` /
+  `filter_gradient[]` structure. Old configs using those fields will silently fall back to
+  `filter_conditions` (the new code checks for `source` and `filter_gradient`).
+
+---
+
 ## [0.4.3] – 2026-05-26
 
 ### Added

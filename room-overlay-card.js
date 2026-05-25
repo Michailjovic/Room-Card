@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.4.3 — MIT License
+ * room-overlay-card v0.5.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -41,6 +41,20 @@ function resolveFilterInverted(conds,states){
 }
 
 function parseCssColor(c){let m=c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);if(m)return[parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];m=c.match(/^#([0-9a-f]{6})$/i);if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];m=c.match(/^#([0-9a-f]{3})$/i);if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];return null;}
+
+function lerpFilterGradient(stops,pct){
+  if(!stops||!stops.length)return 'none';
+  const ss=stops.slice().sort((a,b)=>a.value-b.value);
+  if(pct<=ss[0].value)return ss[0].filter||'none';
+  if(pct>=ss[ss.length-1].value)return ss[ss.length-1].filter||'none';
+  let lo=ss[0],hi=ss[ss.length-1];
+  for(let i=0;i<ss.length-1;i++){if(pct>=ss[i].value&&pct<=ss[i+1].value){lo=ss[i];hi=ss[i+1];break;}}
+  const t=(pct-lo.value)/(hi.value-lo.value);
+  const loF=parseFilterStr(lo.filter||'none'),hiF=parseFilterStr(hi.filter||'none');
+  const res={};
+  FILTER_PROPS.forEach(function(p){res[p.key]=loF[p.key]+t*(hiF[p.key]-loF[p.key]);});
+  return buildFilterStr(res);
+}
 
 function lerpColorGradient(stops,val){if(!stops||!stops.length)return'white';const s=stops.slice().sort((a,b)=>a.value-b.value);if(val<=s[0].value)return s[0].color;if(val>=s[s.length-1].value)return s[s.length-1].color;for(let i=0;i<s.length-1;i++){if(val>=s[i].value&&val<=s[i+1].value){const t=(val-s[i].value)/(s[i+1].value-s[i].value);const c1=parseCssColor(s[i].color),c2=parseCssColor(s[i+1].color);if(!c1||!c2)return s[i].color;return'rgb('+Math.round(c1[0]+(c2[0]-c1[0])*t)+','+Math.round(c1[1]+(c2[1]-c1[1])*t)+','+Math.round(c1[2]+(c2[2]-c1[2])*t)+')';}}return s[s.length-1].color;}
 
@@ -273,19 +287,22 @@ class RoomOverlayCard extends HTMLElement{
     const s=this._hass.states,c=this._config;
     const flipped=(c.test_mode??false)&&this._testFlipped;
     if(this._baseEl){
-      let _bf=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
-      if(c.brightness_model&&!flipped){
-        const _bm=c.brightness_model,_bent=s[_bm.entity];
-        if(_bent){
-          const _braw=_bm.attribute!==undefined?parseFloat(_bent.attributes[_bm.attribute]):parseFloat(_bent.state);
-          if(!isNaN(_braw)){
-            const _bmn=_bm.min_input??0,_bmx=_bm.max_input??1000;
-            const _bpct=Math.max(0,Math.min(1,(_braw-_bmn)/(_bmx-_bmn)));
-            const _bval=(_bm.min_brightness??0.3)+_bpct*((_bm.max_brightness??1.0)-(_bm.min_brightness??0.3));
-            const _bstr='brightness('+_bval.toFixed(3)+')';
-            _bf=_bf==='none'?_bstr:_bf+' '+_bstr;
-          }
+      let _bf;
+      const _bm=c.brightness_model;
+      if(_bm&&_bm.source?.length&&_bm.filter_gradient?.length&&!flipped){
+        let _pct=null;
+        for(const _src of _bm.source){
+          if(_src.condition&&!evalCond(_src.condition,s))continue;
+          const _ent=s[_src.entity];if(!_ent)continue;
+          const _rv=_src.attribute!==undefined?parseFloat(_ent.attributes[_src.attribute]):parseFloat(_ent.state);
+          if(isNaN(_rv))continue;
+          const _mn=_src.min_input??0,_mx=_src.max_input??100;
+          _pct=Math.max(0,Math.min(100,(_rv-_mn)/(_mx-_mn)*100));
+          break;
         }
+        _bf=_pct!==null?lerpFilterGradient(_bm.filter_gradient,_pct):'none';
+      }else{
+        _bf=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
       }
       this._baseEl.style.filter=_bf;
     }
@@ -464,16 +481,28 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(ta&&ta.value.trim()){const p=_yaml.p(ta.value);if(p)c.tap_action=p;else delete c.tap_action;}
     else delete c.tap_action;
 
-    const bmEnt=q('#bm-entity');if(bmEnt&&bmEnt.value.trim()){
-      const bmo={};
-      bmo.entity=bmEnt.value.trim();
-      const bmAt=q('#bm-attr');if(bmAt&&bmAt.value.trim())bmo.attribute=bmAt.value.trim();
-      const bmMi=q('#bm-min-input');if(bmMi)bmo.min_input=parseFloat(bmMi.value)||0;
-      const bmMx=q('#bm-max-input');if(bmMx)bmo.max_input=parseFloat(bmMx.value)||1000;
-      const bmMb=q('#bm-min-b');if(bmMb)bmo.min_brightness=parseFloat(bmMb.value);
-      const bmXb=q('#bm-max-b');if(bmXb)bmo.max_brightness=parseFloat(bmXb.value);
-      c.brightness_model=bmo;
-    }else delete c.brightness_model;
+    const _bmSrcs=[];
+    self.querySelectorAll('[data-bm-src-ent]').forEach(function(el,i){
+      if(!el.value.trim())return;
+      const _s={entity:el.value.trim()};
+      const _cc=self.querySelector('[data-bm-src-cond="'+i+'"]');
+      if(_cc&&_cc.value.trim()){const _p=_yaml.p(_cc.value);if(_p)_s.condition=_p;}
+      const _at=self.querySelector('[data-bm-src-attr="'+i+'"]');
+      if(_at&&_at.value.trim())_s.attribute=_at.value.trim();
+      const _mn=self.querySelector('[data-bm-src-min="'+i+'"]');
+      if(_mn)_s.min_input=parseFloat(_mn.value)||0;
+      const _mx=self.querySelector('[data-bm-src-max="'+i+'"]');
+      if(_mx)_s.max_input=parseFloat(_mx.value)||100;
+      _bmSrcs.push(_s);
+    });
+    const _bmFg=[];
+    self.querySelectorAll('[data-bm-fg-val]').forEach(function(el,i){
+      const _v=parseFloat(el.value);if(isNaN(_v))return;
+      const _fe=self.querySelector('[data-bm-fg-filt="'+i+'"]');
+      if(_fe)_bmFg.push({value:_v,filter:_fe.value.trim()||'none'});
+    });
+    if(_bmSrcs.length&&_bmFg.length)c.brightness_model={source:_bmSrcs,filter_gradient:_bmFg};
+    else delete c.brightness_model;
 
     c.filter_conditions=[];
     this.querySelectorAll('.filter-block').forEach(function(block,i){
@@ -914,24 +943,51 @@ class RoomOverlayCardEditor extends HTMLElement{
     filterInner+='<button id="add-filter" style="'+btnStyle+'">+ Add filter condition</button>';
 
     const bm=c.brightness_model||{};
+    const bmSrcList=bm.source||[];
+    const bmFgList=bm.filter_gradient||[];
     let bmInner='';
-    bmInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity (lux sensor or light)</label>';
-    bmInner+='<input id="bm-entity" type="text" placeholder="sensor.lux or light.room" value="'+this._e(bm.entity||'')+'"'+this._inp('')+'></div>';
-    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional, e.g. brightness)</label>';
-    bmInner+='<input id="bm-attr" type="text" placeholder="leave empty to use state" value="'+this._e(bm.attribute||'')+'"'+this._inp('')+'></div>';
+    bmInner+='<div style="margin-bottom:10px;">';
+    bmInner+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+    bmInner+='<label style="font-size:12px;font-weight:500;">Value sources (first matching condition wins)</label>';
+    bmInner+='<button id="add-bm-src" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Source</button>';
     bmInner+='</div>';
-    bmInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
-    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min input</label>';
-    bmInner+='<input id="bm-min-input" type="number" value="'+(bm.min_input??0)+'"'+this._inp('font-size:12px;')+'></div>';
-    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max input</label>';
-    bmInner+='<input id="bm-max-input" type="number" value="'+(bm.max_input??1000)+'"'+this._inp('font-size:12px;')+'></div>';
-    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min brightness</label>';
-    bmInner+='<input id="bm-min-b" type="number" step="0.05" value="'+(bm.min_brightness??0.3)+'"'+this._inp('font-size:12px;')+'></div>';
-    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max brightness</label>';
-    bmInner+='<input id="bm-max-b" type="number" step="0.05" value="'+(bm.max_brightness??1.0)+'"'+this._inp('font-size:12px;')+'></div>';
+    for(let i=0;i<bmSrcList.length;i++){
+      const src=bmSrcList[i];
+      const condYaml=src.condition?_yaml.s(src.condition):'';
+      bmInner+='<div style="border:1px solid var(--divider-color);border-radius:6px;padding:8px;margin-bottom:6px;">';
+      bmInner+='<div style="display:grid;grid-template-columns:1fr 1fr 70px 70px 28px;gap:6px;align-items:end;margin-bottom:6px;">';
+      bmInner+='<div><label style="font-size:11px;display:block;margin-bottom:3px;">Entity</label>';
+      bmInner+='<input data-bm-src-ent="'+i+'" type="text" value="'+this._e(src.entity||'')+'"'+this._inp('font-size:12px;')+'></div>';
+      bmInner+='<div><label style="font-size:11px;display:block;margin-bottom:3px;">Attribute (optional)</label>';
+      bmInner+='<input data-bm-src-attr="'+i+'" type="text" value="'+this._e(src.attribute||'')+'"'+this._inp('font-size:12px;')+'></div>';
+      bmInner+='<div><label style="font-size:11px;display:block;margin-bottom:3px;">Min</label>';
+      bmInner+='<input data-bm-src-min="'+i+'" type="number" value="'+(src.min_input??0)+'"'+this._inp('font-size:12px;')+'></div>';
+      bmInner+='<div><label style="font-size:11px;display:block;margin-bottom:3px;">Max</label>';
+      bmInner+='<input data-bm-src-max="'+i+'" type="number" value="'+(src.max_input??100)+'"'+this._inp('font-size:12px;')+'></div>';
+      bmInner+='<button data-rm-bm-src="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;align-self:center;">&#x2715;</button>';
+      bmInner+='</div>';
+      bmInner+='<div><label style="font-size:11px;display:block;margin-bottom:3px;">Condition YAML (optional — leave empty = always matches)</label>';
+      bmInner+='<textarea data-bm-src-cond="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:11px;resize:vertical;')+'>';
+      bmInner+=this._e(condYaml)+'</textarea></div>';
+      bmInner+='</div>';
+    }
+    if(!bmSrcList.length)bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No sources — add at least one source entity.</p>';
     bmInner+='</div>';
-    bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0;">Maps the entity value linearly from [min_input → max_input] to CSS brightness [min_brightness → max_brightness]. Leave entity empty to disable.</p>';
+    bmInner+='<div>';
+    bmInner+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+    bmInner+='<label style="font-size:12px;font-weight:500;">Filter gradient stops (value = 0–100 %)</label>';
+    bmInner+='<button id="add-bm-fg" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';
+    bmInner+='</div>';
+    for(let i=0;i<bmFgList.length;i++){
+      bmInner+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:6px;align-items:center;margin-bottom:4px;">';
+      bmInner+='<input type="number" data-bm-fg-val="'+i+'" min="0" max="100" placeholder="%" value="'+bmFgList[i].value+'"'+this._inp('font-size:12px;')+'>';
+      bmInner+='<input type="text" data-bm-fg-filt="'+i+'" placeholder="e.g. brightness(0.5) sepia(0.3)" value="'+this._e(bmFgList[i].filter||'')+'"'+this._inp('font-size:12px;font-family:monospace;')+'>';
+      bmInner+='<button data-rm-bm-fg="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
+      bmInner+='</div>';
+    }
+    if(!bmFgList.length)bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No stops — add at least 2 stops (value 0 and 100).</p>';
+    bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;">Source value is normalized to 0–100 % and interpolated across stops. When defined, replaces filter_conditions.</p>';
+    bmInner+='</div>';
 
     let ovInner='<div id="ov-list">';
     (c.overlays||[]).forEach(function(ov,i){ovInner+=self._ovItem(ov,i);});
@@ -964,7 +1020,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.innerHTML='<div style="padding:8px;">'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
-      +sec('brightness','Brightness model',c.brightness_model&&c.brightness_model.entity?1:0,bmInner)
+      +sec('brightness','Brightness model (filter interpolation)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
       +sec('overlays','Overlay layers',(c.overlays||[]).length,ovInner)
       +sec('zones','Clickable zones',(c.zones||[]).length,zInner)
       +sec('badges','Status badges',(c.badges||[]).length,bInner)
@@ -1003,7 +1059,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
 
-    ['base_image','aspect_ratio','border_radius','filter_transition','bm-entity','bm-attr','bm-min-input','bm-max-input','bm-min-b','bm-max-b'].forEach(function(id){
+    ['base_image','aspect_ratio','border_radius','filter_transition'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     const tm=this.querySelector('#test_mode');if(tm)tm.addEventListener('change',fire);
@@ -1027,6 +1083,48 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this.querySelectorAll('[data-filter-entity],[data-filter-state-op],[data-filter-state-val],[data-filter-and-entity],[data-filter-and-op],[data-filter-and-val],[data-filter-or-entity],[data-filter-or-op],[data-filter-or-val]').forEach(function(el){
       el.addEventListener('change',fire);
+    });
+
+    // Brightness model
+    const addBmSrc=this.querySelector('#add-bm-src');
+    if(addBmSrc)addBmSrc.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.brightness_model)c.brightness_model={source:[],filter_gradient:[]};
+      if(!c.brightness_model.source)c.brightness_model.source=[];
+      c.brightness_model.source.push({entity:'',min_input:0,max_input:100});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-bm-src]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmBmSrc);
+        const c=self._collectConfig();
+        if(c.brightness_model&&c.brightness_model.source)c.brightness_model.source.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-bm-src-ent],[data-bm-src-attr],[data-bm-src-min],[data-bm-src-max],[data-bm-src-cond]').forEach(function(el){
+      el.addEventListener('change',fire);el.addEventListener('input',fire);
+    });
+    const addBmFg=this.querySelector('#add-bm-fg');
+    if(addBmFg)addBmFg.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.brightness_model)c.brightness_model={source:[],filter_gradient:[]};
+      if(!c.brightness_model.filter_gradient)c.brightness_model.filter_gradient=[];
+      const fg=c.brightness_model.filter_gradient;
+      const last=fg[fg.length-1];
+      fg.push({value:last?Math.min(100,last.value+25):0,filter:'none'});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-bm-fg]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmBmFg);
+        const c=self._collectConfig();
+        if(c.brightness_model&&c.brightness_model.filter_gradient)c.brightness_model.filter_gradient.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-bm-fg-val],[data-bm-fg-filt]').forEach(function(el){
+      el.addEventListener('change',fire);el.addEventListener('input',fire);
     });
 
     // Overlays
