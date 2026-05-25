@@ -1,5 +1,43 @@
 # Changelog
 
+## [0.4.0] – 2026-05-26
+
+### Added
+- **`animation` pro `overlays[]`, `badges[]`, `labels[]`** – dvě CSS animace:
+  - `pulse` – plynulé blikání opacity (1 → 0.25 → 1, 2 s, ease-in-out)
+  - `blink` – tvrdé on/off (1 s, step-end)
+- **`animation_color`** – pro `badges[]` a `labels[]` přidá barevnou záři
+  (`filter: drop-shadow`) při animaci `pulse`; vytvoří efekt "glowing badge/label".
+  ```yaml
+  overlays:
+    - id: alarm_overlay
+      color: "rgba(255,0,0,0.35)"
+      animation: pulse          # fade in/out
+
+  badges:
+    - id: alarm_badge
+      icon: mdi:alarm-light
+      animation: pulse
+      animation_color: "#ff2222"   # červená záře
+
+  labels:
+    - id: temp_label
+      animation: blink             # tvrdé blikání (pozor: agresivní)
+  ```
+- **GUI editor pro animace** – dropdown `none / pulse / blink` u `overlays[]`,
+  `badges[]` a `labels[]`; color picker pro záři u `badges[]` a `labels[]`.
+
+---
+
+## [0.4.x] – plánováno
+
+- **`visible_conditions`** pro `labels[]` a `gauges[]` – show/hide podle stavu entity
+- **`orientation: horizontal`** pro `gauges[]` – vodorovný gauge
+- **`brightness_model`** – lux senzor nebo atribut světla → CSS `filter: brightness()`,
+  lineární interpolace (podobně jako `color_gradient`)
+
+---
+
 ## [0.3.19] – 2026-05-25
 
 ### Added
