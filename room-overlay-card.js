@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.12 — MIT License
+ * room-overlay-card v0.3.13 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -905,43 +905,6 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(!c.icons)c.icons=[];
       c.icons.push({id:'icon_'+(c.icons.length+1),icon:'mdi:help',top:'10%',left:'10%',size:'24px'});
       self._config=c;self._render();self._fire(c);
-    });
-    this.querySelectorAll('[data-rm-ico]').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        const i=parseInt(btn.dataset.rmIco);
-        const c=self._collectConfig();
-        if(c.icons)c.icons.splice(i,1);
-        self._config=c;self._render();self._fire(c);
-      });
-    });
-    this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
-      el.addEventListener('change',fire);
-    });
-
-    // Elements
-    const addEl=this.querySelector('#add-el');
-    if(addEl)addEl.addEventListener('click',function(){
-      const c=self._collectConfig();
-      if(!c.elements)c.elements=[];
-      c.elements.push({id:'el_'+(c.elements.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
-      self._config=c;self._render();self._fire(c);
-    });
-    this.querySelectorAll('[data-rm-el]').forEach(function(btn){
-      btn.addEventListener('click',function(){
-        const i=parseInt(btn.dataset.rmEl);
-        const c=self._collectConfig();
-        if(c.elements)c.elements.splice(i,1);
-        self._config=c;self._render();self._fire(c);
-      });
-    });
-    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
-      el.addEventListener('change',fire);
-    });
-  }
-}
-
-customElements.define('room-overlay-card-editor',RoomOverlayCardEditor);
-customElements.get('room-overlay-card').getConfigElement=function(){return document.createElement('room-overlay-card-editor');};ire(c);
     });
     this.querySelectorAll('[data-rm-ico]').forEach(function(btn){
       btn.addEventListener('click',function(){
