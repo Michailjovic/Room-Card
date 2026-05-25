@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.11 — MIT License
+ * room-overlay-card v0.3.12 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -30,6 +30,16 @@ function resolveFilter(conds,states){
   const d=conds.find(fc=>fc.condition===undefined);return d?d.filter:'none';
 }
 
+function resolveFilterInverted(conds,states){
+  // Najdi aktuálně matchující podmínku
+  let curIdx=-1;
+  for(let i=0;i<conds.length;i++){const fc=conds[i];if(fc.condition===undefined)continue;if(evalCond(fc.condition,states)){curIdx=i;break;}}
+  // Pokud matchuje podmínka → zobraz default (fallback)
+  if(curIdx!==-1){const d=conds.find(fc=>fc.condition===undefined);return d?d.filter:'none';}
+  // Pokud je aktivní default → zobraz první podmíněný filter
+  const first=conds.find(fc=>fc.condition!==undefined);return first?first.filter:'none';
+}
+
 const BPOS={'bottom-left':'bottom:10px;left:10px','bottom-right':'bottom:10px;right:10px','top-left':'top:10px;left:10px','top-right':'top:10px;right:10px'};
 
 function makeBadgePos(b){
@@ -55,7 +65,7 @@ class RoomOverlayCard extends HTMLElement{
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
     this._icoEls={};
     this._rafPending=false;this._relevantEntities=null;this._prevStates={};
-    this._io=null;this._visible=true;
+    this._io=null;this._visible=true;this._testFlipped=false;
   }
 
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false};}
@@ -150,6 +160,7 @@ class RoomOverlayCard extends HTMLElement{
 
   _render(){
     if(!this._config)return;
+    this._testFlipped=false;
     const c=this._config,tm=c.test_mode??false;
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
 
@@ -158,7 +169,7 @@ class RoomOverlayCard extends HTMLElement{
     const bHtml=(c.badges||[]).map(b=>`<div class="badge" data-b="${b.id}" style="${makeBadgePos(b)};cursor:${b.tap_action?'pointer':'default'};-webkit-tap-highlight-color:transparent;">${b.icon?`<ha-icon data-bi="${b.id}" icon="${b.icon}" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>`:''} ${b.label!==undefined?`<span class="blabel" data-bl="${b.id}"></span>`:''}</div>`).join('');
     const icoHtml=(c.icons||[]).map(ico=>{const sz=ico.size||'20px';return'<div class="ico" data-ico="'+ico.id+'" style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;"><ha-icon data-icoicon="'+ico.id+'" icon="'+(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:white;pointer-events:none;"></ha-icon></div>';}).join('');
 
-    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+icoHtml+'</div></div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+icoHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; FLIP</button>':'')+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -197,8 +208,21 @@ class RoomOverlayCard extends HTMLElement{
     const hacard=this.shadowRoot.querySelector('ha-card');
     if(hacard&&c.tap_action){
       hacard.addEventListener('click',e=>{
-        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')))this._exec(c.tap_action,e);
+        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')||n.classList?.contains('tm-flip')))this._exec(c.tap_action,e);
       });
+    }
+    if(tm){
+      const flipBtn=this.shadowRoot.querySelector('.tm-flip');
+      if(flipBtn){
+        const self=this;
+        flipBtn.addEventListener('click',function(e){
+          e.stopPropagation();e.preventDefault();
+          self._testFlipped=!self._testFlipped;
+          flipBtn.style.background=self._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)';
+          flipBtn.innerHTML=self._testFlipped?'&#8644; FLIPPED':'&#8644; FLIP';
+          self._update();
+        });
+      }
     }
     // IntersectionObserver — zastav updates když karta není ve viewportu
     if(this._io)this._io.disconnect();
@@ -220,14 +244,16 @@ class RoomOverlayCard extends HTMLElement{
   _update(){
     if(!this._hass||!this._config||!this._rendered)return;
     const s=this._hass.states,c=this._config;
+    const flipped=(c.test_mode??false)&&this._testFlipped;
     if(this._baseEl){
-      this._baseEl.style.filter=c.filter_conditions?.length?resolveFilter(c.filter_conditions,s):'none';
+      this._baseEl.style.filter=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
     }
     for(const ov of(c.overlays||[])){
       const el=this._ovEls[ov.id];if(!el)continue;
       const img=this._ovImg(ov);
       if(img){const bg='url(\''+img+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
-      el.style.opacity=ov.conditions?.opacity?String(resolveVal(ov.conditions.opacity,s,0)):'1';
+      const rawOp=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
+      el.style.opacity=flipped?String(rawOp>0.5?0:1):String(rawOp);
       el.style.filter=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
     }
     for(const z of(c.zones||[])){
@@ -879,6 +905,43 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(!c.icons)c.icons=[];
       c.icons.push({id:'icon_'+(c.icons.length+1),icon:'mdi:help',top:'10%',left:'10%',size:'24px'});
       self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-ico]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmIco);
+        const c=self._collectConfig();
+        if(c.icons)c.icons.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Elements
+    const addEl=this.querySelector('#add-el');
+    if(addEl)addEl.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.elements)c.elements=[];
+      c.elements.push({id:'el_'+(c.elements.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-el]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmEl);
+        const c=self._collectConfig();
+        if(c.elements)c.elements.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+  }
+}
+
+customElements.define('room-overlay-card-editor',RoomOverlayCardEditor);
+customElements.get('room-overlay-card').getConfigElement=function(){return document.createElement('room-overlay-card-editor');};ire(c);
     });
     this.querySelectorAll('[data-rm-ico]').forEach(function(btn){
       btn.addEventListener('click',function(){
