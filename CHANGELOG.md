@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.1] – 2026-05-26
+
+### Added
+- **`visible_conditions` for `labels[]` and `gauges[]`** – show/hide an element based on
+  entity state using the standard condition array syntax (first match wins).
+  Falls back to the existing `visible` property if `visible_conditions` is not set.
+  Gauges previously had no visibility control at all; both `visible` and `visible_conditions`
+  are now supported for them.
+  ```yaml
+  labels:
+    - id: frost_warning
+      entity: sensor.outdoor_temp
+      visible_conditions:
+        - entity: sensor.outdoor_temp
+          operator: "<"
+          value: 2
+          result: true
+        - result: false
+
+  gauges:
+    - id: co2_bar
+      visible_conditions:
+        - entity: sensor.co2
+          operator: ">"
+          value: 800
+          result: true
+        - result: false
+  ```
+  Configured via the YAML textarea in the GUI editor (field label updated to include
+  `visible` / `visible_conditions`).
+
+---
+
 ## [0.4.0] – 2026-05-26
 
 ### Added
