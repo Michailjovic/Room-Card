@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.4.2] – 2026-05-26
+
+### Added
+- **`orientation: horizontal` for `gauges[]`** – horizontal bar that fills left-to-right
+  instead of the default bottom-to-top vertical bar. The `transition` default adjusts
+  automatically (`width` instead of `height`).
+  ```yaml
+  gauges:
+    - id: brightness_bar
+      entity: light.living_room
+      attribute: brightness
+      min: 0
+      max: 255
+      orientation: horizontal
+      width: "40%"
+      height: "6px"
+      top: "85%"
+      left: "5%"
+  ```
+- Orientation dropdown added to the gauge GUI editor (`vertical` / `horizontal`).
+
+---
+
 ## [0.4.1] – 2026-05-26
 
 ### Added
