@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.18] – 2026-05-25
+
+### Fixed
+- GUI editor pro `color_gradient` byl omylem aplikován pouze na mrtvou kopii `_gaugeItem`
+  (třída `RoomOverlayCard`), ne na skutečný editor (`RoomOverlayCardEditor`). V GUI proto
+  sekce *Color Gradient Stops* u gauges nebyla viditelná. Opraveno — obě kopie `_gaugeItem`
+  i `_lblItem` jsou nyní identické a obsahují správný gradient editor.
+
+---
+
 ## [0.3.17] – 2026-05-25
 
 ### Added
