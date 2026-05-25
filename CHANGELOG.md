@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.19] – 2026-05-25
+
+### Added
+- **`background`, `padding`, `border_radius`, `text_shadow` pro `labels[]`** – label lze nyní
+  stylovat jako badge/chip s tmavým pozadím, bez nutnosti externích karet.
+
+---
+
 ## [0.3.18] – 2026-05-25
 
 ### Fixed
