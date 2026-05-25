@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.15 — MIT License
+ * room-overlay-card v0.3.16 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -7,7 +7,7 @@ window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',descr
 
 function evalCond(c,s){
   const e=s[c.entity];if(!e)return false;
-  const sv=e.state,nv=parseFloat(sv);let r=true;
+  const sv=c.attribute!==undefined?String(e.attributes[c.attribute]??''): e.state,nv=parseFloat(sv);let r=true;
   if(c.state!==undefined)r=sv===String(c.state);
   else if(c.state_not!==undefined)r=Array.isArray(c.state_not)?!c.state_not.map(String).includes(sv):sv!==String(c.state_not);
   else if(c.operator!==undefined&&c.value!==undefined){
