@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.3] – 2026-05-26
+
+### Added
+- **`brightness_model`** – maps a sensor value (lux, light brightness, etc.) to a CSS
+  `filter: brightness()` applied on top of the base image in real time, making the room
+  photo automatically darken at night and brighten during the day.
+  Uses linear interpolation identical to `color_gradient`.
+  Composes with `filter_conditions` — both run independently and their brightness factors
+  stack in the CSS filter chain. Disabled automatically in FLIP test mode.
+  ```yaml
+  brightness_model:
+    entity: sensor.living_room_lux
+    min_input: 0          # lux → darkest
+    max_input: 800        # lux → brightest
+    min_brightness: 0.3   # CSS brightness() at min_input
+    max_brightness: 1.1   # CSS brightness() at max_input
+  ```
+  Or using a light entity's brightness attribute (0–255):
+  ```yaml
+  brightness_model:
+    entity: light.living_room
+    attribute: brightness
+    min_input: 0
+    max_input: 255
+    min_brightness: 0.25
+    max_brightness: 1.0
+  ```
+- **GUI editor for `brightness_model`** – dedicated *Brightness model* section with fields
+  for entity, attribute, min/max input range, and min/max brightness. Leave entity empty
+  to disable.
+
+---
+
 ## [0.4.2] – 2026-05-26
 
 ### Added

@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.4.2 — MIT License
+ * room-overlay-card v0.4.3 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -273,7 +273,21 @@ class RoomOverlayCard extends HTMLElement{
     const s=this._hass.states,c=this._config;
     const flipped=(c.test_mode??false)&&this._testFlipped;
     if(this._baseEl){
-      this._baseEl.style.filter=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
+      let _bf=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
+      if(c.brightness_model&&!flipped){
+        const _bm=c.brightness_model,_bent=s[_bm.entity];
+        if(_bent){
+          const _braw=_bm.attribute!==undefined?parseFloat(_bent.attributes[_bm.attribute]):parseFloat(_bent.state);
+          if(!isNaN(_braw)){
+            const _bmn=_bm.min_input??0,_bmx=_bm.max_input??1000;
+            const _bpct=Math.max(0,Math.min(1,(_braw-_bmn)/(_bmx-_bmn)));
+            const _bval=(_bm.min_brightness??0.3)+_bpct*((_bm.max_brightness??1.0)-(_bm.min_brightness??0.3));
+            const _bstr='brightness('+_bval.toFixed(3)+')';
+            _bf=_bf==='none'?_bstr:_bf+' '+_bstr;
+          }
+        }
+      }
+      this._baseEl.style.filter=_bf;
     }
     for(const ov of(c.overlays||[])){
       const el=this._ovEls[ov.id];if(!el)continue;
@@ -449,6 +463,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     const ta=q('#tap_action_yaml');
     if(ta&&ta.value.trim()){const p=_yaml.p(ta.value);if(p)c.tap_action=p;else delete c.tap_action;}
     else delete c.tap_action;
+
+    const bmEnt=q('#bm-entity');if(bmEnt&&bmEnt.value.trim()){
+      const bmo={};
+      bmo.entity=bmEnt.value.trim();
+      const bmAt=q('#bm-attr');if(bmAt&&bmAt.value.trim())bmo.attribute=bmAt.value.trim();
+      const bmMi=q('#bm-min-input');if(bmMi)bmo.min_input=parseFloat(bmMi.value)||0;
+      const bmMx=q('#bm-max-input');if(bmMx)bmo.max_input=parseFloat(bmMx.value)||1000;
+      const bmMb=q('#bm-min-b');if(bmMb)bmo.min_brightness=parseFloat(bmMb.value);
+      const bmXb=q('#bm-max-b');if(bmXb)bmo.max_brightness=parseFloat(bmXb.value);
+      c.brightness_model=bmo;
+    }else delete c.brightness_model;
 
     c.filter_conditions=[];
     this.querySelectorAll('.filter-block').forEach(function(block,i){
@@ -888,6 +913,26 @@ class RoomOverlayCardEditor extends HTMLElement{
     filterInner+='</div>';
     filterInner+='<button id="add-filter" style="'+btnStyle+'">+ Add filter condition</button>';
 
+    const bm=c.brightness_model||{};
+    let bmInner='';
+    bmInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity (lux sensor or light)</label>';
+    bmInner+='<input id="bm-entity" type="text" placeholder="sensor.lux or light.room" value="'+this._e(bm.entity||'')+'"'+this._inp('')+'></div>';
+    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional, e.g. brightness)</label>';
+    bmInner+='<input id="bm-attr" type="text" placeholder="leave empty to use state" value="'+this._e(bm.attribute||'')+'"'+this._inp('')+'></div>';
+    bmInner+='</div>';
+    bmInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min input</label>';
+    bmInner+='<input id="bm-min-input" type="number" value="'+(bm.min_input??0)+'"'+this._inp('font-size:12px;')+'></div>';
+    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max input</label>';
+    bmInner+='<input id="bm-max-input" type="number" value="'+(bm.max_input??1000)+'"'+this._inp('font-size:12px;')+'></div>';
+    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min brightness</label>';
+    bmInner+='<input id="bm-min-b" type="number" step="0.05" value="'+(bm.min_brightness??0.3)+'"'+this._inp('font-size:12px;')+'></div>';
+    bmInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max brightness</label>';
+    bmInner+='<input id="bm-max-b" type="number" step="0.05" value="'+(bm.max_brightness??1.0)+'"'+this._inp('font-size:12px;')+'></div>';
+    bmInner+='</div>';
+    bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0;">Maps the entity value linearly from [min_input → max_input] to CSS brightness [min_brightness → max_brightness]. Leave entity empty to disable.</p>';
+
     let ovInner='<div id="ov-list">';
     (c.overlays||[]).forEach(function(ov,i){ovInner+=self._ovItem(ov,i);});
     ovInner+='</div><button id="add-ov" style="'+btnStyle+'margin-top:4px;">+ Add overlay</button>';
@@ -919,6 +964,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.innerHTML='<div style="padding:8px;">'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
+      +sec('brightness','Brightness model',c.brightness_model&&c.brightness_model.entity?1:0,bmInner)
       +sec('overlays','Overlay layers',(c.overlays||[]).length,ovInner)
       +sec('zones','Clickable zones',(c.zones||[]).length,zInner)
       +sec('badges','Status badges',(c.badges||[]).length,bInner)
@@ -957,7 +1003,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
 
-    ['base_image','aspect_ratio','border_radius','filter_transition'].forEach(function(id){
+    ['base_image','aspect_ratio','border_radius','filter_transition','bm-entity','bm-attr','bm-min-input','bm-max-input','bm-min-b','bm-max-b'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     const tm=this.querySelector('#test_mode');if(tm)tm.addEventListener('change',fire);
