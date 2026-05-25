@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.3.10 — MIT License
+ * room-overlay-card v0.3.11 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -280,7 +280,7 @@ class RoomOverlayCard extends HTMLElement{
     event.stopPropagation();event.preventDefault();
     const a=this._resolveAct(tapAction);
     switch(a.action){
-      case'navigate':if(a.path){history.pushState(null,'',a.path);window.dispatchEvent(new PopStateEvent('popstate'));}break;
+      case'navigate':{const p=a.navigation_path||a.path;if(p){history.pushState(null,'',p);window.dispatchEvent(new PopStateEvent('popstate'));}}break;
       case'more-info':if(a.entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:a.entity}}));break;
       case'call-service':if(a.service){const d=a.service.indexOf('.');this._hass.callService(a.service.slice(0,d),a.service.slice(d+1),a.service_data??{});}break;
       case'browser-mod-popup':this._hass.callService('browser_mod','popup',{title:a.title??'',size:a.size??'normal',content:a.content??{}});break;
