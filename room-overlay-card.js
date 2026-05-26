@@ -363,7 +363,7 @@ class RoomOverlayCard extends HTMLElement{
       const dispVal=!isNaN(numVal)?(lbl.decimals!==undefined?numVal.toFixed(lbl.decimals):String(Math.round(numVal))):String(rawVal??'');
       const text=(lbl.prefix||'')+dispVal+(lbl.suffix||lbl.unit||'');
       if(el.textContent!==text)el.textContent=text;
-      if(lbl.color_gradient){const _lv=parseFloat(lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state);if(!isNaN(_lv))el.style.color=lerpColorGradient(lbl.color_gradient,_lv);}else if(lbl.color)el.style.color=resolveVal(lbl.color,s,'white');
+      if(lbl.color_gradient){const _lv=parseFloat(lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state);if(!isNaN(_lv))el.style.color=lerpColorGradient(lbl.color_gradient,_lv);}else if(lbl.color)el.style.color=Array.isArray(lbl.color)?resolveVal(lbl.color,s,'white'):lbl.color;
     }
     for(const g of(c.gauges||[])){
       const el=this._gaugeEls[g.id];if(!el)continue;
@@ -375,7 +375,7 @@ class RoomOverlayCard extends HTMLElement{
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=el.querySelector('.gfill');
-      if(fill){const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=Math.round(pct*100)+'%';else if(_go==='right'){fill.style.width=Math.round(pct*100)+'%';}else fill.style.height=Math.round(pct*100)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color)fill.style.background=resolveVal(g.color,s,'white');}
+      if(fill){const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=Math.round(pct*100)+'%';else if(_go==='right'){fill.style.width=Math.round(pct*100)+'%';}else fill.style.height=Math.round(pct*100)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color)fill.style.background=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
