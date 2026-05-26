@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.7.2] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` now renders as two stacked gauge layers** – this correctly
+  models the physical mechanism of a day/night blind, which has two fabric layers (striped +
+  solid) that shift relative to each other as the blind closes:
+
+  | position | stripe layer | solid overlay | visual result |
+  |---|---|---|---|
+  | 0 % (open) | 0 % height | 0 % height | fully transparent |
+  | 50 % | 50 % stripes | 0 % solid | half-height stripes visible |
+  | 75 % | 75 % stripes | 50 % solid on top | solid upper half + stripes lower quarter |
+  | 100 % (closed) | 100 % | 100 % | fully opaque |
+
+  The solid overlay layer uses `z_index + 1` and `min = midpoint` of the configured
+  min/max range so it only starts filling from the halfway point.  Both layers are
+  generated automatically from a single `blinds[]` config entry — no duplicate YAML needed.
+
+- `blindToGaugeConfig()` now returns an **array** of gauge configs (`flatMap` used at all
+  call sites).  `_blindGaugeCfgs` cache is flat and covers all generated layers.
+
+---
+
 ## [0.7.1] – 2026-05-27
 
 ### Fixed
