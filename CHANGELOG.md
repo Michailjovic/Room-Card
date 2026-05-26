@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.6.0] – 2026-05-26
+
+### Added
+- **Four fill directions for `gauges[]`** – the `orientation` property now supports all four
+  cardinal directions in addition to the original two:
+
+  | value | fill direction | typical use |
+  |---|---|---|
+  | `vertical` | bottom → top (default) | level / progress |
+  | `top` | top → bottom | roller blind / shade |
+  | `horizontal` | left → right | existing alias |
+  | `right` | right → left | mirrored bar |
+
+  `bottom` and `left` are accepted as aliases for `vertical` and `horizontal`.
+
+- **CSS gradient support in `color`** – any valid CSS `background` value is accepted,
+  including `repeating-linear-gradient(...)`. Combined with `orientation: top` this enables a
+  convincing day/night roller blind simulation directly over a window area:
+  ```yaml
+  gauges:
+    - id: blind_bedroom
+      entity: cover.roller_motor_bedroom_curtain
+      attribute: current_position
+      min: 0
+      max: 100
+      orientation: top          # fills top → bottom like a real shade
+      top: "13%"
+      left: "38%"
+      width: "24%"
+      height: "45%"
+      z_index: 5
+      background: "transparent"
+      color: >
+        repeating-linear-gradient(
+          to bottom,
+          rgba(10,10,10,0.90) 0px,
+          rgba(10,10,10,0.90) 7px,
+          rgba(200,200,200,0.12) 7px,
+          rgba(200,200,200,0.12) 13px
+        )
+  ```
+  The transparent background lets the room photo show through the open portion; the gradient
+  fills downward as the blind closes, mimicking actual slats.
+
+- **GUI dropdown updated** with all four orientation options and descriptive labels.
+
+---
+
 ## [0.5.0.1] – 2026-05-26
 
 ### Fixed
