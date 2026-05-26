@@ -1,5 +1,59 @@
 # Changelog
 
+## [0.7.0] – 2026-05-27
+
+### Added
+- **`blinds[]` section** – dedicated first-class config section for window blinds / roller
+  shades, rendered internally through the existing gauge pipeline via a new module-level
+  `blindToGaugeConfig(b)` helper.  All blind elements use `orientation: top` (fills
+  top → bottom) automatically.
+
+  Three blind types selectable via `blind_type`:
+
+  | `blind_type` | description | extra properties |
+  |---|---|---|
+  | `roller` | solid fill, single colour | — |
+  | `day_night` | repeating stripe (slat + transparent gap) with cyclic solid overlay | `slat_width`, `slat_gap`, `slat_pitch` |
+  | `venetian` | repeating stripe (slat + coloured gap) with optional cyclic overlay | `slat_width`, `slat_gap`, `gap_color`, `slat_pitch` |
+
+  Example – day/night blind over a bedroom window:
+  ```yaml
+  blinds:
+    - id: blind_bedroom
+      entity: cover.roller_motor_bedroom_curtain
+      attribute: current_position
+      min: 0
+      max: 100
+      top: "13%"
+      left: "38%"
+      width: "24%"
+      height: "45%"
+      z_index: 5
+      blind_type: day_night
+      slat_color: "rgba(10,10,10,0.9)"
+      slat_width: 7
+      slat_gap: 6
+      slat_pitch: 2
+  ```
+
+- **GUI editor for `blinds[]`** – new *Window blinds* collapsible section with:
+  - Position / size fields (top, left, width, height, z-index)
+  - Entity, attribute, min, max
+  - **Blind type** dropdown (`roller` / `day/night` / `venetian`)
+  - **Slat / roller color** text field (accepts any CSS color, including `rgba(…)`)
+  - **Slat width**, **Slat gap**, **Slat pitch** fields (visible for `day_night` and
+    `venetian` only)
+  - **Gap color** field (visible for `venetian` only)
+  - YAML textarea for `background`, `border_radius`, `transition`,
+    `visible`, `visible_conditions`
+  - Add / Remove blind buttons
+
+### Changed
+- `_gaugeEls` cache, `_update()` loop, `_extractAttrSources()` and the `setConfig`
+  same-check all extended to cover `blinds[]` entries transparently.
+
+---
+
 ## [0.6.0] – 2026-05-26
 
 ### Added
