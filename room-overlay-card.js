@@ -82,7 +82,7 @@ class RoomOverlayCard extends HTMLElement{
     this._baseEl=null;this._ovEls={};this._zoneEls={};
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
     this._icoEls={};
-    this._rafPending=false;this._relevantEntities=null;this._prevStates={};
+    this._rafPending=false;this._relevantEntities=null;this._relevantAttrSources=null;this._prevStates={};
     this._io=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
   }
 
@@ -99,7 +99,8 @@ class RoomOverlayCard extends HTMLElement{
     if(!this._visible)return;
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
-      if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))return;
+      if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))
+        {if(!this._relevantAttrSources||!this._relevantAttrSources.some(a=>s[a.entity]?.attributes[a.attr]!==p[a.entity+'.'+a.attr]))return;}
     }
     if(!this._rafPending){
       this._rafPending=true;
@@ -118,6 +119,16 @@ class RoomOverlayCard extends HTMLElement{
       else if(v&&typeof v==='object')this._extractEntities(v,ids);
     }
     return ids;
+  }
+
+  _extractAttrSources(cfg){
+    const out=[];
+    const add=function(entity,attr){if(entity&&attr)out.push({entity,attr});}
+    ;(cfg.brightness_model?.source||[]).forEach(function(s){add(s.entity,s.attribute);});
+    (cfg.gauges||[]).forEach(function(g){add(g.entity,g.attribute);});
+    (cfg.labels||[]).forEach(function(l){add(l.entity,l.attribute);});
+    (cfg.icons||[]).forEach(function(ico){add(ico.entity,ico.attribute);});
+    return out;
   }
 
   getCardSize(){return 4;}
@@ -276,6 +287,7 @@ class RoomOverlayCard extends HTMLElement{
       this._io.observe(this);
     }
     this._relevantEntities=[...this._extractEntities(this._config)];
+    this._relevantAttrSources=this._extractAttrSources(this._config);
     this._prevStates={};
     this._rendered=true;
     this._preloadImages();
@@ -365,6 +377,7 @@ class RoomOverlayCard extends HTMLElement{
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
+      if(this._relevantAttrSources)for(const a of this._relevantAttrSources)this._prevStates[a.entity+'.'+a.attr]=s[a.entity]?.attributes[a.attr];
     }
   }
 
@@ -450,7 +463,9 @@ class RoomOverlayCardEditor extends HTMLElement{
         (prev.icons||[]).length===(cfg.icons||[]).length&&
         (prev.filter_conditions||[]).length===(cfg.filter_conditions||[]).length&&
         (prev.labels||[]).length===(cfg.labels||[]).length&&
-        (prev.gauges||[]).length===(cfg.gauges||[]).length;
+        (prev.gauges||[]).length===(cfg.gauges||[]).length&&
+        ((prev.brightness_model?.source||[]).length===(cfg.brightness_model?.source||[]).length)&&
+        ((prev.brightness_model?.filter_gradient||[]).length===(cfg.brightness_model?.filter_gradient||[]).length);
       if(same)return;
     }
     this._render();

@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0.1] – 2026-05-26
+
+### Fixed
+- **Attribute-based `brightness_model` sources not reacting to changes** – `_prevStates` only
+  tracked entity `.state` strings, so a source like `light.living_room` with
+  `attribute: brightness` would only trigger a filter update when the light was turned on/off,
+  not when its brightness level changed. Added `_extractAttrSources()` which builds a list of
+  all `{entity, attribute}` pairs used across `brightness_model.source`, `gauges[]`,
+  `labels[]`, and `icons[]`. The change-detection guard in `set hass` and the end-of-update
+  snapshot in `_update()` now track these attribute values in addition to entity states.
+- **GUI editor not re-rendering when only `brightness_model` was added/modified** – the
+  `setConfig` optimisation that skips re-rendering when array lengths are unchanged did not
+  account for `brightness_model`. Adding or removing sources or filter-gradient stops on an
+  existing card would leave the editor showing stale content. The `same` check now also
+  compares `brightness_model.source.length` and `brightness_model.filter_gradient.length`.
+
+---
+
 ## [0.5.0] – 2026-05-26
 
 ### Added
