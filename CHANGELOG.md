@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.1] – 2026-05-27
+
+### Fixed
+- **Choppy / unnatural blind animation** – four root causes identified and resolved:
+  1. **`background` CSS transition removed from default** – the browser cannot interpolate
+     between `repeating-linear-gradient()` values, so `background 1s ease` produced
+     jarring flashes on every update. Default transition is now `height 0.5s ease` /
+     `width 0.5s ease` (position-only). Background changes are now instant, which is
+     correct: only the fill size should animate.
+  2. **Sub-percent height precision** – `Math.round(pct*100)` truncated to whole integer
+     percentages, causing visible 1 % step-jumps in the fill height. Now uses
+     `Math.round(pct*1000)/10` (one decimal place, 0.1 % resolution).
+  3. **`slat_pitch` cyclic background switch removed** – the binary solid↔gradient
+     alternation every 1 % created a strobe effect when combined with the CSS transition.
+     Removed from the update loop; the `repeating-linear-gradient` itself already renders
+     the slat pattern correctly as the height grows.
+  4. **`blindToGaugeConfig` now cached** – result stored as `this._blindGaugeCfgs` in
+     `_render()` and reused in `_update()` instead of rebuilding gradient strings on every
+     hass state update.
+
+---
+
 ## [0.7.0] – 2026-05-27
 
 ### Added
