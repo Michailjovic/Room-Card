@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.7.11] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` – simplified to single `slat_count` parameter**
+
+  `slat_width`, `slat_gap`, `slat_pitch` are no longer used and can be removed from
+  config.  All geometry is now derived from the container at render time:
+
+  ```
+  period    = containerHeight / slat_count   (px, dynamic)
+  slat_width = period / 2                    (symmetric 50/50 opaque/transparent)
+  offset     = pct × (period / 2)            (linear, 0 = open, 1 = closed)
+  ```
+
+  Minimal YAML:
+  ```yaml
+  blind_type: day_night
+  slat_count: 8          # number of band pairs; default 6
+  slat_color: rgba(0,0,0,0.9)   # optional
+  ```
+
+  The band pattern is always visible at every position between 0 % and 100 %
+  (open = aligned gaps, closed = gaps fully covered).  The previous
+  `Math.min` formula that caused the blind to look fully solid beyond the
+  first slat has been removed.
+
 ## [0.7.10] – 2026-05-27
 
 ### Fixed
