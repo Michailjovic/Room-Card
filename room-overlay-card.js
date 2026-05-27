@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.7.13 — MIT License
+ * room-overlay-card v0.7.14 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -747,8 +747,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const hEl=q('[data-g-h="'+i+'"]');if(hEl)o.height=hEl.value;
       const entEl=q('[data-g-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
       const atEl=q('[data-g-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
-      const minEl=q('[data-g-min="'+i+'"]');if(minEl)o.min=parseFloat(minEl.value)||0;
-      const maxEl=q('[data-g-max="'+i+'"]');if(maxEl)o.max=parseFloat(maxEl.value)||100;const orientEl=q('[data-g-orient="'+i+'"]');if(orientEl&&orientEl.value&&orientEl.value!=='vertical')o.orientation=orientEl.value;else if(orientEl&&orientEl.value==='vertical')delete o.orientation;else delete o.orientation;
+      const minEl=q('[data-g-min="'+i+'"]');if(minEl){const _gmn=parseFloat(minEl.value);o.min=isNaN(_gmn)?0:_gmn;}
+      const maxEl=q('[data-g-max="'+i+'"]');if(maxEl){const _gmx=parseFloat(maxEl.value);o.max=isNaN(_gmx)?100:_gmx;}const orientEl=q('[data-g-orient="'+i+'"]');if(orientEl&&orientEl.value&&orientEl.value!=='vertical')o.orientation=orientEl.value;else if(orientEl&&orientEl.value==='vertical')delete o.orientation;else delete o.orientation;
       const yaEl=q('[data-g-yaml="'+i+'"]');
       if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
       const gradStops=[];
@@ -771,8 +771,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const zEl=q('[data-bl-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value)||6;else delete o.z_index;
       const entEl=q('[data-bl-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
       const atEl=q('[data-bl-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
-      const minEl=q('[data-bl-min="'+i+'"]');if(minEl)o.min=parseFloat(minEl.value)||0;
-      const maxEl=q('[data-bl-max="'+i+'"]');if(maxEl)o.max=parseFloat(maxEl.value)||100;
+      const minEl=q('[data-bl-min="'+i+'"]');if(minEl){const _bmn=parseFloat(minEl.value);o.min=isNaN(_bmn)?0:_bmn;}
+      const maxEl=q('[data-bl-max="'+i+'"]');if(maxEl){const _bmx=parseFloat(maxEl.value);o.max=isNaN(_bmx)?100:_bmx;}
       const typeEl=q('[data-bl-type="'+i+'"]');if(typeEl)o.blind_type=typeEl.value;else o.blind_type='roller';
       const scEl=q('[data-bl-slat-color="'+i+'"]');if(scEl&&scEl.value.trim())o.slat_color=scEl.value.trim();else delete o.slat_color;
       const scntEl=q('[data-bl-slat-count="'+i+'"]');if(scntEl&&scntEl.value)o.slat_count=parseInt(scntEl.value,10)||6;else delete o.slat_count;

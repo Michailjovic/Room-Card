@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.14] – 2026-05-27
+
+### Fixed
+- **GUI editor – `min`/`max` fields no longer overwrite zero values**
+
+  `parseFloat("0") || 100` evaluates to `100` in JavaScript because `0` is falsy.
+  Setting `max: 0` (inverted motor, e.g. 0 = closed) was silently reset to `100` on
+  every editor save.  Fixed for both `blinds[]` and `gauges[]` min/max fields by
+  using `isNaN()` guard instead of the `|| fallback` pattern.
+
 ## [0.7.13] – 2026-05-27
 
 ### Fixed
