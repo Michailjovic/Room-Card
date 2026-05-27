@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.7.14 — MIT License
+ * room-overlay-card v0.7.15 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -573,7 +573,6 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     const _bmSrcs=[];
     self.querySelectorAll('[data-bm-src-ent]').forEach(function(el,i){
-      if(!el.value.trim())return;
       const _s={entity:el.value.trim()};
       const _cc=self.querySelector('[data-bm-src-cond="'+i+'"]');
       if(_cc&&_cc.value.trim()){const _p=_yaml.p(_cc.value);if(_p)_s.condition=_p;}
@@ -591,7 +590,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _fe=self.querySelector('[data-bm-fg-filt="'+i+'"]');
       if(_fe)_bmFg.push({value:_v,filter:_fe.value.trim()||'none'});
     });
-    if(_bmSrcs.length&&_bmFg.length)c.brightness_model={source:_bmSrcs,filter_gradient:_bmFg};
+    if(_bmSrcs.length||_bmFg.length)c.brightness_model={source:_bmSrcs,filter_gradient:_bmFg};
     else delete c.brightness_model;
 
     c.filter_conditions=[];
@@ -1268,7 +1267,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-bm-src-ent],[data-bm-src-attr],[data-bm-src-min],[data-bm-src-max],[data-bm-src-cond]').forEach(function(el){
-      el.addEventListener('change',fire);el.addEventListener('input',fire);
+      el.addEventListener('change',fire);
     });
     const addBmFg=this.querySelector('#add-bm-fg');
     if(addBmFg)addBmFg.addEventListener('click',function(){
@@ -1289,7 +1288,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-bm-fg-val],[data-bm-fg-filt]').forEach(function(el){
-      el.addEventListener('change',fire);el.addEventListener('input',fire);
+      el.addEventListener('change',fire);
     });
 
     // Overlays

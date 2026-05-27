@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.7.15] – 2026-05-27
+
+### Fixed
+- **GUI editor – brightness model section collapses while typing entity name**
+
+  Three cooperating bugs caused the section to disappear mid-edit:
+
+  1. `_collectConfig` skipped any source row whose entity field was empty
+     (`if(!el.value.trim())return`) — so a row being actively typed was treated
+     as non-existent.
+  2. `brightness_model` was deleted from the collected config whenever either
+     `source` or `filter_gradient` was empty (`&&` condition). A freshly added
+     source with no filter stops yet wiped the whole model.
+  3. Entity inputs had `input` event listeners that fired `_fire()` on every
+     keystroke, causing HA to call `setConfig()` again; the length mismatch
+     triggered a full `_render()` that destroyed the in-progress input.
+
+  Fixes: (1) source rows are preserved regardless of entity value, (2) `&&`
+  changed to `||` — model is kept as long as any row exists, (3) `input`
+  listeners removed from brightness model fields (values are committed on
+  `change` / blur, consistent with all other text fields in the editor).
+
 ## [0.7.14] – 2026-05-27
 
 ### Fixed
