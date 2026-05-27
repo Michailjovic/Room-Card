@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.7.11 — MIT License
+ * room-overlay-card v0.7.12 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -261,16 +261,18 @@ class RoomOverlayCard extends HTMLElement{
     h+='</select></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat / roller color (CSS)</label><input data-bl-slat-color="'+i+'" type="text" value="'+this._e(b.slat_color||'rgba(0,0,0,0.9)') +'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
     h+='</div>';
-    if(type==='day_night'||type==='venetian'){
-      const _bc=type==='day_night'?3:4;
-      h+='<div style="display:grid;grid-template-columns:repeat('+_bc+',1fr);gap:8px;margin-bottom:8px;">';
+    if(type==='day_night'){
+      h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
+      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat count (number of band pairs)</label><input data-bl-slat-count="'+i+'" type="number" min="1" step="1" value="'+this._e(String(b.slat_count??6))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='</div>';
+    }else if(type==='venetian'){
+      h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
       h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat width (px)</label><input data-bl-slat-w="'+i+'" type="number" value="'+this._e(String(b.slat_width??7))+'"'+this._inp('font-size:12px;')+'></div>';
       h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat gap (px)</label><input data-bl-slat-g="'+i+'" type="number" value="'+this._e(String(b.slat_gap??6))+'"'+this._inp('font-size:12px;')+'></div>';
-      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat pitch (%)</label><input data-bl-slat-pitch="'+i+'" type="number" step="0.5" value="'+this._e(String(b.slat_pitch??2))+'" placeholder="0=off"'+this._inp('font-size:12px;')+'></div>';
-      if(type==='venetian')h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Gap color (CSS)</label><input data-bl-gap-color="'+i+'" type="text" value="'+this._e(b.gap_color||'rgba(180,160,140,0.35)')+'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
+      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Gap color (CSS)</label><input data-bl-gap-color="'+i+'" type="text" value="'+this._e(b.gap_color||'rgba(180,160,140,0.35)')+'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
       h+='</div>';
     }
-    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_width','slat_gap','gap_color','slat_pitch'].forEach(function(k){delete cpBl[k];});
+    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch'].forEach(function(k){delete cpBl[k];});
     const ysBl=Object.keys(cpBl).length?_yaml.s(cpBl):'';
     h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
@@ -445,7 +447,7 @@ class RoomOverlayCard extends HTMLElement{
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=el.querySelector('.gfill');
-      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
+      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
@@ -773,10 +775,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       const maxEl=q('[data-bl-max="'+i+'"]');if(maxEl)o.max=parseFloat(maxEl.value)||100;
       const typeEl=q('[data-bl-type="'+i+'"]');if(typeEl)o.blind_type=typeEl.value;else o.blind_type='roller';
       const scEl=q('[data-bl-slat-color="'+i+'"]');if(scEl&&scEl.value.trim())o.slat_color=scEl.value.trim();else delete o.slat_color;
+      const scntEl=q('[data-bl-slat-count="'+i+'"]');if(scntEl&&scntEl.value)o.slat_count=parseInt(scntEl.value,10)||6;else delete o.slat_count;
       const swEl=q('[data-bl-slat-w="'+i+'"]');if(swEl&&swEl.value)o.slat_width=parseFloat(swEl.value)||7;else delete o.slat_width;
       const sgEl=q('[data-bl-slat-g="'+i+'"]');if(sgEl&&sgEl.value)o.slat_gap=parseFloat(sgEl.value)||6;else delete o.slat_gap;
       const gcEl=q('[data-bl-gap-color="'+i+'"]');if(gcEl&&gcEl.value.trim())o.gap_color=gcEl.value.trim();else delete o.gap_color;
-      const spEl=q('[data-bl-slat-pitch="'+i+'"]');if(spEl&&spEl.value)o.slat_pitch=parseFloat(spEl.value)||0;else delete o.slat_pitch;
       const yaEl=q('[data-bl-yaml="'+i+'"]');
       if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
       return o;
@@ -1041,16 +1043,18 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</select></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat / roller color (CSS)</label><input data-bl-slat-color="'+i+'" type="text" value="'+this._e(b.slat_color||'rgba(0,0,0,0.9)') +'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
     h+='</div>';
-    if(type==='day_night'||type==='venetian'){
-      const _bc=type==='day_night'?3:4;
-      h+='<div style="display:grid;grid-template-columns:repeat('+_bc+',1fr);gap:8px;margin-bottom:8px;">';
+    if(type==='day_night'){
+      h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
+      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat count (number of band pairs)</label><input data-bl-slat-count="'+i+'" type="number" min="1" step="1" value="'+this._e(String(b.slat_count??6))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='</div>';
+    }else if(type==='venetian'){
+      h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
       h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat width (px)</label><input data-bl-slat-w="'+i+'" type="number" value="'+this._e(String(b.slat_width??7))+'"'+this._inp('font-size:12px;')+'></div>';
       h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat gap (px)</label><input data-bl-slat-g="'+i+'" type="number" value="'+this._e(String(b.slat_gap??6))+'"'+this._inp('font-size:12px;')+'></div>';
-      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat pitch (%)</label><input data-bl-slat-pitch="'+i+'" type="number" step="0.5" value="'+this._e(String(b.slat_pitch??2))+'" placeholder="0=off"'+this._inp('font-size:12px;')+'></div>';
-      if(type==='venetian')h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Gap color (CSS)</label><input data-bl-gap-color="'+i+'" type="text" value="'+this._e(b.gap_color||'rgba(180,160,140,0.35)')+'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
+      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Gap color (CSS)</label><input data-bl-gap-color="'+i+'" type="text" value="'+this._e(b.gap_color||'rgba(180,160,140,0.35)')+'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
       h+='</div>';
     }
-    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_width','slat_gap','gap_color','slat_pitch'].forEach(function(k){delete cpBl[k];});
+    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch'].forEach(function(k){delete cpBl[k];});
     const ysBl=Object.keys(cpBl).length?_yaml.s(cpBl):'';
     h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
@@ -1496,7 +1500,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-slat-pitch],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
   }
 }
 

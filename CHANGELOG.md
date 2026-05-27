@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.12] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` – phase shift cycles `slat_count` times across full travel**
+
+  Previous formula `offset = pct × (period/2)` did one open→closed transition over
+  0–100 % travel.  New formula:
+  ```
+  offset = pct × slat_count × (period/2)
+  ```
+  With `slat_count: 8` the phase completes 8 half-cycles as the blind deploys, matching
+  the physical behaviour where each band pair individually cycles through its open/closed
+  state.  The CSS `background-position-y` transition animates smoothly between positions.
+
+- **GUI editor – `day_night` fields simplified to `slat_count` only**
+
+  For `blind_type: day_night` the editor now shows a single *Slat count* field instead
+  of the old Slat width / Slat gap / Slat pitch inputs.  `venetian` still shows Slat
+  width, Slat gap and Gap color.  `slat_pitch` removed from editor entirely.
+
 ## [0.7.11] – 2026-05-27
 
 ### Changed
