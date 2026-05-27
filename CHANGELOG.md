@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.7.6] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` – both fabric layers now scroll together (physical unroll effect)**
+
+  Previously only layer 2 shifted its `background-position-y` while layer 1 stayed fixed
+  at offset 0.  The result was a gap that simply squeezed shut — the bands themselves never
+  appeared to move.
+
+  New model — two independent but coordinated offsets:
+
+  | layer | `background-position-y` |
+  |---|---|
+  | layer 1 (base, `_dnBase`) | `pct × container_height` px |
+  | layer 2 (overlay, `_dnOverlay`) | `pct × container_height − pct × period/2` px |
+
+  Both layers scroll downward at the same rate (by the full container height as the blind
+  goes from 0 → 100 %).  Layer 2 carries the additional `−pct × period/2` tilt that
+  progressively shifts the two layers out of phase, closing the gaps.  The result is:
+  - The striped fabric **physically slides** as the blind extends — every visible band
+    moves downward, like a striped carpet being pulled across the floor.
+  - Simultaneously the bands tilt from fully open (phase 0) to fully closed (phase
+    `period/2`) at 100 %, exactly as in v0.7.5.
+
+  Implementation: layer 1 is now marked `_dnBase: true` so `_update()` handles it
+  independently from the generic gauge path (which would reset `backgroundPositionY` via
+  the `background` shorthand).  Both `_dnBase` and `_dnOverlay` share the same initial
+  CSS in `_render()` (`transition: height Xs ease, background-position-y Xs ease`).
+
+---
+
 ## [0.7.5] – 2026-05-27
 
 ### Fixed
