@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.7.7 — MIT License
+ * room-overlay-card v0.7.8 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -58,7 +58,7 @@ function lerpFilterGradient(stops,pct){
 
 function blindToGaugeConfig(b){
   const type=b.blind_type||'roller';
-  const sw=b.slat_width??7,sg=b.slat_gap??6;
+  const sw=b.slat_width??7,sg=b.slat_gap??sw;
   const sc=b.slat_color||'rgba(0,0,0,0.9)';
   const z=b.z_index??6;
   const base={id:'__bl_'+b.id,entity:b.entity,min:b.min??0,max:b.max??100,
@@ -71,11 +71,13 @@ function blindToGaugeConfig(b){
   if(type==='roller'){
     return[Object.assign({},base,{color:sc})];
   }else if(type==='day_night'){
-    const grad='repeating-linear-gradient(to bottom,'+sc+' 0px,'+sc+' '+sw+'px,transparent '+sw+'px,transparent '+(sw+sg)+'px)';
-    const sp=b.slat_pitch??30;
+    const scount=b.slat_count??null;
+    const period0=sw+sg;
+    const grad0=scount===null?('repeating-linear-gradient(to bottom,'+sc+' 0px,'+sc+' '+sw+'px,transparent '+sw+'px,transparent '+period0+'px)'):null;
+    const dnX=scount!==null?{_slat_count:scount,_slat_width_px:sw,_slat_color:sc}:{};
     return[
-      Object.assign({},base,{color:grad,_dnBase:true,_period:sw+sg}),
-      Object.assign({},base,{id:'__bl_'+b.id+'_x',z_index:z+1,color:grad,_dnOverlay:true,_sp:sp,_period:sw+sg})
+      Object.assign({},base,{color:grad0,_dnBase:true,_period:scount===null?period0:null},dnX),
+      Object.assign({},base,{id:'__bl_'+b.id+'_x',z_index:z+1,color:grad0,_dnOverlay:true,_period:scount===null?period0:null},dnX)
     ];
   }else if(type==='venetian'){
     const gc=b.gap_color||'rgba(180,160,140,0.35)';
@@ -449,7 +451,7 @@ class RoomOverlayCard extends HTMLElement{
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=el.querySelector('.gfill');
-      if(fill){if(g._dnBase){fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=g.color;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY=(pct*g._period/2)+'px';}else if(g._dnOverlay){fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=g.color;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY='0px';}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
+      if(fill){if(g._dnBase){fill.style.height=(Math.round(pct*1000)/10)+'%';const _imgB=g._slat_count?('repeating-linear-gradient(to bottom,'+g._slat_color+' 0px,'+g._slat_color+' '+g._slat_width_px+'px,transparent '+g._slat_width_px+'px,transparent '+(el.offsetHeight/g._slat_count)+'px)'):g.color;fill.style.backgroundImage=_imgB;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY='0px';}else if(g._dnOverlay){fill.style.height=(Math.round(pct*1000)/10)+'%';const _perOv=g._slat_count?(el.offsetHeight/g._slat_count):g._period;const _imgOv=g._slat_count?('repeating-linear-gradient(to bottom,'+g._slat_color+' 0px,'+g._slat_color+' '+g._slat_width_px+'px,transparent '+g._slat_width_px+'px,transparent '+_perOv+'px)'):g.color;fill.style.backgroundImage=_imgOv;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY=-(pct*_perOv/2)+'px';}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;

@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.7.8] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` – front layer now carries the motion (visible band sliding)**
+
+  Previous versions moved the *behind* layer (`_dnBase`, z-index 6) while the *front* layer
+  (`_dnOverlay`, z-index 7) was fixed.  Because the dominant visible stripes always belong
+  to the front layer, those appeared stationary — only the narrow transparent gaps of the
+  front layer changed, which looked like the gap was just squeezing shut rather than bands
+  physically moving.
+
+  Fix — formulas swapped:
+
+  | layer | role | `background-position-y` |
+  |---|---|---|
+  | `_dnBase` (z, behind) | static reference | `0` px (fixed) |
+  | `_dnOverlay` (z+1, front) | moving fabric | `−(pct × period/2)` px (slides up) |
+
+  The front layer's opaque bands now physically scroll upward as `pct` increases — the
+  leading edge of each band exits above the container top while the next band's leading
+  edge enters from below.  Through the front layer's transparent windows you see the
+  fixed back layer for contrast.  The combined gap closes to zero at `pct = 1`.  The
+  sliding is visible in the **static state** at every pct value, not just during animation.
+
+- **New parameter `slat_count`** — number of slat pairs visible when the blind is fully
+  extended.  The period is computed dynamically from `el.offsetHeight / slat_count` each
+  render tick, so the gradient always scales to the actual container height:
+  ```yaml
+  blind_type: day_night
+  slat_width: 10   # px — width of each opaque band
+  slat_count: 8    # total opaque+transparent pairs in full height
+  ```
+  `slat_gap` is still accepted (overrides auto-derived gap).  If both `slat_count` and
+  `slat_gap` are absent, `slat_gap` defaults to `slat_width` (symmetric bands).
+
+- **`slat_pitch` removed** — parameter no longer has any effect and is silently ignored.
+  Remove it from existing configs.
+
+- **`slat_gap` default changed** from the old hardcoded `6` px to `slat_width` (symmetric
+  bands by default: equal opaque and transparent stripe widths).
+
+---
+
 ## [0.7.7] – 2026-05-27
 
 ### Fixed
