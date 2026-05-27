@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.13] – 2026-05-27
+
+### Fixed
+- **`blind_type: day_night` – fully closed at 100 %**
+
+  For even `slat_count` (e.g. 8) the cycling formula `pct × N × period/2` ended at
+  `N × period/2 ≡ 0 (mod period)` — the gradient wrapped back to its open phase.
+  Fix: when `pct ≥ 1` the offset is clamped to `period/2` (fully closed) regardless
+  of `slat_count` parity.  The CSS transition animates smoothly to this final position.
+
 ## [0.7.12] – 2026-05-27
 
 ### Changed
