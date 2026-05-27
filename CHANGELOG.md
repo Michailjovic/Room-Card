@@ -15,30 +15,26 @@
   ```
 
 ### Changed
-- **`blind_type: day_night` – replaced oscillating formula with two-phase model** – the
-  previous formula `-(pct×100×period/sp + period/2)` caused the slats to complete multiple
-  full open↔close cycles as the blind lowered (5 cycles with `slat_pitch: 20`).  As a
-  result the slat phase oscillated rapidly near 90–100 % and users perceived the blind as
-  "never fully closing" or "open at 100 %".
+- **`blind_type: day_night` – single-pass linear band tilt model** – replaced both the
+  oscillating formula (v0.7.4) and the two-phase "lower then tilt" model (v0.7.5 initial)
+  with a simple single-pass progressive shift:
 
-  New model — two distinct phases:
-  1. **Lowering** (`pct` from `0` to `1 − slat_pitch/100`): blind extends, slats stay in
-     the open / striped (day) position.  `background-position-y = 0`.
-  2. **Tilting** (`pct` from `1 − slat_pitch/100` to `1.0`): slats rotate progressively
-     from fully open (phase 0) to fully closed (phase `period/2`).  Always ends at solid
-     at exactly `pct = 1.0`.
-
-  Formula for the tilt zone:
   ```
-  tiltPct  = (pct − (1 − closeFrac)) / closeFrac   // 0 → 1 in tilt zone
-  bgPosY   = −(tiltPct × period / 2) px
+  background-position-y (layer 2) = −(pct × period / 2)  px
   ```
-  With `slat_pitch: 20` the slats start closing when the blind is 80 % down and are
-  fully solid at 100 %, with no oscillation.
 
-- **`slat_pitch` default changed from `2` to `30`** – a default of `2` triggered 50
-  oscillations per full travel which was visually meaningless.  `30` means tilting begins
-  at 70 % and completes at 100 %, giving a natural two-stage feel out of the box.
+  At `pct = 0`: both layers are in phase → transparent gaps visible (day / open bands).
+  At `pct = 1`: layer 2 is offset by exactly `period/2` → opaque bands cover every gap
+  of layer 1 → fully solid (night / closed bands). ✓
+
+  The tilt is distributed **across the entire blind travel** — as the blind extends, the
+  bands visibly rotate throughout (like pulling striped fabric across a surface), rather
+  than staying static during the lowering phase and only moving in the final segment.
+  No oscillations, no two-phase split. Guaranteed closure at exactly 100 %.
+
+- **`slat_pitch` default changed from `2` to `30`** – the parameter is kept in the config
+  schema but is not used in the current tilt formula; it may serve future extensions.
+  Default updated to `30` as a more descriptive placeholder value.
 
 ---
 
