@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.7.7] – 2026-05-27
+
+### Fixed
+- **`blind_type: day_night` – band sliding effect now visible in static state**
+
+  v0.7.6 tied layer 1's `background-position-y` to `el.offsetHeight` (the container's
+  rendered pixel height).  For any container whose height happens to be a multiple of the
+  gradient period (e.g. a 180 px container with a 20 px period), the scroll offset at
+  every integer-pct value was a multiple of the period → net phase = 0 → visually
+  identical to the unshifted state.  The bands only appeared to move during the 0.5 s CSS
+  transition after each entity update, not at rest.
+
+  New formula — container-height-independent:
+
+  | layer | `background-position-y` |
+  |---|---|
+  | layer 1 `_dnBase` | `pct × period/2` px |
+  | layer 2 `_dnOverlay` | `0` px (fixed) |
+
+  Layer 2 acts as a fixed grid/mask.  Layer 1 slides through it by exactly half a period
+  (`slat_gap` pixels) as `pct` goes from 0 → 1.  At every intermediate `pct` value the
+  opaque band of layer 1 is at a different position relative to layer 2's transparent
+  window, so the sliding effect is **visible in the static (resting) state**, not just
+  during animation.  Full closure at `pct = 1` is guaranteed: layer 1 phase = `period/2`,
+  which means its opaque bands align exactly with layer 2's transparent windows → no gap.
+
+---
+
 ## [0.7.6] – 2026-05-27
 
 ### Changed

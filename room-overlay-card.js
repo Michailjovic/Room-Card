@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v0.7.6 — MIT License
+ * room-overlay-card v0.7.7 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -449,7 +449,7 @@ class RoomOverlayCard extends HTMLElement{
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=el.querySelector('.gfill');
-      if(fill){if(g._dnBase){fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=g.color;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY=(pct*el.offsetHeight)+'px';}else if(g._dnOverlay){fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=g.color;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY=(pct*el.offsetHeight-pct*g._period/2)+'px';}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
+      if(fill){if(g._dnBase){fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=g.color;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY=(pct*g._period/2)+'px';}else if(g._dnOverlay){fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=g.color;fill.style.backgroundColor='transparent';fill.style.backgroundPositionY='0px';}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
