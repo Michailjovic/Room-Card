@@ -25,10 +25,10 @@
   (`height Xs ease, background-position-y Xs ease`), so both animate smoothly and in sync.
   No opacity switches, no background re-paints, no binary jumps — pure CSS geometry.
 
-  **Calibration note**: because the model is cyclic, the final state at `max` depends on
-  `slat_pitch`.  For the fully-closed position to land on SOLID, choose `slat_pitch` such
-  that `(max − min) / slat_pitch` is an **odd integer** (e.g. `slat_pitch: 4` with
-  range 0–100 gives 25 cycles → ends at SOLID).
+  The formula includes a fixed `−period/2` offset so that `pct = 0` starts at phase 0.5
+  (SOLID, but invisible because height is 0) and every whole-cycle boundary (`pct = n ×
+  slat_pitch / 100`) also lands on SOLID.  With `slat_pitch: 4` and range 0–100 the
+  sequence is: 0 % → invisible · 4 % → SOLID · 8 % → transparent · … · 100 % → SOLID ✓
 
 ---
 
