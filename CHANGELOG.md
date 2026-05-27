@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.7.10] – 2026-05-27
+
+### Fixed
+- **`blind_type: day_night` – phase shift rate corrected**
+
+  Previous formula `offset = pct × (period/2)` spread the full half-period shift over
+  the entire 0–100 % travel, so the bands moved imperceptibly slowly.
+
+  New formula:
+  ```
+  offset = min(pct × containerHeight, period) / 2
+  ```
+  The full half-period shift now completes within the first single slat's height of
+  travel (`pct = period / containerHeight = 1 / slat_count`); from that point onward
+  the offset stays at `period/2` (fully closed) and only the covered height continues
+  to grow.  The band motion is visible and fast, matching physical zebra-blind behaviour.
+
 ## [0.7.9] – 2026-05-27
 
 ### Changed
