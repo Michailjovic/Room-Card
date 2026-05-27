@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.7.3] – 2026-05-27
+
+### Fixed
+- **`blind_type: day_night` – correct cyclic solid/stripe model** – the v0.7.2 solid
+  overlay used `min = midpoint` which produced "solid on top, stripes on bottom" and did
+  not use `slat_pitch` at all.  Replaced with:
+  - Both layers always have **identical height** (= current position %)
+  - The solid overlay's **opacity** cycles between `0` and `1` based on `slat_pitch`:
+    ```
+    cycle_pos = (pct × 100 % slat_pitch) / slat_pitch   // 0→1 per cycle
+    opacity   = cycle_pos ≥ 0.5 ? 1 : 0
+    ```
+  - With `slat_pitch: 2` this produces one full stripes↔solid cycle every 2 % of travel,
+    so at e.g. 25 % closed the entire covered area is solid, at 26 % it shows stripes again.
+  - The solid layer config is marked with `_dnOverlay: true` and carries `_sp` (slat_pitch);
+    the `_update()` loop detects this and applies opacity instead of the standard height
+    formula.
+
+---
+
 ## [0.7.2] – 2026-05-27
 
 ### Changed
