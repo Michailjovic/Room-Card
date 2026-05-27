@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.7.9] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` – rewritten as single-element two-CSS-layer model**
+
+  Root cause of the missing motion effect: the previous two-gauge-div approach had the
+  overlay gauge container with `background: rgba(0,0,0,0.5)`.  Through the transparent
+  bands of the overlay fill, the browser rendered *the overlay's own background*, not the
+  gauge behind it — so the base layer was effectively invisible, and the only visible
+  change was the `height` growing.
+
+  New model — one gauge div (`background: transparent`), one `.gfill` div with **two
+  CSS gradient layers** on `background-image`:
+
+  ```
+  background-image: <gradient shifted by −offset>, <gradient at 0>;
+  background-position-y: -offset px, 0px;
+  ```
+
+  where `offset = pct × (period / 2)`.
+
+  | pct | offset | layer 1 opaque | layer 2 opaque | combined transparent |
+  |---|---|---|---|---|
+  | 0 | 0 | [0, sw) | [0, sw) | [sw, period) — max gap |
+  | 0.5 | sw/2 | [0, sw/2) | [0, sw) | [sw, 3sw/2) — half gap |
+  | 1.0 | sw | [sw, 2sw) | [0, sw) | ∅ — fully closed |
+
+  Because the front gradient layer physically shifts, the opaque bands visibly scroll
+  upward relative to the container as `pct` increases — the classic rolling zebra-blind
+  motion.  Through the transparent window you see the room image behind (no background
+  colour blocks it).
+
+  Transition: `height` + `background-position-y` both animated.
+
+- **`slat_pitch`, `_dnBase`, `_dnOverlay` removed** — internal props cleaned up; only
+  `_dayNight` remains.  `slat_count` and `slat_width`/`slat_gap` still supported.
+
 ## [0.7.8] – 2026-05-27
 
 ### Changed
