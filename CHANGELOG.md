@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.7.4] – 2026-05-27
+
+### Changed
+- **`blind_type: day_night` – physical two-layer CSS model** – replaced the opacity-toggle
+  approach with a correct simulation of the actual day/night blind mechanism:
+
+  A day/night blind has two identical striped fabric layers.  As the blind extends, the
+  front layer shifts relative to the back layer, cyclically aligning and misaligning the
+  transparent gaps:
+
+  | relative offset | visual result |
+  |---|---|
+  | 0 (aligned) | transparent — gaps of both layers line up |
+  | ½ period | solid — slats of layer 2 cover gaps of layer 1 |
+  | 1 period | transparent again |
+
+  **Implementation**: both layers carry the same `repeating-linear-gradient`.  Layer 1
+  has `background-position-y: 0` (fixed).  Layer 2's position is updated every hass tick:
+  ```
+  backgroundPositionY = -(pct × 100 × (slat_width + slat_gap) / slat_pitch) px
+  ```
+  Both `height` and `background-position-y` are included in the CSS transition
+  (`height Xs ease, background-position-y Xs ease`), so both animate smoothly and in sync.
+  No opacity switches, no background re-paints, no binary jumps — pure CSS geometry.
+
+  **Calibration note**: because the model is cyclic, the final state at `max` depends on
+  `slat_pitch`.  For the fully-closed position to land on SOLID, choose `slat_pitch` such
+  that `(max − min) / slat_pitch` is an **odd integer** (e.g. `slat_pitch: 4` with
+  range 0–100 gives 25 cycles → ends at SOLID).
+
+---
+
 ## [0.7.3] – 2026-05-27
 
 ### Fixed
