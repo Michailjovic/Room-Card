@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.1] – 2026-05-28
+
+### Gauge border animations
+
+- **Gauge alert animations**: gauge bars can now display a pulsing or blinking
+  colored border when a condition is met (e.g. temperature above threshold).
+- New CSS keyframes `roc-border-pulse` and `roc-border-blink` use an inset
+  `box-shadow` so the effect renders correctly inside the clipped overlay container.
+- New YAML fields on each gauge:
+  - `animation`: `pulse` | `blink` — animation style (always-on if no condition set)
+  - `animation_color`: CSS color string — border/glow color (default `#ff4444`)
+  - `alert_conditions`: condition object `{entity, operator, value}` — when present,
+    animation is shown only while the condition is true; removed as soon as it clears
+- GUI editor updated in the gauge panel: animation dropdown, color picker, and a
+  three-field condition row (entity / operator / value) — no YAML required
+- The alert entity is tracked automatically by the existing `_extractEntities`
+  recursive scanner, so state changes trigger a live update without re-render
+
 ## [1.0.0] – 2026-05-28
 
 ### Release milestone — first public version
