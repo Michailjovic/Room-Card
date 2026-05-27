@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.7.5] – 2026-05-27
+
+### Fixed
+- **`blind_type: day_night` – CSS transition for `background-position-y` was broken** –
+  the transition string was built as `transition: height Xs ease, background-position-y
+  height Xs ease` (the property name `height` leaked into the timing definition for the
+  second property).  Browsers silently discarded the invalid `background-position-y`
+  transition, so the slat phase jumped instantly on every hass update while only `height`
+  animated smoothly.  Fixed by stripping the property-name prefix from `_dtr` before
+  appending it to the `background-position-y` entry, e.g.:
+  ```
+  height 0.5s ease  →  background-position-y 0.5s ease   ✓
+  ```
+
+### Changed
+- **`blind_type: day_night` – replaced oscillating formula with two-phase model** – the
+  previous formula `-(pct×100×period/sp + period/2)` caused the slats to complete multiple
+  full open↔close cycles as the blind lowered (5 cycles with `slat_pitch: 20`).  As a
+  result the slat phase oscillated rapidly near 90–100 % and users perceived the blind as
+  "never fully closing" or "open at 100 %".
+
+  New model — two distinct phases:
+  1. **Lowering** (`pct` from `0` to `1 − slat_pitch/100`): blind extends, slats stay in
+     the open / striped (day) position.  `background-position-y = 0`.
+  2. **Tilting** (`pct` from `1 − slat_pitch/100` to `1.0`): slats rotate progressively
+     from fully open (phase 0) to fully closed (phase `period/2`).  Always ends at solid
+     at exactly `pct = 1.0`.
+
+  Formula for the tilt zone:
+  ```
+  tiltPct  = (pct − (1 − closeFrac)) / closeFrac   // 0 → 1 in tilt zone
+  bgPosY   = −(tiltPct × period / 2) px
+  ```
+  With `slat_pitch: 20` the slats start closing when the blind is 80 % down and are
+  fully solid at 100 %, with no oscillation.
+
+- **`slat_pitch` default changed from `2` to `30`** – a default of `2` triggered 50
+  oscillations per full travel which was visually meaningless.  `30` means tilting begins
+  at 70 % and completes at 100 %, giving a natural two-stage feel out of the box.
+
+---
+
 ## [0.7.4] – 2026-05-27
 
 ### Changed
