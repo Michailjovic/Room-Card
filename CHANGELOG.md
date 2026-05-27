@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.0] – 2026-05-28
+
+### Release milestone — first public version
+
+This release marks the project as production-ready for HACS publication.
+All core features are stable, the GUI editor is complete, and the codebase
+has no known bugs.
+
+#### Feature summary
+- Base image with configurable aspect ratio and border-radius
+- CSS filter engine with conditional states and smooth transitions
+- Brightness model — multi-stop filter interpolation driven by sensor values
+- Overlay layers — conditional opacity and state-driven image switching
+- Gauges — animated progress bars, 6 fill directions, color gradients
+- Blinds — roller, venetian slat, and day/night (zebra) blind animations
+- Clickable zones — navigate, more-info, toggle, call-service, browser-mod
+- Status badges — corner chips with conditional icon color and label
+- Embedded HA cards at absolute coordinates
+- Test mode for layout debugging
+- Full GUI editor — no YAML required
+
+#### Also in this release
+- README rewritten with full documentation for all sections
+- Screenshot paths changed to relative (branch-agnostic)
+- `package.json` bumped to 1.0.0
+
 ## [0.7.15] – 2026-05-27
 
 ### Fixed

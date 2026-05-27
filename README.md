@@ -6,7 +6,7 @@
 
 A Home Assistant Lovelace card for **room visualization** — place a photo of your room and bring it to life with conditional CSS filters, transparent overlay layers, clickable zones, status badges, progress gauges, animated window blinds, and embedded HA cards. Everything configurable from a full GUI editor — no YAML required.
 
-![Room Overlay Card – hero screenshot](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/screenshots/hero.png)
+![Room Overlay Card – hero screenshot](screenshots/hero.png)
 
 ---
 
@@ -32,11 +32,11 @@ A Home Assistant Lovelace card for **room visualization** — place a photo of y
 
 | | |
 |---|---|
-| ![Day scene](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/screenshots/day.png) | ![Night scene](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/screenshots/night.png) |
+| ![Day scene](screenshots/day.png) | ![Night scene](screenshots/night.png) |
 | *Day scene — full brightness* | *Night mode — dim filter active* |
-| ![Gauges](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/screenshots/gauges.png) | ![Blinds](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/screenshots/blinds.png) |
+| ![Gauges](screenshots/gauges.png) | ![Blinds](screenshots/blinds.png) |
 | *Gauges — temperature, humidity, CO₂* | *Day/night zebra blind at 60 %* |
-| ![Editor](https://raw.githubusercontent.com/Michailjovic/Room-Card/main/screenshots/editor.png) | |
+| ![Editor](screenshots/editor.png) | |
 | *GUI editor — no YAML needed* | |
 
 ---
