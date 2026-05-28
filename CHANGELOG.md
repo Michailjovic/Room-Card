@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.2] – 2026-05-28
+
+### Gauge animation editor fixes
+
+- **Fixed: alert condition fields unwritable in GUI** — `data-g-anim`, `data-g-alert-ent`,
+  `data-g-alert-attr`, `data-g-alert-op`, `data-g-alert-val` were missing from the
+  `_listen()` change-event registration; any re-render triggered by another gauge field
+  (entity, min, max, …) would wipe the partially-filled condition row
+- **Fixed: `alert_conditions` leaked into YAML textarea** — the field was not stripped
+  from `cp` in `_gaugeItem()`, causing `Object.assign` from the YAML textarea to silently
+  overwrite the dedicated condition fields on every save cycle
+- **New: attribute support in alert condition** — added optional "Attribute" field to the
+  GUI condition row (entity / attribute / operator / value); saves as `alert_conditions.attribute`
+  and evaluated by the existing `evalCond` attribute path
+
 ## [1.0.1] – 2026-05-28
 
 ### Gauge border animations
