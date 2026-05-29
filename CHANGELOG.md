@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.0.3] – 2026-05-29
+
+### Bug fixes and performance improvements
+
+- **Fixed: `rgba()` colors treated as white** — `parseCssColor` and `_toHex` only matched
+  `rgb(...)` syntax; any color specified as `rgba(...)` in `color_gradient`, `animation_color`,
+  or similar fields fell back to `#ffffff`. Both functions now accept `rgba?` pattern.
+- **Fixed: `alert_conditions` with `attribute` not triggering updates** — `_extractAttrSources`
+  tracked the main gauge `attribute` but not `alert_conditions.attribute`; attribute-based
+  alert conditions now register for change tracking properly.
+- **Fixed: always-on gauge animation skipped when entity unavailable** — animation logic was
+  placed after the `if(!ent) continue` guard, so a gauge with `animation: pulse` and no
+  `alert_conditions` never animated if the entity had no state. Animation is now evaluated
+  before the entity check.
+- **Fixed: preloaded images immediately garbage-collected** — `_preloadImages` created
+  `Image` objects that were never stored, so browsers GC'd them before caching. Images are
+  now retained on the instance.
+- **Perf: `.gfill` element cached at render time** — `_update()` no longer calls
+  `el.querySelector('.gfill')` on every tick; fill elements are stored in `_gaugeFills`
+  during `_render()`.
+- **Perf: `color_gradient` stops sorted once at render time** — `lerpColorGradient` was
+  calling `.slice().sort()` on every update cycle; sorted arrays are now cached in
+  `_sortedGrads` during `_render()`.
+- **Perf: `parseFilterStr` regex precompiled** — `FILTER_PROPS` regex patterns are now
+  compiled once at startup instead of inside every `parseFilterStr` call.
+
 ## [1.0.2] – 2026-05-28
 
 ### Gauge animation editor fixes

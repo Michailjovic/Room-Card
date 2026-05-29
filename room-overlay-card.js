@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.2 — MIT License
+ * room-overlay-card v1.0.3 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -40,7 +40,7 @@ function resolveFilterInverted(conds,states){
   const first=conds.find(fc=>fc.condition!==undefined);return first?first.filter:'none';
 }
 
-function parseCssColor(c){let m=c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);if(m)return[parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];m=c.match(/^#([0-9a-f]{6})$/i);if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];m=c.match(/^#([0-9a-f]{3})$/i);if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];return null;}
+function parseCssColor(c){let m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);if(m)return[parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];m=c.match(/^#([0-9a-f]{6})$/i);if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];m=c.match(/^#([0-9a-f]{3})$/i);if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];return null;}
 
 function lerpFilterGradient(stops,pct){
   if(!stops||!stops.length)return 'none';
@@ -149,7 +149,7 @@ class RoomOverlayCard extends HTMLElement{
     const out=[];
     const add=function(entity,attr){if(entity&&attr)out.push({entity,attr});}
     ;(cfg.brightness_model?.source||[]).forEach(function(s){add(s.entity,s.attribute);});
-    (cfg.gauges||[]).forEach(function(g){add(g.entity,g.attribute);});
+    (cfg.gauges||[]).forEach(function(g){add(g.entity,g.attribute);if(g.alert_conditions?.attribute)add(g.alert_conditions.entity,g.alert_conditions.attribute);});
     (cfg.labels||[]).forEach(function(l){add(l.entity,l.attribute);});
     (cfg.icons||[]).forEach(function(ico){add(ico.entity,ico.attribute);});
     (cfg.blinds||[]).forEach(function(bl){add(bl.entity,bl.attribute);});
@@ -209,7 +209,7 @@ class RoomOverlayCard extends HTMLElement{
       if(ov.image)urls.add(ov.image);
       if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
     }
-    urls.forEach(function(url){const img=new Image();img.src=url;});
+    this._preloadImgs=[];const _plSelf=this;urls.forEach(function(url){const img=new Image();img.src=url;_plSelf._preloadImgs.push(img);});
   }
 
   _lblItem(lbl,i){const cp=Object.assign({},lbl);delete cp.id;delete cp.top;delete cp.left;delete cp.entity;delete cp.attribute;delete cp.suffix;delete cp.unit;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('lbl-'+i);let h='<details style="margin-bottom:6px;" data-panel="lbl-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Label: '+this._e(lbl.id||'lbl_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-lbl-id="'+i+'" type="text" value="'+this._e(lbl.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-lbl-top="'+i+'" type="text" value="'+this._e(lbl.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-lbl-left="'+i+'" type="text" value="'+this._e(lbl.left||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input data-lbl-entity="'+i+'" type="text" value="'+this._e(lbl.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional)</label><input data-lbl-attr="'+i+'" type="text" value="'+this._e(lbl.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Suffix</label><input data-lbl-suffix="'+i+'" type="text" value="'+this._e(lbl.suffix||lbl.unit||'')+'"'+this._inp('')+'></div>';h+='</div>';const ls=lbl.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-lg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<ls.length;j++){const hex=this._toHex(ls[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-l-lv="'+i+'-'+j+'" placeholder="value" value="'+ls[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-l-lc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-lg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!ls.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
@@ -347,7 +347,7 @@ class RoomOverlayCard extends HTMLElement{
       if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
     this._lblEls={};for(const lbl of(c.labels||[])){this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+lbl.id+'"]');}
-    this._gaugeEls={};this._blindGaugeCfgs=(c.blinds||[]).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+bg.id+'"]');}
+    this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+bg.id+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
     this._cardEls={};this._contEls={};
     for(const el of(c.elements||[])){
       const cont=document.createElement('div');
@@ -469,14 +469,14 @@ class RoomOverlayCard extends HTMLElement{
       const el=this._gaugeEls[g.id];if(!el)continue;
       const gVis=g.visible_conditions!==undefined?g.visible_conditions:g.visible;
       if(gVis!==undefined)el.style.display=evalCond(gVis,s)?'block':'none';
+      if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
       const val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
       if(isNaN(val))continue;
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
-      const fill=el.querySelector('.gfill');
-      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
-      if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
+      const fill=this._gaugeFills[g.id];
+      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_scDN+' '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}else{const _go=g.orientation||'vertical';if(_go==='horizontal'||_go==='left')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
@@ -530,13 +530,13 @@ const FILTER_PROPS=[
   {key:'blur',       label:'Blur',       min:0,max:20, step:0.5, dflt:0,unit:'px'},
 ];
 
+FILTER_PROPS.forEach(function(p){p._re=new RegExp(p.key.replace(/-/g,'\\-')+'\\(([\\d.]+)'+(p.unit||'')+'\\)');});
 function parseFilterStr(str){
   const r={};
   FILTER_PROPS.forEach(function(p){r[p.key]=p.dflt;});
   if(!str||str==='none')return r;
   FILTER_PROPS.forEach(function(p){
-    const esc=p.key.replace('-','\\-');
-    const m=str.match(new RegExp(esc+'\\(([\\d.]+)'+p.unit+'\\)'));
+    const m=str.match(p._re);
     if(m)r[p.key]=parseFloat(m[1]);
   });
   return r;
@@ -552,7 +552,7 @@ function buildFilterStr(obj){
 class RoomOverlayCardEditor extends HTMLElement{
   constructor(){super();this._config=null;this._hass=null;}
 
-  _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
+  _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
   setConfig(cfg){
     const prev=this._config;
