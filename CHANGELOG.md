@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.3.1] – 2026-05-29
+
+### Hotfix
+
+- **Fixed: day/night (zebra) blind invisible** — a typo introduced in v1.0.3 inserted the
+  slat color into the transparent band of the `_gradDN` CSS gradient, producing invalid CSS
+  and making all `blind_type: day_night` blinds disappear entirely. Rolled back to the
+  correct gradient string.
+
 ## [1.0.3] – 2026-05-29
 
 ### Bug fixes and performance improvements
@@ -25,6 +34,9 @@
   `_sortedGrads` during `_render()`.
 - **Perf: `parseFilterStr` regex precompiled** — `FILTER_PROPS` regex patterns are now
   compiled once at startup instead of inside every `parseFilterStr` call.
+- **Fixed: day/night blind gradient broken in initial v1.0.3 build** — a typo in the
+  `_gradDN` CSS string inserted the slat color into the transparent band, producing invalid
+  CSS and making zebra blinds invisible.
 
 ## [1.0.2] – 2026-05-28
 
