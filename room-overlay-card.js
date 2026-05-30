@@ -210,6 +210,8 @@ class RoomOverlayCard extends HTMLElement{
       if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
     }
     this._preloadImgs=[];const _plSelf=this;urls.forEach(function(url){const img=new Image();img.src=url;_plSelf._preloadImgs.push(img);});
+  }
+
   _render(){
     if(!this._config)return;
     const c=this._config,tm=c.test_mode??false;
