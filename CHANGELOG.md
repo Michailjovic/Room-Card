@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.11] – 2026-05-29
+
+### Fix: `bottom` positioning with auto height
+
+- When `bottom` is set without an explicit `height`, the element now uses `height: auto`
+  so it expands to fit its content and anchors correctly to the bottom edge on all
+  screen sizes. Fixes bubble-card "floating" inside an oversized container on wide screens.
+
 ## [1.0.10] – 2026-05-29
 
 ### Fix: `bottom` positioning now reliably places element at bottom
