@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.7] – 2026-05-29
+
+### Fix: browser-mod popup no longer broadcasts to all devices
+
+- `browser-mod-popup` action now automatically reads the current browser's ID from
+  `window.browser_mod.browserID` and passes it as `browser_id` to the service call.
+  The popup will only open on the device that triggered the action.
+  No YAML changes required — existing configs benefit automatically.
+
 ## [1.0.6] – 2026-05-29
 
 ### New: icon background (circle style)
