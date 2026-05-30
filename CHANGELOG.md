@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.4] – 2026-05-29
+
+### Refactoring — no functional changes
+
+- **Removed dead code**: `_lblItem()`, `_gaugeItem()`, and `_blindItem()` existed as
+  identical copies in both `RoomOverlayCard` and `RoomOverlayCardEditor`. The copies
+  in `RoomOverlayCard` were never called (the main card builds all HTML inline in
+  `_render()`). Removed 98 lines of unreachable code; only the editor copies remain.
+- **Removed `orientation: left`**: was functionally identical to `orientation: horizontal`
+  in both `_render()` and `_update()`. Removed from rendering logic entirely. No existing
+  config used this value.
+
 ## [1.0.3.1] – 2026-05-29
 
 ### Hotfix
