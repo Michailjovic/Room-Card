@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.6] – 2026-05-29
+
+### New: icon background (circle style)
+
+- **`background` field on icons** — optional CSS background string; when set, the icon
+  is rendered inside a circle (`border-radius: 50%`, `padding: 7px`). Useful for making
+  tappable icons visually distinct from the room image.
+  Example: `background: rgba(0,0,0,0.55)`
+- GUI editor updated with a "Background (circle, optional)" input field in the icon panel.
+
 ## [1.0.5] – 2026-05-29
 
 ### Refactoring — no functional changes

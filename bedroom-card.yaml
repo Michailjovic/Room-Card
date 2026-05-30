@@ -1,0 +1,352 @@
+type: custom:room-overlay-card
+base_image: /local/Dashboards/Rooms/Bedroom-svetlo-off.webp
+aspect_ratio: 1720/783
+border_radius: 12px
+filter_transition: 2.0s ease
+filter_conditions:
+  - condition:
+      entity: light.light_group_bedroom
+      state: "on"
+    filter: brightness(2.6) sepia(0.35) saturate(0.9)
+  - condition:
+      entity: sun.sun
+      state: above_horizon
+    filter: brightness(1.7) sepia(0.12) saturate(1.05)
+  - condition:
+      entity: light.light_group_bedroom
+      state: "off"
+    filter: brightness(0.6) sepia(0.3)
+
+overlays:
+  - id: overlay_svetlo
+    transition: 2.0s ease
+    image: /local/Dashboards/Rooms/Bedroom-overlay-SVETlo.webp
+    conditions:
+      opacity:
+        - condition:
+            entity: light.light_group_bedroom
+            state: "on"
+          value: 1
+        - value: 0
+  - id: overlay_tv
+    transition: 1.5s ease
+    conditions:
+      opacity:
+        - condition:
+            entity: media_player.lg_webos_tv_oled83g58lw_beuyljp
+            state_not:
+              - "off"
+              - unavailable
+          value: 1
+        - value: 0
+    state_images:
+      - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+        state: Stremio
+        image: /local/Dashboards/Rooms/tv-Stremio-Test2.webp
+      - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+        state: YouTube AdFree
+        image: /local/Dashboards/Rooms/tv-YouTube-Test2.webp
+      - image: /local/Dashboards/Rooms/tv-LG-Test2.webp
+  - id: overlay_dehumidifier
+    transition: 2.0s ease
+    image: /local/Dashboards/Rooms/overlay-Bedroom-dehumidifier.webp
+    conditions:
+      opacity:
+        - condition:
+            entity: humidifier.wdh_214us
+            state: "on"
+            or:
+              entity: binary_sensor.wdh_214us_tank_full
+              state: "on"
+          value: 1
+        - value: 0
+      filter:
+        - condition:
+            entity: binary_sensor.wdh_214us_tank_full
+            state: "on"
+          value: hue-rotate(120deg) saturate(3) brightness(1.3)
+        - value: none
+
+zones:
+  - id: zone_okno
+    top: 15.7%
+    left: 40.6%
+    width: 17.1%
+    height: 41.8%
+    tap_action:
+      action: toggle
+      entity: input_boolean.zobrazeni_pocasi
+  - id: zone_tv
+    top: 30%
+    left: 70%
+    width: 20%
+    height: 50%
+    tap_action:
+      condition:
+        entity: switch.01_tv
+        state: "on"
+      then:
+        action: navigate
+        path: /dashboard-various/LG_remote
+      else:
+        action: more-info
+        entity: switch.01_tv
+  - id: zone_vysousec
+    top: 63%
+    left: 50%
+    width: 6%
+    height: 15%
+    tap_action:
+      action: more-info
+      entity: humidifier.wdh_214us
+    hold_action:
+      action: navigate
+      path: /dashboard-various/Dehum
+  - id: bed_charger
+    top: 50%
+    left: 2%
+    width: 8%
+    height: 35%
+    tap_action:
+      action: browser-mod-popup
+      title: Nabíječka
+      size: normal
+      content:
+        type: vertical-stack
+        cards:
+          - type: tile
+            entity: switch.shelly_plug_s_gen3_bedroom_charger
+            name: Nabíječka
+            tap_action:
+              action: toggle
+          - type: tile
+            entity: sensor.plug_shelly_bedroom_charger_power
+            name: Aktuální spotřeba
+  - id: electricity
+    top: 66.5%
+    left: 62.5%
+    width: 2%
+    height: 4%
+    tap_action:
+      action: navigate
+      path: /dashboard-various/HDO
+
+badges:
+  - id: vacuum_chip
+    position: bottom-left
+    icon: cil:roborock-vacuum
+    label:
+      - condition:
+          entity: vacuum.s6_kitchen
+          state: cleaning
+        value: "Uklízí: S6"
+      - condition:
+          entity: vacuum.s7_kitchen
+          state: cleaning
+        value: "Uklízí: S7"
+      - condition:
+          entity: vacuum.s8_maxv_ultra
+          state: cleaning
+        value: "Uklízí: S8"
+      - value: Připraveni
+    icon_color:
+      - condition:
+          entity: vacuum.s6_kitchen
+          state: cleaning
+        value: "#e74c3c"
+      - condition:
+          entity: vacuum.s7_kitchen
+          state: cleaning
+        value: "#e74c3c"
+      - condition:
+          entity: vacuum.s8_maxv_ultra
+          state: cleaning
+        value: "#e74c3c"
+      - value: "#2ecc71"
+    tap_action:
+      action: navigate
+      navigation_path: /dashboard-various/vacuum
+
+icons:
+  # --- Levá strana okna ---
+  - id: ico_weather
+    icon: mdi:weather-partly-cloudy
+    top: 20%
+    left: 37%
+    size: 22px
+    background: rgba(0,0,0,0.55)
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+    tap_action:
+      action: navigate
+      path: /dashboard-various/weather
+
+  - id: ico_blind_control
+    icon: mdi:tune-vertical-variant
+    top: 30%
+    left: 37%
+    size: 22px
+    background: rgba(0,0,0,0.55)
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+    tap_action:
+      action: more-info
+      entity: number.roller_motor_bedroom_percent_control
+
+  # --- Pravá strana okna — 4 presety ---
+  - id: ico_preset_closed
+    icon: mdi:roller-shade-closed
+    top: 18%
+    left: 59%
+    size: 22px
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+    tap_action:
+      action: call-service
+      service: number.set_value
+      service_data:
+        entity_id: number.roller_motor_bedroom_percent_control
+        value: 100
+
+  - id: ico_preset_light
+    icon: mdi:roller-shade
+    top: 27%
+    left: 59%
+    size: 22px
+    background: rgba(0,0,0,0.55)
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+    tap_action:
+      action: call-service
+      service: number.set_value
+      service_data:
+        entity_id: number.roller_motor_bedroom_percent_control
+        value: 98
+
+  - id: ico_preset_ventilation
+    icon: mdi:blinds
+    top: 36%
+    left: 59%
+    size: 22px
+    background: rgba(0,0,0,0.55)
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+    tap_action:
+      action: call-service
+      service: number.set_value
+      service_data:
+        entity_id: number.roller_motor_bedroom_percent_control
+        value: 35
+
+  - id: ico_preset_open
+    icon: mdi:blinds-open
+    top: 45%
+    left: 59%
+    size: 22px
+    background: rgba(0,0,0,0.55)
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+    tap_action:
+      action: call-service
+      service: number.set_value
+      service_data:
+        entity_id: number.roller_motor_bedroom_percent_control
+        value: 0
+
+labels:
+  - id: blind_pct
+    entity: number.roller_motor_bedroom_percent_control
+    suffix: "%"
+    top: 58%
+    left: 46%
+    font_size: 12px
+    font_weight: "700"
+    background: rgba(0,0,0,0.6)
+    padding: 2px 6px
+    border_radius: 6px
+    text_shadow: ""
+    visible:
+      entity: input_boolean.zobrazeni_pocasi
+      state: "on"
+
+elements:
+  - id: weather_window
+    top: 15.7%
+    left: 40.6%
+    width: 17.1%
+    height: 41.8%
+    z_index: 4
+    overflow: hidden
+    border_radius: "0"
+    visible:
+      entity: number.roller_motor_bedroom_percent_control
+      operator: "!="
+      value: 100
+    card:
+      type: custom:atmospheric-weather-card
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 0 !important;
+            overflow: hidden;
+          }
+      weather_entity: weather.weather_google
+      sun_entity: sun.sun
+      moon_phase_entity: sensor.moon_phase
+      theme_entity: sun.sun
+      card_style: standalone
+      card_square: true
+      card_padding: "0"
+      perf_mode: low
+      weather_effects_intensity: 1
+      fps: 30
+      canvas_sharpness: 1
+      cloud_detail: 1
+      celestial_size: 30px
+      celestial_position: dynamic_both
+      celestial_alignment: right
+      celestial_x: 34
+      celestial_y: 0
+      image_scale: 0
+      image_alignment: top-center
+      card_hide_text: false
+      chip_area_hide: true
+      chip_area_position: top-right
+      chip_area_background: false
+      chips:
+        fancy_unit: true
+        hide_label: true
+        hide_icon: true
+        style: vertical
+        align: start
+        background: false
+        icon_background: false
+        value_weight: "500"
+      card_tap_action:
+        action: navigate
+        navigation_path: /dashboard-various/weather
+
+blinds:
+  - id: blind_bedroom
+    top: 15.7%
+    left: 40.5%
+    width: 17.2%
+    height: 41.8%
+    entity: number.roller_motor_bedroom_percent_control
+    min: 0
+    max: 100
+    blind_type: day_night
+    z_index: 6
+    slat_color: rgba(0,0,0,0.9)
+    slat_count: 11
+
+grid_options:
+  columns: full
+test_mode: false
+gauges: []
