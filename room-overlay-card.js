@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.8 — MIT License
+ * room-overlay-card v1.0.9 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -617,7 +617,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     c.elements=(c.elements||[]).map(function(el,i){
       const o=Object.assign({},el);
       const idEl=q('[data-el-id="'+i+'"]');if(idEl)o.id=idEl.value;
-      const topEl=q('[data-el-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const topEl=q('[data-el-top="'+i+'"]');if(topEl&&topEl.value.trim()){o.top=topEl.value.trim();delete o.bottom;}else delete o.top;
+      const botEl=q('[data-el-bot="'+i+'"]');if(botEl&&botEl.value.trim()){o.bottom=botEl.value.trim();delete o.top;}else delete o.bottom;
       const lefEl=q('[data-el-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
       const wEl=q('[data-el-w="'+i+'"]');if(wEl)o.width=wEl.value;
       const hEl=q('[data-el-h="'+i+'"]');if(hEl)o.height=hEl.value;
@@ -888,7 +889,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-el-id="'+i+'" type="text" value="'+this._e(el.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-el-top="'+i+'" type="text" value="'+this._e(el.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top (or use Bottom)</label><input data-el-top="'+i+'" type="text" placeholder="e.g. 10%" value="'+this._e(el.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Bottom (alternative to Top)</label><input data-el-bot="'+i+'" type="text" placeholder="e.g. 0%" value="'+this._e(el.bottom||'')+'"'+this._inp('')+'></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-el-left="'+i+'" type="text" value="'+this._e(el.left||'')+'"'+this._inp('')+'></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-el-w="'+i+'" type="text" value="'+this._e(el.width||'')+'"'+this._inp('')+'></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-el-h="'+i+'" type="text" value="'+this._e(el.height||'')+'"'+this._inp('')+'></div>';
@@ -1449,7 +1451,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
+    this.querySelectorAll('[data-el-id],[data-el-top],[data-el-bot],[data-el-left],[data-el-w],[data-el-h],[data-el-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
     });
     // Blinds

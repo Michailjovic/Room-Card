@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.9] – 2026-05-29
+
+### Fix: element `bottom` positioning works correctly through GUI editor
+
+- **Fixed: `top` field in GUI editor was overwriting `bottom`** — when an element used
+  `bottom` positioning, opening the GUI editor would save an empty `top` value, causing
+  conflicts. Now `top` and `bottom` are mutually exclusive: setting one clears the other.
+- **New: `Bottom` field in element GUI panel** — elements now have a dedicated
+  "Bottom (alternative to Top)" input field. Fill in either `top` or `bottom`, leave
+  the other empty.
+
 ## [1.0.8] – 2026-05-29
 
 ### New: `bottom` positioning for elements
