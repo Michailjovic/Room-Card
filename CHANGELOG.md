@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.8] – 2026-05-29
+
+### New: `bottom` positioning for elements
+
+- Elements now support `bottom` as an alternative to `top`. Use `bottom: 0%` to anchor
+  an embedded card to the bottom edge of the room image — works correctly across all
+  screen sizes regardless of card pixel height.
+
 ## [1.0.7] – 2026-05-29
 
 ### Fix: browser-mod popup no longer broadcasts to all devices
