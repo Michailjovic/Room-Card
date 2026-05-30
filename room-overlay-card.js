@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.9 — MIT License
+ * room-overlay-card v1.0.10 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -256,7 +256,15 @@ class RoomOverlayCard extends HTMLElement{
     for(const el of(c.elements||[])){
       const cont=document.createElement('div');
       cont.className='elcont';cont.setAttribute('data-el',el.id);
-      const _elVPos=el.bottom!==undefined?'bottom:'+el.bottom+';':'top:'+(el.top||'0')+';';
+      let _elVPos;
+      if(el.bottom!==undefined&&el.height){
+        const _eb=parseFloat(el.bottom)||0,_eh=parseFloat(el.height)||0;
+        _elVPos='top:'+(100-_eb-_eh)+'%;';
+      }else{
+        _elVPos='top:'+(el.top||'0')+'%';
+        if(el.top&&String(el.top).includes('%'))_elVPos='top:'+el.top+';';
+        else _elVPos='top:'+(el.top||'0')+';';
+      }
       cont.style.cssText=_elVPos+'left:'+el.left+';width:'+el.width+';height:'+el.height+';z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(tm?'outline:2px dashed blue;':'');
       if(tm)cont.title='[element] '+el.id;
       const card=makeHACard(el.card);

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.10] – 2026-05-29
+
+### Fix: `bottom` positioning now reliably places element at bottom
+
+- CSS `bottom` property proved unreliable in the card's absolute-positioned container.
+  `bottom: X%` is now converted to an equivalent `top` value in JavaScript:
+  `top = 100% - bottom% - height%`. Works correctly on all screen sizes.
+
 ## [1.0.9] – 2026-05-29
 
 ### Fix: element `bottom` positioning works correctly through GUI editor
