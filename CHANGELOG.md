@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.12] – 2026-05-29
+
+### New: percentage-based icon size
+
+- `size` on icons now accepts `%` values (e.g. `size: 2%`) meaning 2% of the card's
+  rendered width. The icon scales proportionally with the card on all screen sizes.
+  Pixel values (e.g. `size: 22px`) continue to work as before.
+
 ## [1.0.11] – 2026-05-29
 
 ### Fix: `bottom` positioning with auto height
