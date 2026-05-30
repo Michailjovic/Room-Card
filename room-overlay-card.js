@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.4 — MIT License
+ * room-overlay-card v1.0.5 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];

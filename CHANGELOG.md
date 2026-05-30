@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.0.4] – 2026-05-29
+## [1.0.5] – 2026-05-29
 
 ### Refactoring — no functional changes
 
