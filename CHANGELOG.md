@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.13] – 2026-05-30
+
+### Refactor: universal `resolveSize()` helper for percentage-based sizes
+
+- New module-level `resolveSize(raw, cardW)` function: if the value ends in `%`,
+  it converts to pixels based on the card's rendered width; otherwise passes the
+  value through unchanged. Works for any CSS size field.
+- `icons[].size` refactored to use `resolveSize()` — removes the inline `%`
+  conversion that was added in v1.0.12; behaviour unchanged.
+- `labels[].font_size` now also accepts `%` values via `resolveSize()`.
+  Example: `font_size: 1.5%` on a 600 px wide card → `9px`; on a 1200 px card → `18px`.
+- GUI icon size field label and placeholder updated to `Size (px or %)` / `20px or 2%`.
+
 ## [1.0.12] – 2026-05-29
 
 ### New: percentage-based icon size
