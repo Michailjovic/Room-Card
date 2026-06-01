@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.16] – 2026-05-30
+
+### Fix: entity search replaced with native datalist
+
+- `ha-entity-picker` had lifecycle issues in the innerHTML-based editor
+  (broken rendering, unresponsive fields, empty values on load).
+- All entity fields now use `<input list="roc-entities">` backed by a native HTML5
+  `<datalist>` populated from `hass.states`. Typing filters entities immediately;
+  the dropdown shows matching IDs without any custom element complexity.
+- `set hass()` in the editor updates the datalist in-place on every hass update,
+  so the list always reflects the current entity set without requiring a full re-render.
+
 ## [1.0.15] – 2026-05-30
 
 ### New: client-side element groups
