@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.14] – 2026-05-30
+
+### New: `ha-entity-picker` in all entity fields
+
+- All entity input fields in the GUI editor now use HA's native `ha-entity-picker`
+  component instead of plain text inputs. Typing filters the list; clicking shows all
+  entities grouped by domain — identical to the standard Lovelace card editors.
+- Fields upgraded: base image filter conditions (main + AND/OR sub-conditions),
+  labels, gauges, gauge alert conditions, blinds, and brightness model sources.
+- `_bindHassComponents()` extended to copy `data-*` attributes from the placeholder
+  span to the created picker, so `_collectConfig()` requires no changes.
+
 ## [1.0.13] – 2026-05-30
 
 ### Refactor: universal `resolveSize()` helper for percentage-based sizes
