@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.14 — MIT License
+ * room-overlay-card v1.0.15 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -110,6 +110,7 @@ class RoomOverlayCard extends HTMLElement{
     this._icoEls={};
     this._rafPending=false;this._relevantEntities=null;this._relevantAttrSources=null;this._prevStates={};
     this._io=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
+    this._groupState={};this._grpPanelEls={};
   }
 
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
@@ -219,6 +220,13 @@ class RoomOverlayCard extends HTMLElement{
     const c=this._config,tm=c.test_mode??false;
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
 
+    // Inicializace group state — zachovat existující stav, přidat nové skupiny
+    const _prevGS=this._groupState||{};
+    this._groupState={};
+    for(const g of(c.groups||[])){
+      this._groupState[g.id]=g.id in _prevGS?_prevGS[g.id]:(g.visible??false);
+    }
+
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
     const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action||z.double_tap_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+b.id+'" style="'+makeBadgePos(b)+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+b.id+'" icon="'+b.icon+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+b.id+'"></span>':'')+'</div>';}).join('');
@@ -226,13 +234,17 @@ class RoomOverlayCard extends HTMLElement{
     const icoHtml=(c.icons||[]).map(ico=>{const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';return'<div class="ico" data-ico="'+ico.id+'" style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+ico.id+'" icon="'+(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:white;pointer-events:none;"></ha-icon></div>';}).join('');
 
     const lblHtml=(c.labels||[]).map(lbl=>{const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:white;';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+lbl.id+'" style="'+st+'"></div>';}).join('');
+    const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+g.id+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;display:'+(vis?'block':'none')+';"></div>';}).join('');
+
     const _allGaugesRC=[...(c.gauges||[]),...(c.blinds||[]).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>':'')+'</div></div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>':'')+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._ovEls={};
     for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+ov.id+'"]');}
+    this._grpPanelEls={};
+    for(const g of(c.groups||[])){if(g.style)this._grpPanelEls[g.id]=this.shadowRoot.querySelector('[data-grp-panel="'+g.id+'"]');}
     this._zoneEls={};
     for(const z of(c.zones||[])){
       const el=this.shadowRoot.querySelector('[data-z="'+z.id+'"]');
@@ -336,12 +348,18 @@ class RoomOverlayCard extends HTMLElement{
       const showOp=flipped?String(rawOp>0.5?0:1):String(rawOp);if(parseFloat(showOp)>0&&ov.animation){el.style.animation='roc-'+ov.animation+' '+(ov.animation==='blink'?'1s step-end':'2s ease-in-out')+' infinite';el.style.opacity='';}else{el.style.animation='none';el.style.opacity=showOp;}
       el.style.filter=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
     }
+    // Group panels
+    for(const g of(c.groups||[])){
+      if(g.style&&this._grpPanelEls[g.id])this._grpPanelEls[g.id].style.display=(this._groupState[g.id]??false)?'block':'none';
+    }
     for(const z of(c.zones||[])){
-      const el=this._zoneEls[z.id];
-      if(el&&z.visible)el.style.display=evalCond(z.visible,s)?'block':'none';
+      const el=this._zoneEls[z.id];if(!el)continue;
+      if(z.group&&!(this._groupState[z.group]??true)){el.style.display='none';continue;}
+      el.style.display=(z.visible&&!evalCond(z.visible,s))?'none':'';
     }
     for(const b of(c.badges||[])){
       const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
+      if(bel&&b.group&&!(this._groupState[b.group]??true)){bel.style.display='none';continue;}
       if(bel&&b.visible)bel.style.display=evalCond(b.visible,s)?'flex':'none';
       const iel=this._biconEls[b.id];
       if(iel&&b.icon_color)iel.style.color=resolveVal(b.icon_color,s,'white');
@@ -350,7 +368,9 @@ class RoomOverlayCard extends HTMLElement{
     }
     for(const ico of(c.icons||[])){
       const el=this._icoEls[ico.id];if(!el)continue;
+      if(ico.group&&!(this._groupState[ico.group]??true)){el.style.display='none';continue;}
       if(ico.visible)el.style.display=evalCond(ico.visible,s)?'flex':'none';
+      else el.style.display='flex';
       if(ico.color){
         const haicon=el.querySelector('ha-icon');
         if(haicon)haicon.style.color=resolveVal(ico.color,s,'white');
@@ -358,12 +378,14 @@ class RoomOverlayCard extends HTMLElement{
     }
     for(const el of(c.elements||[])){
       const card=this._cardEls[el.id],cont=this._contEls[el.id];
+      if(cont&&el.group&&!(this._groupState[el.group]??true)){cont.style.display='none';continue;}
       let vis=true;
       if(cont&&el.visible){vis=evalCond(el.visible,s);cont.style.display=vis?'block':'none';}
       if(card&&vis)try{card.hass=this._hass;}catch(_){}
     }
     for(const lbl of(c.labels||[])){
       const el=this._lblEls[lbl.id];if(!el)continue;
+      if(lbl.group&&!(this._groupState[lbl.group]??true)){el.style.display='none';continue;}
       const lblVis=lbl.visible_conditions!==undefined?lbl.visible_conditions:lbl.visible;if(lblVis!==undefined)el.style.display=evalCond(lblVis,s)?'block':'none';
       const ent=s[lbl.entity];if(!ent)continue;
       const rawVal=lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state;
@@ -376,6 +398,7 @@ class RoomOverlayCard extends HTMLElement{
     const _allGaugesUp=[...(c.gauges||[]),...(this._blindGaugeCfgs||[])];
     for(const g of _allGaugesUp){
       const el=this._gaugeEls[g.id];if(!el)continue;
+      if(g.group&&!(this._groupState[g.group]??true)){el.style.display='none';continue;}
       const gVis=g.visible_conditions!==undefined?g.visible_conditions:g.visible;
       if(gVis!==undefined)el.style.display=evalCond(gVis,s)?'block':'none';
       if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
@@ -417,6 +440,19 @@ class RoomOverlayCard extends HTMLElement{
       case'call-service':if(a.service){const d=a.service.indexOf('.');this._hass.callService(a.service.slice(0,d),a.service.slice(d+1),a.service_data??{});}break;
       case'browser-mod-popup':{const _bmData={title:a.title??'',size:a.size??'normal',content:a.content??{}};const _bmId=window.browser_mod?.browserID||window.browser_mod?.browser_id;if(_bmId)_bmData.browser_id=_bmId;this._hass.callService('browser_mod','popup',_bmData);}break;
       case'toggle':if(a.entity)this._hass.callService('homeassistant','toggle',{entity_id:a.entity});break;
+      case'toggle-group':
+      case'show-group':
+      case'hide-group':
+        if(a.group){
+          const _newVis=a.action==='toggle-group'?!(this._groupState[a.group]??false):a.action==='show-group';
+          this._groupState[a.group]=_newVis;
+          if(_newVis){
+            const _gc=(this._config.groups||[]).find(g=>g.id===a.group)?.grouping_code;
+            if(_gc!==undefined)for(const _og of(this._config.groups||[]))if(_og.id!==a.group&&_og.grouping_code===_gc)this._groupState[_og.id]=false;
+          }
+          this._update();
+        }
+        break;
     }
   }
 }
@@ -478,7 +514,8 @@ class RoomOverlayCardEditor extends HTMLElement{
         (prev.gauges||[]).length===(cfg.gauges||[]).length&&
         (prev.blinds||[]).length===(cfg.blinds||[]).length&&
         ((prev.brightness_model?.source||[]).length===(cfg.brightness_model?.source||[]).length)&&
-        ((prev.brightness_model?.filter_gradient||[]).length===(cfg.brightness_model?.filter_gradient||[]).length);
+        ((prev.brightness_model?.filter_gradient||[]).length===(cfg.brightness_model?.filter_gradient||[]).length)&&
+        (prev.groups||[]).length===(cfg.groups||[]).length;
       if(same)return;
     }
     this._render();
@@ -628,6 +665,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const hEl=q('[data-el-h="'+i+'"]');if(hEl)o.height=hEl.value;
       const yaEl=q('[data-el-yaml="'+i+'"]');
       if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p){if(p.card)o.card=p.card;if(p.visible!==undefined)o.visible=p.visible;if(p.z_index!==undefined)o.z_index=p.z_index;if(p.border_radius)o.border_radius=p.border_radius;if(p.overflow)o.overflow=p.overflow;}}
+      const elGrpEl=q('[data-el-grp="'+i+'"]');if(elGrpEl&&elGrpEl.value.trim())o.group=elGrpEl.value.trim();else delete o.group;
       return o;
     });
 
@@ -652,6 +690,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(dtapEl&&dtapEl.value.trim()){const p=_yaml.p(dtapEl.value);if(p)o.double_tap_action=p;else delete o.double_tap_action;}else delete o.double_tap_action;
       const holdEl=q('[data-ico-hold="'+i+'"]');
       if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}else delete o.hold_action;
+      const icoGrpEl=q('[data-ico-grp="'+i+'"]');if(icoGrpEl&&icoGrpEl.value.trim())o.group=icoGrpEl.value.trim();else delete o.group;
       return o;
     });
 
@@ -674,6 +713,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
       if(lblGradStops.length)o.color_gradient=lblGradStops.sort((a,b)=>a.value-b.value);
       else delete o.color_gradient;
+      const lblGrpEl=q('[data-lbl-grp="'+i+'"]');if(lblGrpEl&&lblGrpEl.value.trim())o.group=lblGrpEl.value.trim();else delete o.group;
       return o;
     });
 
@@ -703,6 +743,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gAlertEntEl=q('[data-g-alert-ent="'+i+'"]');const gAlertOpEl=q('[data-g-alert-op="'+i+'"]');const gAlertValEl=q('[data-g-alert-val="'+i+'"]');
       const gAlertAttrEl=q('[data-g-alert-attr="'+i+'"]');
       if(gAlertEntEl&&gAlertEntEl.value.trim()&&gAlertOpEl&&gAlertOpEl.value&&gAlertValEl&&gAlertValEl.value.trim()){const _ac={entity:gAlertEntEl.value.trim(),operator:gAlertOpEl.value,value:parseFloat(gAlertValEl.value)};if(gAlertAttrEl&&gAlertAttrEl.value.trim())_ac.attribute=gAlertAttrEl.value.trim();o.alert_conditions=_ac;}else delete o.alert_conditions;
+      const gGrpEl=q('[data-g-grp="'+i+'"]');if(gGrpEl&&gGrpEl.value.trim())o.group=gGrpEl.value.trim();else delete o.group;
       return o;
     });
     c.blinds=(c.blinds||[]).map(function(b,i){
@@ -725,8 +766,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gcEl=q('[data-bl-gap-color="'+i+'"]');if(gcEl&&gcEl.value.trim())o.gap_color=gcEl.value.trim();else delete o.gap_color;
       const yaEl=q('[data-bl-yaml="'+i+'"]');
       if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      const blGrpEl=q('[data-bl-grp="'+i+'"]');if(blGrpEl&&blGrpEl.value.trim())o.group=blGrpEl.value.trim();else delete o.group;
       return o;
     });
+
+    c.groups=(c.groups||[]).map(function(g,i){
+      const o=Object.assign({},g);
+      const idEl=q('[data-grp-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const visEl=q('[data-grp-vis="'+i+'"]');if(visEl)o.visible=visEl.checked;
+      const gcEl=q('[data-grp-gc="'+i+'"]');if(gcEl&&gcEl.value.trim())o.grouping_code=parseInt(gcEl.value,10);else delete o.grouping_code;
+      const yaEl=q('[data-grp-yaml="'+i+'"]');
+      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p&&p.style)o.style=p.style;else delete o.style;}else delete o.style;
+      return o;
+    });
+
     return c;
   }
 
@@ -901,6 +954,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">card / visible / z_index / border_radius (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
     h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
     h+='</div></details>';
     return h;
@@ -935,6 +989,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">double_tap_action (YAML)</label><textarea data-ico-dtap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
     h+='</div>';
+    h+='<div style="margin-bottom:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
     h+='</div></details>';
     return h;
@@ -950,7 +1005,9 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation color (glow)</label>';
     h+='<input type="color" data-lbl-ac="'+i+'" value="'+(lbl.animation_color?this._toHex(lbl.animation_color):'#ff4444')+'"'+this._inp('height:32px;cursor:pointer;')+'></div>';
     h+='</div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">font_size / font_weight / color / visible / visible_conditions / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">font_size / font_weight / color / visible / visible_conditions / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
+    h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
 
   _gaugeItem(g,i){const cp=Object.assign({},g);delete cp.id;delete cp.top;delete cp.left;delete cp.width;delete cp.height;delete cp.entity;delete cp.attribute;delete cp.min;delete cp.max;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('g-'+i);let h='<details style="margin-bottom:6px;" data-panel="g-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Gauge: '+this._e(g.id||'gauge_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-g-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-g-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-g-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-g-w="'+i+'" type="text" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-g-h="'+i+'" type="text" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><span class="ep-placeholder" data-ep-val="'+this._e(g.entity||'')+'" data-g-entity="'+i+'"></span></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute</label><input data-g-attr="'+i+'" type="text" value="'+this._e(g.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min</label><input data-g-min="'+i+'" type="number" value="'+this._e(String(g.min??0))+'"'+this._inp('font-size:12px;')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max</label><input data-g-max="'+i+'" type="number" value="'+this._e(String(g.max??100))+'"'+this._inp('font-size:12px;')+'></div>';h+='</div>';const gs=g.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-gg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<gs.length;j++){const hex=this._toHex(gs[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-g-gv="'+i+'-'+j+'" placeholder="value" value="'+gs[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-g-gc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-gg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!gs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Orientation</label>';
@@ -988,7 +1045,9 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Value</label>';
     h+='<input data-g-alert-val="'+i+'" type="number" value="'+this._e(String(g.alert_conditions&&g.alert_conditions.value!==undefined?g.alert_conditions.value:''))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
+    h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
 
   _blindItem(b,i){
     const type=b.blind_type||'roller';
@@ -1032,6 +1091,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const ysBl=Object.keys(cpBl).length?_yaml.s(cpBl):'';
     h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
     h+='<button data-rm-bl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove blind</button>';
     h+='</div></details>';
     return h;}
@@ -1155,6 +1215,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     (c.blinds||[]).forEach(function(b,i){blInner+=self._blindItem(b,i);});
     blInner+='</div><button id="add-bl" style="'+btnStyle+'margin-top:4px;">+ Add blind</button>';
 
+    let grpInner='<div id="grp-list">';
+    (c.groups||[]).forEach(function(g,i){grpInner+=self._groupItem(g,i);});
+    grpInner+='</div><button id="add-grp" style="'+btnStyle+'margin-top:4px;">+ Add group</button>';
+
     this.innerHTML='<div style="padding:8px;">'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
@@ -1165,6 +1229,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +sec('elements','Embedded HA cards',(c.elements||[]).length,elInner)
       +sec('icons','Icon overlays',(c.icons||[]).length,icoInner)+sec('labels','Value labels',(c.labels||[]).length,lblInner)+sec('gauges','Gauge bars',(c.gauges||[]).length,gInner)
       +sec('blinds','Window blinds',(c.blinds||[]).length,blInner)
+      +sec('groups','Element groups',(c.groups||[]).length,grpInner)
       +'</div>';
 
     this._listen();
@@ -1193,6 +1258,25 @@ class RoomOverlayCardEditor extends HTMLElement{
       range.addEventListener('input',function(){num.value=range.value;self._fire(self._collectConfig());});
       num.addEventListener('change',function(){range.value=num.value;self._fire(self._collectConfig());});
     });
+  }
+
+  _groupItem(g,i){
+    const op=this._openPanels&&this._openPanels.has('grp-'+i);
+    const styleYaml=g.style?_yaml.s({style:g.style}):'';
+    let h='<details style="margin-bottom:6px;" data-panel="grp-'+i+'"'+(op?' open':'')+' >';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Group: '+this._e(g.id||'group_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-grp-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Grouping code (mutual exclusion)</label><input data-grp-gc="'+i+'" type="number" placeholder="e.g. 1" value="'+this._e(g.grouping_code!=null?String(g.grouping_code):'')+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><label style="font-size:12px;">Initially visible</label><input data-grp-vis="'+i+'" type="checkbox"'+(g.visible?' checked':'')+' style="width:auto;cursor:pointer;"></div>';
+    h+='</div>';
+    h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Background panel — style: (top / left / width / height / background / border_radius / z_index)</label>';
+    h+='<textarea data-grp-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(styleYaml)+'</textarea></div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 8px;">Actions: <code>action: toggle-group</code>, <code>show-group</code>, <code>hide-group</code> with <code>group: '+this._e(g.id||'group_id')+'</code></p>';
+    h+='<button data-rm-grp="'+i+'" style="padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove group</button>';
+    h+='</div></details>';
+    return h;
   }
 
   _listen(){
@@ -1476,6 +1560,27 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+
+    // Group fields on elements
+    this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp]').forEach(function(el){el.addEventListener('change',fire);});
+
+    // Groups
+    const addGrp=this.querySelector('#add-grp');
+    if(addGrp)addGrp.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!c.groups)c.groups=[];
+      c.groups.push({id:'group_'+(c.groups.length+1),visible:false});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-grp]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmGrp);
+        const c=self._collectConfig();
+        if(c.groups)c.groups.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-grp-id],[data-grp-gc],[data-grp-vis],[data-grp-yaml]').forEach(function(el){el.addEventListener('change',fire);});
   }
 }
 

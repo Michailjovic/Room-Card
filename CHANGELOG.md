@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.0.15] – 2026-05-30
+
+### New: client-side element groups
+
+Elements can now be grouped and toggled on/off without any HA entity.
+
+**New config section `groups[]`:**
+```yaml
+groups:
+  - id: tv_controls
+    visible: false          # initial state
+    grouping_code: 1        # optional: mutual exclusion with same code
+    style:                  # optional: background panel div
+      top: 65%
+      left: 5%
+      width: 90%
+      height: 28%
+      background: rgba(0,0,0,0.75)
+      border_radius: 10px
+      z_index: 49
+```
+
+**New `group` property on `icons[]`, `labels[]`, `gauges[]`, `blinds[]`, `elements[]`, `badges[]`, `zones[]`:**
+```yaml
+icons:
+  - id: tv_power
+    group: tv_controls
+    ...
+```
+
+**New action types `toggle-group`, `show-group`, `hide-group`:**
+```yaml
+zones:
+  - id: zone_tv
+    tap_action:
+      action: toggle-group
+      group: tv_controls
+```
+
+- `grouping_code`: when a group becomes visible, all other groups sharing the same code are automatically hidden (radio-button behaviour).
+- Group state is client-side only — no `input_boolean` entity needed.
+- GUI editor: new *Element groups* section with ID, grouping code, initially-visible checkbox, and optional background panel YAML. All element panels gain a *Group* input field.
+
 ## [1.0.14] – 2026-05-30
 
 ### New: `ha-entity-picker` in all entity fields
