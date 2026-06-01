@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.16 — MIT License
+ * room-overlay-card v1.0.17 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -524,7 +524,8 @@ class RoomOverlayCardEditor extends HTMLElement{
   set hass(h){
     this._hass=h;
     const dl=this.querySelector('#roc-entities');
-    if(dl)dl.innerHTML=Object.keys(h.states).sort().map(function(id){return'<option value="'+id+'">';}).join('');
+    if(dl&&!dl.hasChildNodes())
+      dl.innerHTML=Object.keys(h.states).sort().map(function(id){return'<option value="'+id+'">';}).join('');
   }
 
   _e(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}

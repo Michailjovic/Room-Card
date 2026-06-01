@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.17] – 2026-05-30
+
+### Fix: editor freeze caused by datalist DOM thrashing
+
+- `set hass()` in the editor was regenerating and re-setting the full entity
+  `<datalist>` on every hass tick (called dozens of times per second when any
+  entity changes), causing severe DOM thrashing and browser freeze.
+- Fix: datalist is now populated only when empty — once after each `_render()`.
+  Subsequent hass updates skip the datalist entirely. Entity list is stable
+  within a session so a single fill is sufficient.
+
 ## [1.0.16] – 2026-05-30
 
 ### Fix: entity search replaced with native datalist
