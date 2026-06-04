@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.8 — MIT License
+ * room-overlay-card v1.2.9 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -371,7 +371,15 @@ class RoomOverlayCard extends HTMLElement{
                     if(card.card)_walk([card.card]);
                   }
                 }
+                // Masonry / panel layout: view.cards[]
                 _walk(view.cards);
+                // Sections layout (HA 2024+): view.sections[].cards[]
+                if(!found&&Array.isArray(view.sections)){
+                  for(const sec of view.sections){
+                    _walk(sec.cards);
+                    if(found)break;
+                  }
+                }
                 if(!found)throw new Error('card_not_found_in_view');
                 return _callWS({type:'lovelace/config/save',url_path:_urlPath,config:nc});
               })

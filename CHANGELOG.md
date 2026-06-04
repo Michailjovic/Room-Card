@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.9] – 2026-06-04
+
+### Fix: Save now finds card in sections-layout views (HA 2024+)
+
+HA 2024+ introduced a new `sections` view type (the default for new dashboards).
+Unlike the classic `masonry` layout where cards live in `view.cards[]`, the
+sections layout stores cards in `view.sections[].cards[]`.
+
+The card search now walks both structures:
+- `view.cards[]` — classic masonry/panel layout
+- `view.sections[].cards[]` — sections layout (HA 2024 and newer)
+
+This fixes the `card_not_found_in_view` error reported on dashboards using
+the sections view type.
+
 ## [1.2.8] – 2026-06-04
 
 ### Improved: Save button diagnostics + hass.callWS fallback
