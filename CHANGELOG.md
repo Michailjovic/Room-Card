@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.2] – 2026-06-04
+
+### Fix: drag & drop and keyboard nudge positions now actually save
+
+Config changes from the card (drag, resize, keyboard) were dispatched as
+`config-changed` from the card element — but HA Lovelace only listens for
+`config-changed` from the **editor** element, so positions were not persisted.
+
+Fix: the card now dispatches a `window` custom event `roc-pos-update` instead.
+The editor registers a `window` listener when `test_mode: true` and relays
+any received config through its own `_fire()` call, which HA correctly treats
+as an editor config change and saves to storage. The listener is cleaned up
+in the editor's `disconnectedCallback`.
+
 ## [1.2.1] – 2026-06-04
 
 ### Fix: test mode red border restored after deselect

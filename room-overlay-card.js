@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.1 — MIT License
+ * room-overlay-card v1.2.2 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -305,7 +305,7 @@ class RoomOverlayCard extends HTMLElement{
       // Drag & drop — zones, icons, labels
       const _dpFire=(nc)=>{
         this._config=nc;
-        this.dispatchEvent(new CustomEvent('config-changed',{bubbles:true,composed:true,detail:{config:Object.assign({type:'custom:room-overlay-card'},nc)}}));
+        window.dispatchEvent(new CustomEvent('roc-pos-update',{detail:{config:Object.assign({type:'custom:room-overlay-card'},nc)}}));
       };
       for(const z of(c.zones||[])){
         const el=this._zoneEls[z.id];if(!el)continue;
@@ -699,7 +699,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;}
 
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
@@ -1451,6 +1451,13 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     this._listen();
     this._bindHassComponents();
+    // Position updates from card drag/keyboard — relay through editor so HA saves correctly
+    if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
+    if(c.test_mode){
+      const self=this;
+      this._rocPosHandler=function(e){self._config=e.detail.config;self._fire(e.detail.config);};
+      window.addEventListener('roc-pos-update',this._rocPosHandler);
+    }
   }
 
   _bindHassComponents(){
@@ -1807,6 +1814,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-grp-id],[data-grp-gc],[data-grp-vis],[data-grp-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+  }
+
+  disconnectedCallback(){
+    if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
   }
 }
 
