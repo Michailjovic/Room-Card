@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.0 — MIT License
+ * room-overlay-card v1.2.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -360,20 +360,21 @@ class RoomOverlayCard extends HTMLElement{
         });
       }
       // Keyboard nudge — click to select, arrows to nudge, Escape to deselect
+      const _tmOutline=(type)=>type==='zone'?'3px solid red':'';
       const _selectTM=(el,type,id)=>{
-        if(this._selectedTM)this._selectedTM.el.style.outline='';
+        if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';}
         el.style.outline='2px dashed var(--primary-color,#03a9f4)';
         el.style.outlineOffset='2px';
         this._selectedTM={el,type,id};
       };
-      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline='';this._selectedTM=null;}};
+      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';this._selectedTM=null;}};
       let _nudgeTimer=null;
       const _nudgeFn=(e)=>{
         if(!this._selectedTM)return;
         if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Escape'].includes(e.key))return;
         if(e.key==='Escape'){_deselectTM();return;}
         e.preventDefault();
-        const step=e.shiftKey?2:0.5;
+        const step=e.shiftKey?0.1:1;
         const {el,type,id}=this._selectedTM;
         let top=parseFloat(el.style.top)||0,left=parseFloat(el.style.left)||0;
         if(e.key==='ArrowUp')top=Math.max(0,top-step);

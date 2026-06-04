@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.1] – 2026-06-04
+
+### Fix: test mode red border restored after deselect
+
+Selecting an element for keyboard nudge overrides its outline with the dashed
+selection indicator. On deselect, zones now get their `3px solid red` test mode
+border back; other element types get an empty outline (they have no default
+test mode border).
+
+### Changed: keyboard nudge step sizes
+
+- `Arrow` keys: **1%** per press (was 0.5%)
+- `Shift` + `Arrow`: **0.1%** per press (was 2%) — for fine pixel-level tuning
+
 ## [1.2.0] – 2026-06-04
 
 ### New: keyboard nudge in test mode
