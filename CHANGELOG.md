@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.3] – 2026-06-04
+
+### New: Save button in test mode
+
+A green **💾 Save** button appears below the FLIP button when `test_mode: true`.
+
+- **When the HA card editor is open:** fires `roc-pos-update` → editor relays
+  the config to HA storage automatically. Button shows "✓ Saved!" for 2 s.
+- **When on the dashboard without editor:** copies the full config YAML
+  (or JSON if YAML unavailable) to the clipboard so you can paste it into the
+  YAML editor manually.
+
+The Save button is excluded from the card's `tap_action` so clicking it never
+triggers navigation or other card-level actions.
+
 ## [1.2.2] – 2026-06-04
 
 ### Fix: drag & drop and keyboard nudge positions now actually save
