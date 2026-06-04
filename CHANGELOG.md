@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.8] – 2026-06-04
+
+### Improved: Save button diagnostics + hass.callWS fallback
+
+- Uses `hass.callWS` (standard HA frontend method) with automatic fallback
+  to `conn.sendMessagePromise` for compatibility.
+- When auto-save fails, the overlay now shows the **exact error** in red below
+  the header (e.g. `config_not_supported`, `card_not_found_in_view`, etc.)
+  so it's clear whether the issue is YAML mode, permissions, or wrong view.
+
+**Note:** If Lovelace is configured in YAML mode (`lovelace.yaml` /
+`ui-lovelace.yaml`), `lovelace/config/save` is not supported by HA — the
+overlay copy-paste workflow is the only option in that case.
+
 ## [1.2.7] – 2026-06-04
 
 ### Fix: Save button uses view-scoped search to handle duplicate cards

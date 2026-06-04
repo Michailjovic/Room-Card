@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.7 — MIT License
+ * room-overlay-card v1.2.8 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -311,7 +311,7 @@ class RoomOverlayCard extends HTMLElement{
           // Always relay via editor if open
           window.dispatchEvent(new CustomEvent('roc-pos-update',{detail:{config:cfg}}));
 
-          function _showOverlay(){
+          function _showOverlay(reason){
             const existing=self.shadowRoot.querySelector('.tm-cfg-ov');
             if(existing){existing.remove();return;}
             const txt=window.YAML?window.YAML.stringify(cfg):JSON.stringify(cfg,null,2);
@@ -319,8 +319,13 @@ class RoomOverlayCard extends HTMLElement{
             ov.className='tm-cfg-ov';
             ov.style.cssText='position:absolute;inset:0;z-index:500;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;padding:10px;box-sizing:border-box;';
             const hdr=document.createElement('div');
-            hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
-            hdr.innerHTML='<span style="color:#fff;font-size:11px;font-weight:bold;">&#128190; Config — press Ctrl+C to copy, paste in YAML editor</span><button style="background:none;border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">&#x2715;</button>';
+            hdr.style.cssText='display:flex;flex-direction:column;gap:4px;margin-bottom:6px;';
+            const hdr1=document.createElement('div');
+            hdr1.style.cssText='display:flex;justify-content:space-between;align-items:center;';
+            hdr1.innerHTML='<span style="color:#fff;font-size:11px;font-weight:bold;">&#128190; Config — Ctrl+A, Ctrl+C, then paste in YAML editor</span><button style="background:none;border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">&#x2715;</button>';
+            hdr.appendChild(hdr1);
+            if(reason){const hdr2=document.createElement('div');hdr2.style.cssText='color:#faa;font-size:10px;';hdr2.textContent='Auto-save failed: '+reason;hdr.appendChild(hdr2);}
+            hdr1.querySelector('button').addEventListener('click',function(ev){ev.stopPropagation();ov.remove();});
             const ta=document.createElement('textarea');
             ta.value=txt;ta.readOnly=true;
             ta.style.cssText='flex:1;width:100%;background:#111;color:#aef;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-family:monospace;font-size:11px;padding:8px;box-sizing:border-box;resize:none;';
@@ -329,20 +334,19 @@ class RoomOverlayCard extends HTMLElement{
             ta.focus();ta.select();
             if(navigator.clipboard)navigator.clipboard.writeText(txt).catch(function(){});
             try{document.execCommand('copy');}catch(_){}
-            hdr.querySelector('button').addEventListener('click',function(ev){ev.stopPropagation();ov.remove();});
             ov.addEventListener('click',function(ev){if(ev.target===ov)ov.remove();});
           }
 
           // Direct HA Lovelace save via WebSocket (storage mode only)
-          const conn=self._hass&&self._hass.connection;
-          if(conn&&typeof conn.sendMessagePromise==='function'){
+          const _callWS=self._hass&&(typeof self._hass.callWS==='function'?self._hass.callWS.bind(self._hass):null)||(self._hass&&self._hass.connection&&typeof self._hass.connection.sendMessagePromise==='function'?self._hass.connection.sendMessagePromise.bind(self._hass.connection):null);
+          if(_callWS){
             // Extract dashboard url_path and view key from current URL
             // e.g. /lovelace/2  →  urlPath=null, viewKey='2'
             // e.g. /my-dash/living-room  →  urlPath='my-dash', viewKey='living-room'
             const _parts=window.location.pathname.split('/').filter(Boolean);
             const _urlPath=_parts[0]==='lovelace'?null:(_parts[0]||null);
             const _viewKey=_parts.length>1?_parts[_parts.length-1]:null;
-            conn.sendMessagePromise({type:'lovelace/config',url_path:_urlPath})
+            _callWS({type:'lovelace/config',url_path:_urlPath})
               .then(function(lc){
                 const nc=JSON.parse(JSON.stringify(lc));
                 // Find the current view (by index or path slug)
@@ -369,18 +373,19 @@ class RoomOverlayCard extends HTMLElement{
                 }
                 _walk(view.cards);
                 if(!found)throw new Error('card_not_found_in_view');
-                return conn.sendMessagePromise({type:'lovelace/config/save',url_path:_urlPath,config:nc});
+                return _callWS({type:'lovelace/config/save',url_path:_urlPath,config:nc});
               })
               .then(function(){
                 saveBtn.innerHTML='&#10003; Saved!';saveBtn.style.background='rgba(0,140,0,0.9)';
                 setTimeout(function(){saveBtn.innerHTML='&#128190; Save';saveBtn.style.background='rgba(20,100,20,0.82)';},2500);
               })
               .catch(function(err){
-                console.warn('[room-overlay-card] Direct save failed ('+err.message+'), showing overlay');
-                _showOverlay();
+                const reason=(err&&(err.code||err.message))||String(err);
+                console.warn('[room-overlay-card] Direct save failed:',reason);
+                _showOverlay(reason);
               });
           } else {
-            _showOverlay();
+            _showOverlay('hass.callWS not available');
           }
         });
       }
