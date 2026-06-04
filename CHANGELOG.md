@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.7] – 2026-06-04
+
+### Fix: Save button uses view-scoped search to handle duplicate cards
+
+Searching the entire Lovelace config by `base_image` matched copies of the
+same card in other views/dashboards (production, dev, backup tabs).
+
+Fix: the current view is extracted from `window.location.pathname` and the
+card search is scoped to that view only:
+
+- `/lovelace/2` → looks in `views[2]` of the default dashboard
+- `/my-dash/living-room` → dashboard `my-dash`, view with `path: living-room`
+- Fallback to `views[0]` if no view segment in URL
+
+This correctly distinguishes copies of the same card that live in different
+views/tabs, even when they share the same `base_image`.
+
 ## [1.2.6] – 2026-06-04
 
 ### New: Save button writes directly to HA Lovelace storage

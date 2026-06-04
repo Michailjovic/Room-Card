@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.6 — MIT License
+ * room-overlay-card v1.2.7 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -336,11 +336,24 @@ class RoomOverlayCard extends HTMLElement{
           // Direct HA Lovelace save via WebSocket (storage mode only)
           const conn=self._hass&&self._hass.connection;
           if(conn&&typeof conn.sendMessagePromise==='function'){
+            // Extract dashboard url_path and view key from current URL
+            // e.g. /lovelace/2  →  urlPath=null, viewKey='2'
+            // e.g. /my-dash/living-room  →  urlPath='my-dash', viewKey='living-room'
             const _parts=window.location.pathname.split('/').filter(Boolean);
             const _urlPath=_parts[0]==='lovelace'?null:(_parts[0]||null);
+            const _viewKey=_parts.length>1?_parts[_parts.length-1]:null;
             conn.sendMessagePromise({type:'lovelace/config',url_path:_urlPath})
               .then(function(lc){
                 const nc=JSON.parse(JSON.stringify(lc));
+                // Find the current view (by index or path slug)
+                let view=null;
+                if(_viewKey!==null){
+                  const idx=parseInt(_viewKey,10);
+                  view=!isNaN(idx)?nc.views[idx]:nc.views.find(function(v){return v.path===_viewKey;});
+                }
+                if(!view&&nc.views&&nc.views.length)view=nc.views[0];
+                if(!view)throw new Error('view_not_found');
+                // Walk only the current view — avoids matching copies in other views/tabs
                 let found=false;
                 function _walk(cards){
                   if(!Array.isArray(cards))return;
@@ -354,8 +367,8 @@ class RoomOverlayCard extends HTMLElement{
                     if(card.card)_walk([card.card]);
                   }
                 }
-                for(const v of(nc.views||[])){_walk(v.cards);if(found)break;}
-                if(!found)throw new Error('card_not_found');
+                _walk(view.cards);
+                if(!found)throw new Error('card_not_found_in_view');
                 return conn.sendMessagePromise({type:'lovelace/config/save',url_path:_urlPath,config:nc});
               })
               .then(function(){
