@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.5] – 2026-06-04
+
+### Fix: Save button now shows config overlay for reliable copy
+
+`navigator.clipboard` is not available in all HA setups (HTTP, older browsers,
+permission denied), so the previous clipboard-only approach silently did nothing.
+
+Clicking **💾 Save** now toggles a dark overlay over the card with the full
+config YAML in a read-only textarea — auto-focused and auto-selected so
+**Ctrl+C** copies it immediately. The clipboard API is still attempted in the
+background as a best-effort bonus. Close the overlay with ✕ or by clicking
+outside it. Clicking Save again also closes the overlay.
+
 ## [1.2.4] – 2026-06-04
 
 ### Fix: Save button and roc-pos-update now work when test_mode is toggled in editor

@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.4 — MIT License
+ * room-overlay-card v1.2.5 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -308,19 +308,27 @@ class RoomOverlayCard extends HTMLElement{
         saveBtn.addEventListener('click',function(e){
           e.stopPropagation();e.preventDefault();
           const cfg=Object.assign({type:'custom:room-overlay-card'},self._config);
-          // Relay via window event — works when editor is open
           window.dispatchEvent(new CustomEvent('roc-pos-update',{detail:{config:cfg}}));
-          // Copy to clipboard as fallback (dashboard without editor)
           const txt=window.YAML?window.YAML.stringify(cfg):JSON.stringify(cfg,null,2);
-          if(navigator.clipboard){
-            navigator.clipboard.writeText(txt).then(function(){
-              saveBtn.innerHTML='&#128203; Copied!';saveBtn.style.background='rgba(0,100,160,0.9)';
-              setTimeout(function(){saveBtn.innerHTML='&#128190; Save';saveBtn.style.background='rgba(20,100,20,0.82)';},2500);
-            });
-          } else {
-            saveBtn.innerHTML='&#10003; Sent';saveBtn.style.background='rgba(0,140,0,0.9)';
-            setTimeout(function(){saveBtn.innerHTML='&#128190; Save';saveBtn.style.background='rgba(20,100,20,0.82)';},2000);
-          }
+          // Toggle config overlay
+          const existing=self.shadowRoot.querySelector('.tm-cfg-ov');
+          if(existing){existing.remove();return;}
+          const ov=document.createElement('div');
+          ov.className='tm-cfg-ov';
+          ov.style.cssText='position:absolute;inset:0;z-index:500;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;padding:10px;box-sizing:border-box;';
+          const hdr=document.createElement('div');
+          hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
+          hdr.innerHTML='<span style="color:#fff;font-size:11px;font-weight:bold;">&#128190; Config — press Ctrl+C to copy, then paste in YAML editor</span><button style="background:none;border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">&#x2715;</button>';
+          const ta=document.createElement('textarea');
+          ta.value=txt;ta.readOnly=true;
+          ta.style.cssText='flex:1;width:100%;background:#111;color:#aef;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-family:monospace;font-size:11px;padding:8px;box-sizing:border-box;resize:none;';
+          ov.appendChild(hdr);ov.appendChild(ta);
+          self.shadowRoot.querySelector('.content').appendChild(ov);
+          ta.focus();ta.select();
+          if(navigator.clipboard)navigator.clipboard.writeText(txt).catch(function(){});
+          try{document.execCommand('copy');}catch(_){}
+          hdr.querySelector('button').addEventListener('click',function(ev){ev.stopPropagation();ov.remove();});
+          ov.addEventListener('click',function(ev){if(ev.target===ov)ov.remove();});
         });
       }
       // Drag & drop — zones, icons, labels
