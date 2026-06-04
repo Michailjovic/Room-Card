@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0] – 2026-06-04
+
+### New: keyboard nudge in test mode
+
+Click any zone, icon, or label in `test_mode: true` to select it — it gets a
+dashed primary-color outline. Then use the keyboard to position it precisely:
+
+| Key | Movement |
+|---|---|
+| `Arrow` keys | ±0.5% per press |
+| `Shift` + `Arrow` | ±2% per press (coarse) |
+| `Escape` | Deselect |
+
+Config is saved 200 ms after the last key press (debounced), so holding down
+an arrow key moves the element smoothly without flooding config-changed events.
+
+Click anywhere on the card background to deselect. Click a different element to
+switch selection. The keyboard handler is registered on `document` while
+test_mode is active and cleaned up on re-render and `disconnectedCallback`.
+
 ## [1.1.0] – 2026-06-04
 
 ### New: visual resize handles in test mode

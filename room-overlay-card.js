@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.1.0 — MIT License
+ * room-overlay-card v1.2.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -111,6 +111,7 @@ class RoomOverlayCard extends HTMLElement{
     this._rafPending=false;this._relevantEntities=null;this._relevantAttrSources=null;this._prevStates={};
     this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
+    this._selectedTM=null;this._tmKeyHandler=null;
   }
 
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
@@ -227,6 +228,9 @@ class RoomOverlayCard extends HTMLElement{
     for(const g of(c.groups||[])){
       this._groupState[g.id]=g.id in _prevGS?_prevGS[g.id]:(g.visible??false);
     }
+    // Reset keyboard handler from previous render
+    if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
+    this._selectedTM=null;
 
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
     const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action||z.double_tap_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
@@ -355,6 +359,55 @@ class RoomOverlayCard extends HTMLElement{
           _dpFire(nc);this._update();
         });
       }
+      // Keyboard nudge — click to select, arrows to nudge, Escape to deselect
+      const _selectTM=(el,type,id)=>{
+        if(this._selectedTM)this._selectedTM.el.style.outline='';
+        el.style.outline='2px dashed var(--primary-color,#03a9f4)';
+        el.style.outlineOffset='2px';
+        this._selectedTM={el,type,id};
+      };
+      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline='';this._selectedTM=null;}};
+      let _nudgeTimer=null;
+      const _nudgeFn=(e)=>{
+        if(!this._selectedTM)return;
+        if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Escape'].includes(e.key))return;
+        if(e.key==='Escape'){_deselectTM();return;}
+        e.preventDefault();
+        const step=e.shiftKey?2:0.5;
+        const {el,type,id}=this._selectedTM;
+        let top=parseFloat(el.style.top)||0,left=parseFloat(el.style.left)||0;
+        if(e.key==='ArrowUp')top=Math.max(0,top-step);
+        else if(e.key==='ArrowDown')top=Math.min(98,top+step);
+        else if(e.key==='ArrowLeft')left=Math.max(0,left-step);
+        else if(e.key==='ArrowRight')left=Math.min(98,left+step);
+        el.style.top=top.toFixed(1)+'%';el.style.left=left.toFixed(1)+'%';
+        clearTimeout(_nudgeTimer);
+        _nudgeTimer=setTimeout(()=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const arr=type==='zone'?nc.zones:type==='icon'?nc.icons:nc.labels;
+          const item=(arr||[]).find(x=>x.id===id);
+          if(item){item.top=el.style.top;item.left=el.style.left;}
+          _dpFire(nc);
+        },200);
+      };
+      this._tmKeyHandler=_nudgeFn;
+      document.addEventListener('keydown',_nudgeFn);
+      // Click to select (capture phase — fires before drag suppression and zone tap actions)
+      for(const z of(c.zones||[])){
+        const el=this._zoneEls[z.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'zone',z.id);},true);
+      }
+      for(const ico of(c.icons||[])){
+        const el=this._icoEls[ico.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'icon',ico.id);},true);
+      }
+      for(const lbl of(c.labels||[])){
+        const el=this._lblEls[lbl.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'label',lbl.id);},true);
+      }
+      // Click on card background → deselect
+      const _hacard=this.shadowRoot.querySelector('ha-card');
+      if(_hacard)_hacard.addEventListener('click',_deselectTM);
     }
     // IntersectionObserver — zastav updates když karta není ve viewportu
     if(this._io)this._io.disconnect();
@@ -599,6 +652,11 @@ class RoomOverlayCard extends HTMLElement{
         }
         break;
     }
+  }
+  disconnectedCallback(){
+    if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
+    if(this._ro){this._ro.disconnect();this._ro=null;}
+    if(this._io){this._io.disconnect();this._io=null;}
   }
 }
 
