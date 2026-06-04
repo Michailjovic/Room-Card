@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.3 — MIT License
+ * room-overlay-card v1.2.4 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -314,12 +314,11 @@ class RoomOverlayCard extends HTMLElement{
           const txt=window.YAML?window.YAML.stringify(cfg):JSON.stringify(cfg,null,2);
           if(navigator.clipboard){
             navigator.clipboard.writeText(txt).then(function(){
-              const orig=saveBtn.innerHTML;
-              saveBtn.innerHTML='&#10003; Saved!';saveBtn.style.background='rgba(0,140,0,0.9)';
-              setTimeout(function(){saveBtn.innerHTML=orig;saveBtn.style.background='rgba(20,100,20,0.82)';},2000);
+              saveBtn.innerHTML='&#128203; Copied!';saveBtn.style.background='rgba(0,100,160,0.9)';
+              setTimeout(function(){saveBtn.innerHTML='&#128190; Save';saveBtn.style.background='rgba(20,100,20,0.82)';},2500);
             });
           } else {
-            saveBtn.innerHTML='&#10003; Event sent!';saveBtn.style.background='rgba(0,140,0,0.9)';
+            saveBtn.innerHTML='&#10003; Sent';saveBtn.style.background='rgba(0,140,0,0.9)';
             setTimeout(function(){saveBtn.innerHTML='&#128190; Save';saveBtn.style.background='rgba(20,100,20,0.82)';},2000);
           }
         });
@@ -1532,7 +1531,18 @@ class RoomOverlayCardEditor extends HTMLElement{
     ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
-    const tm=this.querySelector('#test_mode');if(tm)tm.addEventListener('change',fire);
+    const tm=this.querySelector('#test_mode');
+    if(tm){
+      tm.addEventListener('change',function(){
+        // Re-register roc-pos-update listener — _render() is skipped by same-check when only test_mode toggles
+        if(self._rocPosHandler){window.removeEventListener('roc-pos-update',self._rocPosHandler);self._rocPosHandler=null;}
+        if(tm.checked){
+          self._rocPosHandler=function(e){self._config=e.detail.config;self._fire(e.detail.config);};
+          window.addEventListener('roc-pos-update',self._rocPosHandler);
+        }
+        fire();
+      });
+    }
     const ta=this.querySelector('#tap_action_yaml');if(ta)ta.addEventListener('change',fire);
 
     // Filter conditions

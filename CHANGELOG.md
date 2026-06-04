@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.4] – 2026-06-04
+
+### Fix: Save button and roc-pos-update now work when test_mode is toggled in editor
+
+Root cause: when test_mode is enabled via the checkbox in the GUI editor,
+`setConfig()` is called but the `same` check skips `_render()` (no array
+length changes). The `_rocPosHandler` window listener was only registered
+inside `_render()`, so it was never set up in this case.
+
+Fix: the test_mode checkbox listener in `_listen()` now also manages
+`_rocPosHandler` directly — registering it when the checkbox is checked and
+removing it when unchecked.
+
+### Fix: Save button feedback messages
+
+- **When editor is open (auto-save):** drag/keyboard already auto-saves via
+  window event on every drop; Save button sends an extra event (no visible
+  change needed).
+- **When on dashboard without editor:** Save copies config YAML to clipboard
+  and shows **"📋 Copied!"** (blue) instead of the misleading "✓ Saved!",
+  making it clear the user needs to paste it into the YAML editor manually.
+
 ## [1.2.3] – 2026-06-04
 
 ### New: Save button in test mode
