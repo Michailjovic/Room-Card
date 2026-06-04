@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.1.0] – 2026-06-04
+
+### New: visual resize handles in test mode
+
+Zones, elements, and gauges now show 6 resize handles in `test_mode: true` —
+four corners and two edge handles (right, bottom). Dragging a corner changes
+both axes simultaneously; edge handles change one axis. Position and size save
+to config automatically on release, identical to the drag & drop behaviour.
+
+Handles are 10×10 px squares styled with `--primary-color` and a white border
+so they're visible against any room image. `overflow: visible` is set on the
+element in test mode so handles can extend outside the element boundary.
+
+### New: `base_image_conditions` — conditional base image switching
+
+Swap the room photo based on entity state without needing an overlay:
+
+```yaml
+base_image: /local/living_room_day.jpg
+base_image_conditions:
+  - condition:
+      entity: sun.sun
+      state: below_horizon
+    image: /local/living_room_night.jpg
+  - image: /local/living_room_day.jpg   # default (no condition)
+```
+
+Evaluated in order — first match wins; entry without `condition` is the
+default fallback. Images are preloaded at startup. Available in the GUI
+editor as a YAML textarea in the Basic settings section.
+
+### Includes all v1.0.18 changes
+
+- Drag & drop positioning in test mode (zones, icons, labels)
+- Duplicate button in all GUI editor panels
+- Icon `%` size now tracks live card width via `ResizeObserver`
+
 ## [1.0.18] – 2026-06-04
 
 ### New: drag & drop positioning in test mode

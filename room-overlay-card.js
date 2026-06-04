@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.18 — MIT License
+ * room-overlay-card v1.1.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -208,6 +208,7 @@ class RoomOverlayCard extends HTMLElement{
   _preloadImages(){
     const c=this._config,urls=new Set();
     if(c.base_image)urls.add(c.base_image);
+    for(const bc of(c.base_image_conditions||[])){if(bc.image)urls.add(bc.image);}
     for(const ov of(c.overlays||[])){
       if(ov.image)urls.add(ov.image);
       if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
@@ -329,6 +330,31 @@ class RoomOverlayCard extends HTMLElement{
           _dpFire(nc);this._update();
         });
       }
+      // Resize handles — zones, elements, gauges
+      for(const z of(c.zones||[])){
+        const el=this._zoneEls[z.id];if(!el)continue;
+        this._makeResizable(el,(top,left,width,height)=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const zc=(nc.zones||[]).find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;zc.width=width;zc.height=height;}
+          _dpFire(nc);this._update();
+        });
+      }
+      for(const elCfg of(c.elements||[])){
+        const cont=this._contEls[elCfg.id];if(!cont)continue;
+        this._makeResizable(cont,(top,left,width,height)=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const ec=(nc.elements||[]).find(x=>x.id===elCfg.id);if(ec){ec.top=top;ec.left=left;ec.width=width;ec.height=height;}
+          _dpFire(nc);this._update();
+        });
+      }
+      for(const g of(c.gauges||[])){
+        const el=this._gaugeEls[g.id];if(!el)continue;
+        this._makeResizable(el,(top,left,width,height)=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const gc=(nc.gauges||[]).find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;gc.width=width;gc.height=height;}
+          _dpFire(nc);this._update();
+        });
+      }
     }
     // IntersectionObserver — zastav updates když karta není ve viewportu
     if(this._io)this._io.disconnect();
@@ -352,6 +378,40 @@ class RoomOverlayCard extends HTMLElement{
     this._rendered=true;
     this._preloadImages();
     this._update();
+  }
+
+  _makeResizable(el,onResize){
+    // 6 handles: 4 corners + right edge + bottom edge
+    const hs=[
+      {p:'top:-6px;left:-6px',c:'nw-resize',w:-1,h:-1,ml:true,mt:true},
+      {p:'top:-6px;right:-6px',c:'ne-resize',w:1,h:-1,ml:false,mt:true},
+      {p:'bottom:-6px;left:-6px',c:'sw-resize',w:-1,h:1,ml:true,mt:false},
+      {p:'bottom:-6px;right:-6px',c:'se-resize',w:1,h:1,ml:false,mt:false},
+      {p:'top:calc(50% - 5px);right:-6px',c:'e-resize',w:1,h:0,ml:false,mt:false},
+      {p:'left:calc(50% - 5px);bottom:-6px',c:'s-resize',w:0,h:1,ml:false,mt:false},
+    ];
+    el.style.overflow='visible';
+    const self=this;
+    hs.forEach(function(hd){
+      const h=document.createElement('div');
+      h.style.cssText='position:absolute;'+hd.p+';width:10px;height:10px;background:var(--primary-color,#03a9f4);border:2px solid #fff;border-radius:2px;z-index:1000;cursor:'+hd.c+';box-sizing:border-box;pointer-events:auto;';
+      el.appendChild(h);
+      h.addEventListener('mousedown',function(e){
+        e.stopPropagation();e.preventDefault();
+        const cont=self.shadowRoot.querySelector('.content');if(!cont)return;
+        const rect=cont.getBoundingClientRect();
+        const sx=e.clientX,sy=e.clientY;
+        const st=parseFloat(el.style.top)||0,sl=parseFloat(el.style.left)||0;
+        const sw=parseFloat(el.style.width)||10,sh=parseFloat(el.style.height)||10;
+        function onMove(ev){
+          const dx=(ev.clientX-sx)/rect.width*100,dy=(ev.clientY-sy)/rect.height*100;
+          if(hd.w!==0){const nw=Math.max(2,sw+hd.w*dx);el.style.width=nw.toFixed(1)+'%';if(hd.ml)el.style.left=(sl+dx).toFixed(1)+'%';}
+          if(hd.h!==0){const nh=Math.max(2,sh+hd.h*dy);el.style.height=nh.toFixed(1)+'%';if(hd.mt)el.style.top=(st+dy).toFixed(1)+'%';}
+        }
+        function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);onResize(el.style.top,el.style.left,el.style.width,el.style.height);}
+        document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+      });
+    });
   }
 
   _makeDraggable(el,onDrop){
@@ -412,6 +472,15 @@ class RoomOverlayCard extends HTMLElement{
         _bf=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
       }
       this._baseEl.style.filter=_bf;
+      // Conditional base image
+      if(c.base_image_conditions?.length){
+        let _bimg=c.base_image;
+        for(const bc of c.base_image_conditions){
+          if(bc.condition===undefined){_bimg=bc.image;continue;}
+          if(evalCond(bc.condition,s)){_bimg=bc.image;break;}
+        }
+        if(_bimg){const _bbg='url(\''+_bimg+'\')';if(this._baseEl.style.backgroundImage!==_bbg)this._baseEl.style.backgroundImage=_bbg;}
+      }
     }
     for(const ov of(c.overlays||[])){
       const el=this._ovEls[ov.id];if(!el)continue;
@@ -616,6 +685,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     const q=function(s){return this.querySelector(s);}.bind(this);
     const v=function(id,fb){const el=q('#'+id);return el?el.value:fb;};
     c.base_image=v('base_image',c.base_image||'');
+    const _bicEl=this.querySelector('#base_image_conditions');
+    if(_bicEl&&_bicEl.value.trim()){const _bic=_yaml.p(_bicEl.value);if(Array.isArray(_bic))c.base_image_conditions=_bic;else delete c.base_image_conditions;}else delete c.base_image_conditions;
     c.aspect_ratio=v('aspect_ratio','16/9');
     c.border_radius=v('border_radius','12px');
     c.filter_transition=v('filter_transition','2s ease');
@@ -1204,6 +1275,8 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     let basicInner='<div style="display:grid;gap:8px;">';
     basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Base image URL *</label><input id="base_image" type="text" value="'+this._e(c.base_image||'')+'"'+this._inp('')+'></div>';
+    const _bicYaml=c.base_image_conditions?_yaml.s(c.base_image_conditions):'';
+    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
     basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
     basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Aspect ratio</label><input id="aspect_ratio" type="text" value="'+this._e(c.aspect_ratio||'16/9')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Border radius</label><input id="border_radius" type="text" value="'+this._e(c.border_radius||'12px')+'"'+this._inp('')+'></div>';
@@ -1368,7 +1441,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
 
-    ['base_image','aspect_ratio','border_radius','filter_transition'].forEach(function(id){
+    ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     const tm=this.querySelector('#test_mode');if(tm)tm.addEventListener('change',fire);
