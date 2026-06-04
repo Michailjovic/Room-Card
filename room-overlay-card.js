@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.0.17 — MIT License
+ * room-overlay-card v1.0.18 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -109,7 +109,7 @@ class RoomOverlayCard extends HTMLElement{
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
     this._icoEls={};
     this._rafPending=false;this._relevantEntities=null;this._relevantAttrSources=null;this._prevStates={};
-    this._io=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
+    this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
   }
 
@@ -297,6 +297,38 @@ class RoomOverlayCard extends HTMLElement{
           self._update();
         });
       }
+      // Drag & drop — zones, icons, labels
+      const _dpFire=(nc)=>{
+        this._config=nc;
+        this.dispatchEvent(new CustomEvent('config-changed',{bubbles:true,composed:true,detail:{config:Object.assign({type:'custom:room-overlay-card'},nc)}}));
+      };
+      for(const z of(c.zones||[])){
+        const el=this._zoneEls[z.id];if(!el)continue;
+        el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const zc=(nc.zones||[]).find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;}
+          _dpFire(nc);this._update();
+        });
+      }
+      for(const ico of(c.icons||[])){
+        const el=this._icoEls[ico.id];if(!el)continue;
+        el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const ic=(nc.icons||[]).find(x=>x.id===ico.id);if(ic){ic.top=top;ic.left=left;}
+          _dpFire(nc);this._update();
+        });
+      }
+      for(const lbl of(c.labels||[])){
+        const el=this._lblEls[lbl.id];if(!el)continue;
+        el.style.pointerEvents='auto';el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=JSON.parse(JSON.stringify(this._config));
+          const lc=(nc.labels||[]).find(x=>x.id===lbl.id);if(lc){lc.top=top;lc.left=left;}
+          _dpFire(nc);this._update();
+        });
+      }
     }
     // IntersectionObserver — zastav updates když karta není ve viewportu
     if(this._io)this._io.disconnect();
@@ -308,12 +340,53 @@ class RoomOverlayCard extends HTMLElement{
       },{threshold:0});
       this._io.observe(this);
     }
+    if(window.ResizeObserver){
+      if(this._ro)this._ro.disconnect();
+      const self=this;
+      this._ro=new ResizeObserver(function(){if(self._rendered&&self._hass&&self._visible)self._update();});
+      this._ro.observe(this);
+    }
     this._relevantEntities=[...this._extractEntities(this._config)];
     this._relevantAttrSources=this._extractAttrSources(this._config);
     this._prevStates={};
     this._rendered=true;
     this._preloadImages();
     this._update();
+  }
+
+  _makeDraggable(el,onDrop){
+    const self=this;
+    let dragOccurred=false;
+    el.addEventListener('mousedown',function(e){
+      if(e.button!==0)return;
+      const cont=self.shadowRoot.querySelector('.content');
+      if(!cont)return;
+      const rect=cont.getBoundingClientRect();
+      const startX=e.clientX,startY=e.clientY;
+      const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
+      let moved=false;
+      function onMove(e){
+        const dx=e.clientX-startX,dy=e.clientY-startY;
+        if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;
+        moved=true;e.preventDefault();e.stopPropagation();
+        el.style.top=Math.max(0,Math.min(98,startTop+dy/rect.height*100)).toFixed(1)+'%';
+        el.style.left=Math.max(0,Math.min(98,startLeft+dx/rect.width*100)).toFixed(1)+'%';
+      }
+      function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);if(moved){dragOccurred=true;onDrop(el.style.top,el.style.left);}}
+      document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+    });
+    el.addEventListener('touchstart',function(e){
+      const cont=self.shadowRoot.querySelector('.content');if(!cont)return;
+      const rect=cont.getBoundingClientRect();
+      const t0=e.touches[0],startX=t0.clientX,startY=t0.clientY;
+      const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
+      let moved=false;
+      function onTMove(e){const t=e.touches[0],dx=t.clientX-startX,dy=t.clientY-startY;if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;moved=true;e.preventDefault();e.stopPropagation();el.style.top=Math.max(0,Math.min(98,startTop+dy/rect.height*100)).toFixed(1)+'%';el.style.left=Math.max(0,Math.min(98,startLeft+dx/rect.width*100)).toFixed(1)+'%';}
+      function onTEnd(){el.removeEventListener('touchmove',onTMove);el.removeEventListener('touchend',onTEnd);if(moved){dragOccurred=true;onDrop(el.style.top,el.style.left);}}
+      el.addEventListener('touchmove',onTMove,{passive:false});el.addEventListener('touchend',onTEnd);
+    },{passive:true});
+    // Suppress click after drag — capture phase fires before zone/icon tap listeners
+    el.addEventListener('click',function(e){if(dragOccurred){e.stopImmediatePropagation();e.preventDefault();dragOccurred=false;}},true);
   }
 
   _update(){
@@ -366,14 +439,17 @@ class RoomOverlayCard extends HTMLElement{
       const lel=this._blabelEls[b.id];
       if(lel&&b.label){const t=resolveVal(b.label,s,'');if(lel.textContent!==t)lel.textContent=t;}
     }
+    const _icoW=this.offsetWidth||300;
     for(const ico of(c.icons||[])){
       const el=this._icoEls[ico.id];if(!el)continue;
       if(ico.group&&!(this._groupState[ico.group]??true)){el.style.display='none';continue;}
       if(ico.visible)el.style.display=evalCond(ico.visible,s)?'flex':'none';
       else el.style.display='flex';
-      if(ico.color){
-        const haicon=el.querySelector('ha-icon');
-        if(haicon)haicon.style.color=resolveVal(ico.color,s,'white');
+      const haicon=el.querySelector('ha-icon');
+      if(haicon){
+        const sz=resolveSize(ico.size||'20px',_icoW);
+        haicon.style.setProperty('--mdc-icon-size',sz);haicon.style.width=sz;haicon.style.height=sz;
+        if(ico.color)haicon.style.color=resolveVal(ico.color,s,'white');
       }
     }
     for(const el of(c.elements||[])){
@@ -894,6 +970,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
     h+='</div>';
+    h+='<button data-dup-z="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-z="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove zone</button>';
     h+='</div></details>';
     return h;
@@ -957,6 +1034,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">card / visible / z_index / border_radius (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
+    h+='<button data-dup-el="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
     h+='</div></details>';
     return h;
@@ -992,6 +1070,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
     h+='</div>';
     h+='<div style="margin-bottom:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
+    h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
     h+='</div></details>';
     return h;
@@ -1009,6 +1088,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">font_size / font_weight / color / visible / visible_conditions / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
+    h+='<button data-dup-lbl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
 
   _gaugeItem(g,i){const cp=Object.assign({},g);delete cp.id;delete cp.top;delete cp.left;delete cp.width;delete cp.height;delete cp.entity;delete cp.attribute;delete cp.min;delete cp.max;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('g-'+i);let h='<details style="margin-bottom:6px;" data-panel="g-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Gauge: '+this._e(g.id||'gauge_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-g-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-g-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-g-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-g-w="'+i+'" type="text" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-g-h="'+i+'" type="text" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input type="text" list="roc-entities" data-g-entity="'+i+'" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute</label><input data-g-attr="'+i+'" type="text" value="'+this._e(g.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min</label><input data-g-min="'+i+'" type="number" value="'+this._e(String(g.min??0))+'"'+this._inp('font-size:12px;')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max</label><input data-g-max="'+i+'" type="number" value="'+this._e(String(g.max??100))+'"'+this._inp('font-size:12px;')+'></div>';h+='</div>';const gs=g.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-gg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<gs.length;j++){const hex=this._toHex(gs[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-g-gv="'+i+'-'+j+'" placeholder="value" value="'+gs[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-g-gc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-gg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!gs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
@@ -1049,6 +1129,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
+    h+='<button data-dup-g="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
 
   _blindItem(b,i){
@@ -1094,6 +1175,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
+    h+='<button data-dup-bl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-bl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove blind</button>';
     h+='</div></details>';
     return h;}
@@ -1563,6 +1645,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+
+    // Duplicate (clone) handlers
+    function _cp(v,dflt){if(!v)return dflt||'3%';const n=parseFloat(v);return(!isNaN(n)&&String(v).trim().endsWith('%'))?Math.min(n+3,95).toFixed(1)+'%':v;}
+    this.querySelectorAll('[data-dup-ico]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupIco),c=self._collectConfig();if(!c.icons||!c.icons[i])return;const cl=JSON.parse(JSON.stringify(c.icons[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.icons.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-lbl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupLbl),c=self._collectConfig();if(!c.labels||!c.labels[i])return;const cl=JSON.parse(JSON.stringify(c.labels[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.labels.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-g]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupG),c=self._collectConfig();if(!c.gauges||!c.gauges[i])return;const cl=JSON.parse(JSON.stringify(c.gauges[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.gauges.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-bl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupBl),c=self._collectConfig();if(!c.blinds||!c.blinds[i])return;const cl=JSON.parse(JSON.stringify(c.blinds[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.blinds.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-el]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupEl),c=self._collectConfig();if(!c.elements||!c.elements[i])return;const cl=JSON.parse(JSON.stringify(c.elements[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.elements.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-z]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupZ),c=self._collectConfig();if(!c.zones||!c.zones[i])return;const cl=JSON.parse(JSON.stringify(c.zones[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.zones.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
 
     // Group fields on elements
     this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp]').forEach(function(el){el.addEventListener('change',fire);});

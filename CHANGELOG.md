@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.0.18] – 2026-06-04
+
+### New: drag & drop positioning in test mode
+
+- Zones, icons, and labels are now draggable when `test_mode: true`.
+  Grab any element and drag it to its new position — `top`/`left` update live
+  and the config is saved automatically on drop.
+- Tap/click actions are suppressed when a drag occurs (capture-phase listener),
+  so dragging a tappable zone doesn't accidentally trigger its action.
+- Labels temporarily become pointer-interactive in test mode to allow dragging.
+
+### New: Duplicate button in GUI editor
+
+- Every icon, label, gauge, blind, zone, and element panel now has a **Duplicate**
+  button alongside Remove. Creates a deep copy of the element, appends `_2` to
+  the ID, and offsets `top`/`left` by 3% so the copy is visible immediately.
+
+### Fix: icon `%` size now tracks actual card width
+
+- `size: X%` was calculated from `offsetWidth` at `_render()` time, which is often
+  0 before the card is laid out (defaulting to 300 px).
+- Icon sizes are now recalculated on every `_update()` using the live `offsetWidth`.
+- Added `ResizeObserver` — resizing the browser window or changing the dashboard
+  layout triggers an `_update()` so icon sizes adjust to the new card width.
+- `vw`, `vh`, `vmin`, `clamp()` and other CSS units continue to work unchanged
+  (they pass through `resolveSize` unmodified).
+
 ## [1.0.17] – 2026-05-30
 
 ### Fix: editor freeze caused by datalist DOM thrashing
