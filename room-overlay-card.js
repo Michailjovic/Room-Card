@@ -1,5 +1,5 @@
 /**
- * room-overlay-card v1.2.5 — MIT License
+ * room-overlay-card v1.2.6 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
 window.customCards=window.customCards||[];
@@ -308,27 +308,67 @@ class RoomOverlayCard extends HTMLElement{
         saveBtn.addEventListener('click',function(e){
           e.stopPropagation();e.preventDefault();
           const cfg=Object.assign({type:'custom:room-overlay-card'},self._config);
+          // Always relay via editor if open
           window.dispatchEvent(new CustomEvent('roc-pos-update',{detail:{config:cfg}}));
-          const txt=window.YAML?window.YAML.stringify(cfg):JSON.stringify(cfg,null,2);
-          // Toggle config overlay
-          const existing=self.shadowRoot.querySelector('.tm-cfg-ov');
-          if(existing){existing.remove();return;}
-          const ov=document.createElement('div');
-          ov.className='tm-cfg-ov';
-          ov.style.cssText='position:absolute;inset:0;z-index:500;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;padding:10px;box-sizing:border-box;';
-          const hdr=document.createElement('div');
-          hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
-          hdr.innerHTML='<span style="color:#fff;font-size:11px;font-weight:bold;">&#128190; Config — press Ctrl+C to copy, then paste in YAML editor</span><button style="background:none;border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">&#x2715;</button>';
-          const ta=document.createElement('textarea');
-          ta.value=txt;ta.readOnly=true;
-          ta.style.cssText='flex:1;width:100%;background:#111;color:#aef;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-family:monospace;font-size:11px;padding:8px;box-sizing:border-box;resize:none;';
-          ov.appendChild(hdr);ov.appendChild(ta);
-          self.shadowRoot.querySelector('.content').appendChild(ov);
-          ta.focus();ta.select();
-          if(navigator.clipboard)navigator.clipboard.writeText(txt).catch(function(){});
-          try{document.execCommand('copy');}catch(_){}
-          hdr.querySelector('button').addEventListener('click',function(ev){ev.stopPropagation();ov.remove();});
-          ov.addEventListener('click',function(ev){if(ev.target===ov)ov.remove();});
+
+          function _showOverlay(){
+            const existing=self.shadowRoot.querySelector('.tm-cfg-ov');
+            if(existing){existing.remove();return;}
+            const txt=window.YAML?window.YAML.stringify(cfg):JSON.stringify(cfg,null,2);
+            const ov=document.createElement('div');
+            ov.className='tm-cfg-ov';
+            ov.style.cssText='position:absolute;inset:0;z-index:500;background:rgba(0,0,0,0.88);display:flex;flex-direction:column;padding:10px;box-sizing:border-box;';
+            const hdr=document.createElement('div');
+            hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;';
+            hdr.innerHTML='<span style="color:#fff;font-size:11px;font-weight:bold;">&#128190; Config — press Ctrl+C to copy, paste in YAML editor</span><button style="background:none;border:1px solid rgba(255,255,255,0.4);color:#fff;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">&#x2715;</button>';
+            const ta=document.createElement('textarea');
+            ta.value=txt;ta.readOnly=true;
+            ta.style.cssText='flex:1;width:100%;background:#111;color:#aef;border:1px solid rgba(255,255,255,0.15);border-radius:4px;font-family:monospace;font-size:11px;padding:8px;box-sizing:border-box;resize:none;';
+            ov.appendChild(hdr);ov.appendChild(ta);
+            self.shadowRoot.querySelector('.content').appendChild(ov);
+            ta.focus();ta.select();
+            if(navigator.clipboard)navigator.clipboard.writeText(txt).catch(function(){});
+            try{document.execCommand('copy');}catch(_){}
+            hdr.querySelector('button').addEventListener('click',function(ev){ev.stopPropagation();ov.remove();});
+            ov.addEventListener('click',function(ev){if(ev.target===ov)ov.remove();});
+          }
+
+          // Direct HA Lovelace save via WebSocket (storage mode only)
+          const conn=self._hass&&self._hass.connection;
+          if(conn&&typeof conn.sendMessagePromise==='function'){
+            const _parts=window.location.pathname.split('/').filter(Boolean);
+            const _urlPath=_parts[0]==='lovelace'?null:(_parts[0]||null);
+            conn.sendMessagePromise({type:'lovelace/config',url_path:_urlPath})
+              .then(function(lc){
+                const nc=JSON.parse(JSON.stringify(lc));
+                let found=false;
+                function _walk(cards){
+                  if(!Array.isArray(cards))return;
+                  for(let i=0;i<cards.length;i++){
+                    const card=cards[i];
+                    if(card.type==='custom:room-overlay-card'&&card.base_image===self._config.base_image){
+                      cards[i]=Object.assign({},self._config,{type:'custom:room-overlay-card'});
+                      found=true;return;
+                    }
+                    if(card.cards)_walk(card.cards);
+                    if(card.card)_walk([card.card]);
+                  }
+                }
+                for(const v of(nc.views||[])){_walk(v.cards);if(found)break;}
+                if(!found)throw new Error('card_not_found');
+                return conn.sendMessagePromise({type:'lovelace/config/save',url_path:_urlPath,config:nc});
+              })
+              .then(function(){
+                saveBtn.innerHTML='&#10003; Saved!';saveBtn.style.background='rgba(0,140,0,0.9)';
+                setTimeout(function(){saveBtn.innerHTML='&#128190; Save';saveBtn.style.background='rgba(20,100,20,0.82)';},2500);
+              })
+              .catch(function(err){
+                console.warn('[room-overlay-card] Direct save failed ('+err.message+'), showing overlay');
+                _showOverlay();
+              });
+          } else {
+            _showOverlay();
+          }
         });
       }
       // Drag & drop — zones, icons, labels

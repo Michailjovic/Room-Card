@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.6] – 2026-06-04
+
+### New: Save button writes directly to HA Lovelace storage
+
+When `test_mode: true` and Lovelace is in storage mode (UI-managed), clicking
+**💾 Save** now saves the card's current config directly to HA without any
+copy-paste:
+
+1. Fetches the full Lovelace config via `hass.connection.sendMessagePromise`
+2. Locates the card by matching `type` + `base_image`
+3. Replaces the card config with current positions
+4. Saves the updated Lovelace config back to HA
+
+On success the button shows **"✓ Saved!"** for 2.5 s.
+
+**Fallback:** If Lovelace is in YAML mode, the card is not found (multiple
+cards with the same `base_image`), or the connection is unavailable, the
+config overlay (Ctrl+C copy) is shown instead with a console warning.
+
 ## [1.2.5] – 2026-06-04
 
 ### Fix: Save button now shows config overlay for reliable copy
