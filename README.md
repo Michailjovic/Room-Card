@@ -23,8 +23,14 @@ A Home Assistant Lovelace card for **room visualization** — place a photo of y
 | **Clickable zones** | Invisible hit areas — navigate, more-info, toggle, call-service, browser-mod popup |
 | **Status badges** | Floating chips in any corner — MDI icon, conditional color, conditional label |
 | **Embedded HA cards** | Any card (tile, mini-graph, button…) placed at absolute coordinates |
-| **Test mode** | Red outlines on zones, blue on elements — for precise positioning |
-| **GUI editor** | Full configuration without writing YAML |
+| **Slider zones** | Drag across a zone to dim lights, move covers, set volume/temperature |
+| **Radial gauges** | Circular SVG arc gauges with gradients and target markers |
+| **Jinja templates** | Labels rendered from any Jinja2 template, live via WebSocket |
+| **Camera background** | Use a camera snapshot as the base layer, auto-refreshing |
+| **Weather effects** | Animated rain/snow overlay driven by a weather entity |
+| **Groups** | Show/hide sets of elements with fade, mutual exclusion via grouping codes |
+| **Test mode** | Red outlines on zones, blue on elements — drag & drop, resize, keyboard nudge |
+| **GUI editor** | Full configuration without writing YAML, reorder buttons, live highlight |
 
 ---
 
@@ -75,20 +81,28 @@ aspect_ratio: "16/9"
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `base_image` | string | **required** | Path to the room photo |
+| `base_image` | string | **required**¹ | Path to the room photo |
+| `base_camera` | string | — | Camera entity used as live background (¹makes `base_image` optional) |
+| `camera_refresh` | number | `10` | Camera snapshot refresh interval in seconds |
+| `base_image_conditions` | list | — | Swap the base image by entity state |
+| `weather_overlay` | object/string | — | Animated rain/snow layer (`entity`, `effect`, `opacity`, `z_index`) |
 | `aspect_ratio` | string | `16/9` | Card aspect ratio (`width/height`) |
 | `border_radius` | string | `12px` | Card corner radius |
 | `filter_transition` | string | `2s ease` | CSS transition for the base image filter |
 | `filter_conditions` | list | `[]` | Discrete CSS filter states |
 | `brightness_model` | object | — | Multi-stop filter interpolation |
 | `overlays` | list | `[]` | Overlay image layers |
-| `gauges` | list | `[]` | Progress gauge bars |
+| `gauges` | list | `[]` | Progress gauge bars (linear or radial) |
 | `blinds` | list | `[]` | Window blind visualizations |
-| `zones` | list | `[]` | Clickable hit areas |
+| `zones` | list | `[]` | Clickable hit areas / sliders |
 | `badges` | list | `[]` | Corner status chips |
+| `icons` | list | `[]` | Icon overlays with actions |
+| `labels` | list | `[]` | Value/template text labels |
 | `elements` | list | `[]` | Embedded HA cards |
-| `test_mode` | bool | `false` | Show outlines for debugging |
+| `groups` | list | `[]` | Client-side element groups (toggle/show/hide) |
+| `test_mode` | bool | `false` | Outlines, drag & drop, resize handles, Save button |
 | `tap_action` | action | — | Action on card background click |
+| `haptic` | bool | `true` | Haptic feedback on actions (companion app) |
 
 ---
 
@@ -240,6 +254,32 @@ gauges:
 | `top` | top → bottom |
 | `horizontal` / `left` | left → right |
 | `right` | right → left |
+| `radial` | circular SVG arc gauge |
+
+#### Radial gauges
+
+```yaml
+gauges:
+  - id: humidity_ring
+    entity: sensor.bedroom_humidity
+    orientation: radial
+    top: "8%"
+    left: "80%"
+    width: "14%"
+    height: "24%"
+    min: 0
+    max: 100
+    arc: 270          # arc length in degrees (default 270)
+    thickness: 10     # stroke width in viewBox units
+    target: 55        # optional target tick mark
+    color_gradient:
+      - value: 30
+        color: "#FF9800"
+      - value: 50
+        color: "#4CAF50"
+      - value: 70
+        color: "#2196F3"
+```
 
 #### Discrete color based on state
 
@@ -340,16 +380,57 @@ zones:
         entity: light.bedroom_main
 ```
 
+#### Slider zones
+
+Drag across a zone to control an entity — vertical by default, horizontal optional.
+Domains: `light` (brightness), `cover` (position), `fan` (speed), `media_player`
+(volume), `climate` (temperature, uses `min`/`max`), `number` / `input_number`.
+
+```yaml
+zones:
+  - id: dimmer
+    top: "20%"
+    left: "60%"
+    width: "12%"
+    height: "45%"
+    slider:
+      entity: light.bedroom_ceiling
+      direction: vertical    # vertical | horizontal
+      live: false            # true = send while dragging (throttled)
+      color: "rgba(255,255,255,0.28)"
+    tap_action:              # tap still works — drags are suppressed
+      action: toggle
+      entity: light.bedroom_ceiling
+```
+
 #### Action types
 
 | Action | Required params | Description |
 |---|---|---|
 | `navigate` | `path` | Navigate to a dashboard path |
+| `url` | `url_path` | Open a URL (`new_tab: false` for same tab) |
 | `more-info` | `entity` | Open entity more-info dialog |
 | `toggle` | `entity` | Toggle entity on/off |
-| `call-service` | `service`, `service_data` | Call any HA service |
+| `call-service` / `perform-action` | `service` or `perform_action` | Call any HA action; supports `data:` and `target:` |
 | `browser-mod-popup` | `title`, `size`, `content` | Open a browser-mod popup |
+| `toggle-group` / `show-group` / `hide-group` | `group` | Control element groups |
 | `none` | — | Do nothing |
+
+Any action may carry `confirmation: true` (or `confirmation: {text: "..."}`)
+to ask before executing. Actions trigger haptic feedback in the companion app
+unless `haptic: false` is set at card level.
+
+```yaml
+tap_action:
+  action: perform-action
+  perform_action: climate.set_temperature
+  target:
+    entity_id: climate.bedroom
+  data:
+    temperature: 21.5
+  confirmation:
+    text: Set bedroom to 21.5 °C?
+```
 
 ---
 
@@ -421,6 +502,52 @@ elements:
     card:
       type: tile
       entity: weather.home
+```
+
+---
+
+### Labels
+
+Text values positioned anywhere on the card — entity states or Jinja templates.
+
+```yaml
+labels:
+  # Entity value with automatic unit
+  - id: temp_label
+    entity: sensor.bedroom_temperature
+    top: "12%"
+    left: "10%"
+    decimals: 1
+    suffix: auto          # appends the entity's unit_of_measurement
+    font_size: "2.2%"     # % of card width — responsive
+    color_gradient:
+      - value: 18
+        color: "#2196F3"
+      - value: 26
+        color: "#FF5722"
+
+  # Jinja template (rendered live via WebSocket)
+  - id: summary
+    template: >-
+      {{ states('sensor.bedroom_temperature') | round(1) }} °C ·
+      {{ states('sensor.bedroom_humidity') | round(0) }} %
+    top: "5%"
+    left: "10%"
+```
+
+---
+
+### Camera background & weather effects
+
+```yaml
+type: custom:room-overlay-card
+base_camera: camera.living_room      # base_image becomes optional
+camera_refresh: 5                    # seconds (paused off-screen)
+weather_overlay:
+  entity: weather.home               # rainy/pouring → rain, snowy → snow
+  # effect: rain                     # or force an effect manually
+  opacity: 0.45
+  z_index: 5
 ```
 
 ---
@@ -520,14 +647,9 @@ test_mode: true
 
 ## Development
 
-```bash
-npm install          # install dependencies
-npm run build        # production build
-npm run watch        # watch mode with source maps
-```
-
-Source: `src/room-overlay-card.ts` (TypeScript).
-Distributed file: `room-overlay-card.js` — single file, zero external runtime dependencies.
+`room-overlay-card.js` is the single source of truth — hand-maintained vanilla
+JS, no build step, zero external runtime dependencies. Edit the file directly
+and hard-refresh your browser.
 
 ---
 

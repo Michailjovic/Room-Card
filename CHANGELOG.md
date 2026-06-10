@@ -1,5 +1,114 @@
 # Changelog
 
+## [1.3.0] – 2026-06-10
+
+Major release: bug-fix sweep from a full code audit, performance pass, editor
+overhaul, and six new features. Verified against Home Assistant 2026.6.
+
+### Added
+- **Jinja templates on labels** — new `template:` option renders any Jinja2
+  template live via the `render_template` WebSocket subscription. Replaces the
+  entity value entirely; works with `color_gradient` (numeric results).
+- **Slider zones** — new `slider:` option on zones: drag vertically or
+  horizontally across a zone to set light brightness, cover position, fan
+  speed, media volume, climate temperature or number value. Keys: `entity`,
+  `direction`, `min`, `max`, `live`, `invert`, `color`. Shows a translucent
+  fill while dragging; tap actions still work (drags are suppressed).
+- **Radial gauges** — `orientation: radial` renders a circular SVG arc gauge
+  with `arc` (degrees, default 270), `thickness`, optional `target` marker and
+  full `color_gradient` support.
+- **Camera background** — new `base_camera:` option uses a camera entity
+  snapshot as the base layer, refreshed every `camera_refresh:` seconds
+  (default 10, paused when the card is off-screen). `base_image` is now
+  optional when `base_camera` is set.
+- **Weather effects** — new `weather_overlay:` option renders an animated CSS
+  rain/snow layer, driven automatically by a `weather.*` entity state or
+  forced with `effect: rain|snow`. Configurable `opacity` and `z_index`.
+- **Full action support** — actions now accept `target:` and `data:` for
+  `call-service`, the HA 2024+ `perform-action` / `perform_action` aliases,
+  `url` actions, `confirmation:` dialogs, and emit haptic feedback on the
+  companion app (disable with `haptic: false` at card level).
+- **Groups on overlays and zones** — `group:` is now supported on every
+  element type, and group show/hide animates with a 0.25 s fade instead of an
+  instant toggle.
+- **Auto units on labels** — `suffix: auto` appends the entity's
+  `unit_of_measurement` automatically.
+- **`getGridOptions()`** — proper default sizing in sections-view dashboards,
+  derived from the configured aspect ratio.
+- **Card picker suggestion (HA 2026.6)** — the card suggests itself with a
+  `base_camera` preset when a camera entity is selected in the card picker.
+- **Editor: reorder buttons** (▲▼) on overlays, zones, badges, elements,
+  icons, labels, gauges and blinds — overlay stacking order is finally
+  editable without YAML.
+- **Editor: live highlight** — opening an item panel in the editor flashes the
+  corresponding element in the card preview.
+- **Editor: version header** — the GUI editor now shows the installed card
+  version; a version banner is also printed to the browser console.
+- **Editor: new fields** — base camera + refresh, weather overlay,
+  zone slider, zone group, overlay group, label Jinja template.
+
+### Fixed
+- **Group re-show left elements hidden** — badges, labels, gauges, blinds and
+  embedded cards inside a group stayed invisible after the group was hidden
+  and shown again unless they had their own `visible` condition.
+- **`double_tap_action` without `tap_action` never fired** — the double-tap
+  detector required a pending single-tap timer that only existed when a tap
+  action was configured.
+- **Dragging in test mode could be reverted by the next editor change** — the
+  editor now re-renders its inputs after a position update from the card, so
+  stale top/left values no longer overwrite the dragged position.
+- **Attribute-based conditions didn't trigger updates** — conditions using
+  `attribute:` anywhere (filters, overlays, visibility, badge labels/colors)
+  are now part of change detection; previously only a state-string change
+  re-rendered the card.
+- **Embedded cards could render blank or freeze** — elements are now created
+  through HA's official card helpers (`loadCardHelpers`), which resolves
+  lazy-loaded `hui-*` cards and shows a proper error card on bad config; and
+  `hass` is forwarded to embedded cards on every update so cards listing
+  entities as plain strings (e.g. entities card) stay live.
+- **Editor silently deleted config on invalid YAML** — YAML fields now keep
+  the previous value and turn red when input can't be parsed. The editor also
+  ships a built-in YAML parser/serializer, so YAML works even though HA
+  provides no global YAML library (previously only JSON was accepted in
+  practice).
+- **Editor round-trip data loss** — unknown filter functions (`grayscale`,
+  `invert`, `drop-shadow`, …) survive slider edits; keys removed from item
+  YAML textareas are now actually removed from the config; clearing an
+  overlay's conditions removes them; `rgba()` colors are no longer collapsed
+  to opaque hex by the color pickers.
+- **Cross-talk between two cards in test mode** — position updates and saves
+  are matched to the editor by base image/camera; Save aborts with a clear
+  message when two identical cards exist in the same view instead of
+  overwriting the wrong one.
+- **`%`-based label `font_size` now responds to card resizes** and no longer
+  freezes at the initial render width.
+- **Tapping a badge without `tap_action` no longer triggers the card-level
+  `tap_action`.**
+- **Stray tap after touch-dragging an element in test mode** is no longer
+  swallowed permanently.
+- Config values (ids, image URLs, icons) are HTML-escaped in the card markup.
+
+### Changed / Performance
+- Skip full re-render when `setConfig` receives an identical configuration
+  (stops flicker while typing in the editor).
+- Gradient stops are sorted once per render instead of on every state update;
+  badge containers are cached; repeated style writes are guarded.
+- Slider/gradient/color inputs in the editor are debounced (150 ms), so the
+  preview no longer re-collects the whole form on every pixel of movement.
+- Zones and icons with actions are keyboard-accessible (`Tab` + `Enter`/`Space`,
+  `role="button"`, `aria-label`).
+- Label/icon default colors are themeable via `--roc-label-color` /
+  `--roc-icon-color` CSS variables.
+- Editor inputs share a stylesheet class instead of repeating inline styles.
+
+### Removed
+- Stale `src/` TypeScript sources (frozen at ~v0.3), prehistoric `dist/`
+  bundle (v0.2.0), `node_modules/`, `tsconfig.json` and `rollup.config.mjs`.
+  The single source of truth is `room-overlay-card.js`; the dangerous
+  `npm run build` scripts that would have overwritten it are gone.
+
+---
+
 ## [1.2.9] – 2026-06-04
 
 ### Fix: Save now finds card in sections-layout views (HA 2024+)

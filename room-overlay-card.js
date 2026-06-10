@@ -1,9 +1,19 @@
 /**
- * room-overlay-card v1.2.9 — MIT License
+ * room-overlay-card v1.3.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
+const ROC_VERSION='1.3.0';
+console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
-window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones',preview:true});
+window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
+  getEntitySuggestion:function(hass,entityId){
+    // HA 2026.6+: suggest this card when the user picks a camera entity
+    if(entityId.split('.')[0]!=='camera')return null;
+    return{config:{type:'custom:room-overlay-card',base_camera:entityId,aspect_ratio:'16/9'}};
+  }});
+
+function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
+function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
 
 function evalCond(c,s){
   const e=s[c.entity];if(!e)return false;
@@ -42,9 +52,9 @@ function resolveFilterInverted(conds,states){
 
 function parseCssColor(c){let m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);if(m)return[parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];m=c.match(/^#([0-9a-f]{6})$/i);if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];m=c.match(/^#([0-9a-f]{3})$/i);if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];return null;}
 
-function lerpFilterGradient(stops,pct){
+function lerpFilterGradient(stops,pct,presorted){
   if(!stops||!stops.length)return 'none';
-  const ss=stops.slice().sort((a,b)=>a.value-b.value);
+  const ss=presorted?stops:stops.slice().sort((a,b)=>a.value-b.value);
   if(pct<=ss[0].value)return ss[0].filter||'none';
   if(pct>=ss[ss.length-1].value)return ss[ss.length-1].filter||'none';
   let lo=ss[0],hi=ss[ss.length-1];
@@ -82,7 +92,7 @@ function blindToGaugeConfig(b){
   }
   return[Object.assign({},base,{color:sc})];
 }
-function lerpColorGradient(stops,val){if(!stops||!stops.length)return'white';const s=stops.slice().sort((a,b)=>a.value-b.value);if(val<=s[0].value)return s[0].color;if(val>=s[s.length-1].value)return s[s.length-1].color;for(let i=0;i<s.length-1;i++){if(val>=s[i].value&&val<=s[i+1].value){const t=(val-s[i].value)/(s[i+1].value-s[i].value);const c1=parseCssColor(s[i].color),c2=parseCssColor(s[i+1].color);if(!c1||!c2)return s[i].color;return'rgb('+Math.round(c1[0]+(c2[0]-c1[0])*t)+','+Math.round(c1[1]+(c2[1]-c1[1])*t)+','+Math.round(c1[2]+(c2[2]-c1[2])*t)+')';}}return s[s.length-1].color;}
+function lerpColorGradient(stops,val,presorted){if(!stops||!stops.length)return'white';const s=presorted?stops:stops.slice().sort((a,b)=>a.value-b.value);if(val<=s[0].value)return s[0].color;if(val>=s[s.length-1].value)return s[s.length-1].color;for(let i=0;i<s.length-1;i++){if(val>=s[i].value&&val<=s[i+1].value){const t=(val-s[i].value)/(s[i+1].value-s[i].value);const c1=parseCssColor(s[i].color),c2=parseCssColor(s[i+1].color);if(!c1||!c2)return s[i].color;return'rgb('+Math.round(c1[0]+(c2[0]-c1[0])*t)+','+Math.round(c1[1]+(c2[1]-c1[1])*t)+','+Math.round(c1[2]+(c2[2]-c1[2])*t)+')';}}return s[s.length-1].color;}
 
 const BPOS={'bottom-left':'bottom:10px;left:10px','bottom-right':'bottom:10px;right:10px','top-left':'top:10px;left:10px','top-right':'top:10px;right:10px'};
 
@@ -91,14 +101,38 @@ function makeBadgePos(b){
   return BPOS[b.position||'bottom-left']||BPOS['bottom-left'];
 }
 
-function makeHACard(cfg){
+let _rocHelpers=null,_rocHelpersP=null;
+function getHelpers(){
+  if(_rocHelpers)return Promise.resolve(_rocHelpers);
+  if(window.loadCardHelpers){
+    if(!_rocHelpersP)_rocHelpersP=window.loadCardHelpers().then(function(h){_rocHelpers=h;return h;}).catch(function(){return null;});
+    return _rocHelpersP;
+  }
+  return Promise.resolve(null);
+}
+function makeHACard(cfg,onReady){
   if(!cfg?.type)return null;
-  const name=cfg.type.startsWith('custom:')?cfg.type.substring(7):`hui-${cfg.type}-card`;
-  let el;
-  try{el=document.createElement(name);}catch(e){console.error('[room-overlay-card] createElement failed:',name,e);return null;}
-  const apply=()=>{if(typeof el.setConfig==='function')try{el.setConfig(cfg);}catch(e){console.error('[room-overlay-card] setConfig failed:',cfg.type,e);}};
-  customElements.get(name)?apply():customElements.whenDefined(name).then(apply);
-  return el;
+  // Container — the real card element is created async via HA card helpers
+  // (helpers handle lazy-loaded hui-* cards and render hui-error-card on failure)
+  const wrap=document.createElement('div');
+  wrap.style.cssText='width:100%;height:100%;display:block;';
+  getHelpers().then(function(h){
+    let el=null;
+    if(h&&typeof h.createCardElement==='function'){
+      try{el=h.createCardElement(cfg);}catch(e){console.error('[room-overlay-card] createCardElement failed:',cfg.type,e);}
+    }
+    if(!el){
+      // Fallback: direct element creation (pre-2024 behaviour)
+      const name=cfg.type.startsWith('custom:')?cfg.type.substring(7):`hui-${cfg.type}-card`;
+      try{el=document.createElement(name);}catch(e){console.error('[room-overlay-card] createElement failed:',name,e);return;}
+      const apply=function(){if(typeof el.setConfig==='function')try{el.setConfig(cfg);}catch(e){console.error('[room-overlay-card] setConfig failed:',cfg.type,e);}};
+      customElements.get(name)?apply():customElements.whenDefined(name).then(apply);
+    }
+    el.style.width='100%';el.style.height='100%';
+    wrap.appendChild(el);
+    if(onReady)onReady(el);
+  });
+  return wrap;
 }
 
 class RoomOverlayCard extends HTMLElement{
@@ -112,12 +146,19 @@ class RoomOverlayCard extends HTMLElement{
     this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
     this._selectedTM=null;this._tmKeyHandler=null;
+    this._bcontEls={};this._wxEl=null;this._camTimer=null;
+    this._tmplUnsubs=[];this._tmplVals={};
+    this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
+    this._cfgJson=null;
   }
 
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
 
   setConfig(cfg){
-    if(!cfg.base_image)throw new Error('[room-overlay-card] base_image is required');
+    if(!cfg.base_image&&!cfg.base_camera)throw new Error('[room-overlay-card] base_image (or base_camera) is required');
+    const j=JSON.stringify(cfg);
+    if(this._rendered&&this._cfgJson===j)return; // identical config — skip full rebuild
+    this._cfgJson=j;
     this._config=cfg;this._rendered=false;if(this._hass)this._render();
   }
 
@@ -125,6 +166,8 @@ class RoomOverlayCard extends HTMLElement{
     this._hass=h;if(!this._config)return;
     if(!this._rendered){this._render();return;}
     if(!this._visible)return;
+    // Embedded cards do their own change detection — always forward hass
+    for(const k in this._cardEls){try{this._cardEls[k].hass=h;}catch(_){}}
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
       if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))
@@ -139,14 +182,20 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
-  _extractEntities(obj,ids=new Set()){
-    if(!obj||typeof obj!=='object')return ids;
-    if(typeof obj.entity==='string')ids.add(obj.entity);
-    for(const v of Object.values(obj)){
-      if(Array.isArray(v))v.forEach(i=>this._extractEntities(i,ids));
-      else if(v&&typeof v==='object')this._extractEntities(v,ids);
+  _extractEntities(obj,ids=new Set(),attrs=new Set()){
+    if(!obj||typeof obj!=='object')return{ids,attrs};
+    if(typeof obj.entity==='string'){
+      ids.add(obj.entity);
+      if(typeof obj.attribute==='string')attrs.add(obj.entity+' '+obj.attribute);
     }
-    return ids;
+    for(const v of Object.values(obj)){
+      if(Array.isArray(v))v.forEach(i=>{
+        if(typeof i==='string'&&/^[a-z_]+\.[a-z0-9_]+$/.test(i))ids.add(i); // entity-id strings in plain lists (e.g. embedded entities cards)
+        else this._extractEntities(i,ids,attrs);
+      });
+      else if(v&&typeof v==='object')this._extractEntities(v,ids,attrs);
+    }
+    return{ids,attrs};
   }
 
   _extractAttrSources(cfg){
@@ -167,11 +216,13 @@ class RoomOverlayCard extends HTMLElement{
     let holdTimer=null,held=false,tapTimer=null,lastTapTime=0;
     const self=this;
     const onTap=function(e){
+      if(el._rocSlid){el._rocSlid=false;return;} // slider drag just ended — swallow the tap
       if(held){if(holdAction)self._exec(holdAction,e);held=false;return;}
       if(doubleTapAction){
         const now=Date.now();
-        if(now-lastTapTime<350&&tapTimer){
-          clearTimeout(tapTimer);tapTimer=null;lastTapTime=0;
+        if(now-lastTapTime<350){ // double tap works even without tap_action
+          if(tapTimer){clearTimeout(tapTimer);tapTimer=null;}
+          lastTapTime=0;
           self._exec(doubleTapAction,e);
         }else{
           lastTapTime=now;
@@ -181,6 +232,9 @@ class RoomOverlayCard extends HTMLElement{
         if(tapAction)self._exec(tapAction,e);
       }
     };
+    el.addEventListener('keydown',function(e){
+      if(e.key==='Enter'||e.key===' '){if(tapAction)self._exec(tapAction,e);else{e.preventDefault();}}
+    });
     el.addEventListener('touchstart',function(){
       held=false;clearTimeout(holdTimer);
       if(holdAction)holdTimer=setTimeout(function(){held=true;},delay);
@@ -228,24 +282,50 @@ class RoomOverlayCard extends HTMLElement{
     for(const g of(c.groups||[])){
       this._groupState[g.id]=g.id in _prevGS?_prevGS[g.id]:(g.visible??false);
     }
-    // Reset keyboard handler from previous render
+    // Reset handlers/timers/subscriptions from previous render
     if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
+    if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
+    if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
+    this._teardownTemplates();
     this._selectedTM=null;
 
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
-    const zHtml=(c.zones||[]).map(z=>`<div class="zone" data-z="${z.id}" style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${(z.tap_action||z.hold_action||z.double_tap_action)?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`:''}">${tm?`<span class="zlabel">${z.id}</span>`:''}</div>`).join('');
+    const zHtml=(c.zones||[]).map(z=>{const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+b.id+'" style="'+makeBadgePos(b)+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+b.id+'" icon="'+b.icon+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+b.id+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
-    const icoHtml=(c.icons||[]).map(ico=>{const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';return'<div class="ico" data-ico="'+ico.id+'" style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+ico.id+'" icon="'+(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:white;pointer-events:none;"></ha-icon></div>';}).join('');
+    const icoHtml=(c.icons||[]).map(ico=>{const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';const a11y=ico.tap_action?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;"></ha-icon></div>';}).join('');
 
-    const lblHtml=(c.labels||[]).map(lbl=>{const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:white;';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+lbl.id+'" style="'+st+'"></div>';}).join('');
-    const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+g.id+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;display:'+(vis?'block':'none')+';"></div>';}).join('');
+    const lblHtml=(c.labels||[]).map(lbl=>{const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+lbl.id+'" style="'+st+'"></div>';}).join('');
+    const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+escA(g.id)+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;transition:opacity .25s ease,visibility .25s ease;visibility:'+(vis?'visible':'hidden')+';opacity:'+(vis?'1':'0')+';"></div>';}).join('');
+    const _wx=c.weather_overlay?(typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay):null;
+    const wxHtml=_wx?'<div class="layer wx" data-wx style="z-index:'+(_wx.z_index??5)+';opacity:0;"></div>':'';
 
-    const _allGaugesRC=[...(c.gauges||[]),...(c.blinds||[]).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="background-image:url(\''+c.base_image+'\');transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
+    this._radialMeta={};
+    const _allGaugesRC=[...(c.gauges||[]),...(c.blinds||[]).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';
+    if(_gor==='radial'){
+      const arc=Math.max(30,Math.min(360,g.arc??270)),r=42,circ=2*Math.PI*r,arcLen=circ*arc/360;
+      const rot=90+(360-arc)/2,th=g.thickness??10;
+      this._radialMeta[g.id]={arcLen:arcLen,circ:circ};
+      let tgt='';
+      if(g.target!==undefined){
+        const mn=g.min??0,mx=g.max??100;
+        const tp=Math.max(0,Math.min(1,(g.target-mn)/(mx-mn)));
+        const ang=(rot+tp*arc)*Math.PI/180;
+        const x1=50+(r-th/2-2)*Math.cos(ang),y1=50+(r-th/2-2)*Math.sin(ang);
+        const x2=50+(r+th/2+2)*Math.cos(ang),y2=50+(r+th/2+2)*Math.sin(ang);
+        tgt='<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="'+escA(g.target_color||'#fff')+'" stroke-width="2.5" stroke-linecap="round"/>';
+      }
+      return'<div class="gauge gauge-radial" data-gauge="'+escA(g.id)+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;">'
+        +'<svg viewBox="0 0 100 100" style="width:100%;height:100%;display:block;overflow:visible;">'
+        +'<circle cx="50" cy="50" r="'+r+'" fill="none" stroke="'+escA(bg)+'" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="'+arcLen.toFixed(2)+' '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)"/>'
+        +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
+        +tgt+'</svg></div>';
+    }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(105deg,rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(100deg,rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
+    this._wxEl=this.shadowRoot.querySelector('[data-wx]');
     this._ovEls={};
     for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+ov.id+'"]');}
     this._grpPanelEls={};
@@ -256,12 +336,14 @@ class RoomOverlayCard extends HTMLElement{
       if(!el)continue;this._zoneEls[z.id]=el;
       if(z.tap_action||z.hold_action||z.double_tap_action)
         this._addZoneListeners(el,z.tap_action,z.hold_action,z.double_tap_action,z.hold_delay);
+      if(z.slider&&z.slider.entity&&!tm)this._attachSlider(el,z);
     }
-    this._biconEls={};this._blabelEls={};
+    this._biconEls={};this._blabelEls={};this._bcontEls={};
     for(const b of(c.badges||[])){
       this._biconEls[b.id]=this.shadowRoot.querySelector('[data-bi="'+b.id+'"]');
       this._blabelEls[b.id]=this.shadowRoot.querySelector('[data-bl="'+b.id+'"]');
       const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
+      this._bcontEls[b.id]=bel;
       if(bel&&b.tap_action){bel.addEventListener('click',e=>this._exec(b.tap_action,e));bel.addEventListener('touchend',e=>this._exec(b.tap_action,e));}
     }
     this._icoEls={};
@@ -270,7 +352,12 @@ class RoomOverlayCard extends HTMLElement{
       if(!el)continue;this._icoEls[ico.id]=el;
       if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
-    this._lblEls={};for(const lbl of(c.labels||[])){this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+lbl.id+'"]');}
+    this._lblEls={};this._sortedLblGrads={};
+    for(const lbl of(c.labels||[])){
+      this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+lbl.id+'"]');
+      if(lbl.color_gradient)this._sortedLblGrads[lbl.id]=lbl.color_gradient.slice().sort((a,b)=>a.value-b.value);
+    }
+    this._sortedBmFg=c.brightness_model?.filter_gradient?.length?c.brightness_model.filter_gradient.slice().sort((a,b)=>a.value-b.value):null;
     this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+bg.id+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
     this._cardEls={};this._contEls={};
     for(const el of(c.elements||[])){
@@ -280,14 +367,18 @@ class RoomOverlayCard extends HTMLElement{
       const _elH=el.height?('height:'+el.height+';'):(el.bottom!==undefined?'height:auto;':'height:auto;');
       cont.style.cssText=_elVPos+'left:'+el.left+';width:'+el.width+';'+_elH+'z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(tm?'outline:2px dashed blue;':'');
       if(tm)cont.title='[element] '+el.id;
-      const card=makeHACard(el.card);
-      if(card){if(this._hass)card.hass=this._hass;cont.appendChild(card);this._cardEls[el.id]=card;}
+      const self=this,elId=el.id;
+      const wrap=makeHACard(el.card,function(cardEl){
+        self._cardEls[elId]=cardEl;
+        if(self._hass)try{cardEl.hass=self._hass;}catch(_){}
+      });
+      if(wrap)cont.appendChild(wrap);
       this._contEls[el.id]=cont;if(content)content.appendChild(cont);
     }
     const hacard=this.shadowRoot.querySelector('ha-card');
     if(hacard&&c.tap_action){
       hacard.addEventListener('click',e=>{
-        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')||n.classList?.contains('tm-flip')||n.classList?.contains('tm-save')))this._exec(c.tap_action,e);
+        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')||n.classList?.contains('badge')||n.classList?.contains('tm-flip')||n.classList?.contains('tm-save')))this._exec(c.tap_action,e);
       });
     }
     if(tm){
@@ -358,14 +449,13 @@ class RoomOverlayCard extends HTMLElement{
                 if(!view&&nc.views&&nc.views.length)view=nc.views[0];
                 if(!view)throw new Error('view_not_found');
                 // Walk only the current view — avoids matching copies in other views/tabs
-                let found=false;
+                const matches=[];
                 function _walk(cards){
                   if(!Array.isArray(cards))return;
                   for(let i=0;i<cards.length;i++){
                     const card=cards[i];
-                    if(card.type==='custom:room-overlay-card'&&card.base_image===self._config.base_image){
-                      cards[i]=Object.assign({},self._config,{type:'custom:room-overlay-card'});
-                      found=true;return;
+                    if(card.type==='custom:room-overlay-card'&&card.base_image===self._config.base_image&&card.base_camera===self._config.base_camera){
+                      matches.push({arr:cards,idx:i});
                     }
                     if(card.cards)_walk(card.cards);
                     if(card.card)_walk([card.card]);
@@ -374,13 +464,10 @@ class RoomOverlayCard extends HTMLElement{
                 // Masonry / panel layout: view.cards[]
                 _walk(view.cards);
                 // Sections layout (HA 2024+): view.sections[].cards[]
-                if(!found&&Array.isArray(view.sections)){
-                  for(const sec of view.sections){
-                    _walk(sec.cards);
-                    if(found)break;
-                  }
-                }
-                if(!found)throw new Error('card_not_found_in_view');
+                if(Array.isArray(view.sections))for(const sec of view.sections)_walk(sec.cards);
+                if(!matches.length)throw new Error('card_not_found_in_view');
+                if(matches.length>1)throw new Error('multiple matching cards in view (same base image) — copy the YAML manually');
+                matches[0].arr[matches[0].idx]=Object.assign({},self._config,{type:'custom:room-overlay-card'});
                 return _callWS({type:'lovelace/config/save',url_path:_urlPath,config:nc});
               })
               .then(function(){
@@ -521,12 +608,147 @@ class RoomOverlayCard extends HTMLElement{
       this._ro=new ResizeObserver(function(){if(self._rendered&&self._hass&&self._visible)self._update();});
       this._ro.observe(this);
     }
-    this._relevantEntities=[...this._extractEntities(this._config)];
-    this._relevantAttrSources=this._extractAttrSources(this._config);
+    const _ex=this._extractEntities(this._config);
+    this._relevantEntities=[..._ex.ids];
+    this._relevantAttrSources=[...this._extractAttrSources(this._config),...[..._ex.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};})];
     this._prevStates={};
     this._rendered=true;
     this._preloadImages();
+    // Editor → card highlight (panel opened in GUI editor flashes the element)
+    const hlSelf=this;
+    this._hlHandler=function(e){
+      const d=e.detail||{};
+      if(d.base_image!==hlSelf._config.base_image||d.base_camera!==hlSelf._config.base_camera)return;
+      const pre={zone:'[data-z="',icon:'[data-ico="',label:'[data-lbl="',gauge:'[data-gauge="',badge:'[data-b="',element:'[data-el="',overlay:'[data-ov="'}[d.kind];
+      if(!pre)return;
+      const el=hlSelf.shadowRoot.querySelector(pre+d.id+'"]');
+      if(!el)return;
+      const po=el.style.outline,poo=el.style.outlineOffset;
+      el.style.outline='3px solid var(--primary-color,#03a9f4)';el.style.outlineOffset='2px';
+      clearTimeout(el._rocHlT);
+      el._rocHlT=setTimeout(function(){el.style.outline=po;el.style.outlineOffset=poo;},1600);
+    };
+    window.addEventListener('roc-highlight',this._hlHandler);
+    this._startCamera();
+    this._setupTemplates();
     this._update();
+  }
+
+  _startCamera(){
+    if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
+    const c=this._config;if(!c.base_camera)return;
+    const iv=Math.max(2,c.camera_refresh??10)*1000;
+    const self=this;
+    const tick=function(){
+      if(!self._hass||!self._visible||!self._baseEl)return;
+      const st=self._hass.states[c.base_camera];
+      const ep=st&&st.attributes&&st.attributes.entity_picture;
+      if(!ep)return;
+      const url=ep+(ep.includes('?')?'&':'?')+'_roc='+Date.now();
+      const img=new Image();
+      img.onload=function(){if(self._baseEl)self._baseEl.style.backgroundImage='url("'+url.replace(/"/g,'%22')+'")';};
+      img.src=url;
+    };
+    tick();
+    this._camTimer=setInterval(tick,iv);
+  }
+
+  _teardownTemplates(){
+    (this._tmplUnsubs||[]).forEach(function(u){
+      try{
+        if(u&&typeof u.then==='function')u.then(function(f){try{if(typeof f==='function')f();else if(f&&f.unsubscribe)f.unsubscribe();}catch(_){}});
+        else if(typeof u==='function')u();
+      }catch(_){}
+    });
+    this._tmplUnsubs=[];this._tmplVals={};
+  }
+
+  _setupTemplates(){
+    const c=this._config,self=this;
+    if(!this._hass||!this._hass.connection)return;
+    for(const lbl of(c.labels||[])){
+      if(!lbl.template)continue;
+      const el=this._lblEls[lbl.id];if(!el)continue;
+      const lblId=lbl.id,grad=this._sortedLblGrads[lblId];
+      try{
+        const p=this._hass.connection.subscribeMessage(function(msg){
+          const v=msg&&msg.result!==undefined&&msg.result!==null?String(msg.result):'';
+          self._tmplVals[lblId]=v;
+          if(el.textContent!==v)el.textContent=v;
+          if(grad){const nv=parseFloat(v);if(!isNaN(nv))el.style.color=lerpColorGradient(grad,nv,true);}
+        },{type:'render_template',template:lbl.template});
+        this._tmplUnsubs.push(p);
+      }catch(e){console.warn('[room-overlay-card] template subscribe failed:',lblId,e);}
+    }
+  }
+
+  _setGrpVis(el,show){
+    if(!el)return;
+    const v=show?'':'hidden';
+    if(el.dataset.rocGv!==v){
+      el.dataset.rocGv=v;
+      el.style.visibility=v;
+      el.style.opacity=show?'':'0';
+    }
+  }
+
+  _attachSlider(el,z){
+    const self=this,sl=z.slider;
+    el.style.touchAction='none';
+    const horiz=sl.direction==='horizontal';
+    const fill=document.createElement('div');
+    fill.className='zslider-fill';
+    fill.style.cssText='position:absolute;pointer-events:none;background:'+(sl.color||'rgba(255,255,255,0.28)')+';opacity:0;transition:opacity .2s;'+(horiz?'left:0;top:0;bottom:0;width:0%;':'left:0;right:0;bottom:0;height:0%;');
+    el.appendChild(fill);
+    let active=false,moved=false,pct=0,sx=0,sy=0,lastSent=0;
+    const calc=function(ev){
+      const r=el.getBoundingClientRect();
+      let p=horiz?(ev.clientX-r.left)/r.width:1-(ev.clientY-r.top)/r.height;
+      if(sl.invert)p=1-p;
+      return Math.max(0,Math.min(1,p));
+    };
+    const apply=function(p){
+      const h=self._hass;if(!h)return;
+      const ent=sl.entity,dom=ent.split('.')[0];
+      const mn=sl.min??0,mx=sl.max??100;
+      if(dom==='light')h.callService('light','turn_on',{entity_id:ent,brightness_pct:Math.round(p*100)});
+      else if(dom==='cover')h.callService('cover','set_cover_position',{entity_id:ent,position:Math.round(p*100)});
+      else if(dom==='fan')h.callService('fan','set_percentage',{entity_id:ent,percentage:Math.round(p*100)});
+      else if(dom==='media_player')h.callService('media_player','volume_set',{entity_id:ent,volume_level:Math.round(p*100)/100});
+      else if(dom==='number'||dom==='input_number')h.callService(dom,'set_value',{entity_id:ent,value:Math.round((mn+p*(mx-mn))*100)/100});
+      else if(dom==='climate')h.callService('climate','set_temperature',{entity_id:ent,temperature:Math.round((mn+p*(mx-mn))*2)/2});
+      else console.warn('[room-overlay-card] slider: unsupported domain',dom);
+    };
+    el.addEventListener('pointerdown',function(e){
+      if(self._config.test_mode)return;
+      active=true;moved=false;sx=e.clientX;sy=e.clientY;
+      try{el.setPointerCapture(e.pointerId);}catch(_){}
+    });
+    el.addEventListener('pointermove',function(e){
+      if(!active)return;
+      if(!moved&&Math.abs(horiz?e.clientX-sx:e.clientY-sy)<6)return;
+      moved=true;
+      pct=calc(e);
+      fill.style.opacity='1';
+      if(horiz)fill.style.width=(pct*100).toFixed(1)+'%';
+      else fill.style.height=(pct*100).toFixed(1)+'%';
+      if(sl.live){const now=Date.now();if(now-lastSent>250){lastSent=now;apply(pct);}}
+    });
+    el.addEventListener('pointerup',function(e){
+      if(!active)return;
+      active=false;
+      if(moved){el._rocSlid=true;e.stopPropagation();apply(pct);setTimeout(function(){el._rocSlid=false;},400);}
+      setTimeout(function(){fill.style.opacity='0';},250);
+    });
+    el.addEventListener('pointercancel',function(){active=false;fill.style.opacity='0';});
+  }
+
+  getGridOptions(){
+    const p=String(this._config?.aspect_ratio||'16/9').split('/');
+    let ratio=9/16;
+    if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);if(w>0&&h>0)ratio=h/w;}
+    const rows=Math.max(2,Math.min(12,Math.round(400*ratio/64)));
+    return{columns:12,rows:rows,min_columns:6,min_rows:2};
   }
 
   _makeResizable(el,onResize){
@@ -581,7 +803,7 @@ class RoomOverlayCard extends HTMLElement{
         el.style.top=Math.max(0,Math.min(98,startTop+dy/rect.height*100)).toFixed(1)+'%';
         el.style.left=Math.max(0,Math.min(98,startLeft+dx/rect.width*100)).toFixed(1)+'%';
       }
-      function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);if(moved){dragOccurred=true;onDrop(el.style.top,el.style.left);}}
+      function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
       document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
     });
     el.addEventListener('touchstart',function(e){
@@ -591,7 +813,7 @@ class RoomOverlayCard extends HTMLElement{
       const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
       let moved=false;
       function onTMove(e){const t=e.touches[0],dx=t.clientX-startX,dy=t.clientY-startY;if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;moved=true;e.preventDefault();e.stopPropagation();el.style.top=Math.max(0,Math.min(98,startTop+dy/rect.height*100)).toFixed(1)+'%';el.style.left=Math.max(0,Math.min(98,startLeft+dx/rect.width*100)).toFixed(1)+'%';}
-      function onTEnd(){el.removeEventListener('touchmove',onTMove);el.removeEventListener('touchend',onTEnd);if(moved){dragOccurred=true;onDrop(el.style.top,el.style.left);}}
+      function onTEnd(){el.removeEventListener('touchmove',onTMove);el.removeEventListener('touchend',onTEnd);if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
       el.addEventListener('touchmove',onTMove,{passive:false});el.addEventListener('touchend',onTEnd);
     },{passive:true});
     // Suppress click after drag — capture phase fires before zone/icon tap listeners
@@ -616,13 +838,13 @@ class RoomOverlayCard extends HTMLElement{
           _pct=Math.max(0,Math.min(100,(_rv-_mn)/(_mx-_mn)*100));
           break;
         }
-        _bf=_pct!==null?lerpFilterGradient(_bm.filter_gradient,_pct):'none';
+        _bf=_pct!==null?lerpFilterGradient(this._sortedBmFg||_bm.filter_gradient,_pct,!!this._sortedBmFg):'none';
       }else{
         _bf=c.filter_conditions?.length?(flipped?resolveFilterInverted(c.filter_conditions,s):resolveFilter(c.filter_conditions,s)):'none';
       }
-      this._baseEl.style.filter=_bf;
-      // Conditional base image
-      if(c.base_image_conditions?.length){
+      setSt(this._baseEl,'filter',_bf);
+      // Conditional base image (static images only — base_camera drives its own refresh)
+      if(c.base_image_conditions?.length&&!c.base_camera){
         let _bimg=c.base_image;
         for(const bc of c.base_image_conditions){
           if(bc.condition===undefined){_bimg=bc.image;continue;}
@@ -633,68 +855,102 @@ class RoomOverlayCard extends HTMLElement{
     }
     for(const ov of(c.overlays||[])){
       const el=this._ovEls[ov.id];if(!el)continue;
+      const gShow=!ov.group||(this._groupState[ov.group]??true);
+      this._setGrpVis(el,gShow);
+      if(!gShow)continue;
       const img=this._ovImg(ov);
       if(img){const bg='url(\''+img+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
       const rawOp=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
       const showOp=flipped?String(rawOp>0.5?0:1):String(rawOp);if(parseFloat(showOp)>0&&ov.animation){el.style.animation='roc-'+ov.animation+' '+(ov.animation==='blink'?'1s step-end':'2s ease-in-out')+' infinite';el.style.opacity='';}else{el.style.animation='none';el.style.opacity=showOp;}
       el.style.filter=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
     }
-    // Group panels
+    // Weather overlay
+    if(this._wxEl&&c.weather_overlay){
+      const wx=typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay;
+      let eff=wx.effect&&wx.effect!=='auto'?wx.effect:null;
+      if(!eff&&wx.entity){
+        const wst=s[wx.entity]?.state;
+        eff=({rainy:'rain',pouring:'rain','lightning-rainy':'rain',hail:'snow',snowy:'snow','snowy-rainy':'snow'})[wst]||null;
+      }
+      const wcls='layer wx'+(eff?' wx-'+eff:'');
+      if(this._wxEl.className!==wcls)this._wxEl.className=wcls;
+      setSt(this._wxEl,'opacity',eff?String(wx.opacity??0.45):'0');
+    }
+    // Group panels (fade via visibility/opacity)
     for(const g of(c.groups||[])){
-      if(g.style&&this._grpPanelEls[g.id])this._grpPanelEls[g.id].style.display=(this._groupState[g.id]??false)?'block':'none';
+      if(g.style&&this._grpPanelEls[g.id])this._setGrpVis(this._grpPanelEls[g.id],this._groupState[g.id]??false);
     }
     for(const z of(c.zones||[])){
       const el=this._zoneEls[z.id];if(!el)continue;
-      if(z.group&&!(this._groupState[z.group]??true)){el.style.display='none';continue;}
-      el.style.display=(z.visible&&!evalCond(z.visible,s))?'none':'';
+      const gShow=!z.group||(this._groupState[z.group]??true);
+      this._setGrpVis(el,gShow);
+      if(!gShow)continue;
+      setSt(el,'display',(z.visible&&!evalCond(z.visible,s))?'none':'');
     }
     for(const b of(c.badges||[])){
-      const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
-      if(bel&&b.group&&!(this._groupState[b.group]??true)){bel.style.display='none';continue;}
-      if(bel&&b.visible)bel.style.display=evalCond(b.visible,s)?'flex':'none';
+      const bel=this._bcontEls[b.id];if(!bel)continue;
+      const gShow=!b.group||(this._groupState[b.group]??true);
+      this._setGrpVis(bel,gShow);
+      if(!gShow)continue;
+      setSt(bel,'display',b.visible?(evalCond(b.visible,s)?'flex':'none'):'flex');
       const iel=this._biconEls[b.id];
-      if(iel&&b.icon_color)iel.style.color=resolveVal(b.icon_color,s,'white');
+      if(iel&&b.icon_color)setSt(iel,'color',resolveVal(b.icon_color,s,'white'));
       const lel=this._blabelEls[b.id];
       if(lel&&b.label){const t=resolveVal(b.label,s,'');if(lel.textContent!==t)lel.textContent=t;}
     }
     const _icoW=this.offsetWidth||300;
     for(const ico of(c.icons||[])){
       const el=this._icoEls[ico.id];if(!el)continue;
-      if(ico.group&&!(this._groupState[ico.group]??true)){el.style.display='none';continue;}
-      if(ico.visible)el.style.display=evalCond(ico.visible,s)?'flex':'none';
-      else el.style.display='flex';
+      const gShow=!ico.group||(this._groupState[ico.group]??true);
+      this._setGrpVis(el,gShow);
+      if(!gShow)continue;
+      setSt(el,'display',ico.visible?(evalCond(ico.visible,s)?'flex':'none'):'flex');
       const haicon=el.querySelector('ha-icon');
       if(haicon){
         const sz=resolveSize(ico.size||'20px',_icoW);
-        haicon.style.setProperty('--mdc-icon-size',sz);haicon.style.width=sz;haicon.style.height=sz;
-        if(ico.color)haicon.style.color=resolveVal(ico.color,s,'white');
+        if(haicon.style.getPropertyValue('--mdc-icon-size')!==sz){haicon.style.setProperty('--mdc-icon-size',sz);haicon.style.width=sz;haicon.style.height=sz;}
+        if(ico.color)setSt(haicon,'color',resolveVal(ico.color,s,'white'));
       }
     }
     for(const el of(c.elements||[])){
-      const card=this._cardEls[el.id],cont=this._contEls[el.id];
-      if(cont&&el.group&&!(this._groupState[el.group]??true)){cont.style.display='none';continue;}
-      let vis=true;
-      if(cont&&el.visible){vis=evalCond(el.visible,s);cont.style.display=vis?'block':'none';}
-      if(card&&vis)try{card.hass=this._hass;}catch(_){}
+      const cont=this._contEls[el.id];if(!cont)continue;
+      const gShow=!el.group||(this._groupState[el.group]??true);
+      this._setGrpVis(cont,gShow);
+      if(!gShow)continue;
+      setSt(cont,'display',el.visible?(evalCond(el.visible,s)?'block':'none'):'block');
     }
     for(const lbl of(c.labels||[])){
       const el=this._lblEls[lbl.id];if(!el)continue;
-      if(lbl.group&&!(this._groupState[lbl.group]??true)){el.style.display='none';continue;}
-      const lblVis=lbl.visible_conditions!==undefined?lbl.visible_conditions:lbl.visible;if(lblVis!==undefined)el.style.display=evalCond(lblVis,s)?'block':'none';
+      const gShow=!lbl.group||(this._groupState[lbl.group]??true);
+      this._setGrpVis(el,gShow);
+      if(!gShow)continue;
+      const lblVis=lbl.visible_conditions!==undefined?lbl.visible_conditions:lbl.visible;
+      setSt(el,'display',lblVis!==undefined?(evalCond(lblVis,s)?'block':'none'):'');
+      if(lbl.font_size){const _fs=resolveSize(lbl.font_size,_icoW);if(_fs)setSt(el,'fontSize',_fs);}
+      if(lbl.template){
+        // Text and gradient colour come from the template subscription
+        const tv=this._tmplVals[lbl.id];
+        if(tv!==undefined&&el.textContent!==tv)el.textContent=tv;
+        continue;
+      }
       const ent=s[lbl.entity];if(!ent)continue;
       const rawVal=lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state;
       const numVal=parseFloat(rawVal);
       const dispVal=!isNaN(numVal)?(lbl.decimals!==undefined?numVal.toFixed(lbl.decimals):String(Math.round(numVal))):String(rawVal??'');
-      const text=(lbl.prefix||'')+dispVal+(lbl.suffix||lbl.unit||'');
+      let _sfx=lbl.suffix||lbl.unit||'';
+      if(_sfx==='auto')_sfx=ent.attributes.unit_of_measurement?' '+ent.attributes.unit_of_measurement:'';
+      const text=(lbl.prefix||'')+dispVal+_sfx;
       if(el.textContent!==text)el.textContent=text;
-      if(lbl.color_gradient){const _lv=parseFloat(lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state);if(!isNaN(_lv))el.style.color=lerpColorGradient(lbl.color_gradient,_lv);}else if(lbl.color)el.style.color=Array.isArray(lbl.color)?resolveVal(lbl.color,s,'white'):lbl.color;
+      if(lbl.color_gradient){const _lv=parseFloat(lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state);if(!isNaN(_lv))setSt(el,'color',lerpColorGradient(this._sortedLblGrads[lbl.id]||lbl.color_gradient,_lv,!!this._sortedLblGrads[lbl.id]));}else if(lbl.color)setSt(el,'color',Array.isArray(lbl.color)?resolveVal(lbl.color,s,'white'):lbl.color);
     }
     const _allGaugesUp=[...(c.gauges||[]),...(this._blindGaugeCfgs||[])];
     for(const g of _allGaugesUp){
       const el=this._gaugeEls[g.id];if(!el)continue;
-      if(g.group&&!(this._groupState[g.group]??true)){el.style.display='none';continue;}
+      const gShow=!g.group||(this._groupState[g.group]??true);
+      this._setGrpVis(el,gShow);
+      if(!gShow)continue;
       const gVis=g.visible_conditions!==undefined?g.visible_conditions:g.visible;
-      if(gVis!==undefined)el.style.display=evalCond(gVis,s)?'block':'none';
+      setSt(el,'display',gVis!==undefined?(evalCond(gVis,s)?'block':'none'):'');
       if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
       const val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
@@ -702,7 +958,19 @@ class RoomOverlayCard extends HTMLElement{
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=this._gaugeFills[g.id];
-      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}else{const _go=g.orientation||'vertical';if(_go==='horizontal')fill.style.width=(Math.round(pct*1000)/10)+'%';else if(_go==='right'){fill.style.width=(Math.round(pct*1000)/10)+'%';}else fill.style.height=(Math.round(pct*1000)/10)+'%';if(g.color_gradient)fill.style.background=lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val);else if(g.color){const _gc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;fill.style.background=_gc;}}}
+      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
+      else if((g.orientation||'vertical')==='radial'){
+        const meta=this._radialMeta[g.id];
+        if(meta){
+          const dash=(pct*meta.arcLen).toFixed(2)+' '+meta.circ.toFixed(2);
+          if(fill.getAttribute('stroke-dasharray')!==dash)fill.setAttribute('stroke-dasharray',dash);
+          let _rc=null;
+          if(g.color_gradient)_rc=lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val,!!this._sortedGrads[g.id]);
+          else if(g.color)_rc=Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color;
+          if(_rc&&fill.getAttribute('stroke')!==_rc)fill.setAttribute('stroke',_rc);
+        }
+      }
+      else{const _go=g.orientation||'vertical';const _pv=(Math.round(pct*1000)/10)+'%';if(_go==='horizontal'||_go==='right')setSt(fill,'width',_pv);else setSt(fill,'height',_pv);if(g.color_gradient)setSt(fill,'background',lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val,!!this._sortedGrads[g.id]));else if(g.color)setSt(fill,'background',Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color);}}
     }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
@@ -726,12 +994,23 @@ class RoomOverlayCard extends HTMLElement{
 
   _exec(tapAction,event){
     if(!tapAction)return;
-    event.stopPropagation();event.preventDefault();
+    if(event){event.stopPropagation();event.preventDefault();}
     const a=this._resolveAct(tapAction);
+    if(!a||a.action==='none')return;
+    if(a.confirmation){
+      const _ct=typeof a.confirmation==='object'?(a.confirmation.text||'Are you sure?'):'Are you sure?';
+      if(!window.confirm(_ct))return;
+    }
+    if(this._config.haptic!==false)try{window.dispatchEvent(new CustomEvent('haptic',{detail:'light'}));}catch(_){}
     switch(a.action){
       case'navigate':{const p=a.navigation_path||a.path;if(p){history.pushState(null,'',p);window.dispatchEvent(new PopStateEvent('popstate'));}}break;
+      case'url':{const u=a.url_path||a.url;if(u)window.open(u,a.new_tab===false?'_self':'_blank');}break;
       case'more-info':if(a.entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:a.entity}}));break;
-      case'call-service':if(a.service){const d=a.service.indexOf('.');this._hass.callService(a.service.slice(0,d),a.service.slice(d+1),a.service_data??{});}break;
+      case'perform-action':
+      case'call-service':{
+        const svc=a.perform_action||a.service;
+        if(svc){const d=svc.indexOf('.');this._hass.callService(svc.slice(0,d),svc.slice(d+1),a.data??a.service_data??{},a.target);}
+      }break;
       case'browser-mod-popup':{const _bmData={title:a.title??'',size:a.size??'normal',content:a.content??{}};const _bmId=window.browser_mod?.browserID||window.browser_mod?.browser_id;if(_bmId)_bmData.browser_id=_bmId;this._hass.callService('browser_mod','popup',_bmData);}break;
       case'toggle':if(a.entity)this._hass.callService('homeassistant','toggle',{entity_id:a.entity});break;
       case'toggle-group':
@@ -751,8 +1030,22 @@ class RoomOverlayCard extends HTMLElement{
   }
   disconnectedCallback(){
     if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
+    if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
+    if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
+    this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
     if(this._io){this._io.disconnect();this._io=null;}
+  }
+
+  connectedCallback(){
+    // Re-attach observers & subscriptions after the element is moved back into the DOM
+    if(this._rendered&&this._config){
+      if(this._io)this._io.observe(this);
+      if(this._ro)this._ro.observe(this);
+      this._startCamera();
+      if(!this._tmplUnsubs.length)this._setupTemplates();
+      if(this._hlHandler)window.addEventListener('roc-highlight',this._hlHandler);
+    }
   }
 }
 
@@ -760,9 +1053,136 @@ customElements.define('room-overlay-card',RoomOverlayCard);
 
 
 
+// ----- Minimal YAML subset (dump + parse) -----------------------------------
+// HA frontend does not expose a global YAML library, so the editor ships its
+// own small implementation covering plain mappings, lists, nesting and scalars.
+// window.YAML is still preferred when some other resource provides it.
+function _yScalar(v){
+  if(v===null||v===undefined)return'null';
+  if(typeof v==='boolean'||typeof v==='number')return String(v);
+  const s=String(v);
+  if(s===''||/[:#{}\[\]&*!|>'"%@`]/.test(s)||/^[\s-]|\s$/.test(s)||/^(true|false|null|~|yes|no|on|off)$/i.test(s)||/^[+-]?[\d.]/.test(s))
+    return"'"+s.replace(/'/g,"''")+"'";
+  return s;
+}
+function _yDump(v,ind){
+  ind=ind||0;
+  const pad='  '.repeat(ind);
+  if(v===null||v===undefined)return'null';
+  if(Array.isArray(v)){
+    if(!v.length)return'[]';
+    return v.map(function(it){
+      if(it&&typeof it==='object'&&((Array.isArray(it)&&it.length)||(!Array.isArray(it)&&Object.keys(it).length))){
+        const sub=_yDump(it,ind+1);
+        return pad+'- '+sub.slice((ind+1)*2);
+      }
+      if(it&&typeof it==='object')return pad+'- '+(Array.isArray(it)?'[]':'{}');
+      return pad+'- '+_yScalar(it);
+    }).join('\n');
+  }
+  if(typeof v==='object'){
+    const ks=Object.keys(v);
+    if(!ks.length)return'{}';
+    return ks.map(function(k){
+      const val=v[k];
+      if(val&&typeof val==='object'&&((Array.isArray(val)&&val.length)||(!Array.isArray(val)&&Object.keys(val).length)))
+        return pad+k+':\n'+_yDump(val,ind+1);
+      return pad+k+': '+_yScalar(Array.isArray(val)?'[]':(val&&typeof val==='object'?'{}':val)).replace(/^'(\[\]|\{\})'$/,'$1');
+    }).join('\n');
+  }
+  return _yScalar(v);
+}
+function _yParseScalar(s){
+  s=s.trim();
+  if(s==='')return null;
+  if(s.length>1&&(s[0]==="'"||s[0]==='"')&&s[s.length-1]===s[0]){
+    const q=s[0];s=s.slice(1,-1);
+    return q==="'"?s.replace(/''/g,"'"):s.replace(/\\"/g,'"');
+  }
+  if(s==='null'||s==='~')return null;
+  if(s==='true')return true;
+  if(s==='false')return false;
+  if(s==='[]')return[];
+  if(s==='{}')return{};
+  if(/^[+-]?\d+$/.test(s))return parseInt(s,10);
+  if(/^[+-]?\d*\.\d+$/.test(s))return parseFloat(s);
+  if((s[0]==='{'&&s[s.length-1]==='}')||(s[0]==='['&&s[s.length-1]===']')){
+    try{return JSON.parse(s);}catch(_){}
+    const inner=s.slice(1,-1).trim();
+    if(s[0]==='{'){
+      const o={};if(!inner)return{};
+      inner.split(',').forEach(function(p){const ci=p.indexOf(':');if(ci>0)o[p.slice(0,ci).trim()]=_yParseScalar(p.slice(ci+1));});
+      return o;
+    }
+    if(!inner)return[];
+    return inner.split(',').map(_yParseScalar);
+  }
+  return s;
+}
+function _yParse(text){
+  const _t0=text.trim();
+  if((_t0[0]==='{'||_t0[0]==='[')&&!_t0.includes('\n'))return _yParseScalar(_t0);
+  const lines=text.split('\n').map(function(l){return l.replace(/\t/g,'  ').replace(/\r$/,'');})
+    .filter(function(l){return l.trim()!==''&&!/^\s*#/.test(l);});
+  if(!lines.length)return null;
+  let i=0;
+  function indentOf(l){return l.match(/^ */)[0].length;}
+  function parseBlock(ind){
+    const isList=/^\s*-(\s|$)/.test(lines[i]);
+    if(isList){
+      const arr=[];
+      while(i<lines.length){
+        const l=lines[i],li=indentOf(l);
+        if(li<ind||!/^\s*-(\s|$)/.test(l)||li>ind)
+          {if(li>ind)throw new Error('bad indent');break;}
+        const rest=l.replace(/^\s*-\s?/,'');
+        if(rest.trim()===''){
+          i++;
+          arr.push(i<lines.length&&indentOf(lines[i])>ind?parseBlock(indentOf(lines[i])):null);
+        }else if(/^[^:'"]+:(\s|$)/.test(rest)){
+          lines[i]=' '.repeat(ind+2)+rest;
+          arr.push(parseBlock(ind+2));
+        }else{
+          arr.push(_yParseScalar(rest));i++;
+        }
+      }
+      return arr;
+    }
+    const obj={};
+    while(i<lines.length){
+      const l=lines[i],li=indentOf(l);
+      if(li<ind)break;
+      if(li>ind)throw new Error('bad indent');
+      if(/^\s*-(\s|$)/.test(l))break;
+      const ci=l.indexOf(':');
+      if(ci<0)throw new Error('bad line: '+l);
+      const key=l.slice(0,ci).trim().replace(/^['"]|['"]$/g,'');
+      const val=l.slice(ci+1);
+      if(val.trim()===''){
+        i++;
+        if(i<lines.length&&indentOf(lines[i])>ind)obj[key]=parseBlock(indentOf(lines[i]));
+        else if(i<lines.length&&/^\s*-(\s|$)/.test(lines[i])&&indentOf(lines[i])===ind)obj[key]=parseBlock(ind);
+        else obj[key]=null;
+      }else{
+        obj[key]=_yParseScalar(val);i++;
+      }
+    }
+    return obj;
+  }
+  const r=parseBlock(indentOf(lines[0]));
+  if(i<lines.length)throw new Error('unparsed trailing lines');
+  return r;
+}
 const _yaml={
-  s:function(o){try{return window.YAML?window.YAML.stringify(o):JSON.stringify(o,null,2);}catch(_){return '';}},
-  p:function(s){try{return window.YAML?window.YAML.parse(s):JSON.parse(s);}catch(_){return null;}}
+  s:function(o){
+    try{if(window.YAML&&window.YAML.stringify)return window.YAML.stringify(o);}catch(_){}
+    try{return _yDump(o,0);}catch(_){try{return JSON.stringify(o,null,2);}catch(__){return'';}}
+  },
+  p:function(s){
+    try{if(window.YAML&&window.YAML.parse){const r=window.YAML.parse(s);if(r!==undefined)return r;}}catch(_){}
+    try{return JSON.parse(s);}catch(_){}
+    try{return _yParse(s);}catch(_){return null;}
+  }
 };
 
 const FILTER_PROPS=[
@@ -794,9 +1214,33 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;}
 
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
+
+  // Parse a YAML textarea non-destructively: invalid input keeps the previous
+  // config value and flags the field red instead of silently deleting data.
+  _pYaml(el){
+    if(!el)return{ok:false,val:undefined};
+    const t=el.value.trim();
+    if(!t){el.style.borderColor='';el.title='';return{ok:true,val:undefined};}
+    const p=_yaml.p(el.value);
+    if(p===null||p===undefined){
+      el.style.borderColor='var(--error-color,#d33)';
+      el.title='Invalid YAML — previous value kept';
+      return{ok:false,val:undefined};
+    }
+    el.style.borderColor='';el.title='';
+    return{ok:true,val:p};
+  }
+
+  // <input type=color> cannot express alpha — if the picker still shows the hex
+  // of the original (possibly rgba) value, keep the original string.
+  _colorVal(el,orig){
+    if(!el)return orig;
+    if(orig&&this._toHex(orig)===el.value)return orig;
+    return el.value;
+  }
 
   setConfig(cfg){
     const prev=this._config;
@@ -833,27 +1277,51 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.dispatchEvent(new CustomEvent('config-changed',{bubbles:true,composed:true,detail:{config:Object.assign({type:'custom:room-overlay-card'},c)}}));
   }
 
+  _fireDebounced(){
+    const self=this;
+    clearTimeout(this._fdT);
+    this._fdT=setTimeout(function(){self._fire(self._collectConfig());},150);
+  }
+
   _collectConfig(){
     const c=Object.assign({},this._config);
     const self=this;
     const q=function(s){return this.querySelector(s);}.bind(this);
     const v=function(id,fb){const el=q('#'+id);return el?el.value:fb;};
     c.base_image=v('base_image',c.base_image||'');
-    const _bicEl=this.querySelector('#base_image_conditions');
-    if(_bicEl&&_bicEl.value.trim()){const _bic=_yaml.p(_bicEl.value);if(Array.isArray(_bic))c.base_image_conditions=_bic;else delete c.base_image_conditions;}else delete c.base_image_conditions;
+    if(!c.base_image)delete c.base_image;
+    const _bcam=v('base_camera','').trim();
+    if(_bcam)c.base_camera=_bcam;else delete c.base_camera;
+    const _bcr=parseFloat(v('camera_refresh',''));
+    if(_bcam&&!isNaN(_bcr)&&_bcr>0&&_bcr!==10)c.camera_refresh=_bcr;else delete c.camera_refresh;
+    const _wxEnt=v('weather_entity','').trim();
+    const _wxEff=v('weather_effect','');
+    const _wxOp=parseFloat(v('weather_opacity',''));
+    if(_wxEnt||(_wxEff&&_wxEff!=='auto')){
+      const _wo={};
+      if(_wxEnt)_wo.entity=_wxEnt;
+      if(_wxEff&&_wxEff!=='auto')_wo.effect=_wxEff;
+      if(!isNaN(_wxOp)&&_wxOp!==0.45)_wo.opacity=_wxOp;
+      const _oldWo=typeof c.weather_overlay==='object'&&c.weather_overlay?c.weather_overlay:{};
+      if(_oldWo.z_index!==undefined)_wo.z_index=_oldWo.z_index;
+      c.weather_overlay=_wo;
+    }else delete c.weather_overlay;
+    const _bicR=this._pYaml(this.querySelector('#base_image_conditions'));
+    if(_bicR.ok){if(Array.isArray(_bicR.val))c.base_image_conditions=_bicR.val;else delete c.base_image_conditions;}
     c.aspect_ratio=v('aspect_ratio','16/9');
     c.border_radius=v('border_radius','12px');
     c.filter_transition=v('filter_transition','2s ease');
     const tm=q('#test_mode');c.test_mode=tm?tm.checked:false;
-    const ta=q('#tap_action_yaml');
-    if(ta&&ta.value.trim()){const p=_yaml.p(ta.value);if(p)c.tap_action=p;else delete c.tap_action;}
-    else delete c.tap_action;
+    const _taR=this._pYaml(q('#tap_action_yaml'));
+    if(_taR.ok){if(_taR.val)c.tap_action=_taR.val;else delete c.tap_action;}
 
     const _bmSrcs=[];
     self.querySelectorAll('[data-bm-src-ent]').forEach(function(el,i){
       const _s={entity:el.value.trim()};
       const _cc=self.querySelector('[data-bm-src-cond="'+i+'"]');
-      if(_cc&&_cc.value.trim()){const _p=_yaml.p(_cc.value);if(_p)_s.condition=_p;}
+      const _ccR=self._pYaml(_cc);
+      if(_ccR.ok){if(_ccR.val)_s.condition=_ccR.val;}
+      else{const _oldS=(self._config.brightness_model?.source||[])[i];if(_oldS&&_oldS.condition)_s.condition=_oldS.condition;}
       const _at=self.querySelector('[data-bm-src-attr="'+i+'"]');
       if(_at&&_at.value.trim())_s.attribute=_at.value.trim();
       const _mn=self.querySelector('[data-bm-src-min="'+i+'"]');
@@ -908,7 +1376,15 @@ class RoomOverlayCardEditor extends HTMLElement{
         const el=block.querySelector('[data-fp="'+i+'-'+p.key+'"][data-fp-num]');
         if(el)filters[p.key]=parseFloat(el.value);
       });
-      entry.filter=buildFilterStr(filters);
+      let _ff=buildFilterStr(filters);
+      // Preserve filter functions the sliders don't cover (grayscale, invert, drop-shadow, …)
+      const _origFc=(self._config.filter_conditions||[])[i];
+      if(_origFc&&_origFc.filter&&_origFc.filter!=='none'){
+        const _known=FILTER_PROPS.map(function(p){return p.key;});
+        const _extras=(String(_origFc.filter).match(/[a-z-]+\((?:[^()]|\([^()]*\))*\)/g)||[]).filter(function(f){return!_known.includes(f.slice(0,f.indexOf('(')));});
+        if(_extras.length)_ff=(_ff==='none'?'':_ff+' ')+_extras.join(' ');
+      }
+      entry.filter=_ff;
       c.filter_conditions.push(entry);
     });
 
@@ -917,8 +1393,17 @@ class RoomOverlayCardEditor extends HTMLElement{
       const idEl=q('[data-ov-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const imgEl=q('[data-ov-img="'+i+'"]');if(imgEl){if(imgEl.value)o.image=imgEl.value;else delete o.image;}
       const trEl=q('[data-ov-tr="'+i+'"]');if(trEl)o.transition=trEl.value;const animOvEl=q('[data-ov-anim="'+i+'"]');if(animOvEl&&animOvEl.value)o.animation=animOvEl.value;else delete o.animation;
-      const yaEl=q('[data-ov-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)o.conditions=p;}
+      const grpEl=q('[data-ov-grp="'+i+'"]');if(grpEl&&grpEl.value.trim())o.group=grpEl.value.trim();else delete o.group;
+      const yaR=self._pYaml(q('[data-ov-yaml="'+i+'"]'));
+      if(yaR.ok){
+        const p=yaR.val;
+        if(p){
+          // state_images lives on the overlay root, opacity/filter under conditions
+          if(p.opacity||p.filter){o.conditions={};if(p.opacity)o.conditions.opacity=p.opacity;if(p.filter)o.conditions.filter=p.filter;}
+          else delete o.conditions;
+          if(p.state_images)o.state_images=p.state_images;else delete o.state_images;
+        }else{delete o.conditions;delete o.state_images;}
+      }
       return o;
     });
 
@@ -929,20 +1414,19 @@ class RoomOverlayCardEditor extends HTMLElement{
       const lefEl=q('[data-z-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
       const wEl=q('[data-z-w="'+i+'"]');if(wEl)o.width=wEl.value;
       const hEl=q('[data-z-h="'+i+'"]');if(hEl)o.height=hEl.value;
-      const tapEl=q('[data-z-tap="'+i+'"]');
-      if(tapEl&&tapEl.value.trim()){const p=_yaml.p(tapEl.value);if(p)o.tap_action=p;else delete o.tap_action;}
-      else delete o.tap_action;
-      const holdEl=q('[data-z-hold="'+i+'"]');
-      if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}
-      else delete o.hold_action;
-      const dtapEl=q('[data-z-dtap="'+i+'"]');
-      if(dtapEl&&dtapEl.value.trim()){const p=_yaml.p(dtapEl.value);if(p)o.double_tap_action=p;else delete o.double_tap_action;}
-      else delete o.double_tap_action;
+      const tapR=self._pYaml(q('[data-z-tap="'+i+'"]'));
+      if(tapR.ok){if(tapR.val)o.tap_action=tapR.val;else delete o.tap_action;}
+      const holdR=self._pYaml(q('[data-z-hold="'+i+'"]'));
+      if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
+      const dtapR=self._pYaml(q('[data-z-dtap="'+i+'"]'));
+      if(dtapR.ok){if(dtapR.val)o.double_tap_action=dtapR.val;else delete o.double_tap_action;}
       const hdelEl=q('[data-z-hdelay="'+i+'"]');
       if(hdelEl&&hdelEl.value&&parseInt(hdelEl.value)!==500)o.hold_delay=parseInt(hdelEl.value);else delete o.hold_delay;
-      const visEl=q('[data-z-vis="'+i+'"]');
-      if(visEl&&visEl.value.trim()){const p=_yaml.p(visEl.value);if(p)o.visible=p;else delete o.visible;}
-      else delete o.visible;
+      const visR=self._pYaml(q('[data-z-vis="'+i+'"]'));
+      if(visR.ok){if(visR.val)o.visible=visR.val;else delete o.visible;}
+      const slR=self._pYaml(q('[data-z-slider="'+i+'"]'));
+      if(slR.ok){if(slR.val&&slR.val.entity)o.slider=slR.val;else delete o.slider;}
+      const zGrpEl=q('[data-z-grp="'+i+'"]');if(zGrpEl&&zGrpEl.value.trim())o.group=zGrpEl.value.trim();else if(zGrpEl)delete o.group;
       return o;
     });
 
@@ -952,9 +1436,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       const posEl=q('[data-b-pos="'+i+'"]');if(posEl)o.position=posEl.value;
       const iconEl=q('[data-b-icon="'+i+'"]');if(iconEl){if(iconEl.value)o.icon=iconEl.value;else delete o.icon;}
       const bxEl=q('[data-b-x="'+i+'"]');if(bxEl){if(bxEl.value.trim())o.x=bxEl.value.trim();else delete o.x;}
-      const byEl=q('[data-b-y="'+i+'"]');if(byEl){if(byEl.value.trim())o.y=byEl.value.trim();else delete o.y;}const bAnimEl=q('[data-b-anim="'+i+'"]');if(bAnimEl&&bAnimEl.value)o.animation=bAnimEl.value;else delete o.animation;const bAcEl=q('[data-b-ac="'+i+'"]');if(bAcEl&&bAcEl.value&&o.animation)o.animation_color=bAcEl.value;else delete o.animation_color;
-      const yaEl=q('[data-b-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      const byEl=q('[data-b-y="'+i+'"]');if(byEl){if(byEl.value.trim())o.y=byEl.value.trim();else delete o.y;}const bAnimEl=q('[data-b-anim="'+i+'"]');if(bAnimEl&&bAnimEl.value)o.animation=bAnimEl.value;else delete o.animation;const bAcEl=q('[data-b-ac="'+i+'"]');if(bAcEl&&bAcEl.value&&o.animation)o.animation_color=self._colorVal(bAcEl,b.animation_color);else delete o.animation_color;
+      const yaR=self._pYaml(q('[data-b-yaml="'+i+'"]'));
+      if(yaR.ok){
+        // The YAML textarea owns every key except those with dedicated fields —
+        // keys removed from the textarea are removed from the config too.
+        const KEEP=['id','icon','position','x','y','animation','animation_color'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
       return o;
     });
 
@@ -966,8 +1456,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       const lefEl=q('[data-el-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
       const wEl=q('[data-el-w="'+i+'"]');if(wEl)o.width=wEl.value;
       const hEl=q('[data-el-h="'+i+'"]');if(hEl)o.height=hEl.value;
-      const yaEl=q('[data-el-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p){if(p.card)o.card=p.card;if(p.visible!==undefined)o.visible=p.visible;if(p.z_index!==undefined)o.z_index=p.z_index;if(p.border_radius)o.border_radius=p.border_radius;if(p.overflow)o.overflow=p.overflow;}}
+      const yaR=self._pYaml(q('[data-el-yaml="'+i+'"]'));
+      if(yaR.ok){
+        const KEEP=['id','top','bottom','left','width','height','group'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
       const elGrpEl=q('[data-el-grp="'+i+'"]');if(elGrpEl&&elGrpEl.value.trim())o.group=elGrpEl.value.trim();else delete o.group;
       return o;
     });
@@ -983,16 +1477,16 @@ class RoomOverlayCardEditor extends HTMLElement{
       const hdelEl=q('[data-ico-hdelay="'+i+'"]');
       if(hdelEl&&hdelEl.value&&parseInt(hdelEl.value)!==500)o.hold_delay=parseInt(hdelEl.value);else delete o.hold_delay;
       const bgEl=q('[data-ico-bg="'+i+'"]');if(bgEl&&bgEl.value.trim())o.background=bgEl.value.trim();else delete o.background;
-      const colorEl=q('[data-ico-color="'+i+'"]');
-      if(colorEl&&colorEl.value.trim()){const p=_yaml.p(colorEl.value);if(p)o.color=p;else delete o.color;}else delete o.color;
-      const visEl=q('[data-ico-vis="'+i+'"]');
-      if(visEl&&visEl.value.trim()){const p=_yaml.p(visEl.value);if(p)o.visible=p;else delete o.visible;}else delete o.visible;
-      const tapEl=q('[data-ico-tap="'+i+'"]');
-      if(tapEl&&tapEl.value.trim()){const p=_yaml.p(tapEl.value);if(p)o.tap_action=p;else delete o.tap_action;}else delete o.tap_action;
-      const dtapEl=q('[data-ico-dtap="'+i+'"]');
-      if(dtapEl&&dtapEl.value.trim()){const p=_yaml.p(dtapEl.value);if(p)o.double_tap_action=p;else delete o.double_tap_action;}else delete o.double_tap_action;
-      const holdEl=q('[data-ico-hold="'+i+'"]');
-      if(holdEl&&holdEl.value.trim()){const p=_yaml.p(holdEl.value);if(p)o.hold_action=p;else delete o.hold_action;}else delete o.hold_action;
+      const colorR=self._pYaml(q('[data-ico-color="'+i+'"]'));
+      if(colorR.ok){if(colorR.val)o.color=colorR.val;else delete o.color;}
+      const visR=self._pYaml(q('[data-ico-vis="'+i+'"]'));
+      if(visR.ok){if(visR.val)o.visible=visR.val;else delete o.visible;}
+      const tapR=self._pYaml(q('[data-ico-tap="'+i+'"]'));
+      if(tapR.ok){if(tapR.val)o.tap_action=tapR.val;else delete o.tap_action;}
+      const dtapR=self._pYaml(q('[data-ico-dtap="'+i+'"]'));
+      if(dtapR.ok){if(dtapR.val)o.double_tap_action=dtapR.val;else delete o.double_tap_action;}
+      const holdR=self._pYaml(q('[data-ico-hold="'+i+'"]'));
+      if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
       const icoGrpEl=q('[data-ico-grp="'+i+'"]');if(icoGrpEl&&icoGrpEl.value.trim())o.group=icoGrpEl.value.trim();else delete o.group;
       return o;
     });
@@ -1005,14 +1499,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       const lefEl=q('[data-lbl-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
       const entEl=q('[data-lbl-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
       const atEl=q('[data-lbl-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
-      const sfxEl=q('[data-lbl-suffix="'+i+'"]');if(sfxEl){if(sfxEl.value)o.suffix=sfxEl.value;else delete o.suffix;}const lblAnimEl=q('[data-lbl-anim="'+i+'"]');if(lblAnimEl&&lblAnimEl.value)o.animation=lblAnimEl.value;else delete o.animation;const lblAcEl=q('[data-lbl-ac="'+i+'"]');if(lblAcEl&&lblAcEl.value&&o.animation)o.animation_color=lblAcEl.value;else delete o.animation_color;
-      const yaEl=q('[data-lbl-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      const sfxEl=q('[data-lbl-suffix="'+i+'"]');if(sfxEl){if(sfxEl.value)o.suffix=sfxEl.value;else delete o.suffix;}const lblAnimEl=q('[data-lbl-anim="'+i+'"]');if(lblAnimEl&&lblAnimEl.value)o.animation=lblAnimEl.value;else delete o.animation;const lblAcEl=q('[data-lbl-ac="'+i+'"]');if(lblAcEl&&lblAcEl.value&&o.animation)o.animation_color=self._colorVal(lblAcEl,lbl.animation_color);else delete o.animation_color;
+      const tmplEl=q('[data-lbl-tmpl="'+i+'"]');
+      if(tmplEl){if(tmplEl.value.trim())o.template=tmplEl.value.trim();else delete o.template;}
+      const yaR=self._pYaml(q('[data-lbl-yaml="'+i+'"]'));
+      if(yaR.ok){
+        const KEEP=['id','top','left','entity','attribute','suffix','unit','color_gradient','animation','animation_color','group','template'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
       const lblGradStops=[];
       self.querySelectorAll('[data-l-lv^="'+i+'-"]').forEach(function(inp){
         const j=inp.dataset.lLv.split('-')[1];
         const cInp=self.querySelector('[data-l-lc="'+i+'-'+j+'"]');
-        if(cInp){const v=parseFloat(inp.value);if(!isNaN(v))lblGradStops.push({value:v,color:cInp.value});}
+        if(cInp){const v=parseFloat(inp.value);if(!isNaN(v))lblGradStops.push({value:v,color:self._colorVal(cInp,(lbl.color_gradient||[])[parseInt(j)]?.color)});}
       });
       if(lblGradStops.length)o.color_gradient=lblGradStops.sort((a,b)=>a.value-b.value);
       else delete o.color_gradient;
@@ -1031,18 +1531,22 @@ class RoomOverlayCardEditor extends HTMLElement{
       const atEl=q('[data-g-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
       const minEl=q('[data-g-min="'+i+'"]');if(minEl){const _gmn=parseFloat(minEl.value);o.min=isNaN(_gmn)?0:_gmn;}
       const maxEl=q('[data-g-max="'+i+'"]');if(maxEl){const _gmx=parseFloat(maxEl.value);o.max=isNaN(_gmx)?100:_gmx;}const orientEl=q('[data-g-orient="'+i+'"]');if(orientEl&&orientEl.value&&orientEl.value!=='vertical')o.orientation=orientEl.value;else if(orientEl&&orientEl.value==='vertical')delete o.orientation;else delete o.orientation;
-      const yaEl=q('[data-g-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      const yaR=self._pYaml(q('[data-g-yaml="'+i+'"]'));
+      if(yaR.ok){
+        const KEEP=['id','top','left','width','height','entity','attribute','min','max','color_gradient','animation','animation_color','alert_conditions','orientation','group'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
       const gradStops=[];
       self.querySelectorAll('[data-g-gv^="'+i+'-"]').forEach(function(inp){
         const j=inp.dataset.gGv.split('-')[1];
         const cInp=self.querySelector('[data-g-gc="'+i+'-'+j+'"]');
-        if(cInp){const v=parseFloat(inp.value);if(!isNaN(v))gradStops.push({value:v,color:cInp.value});}
+        if(cInp){const v=parseFloat(inp.value);if(!isNaN(v))gradStops.push({value:v,color:self._colorVal(cInp,(g.color_gradient||[])[parseInt(j)]?.color)});}
       });
       if(gradStops.length)o.color_gradient=gradStops.sort((a,b)=>a.value-b.value);
       else delete o.color_gradient;
       const gAnimEl=q('[data-g-anim="'+i+'"]');if(gAnimEl&&gAnimEl.value)o.animation=gAnimEl.value;else delete o.animation;
-      const gAcEl=q('[data-g-ac="'+i+'"]');if(gAcEl&&gAcEl.value&&o.animation)o.animation_color=gAcEl.value;else delete o.animation_color;
+      const gAcEl=q('[data-g-ac="'+i+'"]');if(gAcEl&&gAcEl.value&&o.animation)o.animation_color=self._colorVal(gAcEl,g.animation_color);else delete o.animation_color;
       const gAlertEntEl=q('[data-g-alert-ent="'+i+'"]');const gAlertOpEl=q('[data-g-alert-op="'+i+'"]');const gAlertValEl=q('[data-g-alert-val="'+i+'"]');
       const gAlertAttrEl=q('[data-g-alert-attr="'+i+'"]');
       if(gAlertEntEl&&gAlertEntEl.value.trim()&&gAlertOpEl&&gAlertOpEl.value&&gAlertValEl&&gAlertValEl.value.trim()){const _ac={entity:gAlertEntEl.value.trim(),operator:gAlertOpEl.value,value:parseFloat(gAlertValEl.value)};if(gAlertAttrEl&&gAlertAttrEl.value.trim())_ac.attribute=gAlertAttrEl.value.trim();o.alert_conditions=_ac;}else delete o.alert_conditions;
@@ -1067,8 +1571,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       const swEl=q('[data-bl-slat-w="'+i+'"]');if(swEl&&swEl.value)o.slat_width=parseFloat(swEl.value)||7;else delete o.slat_width;
       const sgEl=q('[data-bl-slat-g="'+i+'"]');if(sgEl&&sgEl.value)o.slat_gap=parseFloat(sgEl.value)||6;else delete o.slat_gap;
       const gcEl=q('[data-bl-gap-color="'+i+'"]');if(gcEl&&gcEl.value.trim())o.gap_color=gcEl.value.trim();else delete o.gap_color;
-      const yaEl=q('[data-bl-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p)Object.assign(o,p);}
+      const yaR=self._pYaml(q('[data-bl-yaml="'+i+'"]'));
+      if(yaR.ok){
+        const KEEP=['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
       const blGrpEl=q('[data-bl-grp="'+i+'"]');if(blGrpEl&&blGrpEl.value.trim())o.group=blGrpEl.value.trim();else delete o.group;
       return o;
     });
@@ -1078,15 +1586,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       const idEl=q('[data-grp-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const visEl=q('[data-grp-vis="'+i+'"]');if(visEl)o.visible=visEl.checked;
       const gcEl=q('[data-grp-gc="'+i+'"]');if(gcEl&&gcEl.value.trim())o.grouping_code=parseInt(gcEl.value,10);else delete o.grouping_code;
-      const yaEl=q('[data-grp-yaml="'+i+'"]');
-      if(yaEl&&yaEl.value.trim()){const p=_yaml.p(yaEl.value);if(p&&p.style)o.style=p.style;else delete o.style;}else delete o.style;
+      const yaR=self._pYaml(q('[data-grp-yaml="'+i+'"]'));
+      if(yaR.ok){if(yaR.val&&yaR.val.style)o.style=yaR.val.style;else delete o.style;}
       return o;
     });
 
     return c;
   }
 
-  _inp(s){return ' style="width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;'+s+'"';}
+  _inp(s){return ' class="roc-in"'+(s?' style="'+s+'"':'');}
+
+  _mvBtns(kind,i){
+    const st='padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;margin-top:8px;margin-right:6px;';
+    return'<button data-mv="'+kind+':'+i+':-1" title="Move up" style="'+st+'">&#9650;</button><button data-mv="'+kind+':'+i+':1" title="Move down" style="'+st+'">&#9660;</button>';
+  }
 
   _condFields(prefix,i,c){
     // renders entity + op + val fields for a sub-condition (and/or)
@@ -1148,25 +1661,29 @@ class RoomOverlayCardEditor extends HTMLElement{
   }
 
   _ovItem(ov,i){
-    const condYaml=ov.conditions?_yaml.s(ov.conditions):'';
+    const condView=Object.assign({},ov.conditions||{});
+    if(ov.state_images)condView.state_images=ov.state_images;
+    const condYaml=Object.keys(condView).length?_yaml.s(condView):'';
     const ovOpen=this._openPanels&&this._openPanels.has('ov-'+i);
     let h='<details style="margin-bottom:6px;" data-panel="ov-'+i+'"'+(ovOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Overlay: '+this._e(ov.id||'ov_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-ov-id="'+i+'" type="text" value="'+this._e(ov.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Image URL</label><input data-ov-img="'+i+'" type="text" value="'+this._e(ov.image||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Transition</label><input data-ov-tr="'+i+'" type="text" value="'+this._e(ov.transition||'2s ease')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">ID</label><input data-ov-id="'+i+'" type="text" value="'+this._e(ov.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Image URL</label><input data-ov-img="'+i+'" type="text" value="'+this._e(ov.image||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Transition</label><input data-ov-tr="'+i+'" type="text" value="'+this._e(ov.transition||'2s ease')+'"'+this._inp('')+'></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation</label>';
+    h+='<div><label class="roc-l">Animation</label>';
     h+='<select data-ov-anim="'+i+'"'+this._inp('')+'>';
     h+='<option value=""'+(!ov.animation?' selected':'')+'>none</option>';
     h+='<option value="pulse"'+(ov.animation==="pulse"?' selected':'')+'>pulse (fade in/out)</option>';
     h+='<option value="blink"'+(ov.animation==="blink"?' selected':'')+'>blink (hard on/off)</option>';
     h+='</select></div></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Conditions YAML (opacity / filter / state_images)</label>';
+    h+='<div><label class="roc-l">Conditions YAML (opacity / filter / state_images)</label>';
     h+='<textarea data-ov-yaml="'+i+'" rows="5"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(condYaml)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-ov-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ov.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('ov',i);
     h+='<button data-rm-ov="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove overlay</button>';
     h+='</div></details>';
     return h;
@@ -1182,19 +1699,25 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Zone: '+this._e(z.id||'zone_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-z-id="'+i+'" type="text" value="'+this._e(z.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-z-top="'+i+'" type="text" value="'+this._e(z.top||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-z-left="'+i+'" type="text" value="'+this._e(z.left||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-z-w="'+i+'" type="text" value="'+this._e(z.width||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-z-h="'+i+'" type="text" value="'+this._e(z.height||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_delay (ms)</label><input data-z-hdelay="'+i+'" type="number" value="'+this._e(String(z.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">ID</label><input data-z-id="'+i+'" type="text" value="'+this._e(z.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Top</label><input data-z-top="'+i+'" type="text" value="'+this._e(z.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Left</label><input data-z-left="'+i+'" type="text" value="'+this._e(z.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Width</label><input data-z-w="'+i+'" type="text" value="'+this._e(z.width||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Height</label><input data-z-h="'+i+'" type="text" value="'+this._e(z.height||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">hold_delay (ms)</label><input data-z-hdelay="'+i+'" type="number" value="'+this._e(String(z.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea data-z-tap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">double_tap_action (YAML)</label><textarea data-z-dtap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">tap_action (YAML)</label><textarea data-z-tap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">double_tap_action (YAML)</label><textarea data-z-dtap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
     h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px;">';
+    const sliderYaml=z.slider?_yaml.s(z.slider):'';
+    h+='<div><label class="roc-l">slider (YAML — drag on zone sets light/cover/number; keys: entity, direction, live, min, max, color, invert)</label><textarea data-z-slider="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(sliderYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">Group (optional)</label><input data-z-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(z.group||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+=this._mvBtns('z',i);
     h+='<button data-dup-z="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-z="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove zone</button>';
     h+='</div></details>';
@@ -1202,35 +1725,36 @@ class RoomOverlayCardEditor extends HTMLElement{
   }
 
   _badgeItem(b,i){
-    const bCopy=Object.assign({},b);delete bCopy.id;delete bCopy.icon;delete bCopy.position;
+    const bCopy=Object.assign({},b);delete bCopy.id;delete bCopy.icon;delete bCopy.position;delete bCopy.x;delete bCopy.y;delete bCopy.animation;delete bCopy.animation_color;
     const bYaml=Object.keys(bCopy).length?_yaml.s(bCopy):'';
     const bOpen=this._openPanels&&this._openPanels.has('b-'+i);
     let h='<details style="margin-bottom:6px;" data-panel="b-'+i+'"'+(bOpen?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Badge: '+this._e(b.id||'badge_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-b-id="'+i+'" type="text" value="'+this._e(b.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Icon (mdi:...)</label><input data-b-icon="'+i+'" type="text" value="'+this._e(b.icon||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Position</label>';
+    h+='<div><label class="roc-l">ID</label><input data-b-id="'+i+'" type="text" value="'+this._e(b.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon (mdi:...)</label><input data-b-icon="'+i+'" type="text" value="'+this._e(b.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Position</label>';
     h+='<select data-b-pos="'+i+'"'+this._inp('')+'>';
     const bp=b.position||'bottom-left';
     ['bottom-left','bottom-right','top-left','top-right','custom'].forEach(function(p){h+='<option value="'+p+'"'+(bp===p?' selected':'')+'>'+p+'</option>';});
     h+='</select></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">X (custom pos)</label><input data-b-x="'+i+'" type="text" placeholder="e.g. 30%" value="'+this._e(b.x||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Y (custom pos)</label><input data-b-y="'+i+'" type="text" placeholder="e.g. 15%" value="'+this._e(b.y||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">X (custom pos)</label><input data-b-x="'+i+'" type="text" placeholder="e.g. 30%" value="'+this._e(b.x||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Y (custom pos)</label><input data-b-y="'+i+'" type="text" placeholder="e.g. 15%" value="'+this._e(b.y||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation</label>';
+    h+='<div><label class="roc-l">Animation</label>';
     h+='<select data-b-anim="'+i+'"'+this._inp('')+'>';
     h+='<option value=""'+(!b.animation?' selected':'')+'>none</option>';
     h+='<option value="pulse"'+(b.animation==="pulse"?' selected':'')+'>pulse</option>';
     h+='<option value="blink"'+(b.animation==="blink"?' selected':'')+'>blink</option>';
     h+='</select></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation color (glow)</label>';
+    h+='<div><label class="roc-l">Animation color (glow)</label>';
     h+='<input type="color" data-b-ac="'+i+'" value="'+(b.animation_color?this._toHex(b.animation_color):'#ff4444')+'"'+this._inp('height:32px;cursor:pointer;')+'></div>';
     h+='</div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">label / visible / icon_color / tap_action (YAML)</label>';
+    h+='<div><label class="roc-l">label / visible / icon_color / tap_action / group (YAML)</label>';
     h+='<textarea data-b-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(bYaml)+'</textarea></div>';
+    h+=this._mvBtns('b',i);
     h+='<button data-rm-b="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove badge</button>';
     h+='</div></details>';
     return h;
@@ -1249,16 +1773,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Element: '+this._e(el.id||'el_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-el-id="'+i+'" type="text" value="'+this._e(el.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top (or use Bottom)</label><input data-el-top="'+i+'" type="text" placeholder="e.g. 10%" value="'+this._e(el.top||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Bottom (alternative to Top)</label><input data-el-bot="'+i+'" type="text" placeholder="e.g. 0%" value="'+this._e(el.bottom||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-el-left="'+i+'" type="text" value="'+this._e(el.left||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-el-w="'+i+'" type="text" value="'+this._e(el.width||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-el-h="'+i+'" type="text" value="'+this._e(el.height||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">ID</label><input data-el-id="'+i+'" type="text" value="'+this._e(el.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Top (or use Bottom)</label><input data-el-top="'+i+'" type="text" placeholder="e.g. 10%" value="'+this._e(el.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Bottom (alternative to Top)</label><input data-el-bot="'+i+'" type="text" placeholder="e.g. 0%" value="'+this._e(el.bottom||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Left</label><input data-el-left="'+i+'" type="text" value="'+this._e(el.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Width</label><input data-el-w="'+i+'" type="text" value="'+this._e(el.width||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Height</label><input data-el-h="'+i+'" type="text" value="'+this._e(el.height||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">card / visible / z_index / border_radius (YAML)</label>';
+    h+='<div><label class="roc-l">card / visible / z_index / border_radius (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
-    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
+    h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('el',i);
     h+='<button data-dup-el="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
     h+='</div></details>';
@@ -1276,70 +1801,74 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Icon: '+this._e(ico.id||'ico_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-ico-id="'+i+'" type="text" value="'+this._e(ico.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Icon (mdi:...)</label><input data-ico-icon="'+i+'" type="text" value="'+this._e(ico.icon||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Size (px or %)</label><input data-ico-size="'+i+'" type="text" placeholder="20px or 2%" value="'+this._e(ico.size||'20px')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">z-index</label><input data-ico-z="'+i+'" type="number" value="'+this._e(String(ico.z_index||6))+'"'+this._inp('font-size:12px;')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Background (circle, optional)</label><input data-ico-bg="'+i+'" type="text" placeholder="rgba(0,0,0,0.55)" value="'+this._e(ico.background||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-ico-top="'+i+'" type="text" value="'+this._e(ico.top||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-ico-left="'+i+'" type="text" value="'+this._e(ico.left||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_delay (ms)</label><input data-ico-hdelay="'+i+'" type="number" value="'+this._e(String(ico.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">ID</label><input data-ico-id="'+i+'" type="text" value="'+this._e(ico.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon (mdi:...)</label><input data-ico-icon="'+i+'" type="text" value="'+this._e(ico.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Size (px or %)</label><input data-ico-size="'+i+'" type="text" placeholder="20px or 2%" value="'+this._e(ico.size||'20px')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">z-index</label><input data-ico-z="'+i+'" type="number" value="'+this._e(String(ico.z_index||6))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">Background (circle, optional)</label><input data-ico-bg="'+i+'" type="text" placeholder="rgba(0,0,0,0.55)" value="'+this._e(ico.background||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Top</label><input data-ico-top="'+i+'" type="text" value="'+this._e(ico.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Left</label><input data-ico-left="'+i+'" type="text" value="'+this._e(ico.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">hold_delay (ms)</label><input data-ico-hdelay="'+i+'" type="number" value="'+this._e(String(ico.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">color (YAML condition list)</label><textarea data-ico-color="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(colorYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">visible (YAML condition)</label><textarea data-ico-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">color (YAML condition list)</label><textarea data-ico-color="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(colorYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">visible (YAML condition)</label><textarea data-ico-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea data-ico-tap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">double_tap_action (YAML)</label><textarea data-ico-dtap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">tap_action (YAML)</label><textarea data-ico-tap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">double_tap_action (YAML)</label><textarea data-ico-dtap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
+    h+='<div><label class="roc-l">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
     h+='</div>';
-    h+='<div style="margin-bottom:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
+    h+='<div style="margin-bottom:6px;"><label class="roc-l">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('ico',i);
     h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
     h+='</div></details>';
     return h;
   }
 
-  _lblItem(lbl,i){const cp=Object.assign({},lbl);delete cp.id;delete cp.top;delete cp.left;delete cp.entity;delete cp.attribute;delete cp.suffix;delete cp.unit;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('lbl-'+i);let h='<details style="margin-bottom:6px;" data-panel="lbl-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Label: '+this._e(lbl.id||'lbl_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-lbl-id="'+i+'" type="text" value="'+this._e(lbl.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-lbl-top="'+i+'" type="text" value="'+this._e(lbl.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-lbl-left="'+i+'" type="text" value="'+this._e(lbl.left||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input type="text" list="roc-entities" data-lbl-entity="'+i+'" value="'+this._e(lbl.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional)</label><input data-lbl-attr="'+i+'" type="text" value="'+this._e(lbl.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Suffix</label><input data-lbl-suffix="'+i+'" type="text" value="'+this._e(lbl.suffix||lbl.unit||'')+'"'+this._inp('')+'></div>';h+='</div>';const ls=lbl.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-lg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<ls.length;j++){const hex=this._toHex(ls[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-l-lv="'+i+'-'+j+'" placeholder="value" value="'+ls[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-l-lc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-lg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!ls.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation</label>';
+  _lblItem(lbl,i){const cp=Object.assign({},lbl);delete cp.id;delete cp.top;delete cp.left;delete cp.entity;delete cp.attribute;delete cp.suffix;delete cp.unit;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;delete cp.group;delete cp.template;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('lbl-'+i);let h='<details style="margin-bottom:6px;" data-panel="lbl-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Label: '+this._e(lbl.id||'lbl_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label class="roc-l">ID</label><input data-lbl-id="'+i+'" type="text" value="'+this._e(lbl.id||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Top</label><input data-lbl-top="'+i+'" type="text" value="'+this._e(lbl.top||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Left</label><input data-lbl-left="'+i+'" type="text" value="'+this._e(lbl.left||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';h+='<div><label class="roc-l">Entity</label><input type="text" list="roc-entities" data-lbl-entity="'+i+'" value="'+this._e(lbl.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Attribute (optional)</label><input data-lbl-attr="'+i+'" type="text" value="'+this._e(lbl.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Suffix</label><input data-lbl-suffix="'+i+'" type="text" value="'+this._e(lbl.suffix||lbl.unit||'')+'"'+this._inp('')+'></div>';h+='</div>';const ls=lbl.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-lg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<ls.length;j++){const hex=this._toHex(ls[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-l-lv="'+i+'-'+j+'" placeholder="value" value="'+ls[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-l-lc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-lg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!ls.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Animation</label>';
     h+='<select data-lbl-anim="'+i+'"'+this._inp('')+'>';
     h+='<option value=""'+(!lbl.animation?' selected':'')+'>none</option>';
     h+='<option value="pulse"'+(lbl.animation==="pulse"?' selected':'')+'>pulse</option>';
     h+='<option value="blink"'+(lbl.animation==="blink"?' selected':'')+'>blink</option>';
     h+='</select></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation color (glow)</label>';
+    h+='<div><label class="roc-l">Animation color (glow)</label>';
     h+='<input type="color" data-lbl-ac="'+i+'" value="'+(lbl.animation_color?this._toHex(lbl.animation_color):'#ff4444')+'"'+this._inp('height:32px;cursor:pointer;')+'></div>';
     h+='</div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">font_size / font_weight / color / visible / visible_conditions / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
-    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Template (Jinja — replaces entity value, e.g. {{ states(\'sensor.x\') | round(1) }})</label><textarea data-lbl-tmpl="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(lbl.template||'')+'</textarea></div>';
+    h+='<div><label class="roc-l">font_size / font_weight / color / visible / visible_conditions / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('lbl',i);
     h+='<button data-dup-lbl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
 
-  _gaugeItem(g,i){const cp=Object.assign({},g);delete cp.id;delete cp.top;delete cp.left;delete cp.width;delete cp.height;delete cp.entity;delete cp.attribute;delete cp.min;delete cp.max;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('g-'+i);let h='<details style="margin-bottom:6px;" data-panel="g-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Gauge: '+this._e(g.id||'gauge_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-g-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-g-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-g-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-g-w="'+i+'" type="text" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-g-h="'+i+'" type="text" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input type="text" list="roc-entities" data-g-entity="'+i+'" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute</label><input data-g-attr="'+i+'" type="text" value="'+this._e(g.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min</label><input data-g-min="'+i+'" type="number" value="'+this._e(String(g.min??0))+'"'+this._inp('font-size:12px;')+'></div>';h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max</label><input data-g-max="'+i+'" type="number" value="'+this._e(String(g.max??100))+'"'+this._inp('font-size:12px;')+'></div>';h+='</div>';const gs=g.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-gg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<gs.length;j++){const hex=this._toHex(gs[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-g-gv="'+i+'-'+j+'" placeholder="value" value="'+gs[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-g-gc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-gg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!gs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Orientation</label>';
+  _gaugeItem(g,i){const cp=Object.assign({},g);delete cp.id;delete cp.top;delete cp.left;delete cp.width;delete cp.height;delete cp.entity;delete cp.attribute;delete cp.min;delete cp.max;delete cp.color_gradient;delete cp.animation;delete cp.animation_color;delete cp.alert_conditions;delete cp.orientation;delete cp.group;const ys=Object.keys(cp).length?_yaml.s(cp):'';const op=this._openPanels&&this._openPanels.has('g-'+i);let h='<details style="margin-bottom:6px;" data-panel="g-'+i+'"'+(op?' open':'')+' >';h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Gauge: '+this._e(g.id||'gauge_'+i)+'</summary>';h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label class="roc-l">ID</label><input data-g-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Top</label><input data-g-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Left</label><input data-g-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Width</label><input data-g-w="'+i+'" type="text" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Height</label><input data-g-h="'+i+'" type="text" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';h+='<div><label class="roc-l">Entity</label><input type="text" list="roc-entities" data-g-entity="'+i+'" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Attribute</label><input data-g-attr="'+i+'" type="text" value="'+this._e(g.attribute||'')+'"'+this._inp('')+'></div>';h+='<div><label class="roc-l">Min</label><input data-g-min="'+i+'" type="number" value="'+this._e(String(g.min??0))+'"'+this._inp('font-size:12px;')+'></div>';h+='<div><label class="roc-l">Max</label><input data-g-max="'+i+'" type="number" value="'+this._e(String(g.max??100))+'"'+this._inp('font-size:12px;')+'></div>';h+='</div>';const gs=g.color_gradient||[];h+='<div style="margin-bottom:8px;">';h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';h+='<label style="font-size:12px;font-weight:500;">Color gradient (smooth interpolation)</label>';h+='<button data-add-gg="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Stop</button>';h+='</div>';for(let j=0;j<gs.length;j++){const hex=this._toHex(gs[j].color);h+='<div style="display:grid;grid-template-columns:70px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';h+='<input type="number" data-g-gv="'+i+'-'+j+'" placeholder="value" value="'+gs[j].value+'"'+this._inp('font-size:12px;')+'>';h+='<input type="color" data-g-gc="'+i+'-'+j+'" value="'+hex+'" style="width:100%;height:30px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;">';h+='<button data-rm-gg="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';h+='</div>';}if(!gs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No stops yet — add stops for smooth gradient, or use \'color\' in YAML for discrete conditions.</p>';h+='</div>';h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Orientation</label>';
     h+='<select data-g-orient="'+i+'"'+this._inp('')+'>';
     h+='<option value="vertical"'+((!g.orientation||g.orientation==="vertical")?" selected":"")+'>vertical – bottom→top (default)</option>';
     h+='<option value="top"'+(g.orientation==="top"?' selected':'')+'>top – top→bottom (blind/shade)</option>';
     h+='<option value="horizontal"'+(g.orientation==="horizontal"?' selected':'')+'>horizontal – left→right</option>';
     h+='<option value="right"'+(g.orientation==="right"?' selected':'')+'>right – right→left</option>';
+    h+='<option value="radial"'+(g.orientation==="radial"?' selected':'')+'>radial – circular arc (extra YAML keys: arc, thickness, target)</option>';
     h+='</select></div></div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Alert animation (border)</label>';
+    h+='<div><label class="roc-l">Alert animation (border)</label>';
     h+='<select data-g-anim="'+i+'"'+this._inp('')+'>';
     h+='<option value=""'+(!g.animation?' selected':'')+'>none</option>';
     h+='<option value="pulse"'+(g.animation==="pulse"?' selected':'')+'>pulse</option>';
     h+='<option value="blink"'+(g.animation==="blink"?' selected':'')+'>blink</option>';
     h+='</select></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Animation color</label>';
+    h+='<div><label class="roc-l">Animation color</label>';
     h+='<input type="color" data-g-ac="'+i+'" value="'+(g.animation_color?this._toHex(g.animation_color):'#ff4444')+'"'+this._inp('height:32px;cursor:pointer;')+'></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 70px 70px;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Alert condition: entity</label>';
+    h+='<div><label class="roc-l">Alert condition: entity</label>';
     h+='<input type="text" list="roc-entities" data-g-alert-ent="'+i+'" value="'+this._e((g.alert_conditions&&g.alert_conditions.entity)||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute (optional)</label>';
+    h+='<div><label class="roc-l">Attribute (optional)</label>';
     h+='<input data-g-alert-attr="'+i+'" type="text" value="'+this._e((g.alert_conditions&&g.alert_conditions.attribute)||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Operator</label>';
+    h+='<div><label class="roc-l">Operator</label>';
     h+='<select data-g-alert-op="'+i+'"'+this._inp('font-size:12px;')+'>';
     h+='<option value=""'+(!g.alert_conditions?' selected':'')+'>&#8212;</option>';
     h+='<option value=">"'+(g.alert_conditions&&g.alert_conditions.operator===">"?' selected':'')+'>></option>';
@@ -1349,11 +1878,12 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<option value="=="'+(g.alert_conditions&&g.alert_conditions.operator==="=="?' selected':'')+'>==</option>';
     h+='<option value="!="'+(g.alert_conditions&&g.alert_conditions.operator==="!="?' selected':'')+'>!=</option>';
     h+='</select></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Value</label>';
+    h+='<div><label class="roc-l">Value</label>';
     h+='<input data-g-alert-val="'+i+'" type="number" value="'+this._e(String(g.alert_conditions&&g.alert_conditions.value!==undefined?g.alert_conditions.value:''))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
-    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">background / border_radius / transition / visible / visible_conditions / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('g',i);
     h+='<button data-dup-g="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
 
@@ -1364,42 +1894,43 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Blind: '+this._e(b.id||'blind_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-bl-id="'+i+'" type="text" value="'+this._e(b.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Top</label><input data-bl-top="'+i+'" type="text" value="'+this._e(b.top||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Left</label><input data-bl-left="'+i+'" type="text" value="'+this._e(b.left||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">ID</label><input data-bl-id="'+i+'" type="text" value="'+this._e(b.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Top</label><input data-bl-top="'+i+'" type="text" value="'+this._e(b.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Left</label><input data-bl-left="'+i+'" type="text" value="'+this._e(b.left||'')+'"'+this._inp('')+'></div>';
     h+='</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Width</label><input data-bl-w="'+i+'" type="text" value="'+this._e(b.width||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Height</label><input data-bl-h="'+i+'" type="text" value="'+this._e(b.height||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">z-index</label><input data-bl-z="'+i+'" type="number" value="'+this._e(String(b.z_index??6))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">Width</label><input data-bl-w="'+i+'" type="text" value="'+this._e(b.width||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Height</label><input data-bl-h="'+i+'" type="text" value="'+this._e(b.height||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">z-index</label><input data-bl-z="'+i+'" type="number" value="'+this._e(String(b.z_index??6))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Entity</label><input type="text" list="roc-entities" data-bl-entity="'+i+'" value="'+this._e(b.entity||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Attribute</label><input data-bl-attr="'+i+'" type="text" value="'+this._e(b.attribute||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Min</label><input data-bl-min="'+i+'" type="number" value="'+this._e(String(b.min??0))+'"'+this._inp('font-size:12px;')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Max</label><input data-bl-max="'+i+'" type="number" value="'+this._e(String(b.max??100))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">Entity</label><input type="text" list="roc-entities" data-bl-entity="'+i+'" value="'+this._e(b.entity||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Attribute</label><input data-bl-attr="'+i+'" type="text" value="'+this._e(b.attribute||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Min</label><input data-bl-min="'+i+'" type="number" value="'+this._e(String(b.min??0))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">Max</label><input data-bl-max="'+i+'" type="number" value="'+this._e(String(b.max??100))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Blind type</label><select data-bl-type="'+i+'"'+this._inp('')+'>';
+    h+='<div><label class="roc-l">Blind type</label><select data-bl-type="'+i+'"'+this._inp('')+'>';
     h+='<option value="roller"'+(type==='roller'?' selected':'')+'>roller &#8211; solid fill</option>';
     h+='<option value="day_night"'+(type==='day_night'?' selected':'')+'>day/night &#8211; striped</option>';
     h+='<option value="venetian"'+(type==='venetian'?' selected':'')+'>venetian &#8211; slats + gap</option>';
     h+='</select></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat / roller color (CSS)</label><input data-bl-slat-color="'+i+'" type="text" value="'+this._e(b.slat_color||'rgba(0,0,0,0.9)') +'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
+    h+='<div><label class="roc-l">Slat / roller color (CSS)</label><input data-bl-slat-color="'+i+'" type="text" value="'+this._e(b.slat_color||'rgba(0,0,0,0.9)') +'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
     h+='</div>';
     if(type==='day_night'){
       h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
-      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat count (number of band pairs)</label><input data-bl-slat-count="'+i+'" type="number" min="1" step="1" value="'+this._e(String(b.slat_count??6))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='<div><label class="roc-l">Slat count (number of band pairs)</label><input data-bl-slat-count="'+i+'" type="number" min="1" step="1" value="'+this._e(String(b.slat_count??6))+'"'+this._inp('font-size:12px;')+'></div>';
       h+='</div>';
     }else if(type==='venetian'){
       h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
-      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat width (px)</label><input data-bl-slat-w="'+i+'" type="number" value="'+this._e(String(b.slat_width??7))+'"'+this._inp('font-size:12px;')+'></div>';
-      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Slat gap (px)</label><input data-bl-slat-g="'+i+'" type="number" value="'+this._e(String(b.slat_gap??6))+'"'+this._inp('font-size:12px;')+'></div>';
-      h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Gap color (CSS)</label><input data-bl-gap-color="'+i+'" type="text" value="'+this._e(b.gap_color||'rgba(180,160,140,0.35)')+'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
+      h+='<div><label class="roc-l">Slat width (px)</label><input data-bl-slat-w="'+i+'" type="number" value="'+this._e(String(b.slat_width??7))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='<div><label class="roc-l">Slat gap (px)</label><input data-bl-slat-g="'+i+'" type="number" value="'+this._e(String(b.slat_gap??6))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='<div><label class="roc-l">Gap color (CSS)</label><input data-bl-gap-color="'+i+'" type="text" value="'+this._e(b.gap_color||'rgba(180,160,140,0.35)')+'"'+this._inp('font-size:12px;font-family:monospace;')+'></div>';
       h+='</div>';
     }
-    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch'].forEach(function(k){delete cpBl[k];});
+    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group'].forEach(function(k){delete cpBl[k];});
     const ysBl=Object.keys(cpBl).length?_yaml.s(cpBl):'';
-    h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
-    h+='<div style="margin-top:6px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
+    h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('bl',i);
     h+='<button data-dup-bl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-bl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove blind</button>';
     h+='</div></details>';
@@ -1428,16 +1959,28 @@ class RoomOverlayCardEditor extends HTMLElement{
     const btnStyle='padding:6px 14px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:13px;';
 
     let basicInner='<div style="display:grid;gap:8px;">';
-    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Base image URL *</label><input id="base_image" type="text" value="'+this._e(c.base_image||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Base image URL *</label><input id="base_image" type="text" value="'+this._e(c.base_image||'')+'"'+this._inp('')+'></div>';
     const _bicYaml=c.base_image_conditions?_yaml.s(c.base_image_conditions):'';
-    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
+    basicInner+='<div><label class="roc-l">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
+    basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">';
+    basicInner+='<div><label class="roc-l">Base camera (optional — live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(c.base_camera||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Camera refresh (s)</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(c.camera_refresh??10)+'"'+this._inp('')+'></div>';
+    basicInner+='</div>';
+    const _woEd=typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:(c.weather_overlay||{});
+    basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">';
+    basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-entities" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Effect</label><select id="weather_effect"'+this._inp('')+'>';
+    ['auto','rain','snow'].forEach(function(ef){basicInner+='<option value="'+ef+'"'+((_woEd.effect||'auto')===ef?' selected':'')+'>'+ef+'</option>';});
+    basicInner+='</select></div>';
+    basicInner+='<div><label class="roc-l">Opacity</label><input id="weather_opacity" type="number" step="0.05" min="0" max="1" value="'+(_woEd.opacity??0.45)+'"'+this._inp('')+'></div>';
+    basicInner+='</div>';
     basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
-    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Aspect ratio</label><input id="aspect_ratio" type="text" value="'+this._e(c.aspect_ratio||'16/9')+'"'+this._inp('')+'></div>';
-    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Border radius</label><input id="border_radius" type="text" value="'+this._e(c.border_radius||'12px')+'"'+this._inp('')+'></div>';
-    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Aspect ratio</label><input id="aspect_ratio" type="text" value="'+this._e(c.aspect_ratio||'16/9')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Border radius</label><input id="border_radius" type="text" value="'+this._e(c.border_radius||'12px')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
     basicInner+='<div style="display:flex;align-items:center;gap:8px;"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="test_mode">Test mode (show zone &amp; element outlines)</label></div>';
-    basicInner+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
     basicInner+='</div>';
 
     let filterInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Conditions are evaluated in order — first match wins. A block without an entity is the default (fallback).</p>';
@@ -1531,7 +2074,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     grpInner+='</div><button id="add-grp" style="'+btnStyle+'margin-top:4px;">+ Add group</button>';
 
     const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
-    this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist><div style="padding:8px;">'
+    this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
+      +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}</style>'
+      +'<div class="roc-ed" style="padding:8px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 8px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span><span style="font-size:11px;color:var(--secondary-text-color);">v'+ROC_VERSION+'</span></div>'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
       +sec('brightness','Brightness model (filter interpolation)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
@@ -1549,10 +2095,22 @@ class RoomOverlayCardEditor extends HTMLElement{
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
     if(c.test_mode){
-      const self=this;
-      this._rocPosHandler=function(e){self._config=e.detail.config;self._fire(e.detail.config);};
+      this._rocPosHandler=this._makeRocPosHandler();
       window.addEventListener('roc-pos-update',this._rocPosHandler);
     }
+  }
+
+  _makeRocPosHandler(){
+    const self=this;
+    return function(e){
+      const nc=e.detail&&e.detail.config;
+      if(!nc)return;
+      // Only accept updates from "our" card (two cards in test mode = cross-talk)
+      if(nc.base_image!==self._config.base_image||nc.base_camera!==self._config.base_camera)return;
+      self._config=nc;
+      self._render(); // refresh position inputs, otherwise the next edit reverts the drag
+      self._fire(nc);
+    };
   }
 
   _bindHassComponents(){
@@ -1574,7 +2132,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.querySelectorAll('[data-fp-range]').forEach(function(range){
       const num=self.querySelector('[data-fp="'+range.dataset.fp+'"][data-fp-num]');
       if(!num)return;
-      range.addEventListener('input',function(){num.value=range.value;self._fire(self._collectConfig());});
+      range.addEventListener('input',function(){num.value=range.value;self._fireDebounced();});
       num.addEventListener('change',function(){range.value=num.value;self._fire(self._collectConfig());});
     });
   }
@@ -1586,11 +2144,11 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Group: '+this._e(g.id||'group_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">ID</label><input data-grp-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label style="font-size:12px;display:block;margin-bottom:4px;">Grouping code (mutual exclusion)</label><input data-grp-gc="'+i+'" type="number" placeholder="e.g. 1" value="'+this._e(g.grouping_code!=null?String(g.grouping_code):'')+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">ID</label><input data-grp-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Grouping code (mutual exclusion)</label><input data-grp-gc="'+i+'" type="number" placeholder="e.g. 1" value="'+this._e(g.grouping_code!=null?String(g.grouping_code):'')+'"'+this._inp('font-size:12px;')+'></div>';
     h+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><label style="font-size:12px;">Initially visible</label><input data-grp-vis="'+i+'" type="checkbox"'+(g.visible?' checked':'')+' style="width:auto;cursor:pointer;"></div>';
     h+='</div>';
-    h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:block;margin-bottom:4px;">Background panel — style: (top / left / width / height / background / border_radius / z_index)</label>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Background panel — style: (top / left / width / height / background / border_radius / z_index)</label>';
     h+='<textarea data-grp-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(styleYaml)+'</textarea></div>';
     h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 8px;">Actions: <code>action: toggle-group</code>, <code>show-group</code>, <code>hide-group</code> with <code>group: '+this._e(g.id||'group_id')+'</code></p>';
     h+='<button data-rm-grp="'+i+'" style="padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove group</button>';
@@ -1602,8 +2160,42 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
 
-    ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions'].forEach(function(id){
+    ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
+    });
+    // Reorder (▲▼) — one generic handler for all item lists
+    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds'};
+    this.querySelectorAll('[data-mv]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.mv.split(':');
+        const key=_mvKinds[p[0]];if(!key)return;
+        const i=parseInt(p[1]),dir=parseInt(p[2]),j=i+dir;
+        const c=self._collectConfig();
+        const arr=c[key];
+        if(!arr||j<0||j>=arr.length)return;
+        const t=arr[i];arr[i]=arr[j];arr[j]=t;
+        // keep the moved panel open at its new index
+        if(self._openPanels){
+          const a=p[0]+'-'+i,b=p[0]+'-'+j;
+          const hadA=self._openPanels.has(a),hadB=self._openPanels.has(b);
+          if(hadA)self._openPanels.add(b);else self._openPanels.delete(b);
+          if(hadB)self._openPanels.add(a);else self._openPanels.delete(a);
+        }
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    // Editor → card highlight: opening an item panel flashes the element in the preview
+    const _hlKinds={ov:['overlays','overlay'],z:['zones','zone'],b:['badges','badge'],el:['elements','element'],ico:['icons','icon'],lbl:['labels','label'],g:['gauges','gauge'],bl:['blinds','gauge']};
+    this.querySelectorAll('details[data-panel]').forEach(function(d){
+      d.addEventListener('toggle',function(){
+        if(!d.open)return;
+        const m=d.dataset.panel.match(/^(ov|z|b|el|ico|lbl|g|bl)-(\d+)$/);
+        if(!m)return;
+        const k=_hlKinds[m[1]];
+        const item=(self._config[k[0]]||[])[parseInt(m[2])];
+        if(!item)return;
+        window.dispatchEvent(new CustomEvent('roc-highlight',{detail:{kind:k[1],id:m[1]==='bl'?'__bl_'+item.id:item.id,base_image:self._config.base_image,base_camera:self._config.base_camera}}));
+      });
     });
     const tm=this.querySelector('#test_mode');
     if(tm){
@@ -1611,7 +2203,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         // Re-register roc-pos-update listener — _render() is skipped by same-check when only test_mode toggles
         if(self._rocPosHandler){window.removeEventListener('roc-pos-update',self._rocPosHandler);self._rocPosHandler=null;}
         if(tm.checked){
-          self._rocPosHandler=function(e){self._config=e.detail.config;self._fire(e.detail.config);};
+          self._rocPosHandler=self._makeRocPosHandler();
           window.addEventListener('roc-pos-update',self._rocPosHandler);
         }
         fire();
@@ -1697,7 +2289,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml],[data-ov-anim]').forEach(function(el){
+    this.querySelectorAll('[data-ov-id],[data-ov-img],[data-ov-tr],[data-ov-yaml],[data-ov-anim],[data-ov-grp]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
@@ -1717,7 +2309,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-dtap],[data-z-hdelay],[data-z-vis]').forEach(function(el){
+    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-dtap],[data-z-hdelay],[data-z-vis],[data-z-slider],[data-z-grp]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
@@ -1777,7 +2369,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-lbl-id],[data-lbl-top],[data-lbl-left],[data-lbl-entity],[data-lbl-attr],[data-lbl-suffix],[data-lbl-yaml],[data-lbl-anim],[data-lbl-ac]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-lbl-id],[data-lbl-top],[data-lbl-left],[data-lbl-entity],[data-lbl-attr],[data-lbl-suffix],[data-lbl-yaml],[data-lbl-anim],[data-lbl-ac],[data-lbl-tmpl]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-add-lg]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.addLg);
@@ -1804,7 +2396,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-l-lv],[data-l-lc]').forEach(function(el){
-      el.addEventListener('change',fire);el.addEventListener('input',fire);
+      el.addEventListener('change',fire);el.addEventListener('input',function(){self._fireDebounced();});
     });
 
     // Gauges
@@ -1851,7 +2443,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-g-gv],[data-g-gc]').forEach(function(el){
-      el.addEventListener('change',fire);el.addEventListener('input',fire);
+      el.addEventListener('change',fire);el.addEventListener('input',function(){self._fireDebounced();});
     });
 
     // Elements
@@ -1923,6 +2515,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   }
 
   disconnectedCallback(){
+    clearTimeout(this._fdT);
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
   }
 }
