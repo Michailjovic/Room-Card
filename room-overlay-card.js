@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.3.0 — MIT License
+ * room-overlay-card v1.3.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.3.0';
+const ROC_VERSION='1.3.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -744,11 +744,10 @@ class RoomOverlayCard extends HTMLElement{
   }
 
   getGridOptions(){
-    const p=String(this._config?.aspect_ratio||'16/9').split('/');
-    let ratio=9/16;
-    if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);if(w>0&&h>0)ratio=h/w;}
-    const rows=Math.max(2,Math.min(12,Math.round(400*ratio/64)));
-    return{columns:12,rows:rows,min_columns:6,min_rows:2};
+    // `rows` intentionally NOT defined — the card's height comes from
+    // aspect_ratio (padding-bottom). Declaring rows makes the grid cell
+    // smaller than the rendered card, so following cards overlap it.
+    return{columns:12,min_columns:6};
   }
 
   _makeResizable(el,onResize){

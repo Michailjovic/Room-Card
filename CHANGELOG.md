@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.1] – 2026-06-10
+
+### Fixed
+- **Card no longer renders at the wrong height in sections view** — the
+  `getGridOptions()` introduced in 1.3.0 declared a fixed `rows` count
+  computed from an assumed card width. On wider dashboards the real card
+  (whose height is driven by `aspect_ratio`) overflowed its grid cell, so
+  following cards were laid out on top of it instead of flowing below.
+  `rows` is now intentionally omitted, which per the HA docs makes the grid
+  ignore row sizing and the card keep its natural aspect-ratio height
+  (the pre-1.3.0 behaviour), while keeping the column defaults.
+
+---
+
 ## [1.3.0] – 2026-06-10
 
 Major release: bug-fix sweep from a full code audit, performance pass, editor
