@@ -583,6 +583,44 @@ labels:
 
 ---
 
+### Mobile profiles, zoom & animations
+
+```yaml
+type: custom:room-overlay-card
+mobile_breakpoint: 600        # mobile: overrides apply below this card width
+zoom: true                    # pinch-zoom + pan (double-tap reset, Ctrl+wheel)
+
+icons:
+  - id: lamp
+    top: "30%"
+    left: "62%"
+    size: "22px"
+    fade: true                # fade in/out on visibility change
+    slide: up                 # optional directional slide (implies fade)
+    mobile:                   # alternative layout on phones
+      top: "20%"
+      left: "70%"
+      size: "30px"
+
+gauges:
+  - id: temp_ring
+    orientation: radial
+    entity: sensor.temp
+    tap_action:               # gauges & labels are now clickable
+      action: more-info
+      entity: sensor.temp
+
+overlays:
+  - id: rgb_strip
+    image: /local/strip_glow.png
+    color_from: light.tv_strip   # tint follows the light's rgb_color / color_temp
+```
+
+In test mode, **drag on an empty area** of the card to draw a new zone at that
+exact spot (rubber-band rectangle, auto-named, synced into the editor).
+
+---
+
 ## Complete example
 
 ```yaml

@@ -97,5 +97,19 @@ const twoHrs=new Date(Date.now()-2*3600*1000).toISOString();
 t('relTime hours',/2/.test(g.relTime(twoHrs,'en')));
 t('relTime invalid input',g.relTime('not-a-date','en')==='not-a-date');
 
+// ---- v1.5: mobile profiles, tint, kelvin ------------------------------------
+const mi={top:'10%',left:'20%',size:'20px',mobile:{top:'50%',size:'30px'}};
+const ma=g.mApply(mi,true);
+t('mApply active',ma.top==='50%'&&ma.size==='30px'&&ma.left==='20%');
+t('mApply inactive',g.mApply(mi,false).top==='10%');
+t('mApply no mobile key',g.mApply({top:'1%'},true).top==='1%');
+const warm=g.kelvinToRgb(2700),cold=g.kelvinToRgb(6500);
+t('kelvin warm is reddish',warm[0]===255&&warm[2]<warm[0]);
+t('kelvin cold has blue',cold[2]>200);
+const tf=g.tintFilter([255,0,0]);
+t('tintFilter format',/sepia\(1\) saturate\([\d.]+\) hue-rotate\(-?\d+deg\) brightness\([\d.]+\)/.test(tf));
+const tfB=g.tintFilter([0,0,255]);
+t('tintFilter blue rotates further',tfB.includes('hue-rotate(202deg)'));
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);

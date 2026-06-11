@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v1.4.0** (2026-06-10). Verified against Home Assistant 2026.6.
+Current release: **v1.5.0** (2026-06-10). Verified against Home Assistant 2026.6.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
@@ -18,16 +18,16 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 | 6 | **Weather effects v2** — fog, lightning, heavy tiers, wind `angle:` | ✅ |
 | 7 | **Icon preview in editor** — live `ha-icon` next to icon inputs | ✅ |
 
-## v1.5 — Layout & interaction (mid-term)
+## v1.5 — Layout & interaction — ✅ SHIPPED in v1.5.0 (2026-06-10)
 
-| # | Item | Why |
+| # | Item | Status |
 |---|---|---|
-| 8 | 🎯 **Responsive position profiles** — optional `mobile:` block (top/left/size overrides) applied under a viewport breakpoint | Phone layouts currently need a second card |
-| 9 | 💡 **Light color visualization** — overlay tint auto-derived from a light's `rgb_color` / `color_temp` | RGB lighting without one PNG per color |
-| 10 | 💡 **Draw-to-create zones** — drag on empty card area in test mode creates a zone | Faster than add-in-editor + drag + resize |
-| 11 | 💡 **Pan & pinch-zoom mode** for large floorplans on mobile | Whole-flat plans are unusable at phone width |
-| 12 | 💡 **Entrance/exit animations** per element (fade/slide on visibility change) | Group fade exists; per-element `visible` is still instant |
-| 13 | 💡 **Actions on gauges & labels** (currently `pointer-events: none`) | Tap a gauge → more-info is a natural expectation |
+| 8 | **Responsive position profiles** — `mobile:` block + `mobile_breakpoint` (600 px default) | ✅ |
+| 9 | **Light color visualization** — `color_from:` overlay tint from `rgb_color` / `color_temp_kelvin` | ✅ |
+| 10 | **Draw-to-create zones** — rubber-band drag on empty area in test mode | ✅ |
+| 11 | **Pan & pinch-zoom mode** — `zoom: true`, 1–4×, double-tap reset, Ctrl+wheel | ✅ |
+| 12 | **Entrance/exit animations** — `fade:` / `slide:` per element | ✅ |
+| 13 | **Actions on gauges & labels** — tap/hold/double-tap + keyboard | ✅ |
 
 ## v2.0 — Vision (long-term)
 

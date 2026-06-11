@@ -1,5 +1,48 @@
 # Changelog
 
+## [1.5.0] – 2026-06-10
+
+Layout & interaction release — the complete v1.5 roadmap: responsive mobile
+position profiles, light-colour overlay tinting, draw-to-create zones,
+pan & pinch-zoom floorplan mode, per-element fade/slide animations and
+actions on gauges & labels. Verified against Home Assistant 2026.6.
+
+### Added
+- **Responsive mobile profiles** — every positioned element (zones, icons,
+  labels, gauges, blinds, embedded cards, custom-positioned badges) accepts a
+  `mobile:` block overriding `top`/`left`/`width`/`height`/`size`/`font_size`
+  when the card is narrower than `mobile_breakpoint` (default 600 px). The
+  card re-renders automatically when the profile flips on resize/rotation.
+  Disabled in test mode, where dragging edits the desktop profile.
+- **Light colour visualization** — `color_from: light.x` on an overlay tints
+  the overlay image toward the light's current `rgb_color` (or
+  `color_temp_kelvin`, converted via a Tanner-Helland approximation) using a
+  computed sepia/hue-rotate filter chain. No more one PNG per colour.
+- **Draw-to-create zones** — in test mode, click-drag on an empty area of the
+  card sketches a rubber-band rectangle and creates a new zone with a unique
+  id at that exact position, synced straight into the GUI editor.
+- **Pan & pinch-zoom floorplan mode** — `zoom: true` enables two-finger
+  pinch (1–4×), one-finger panning while zoomed, double-tap reset and
+  Ctrl+wheel zoom on desktop. Taps and sliders keep working while zoomed.
+- **Entrance/exit animations** — `fade: true` (or seconds) animates
+  visibility changes of zones, icons, badges, labels, gauges and embedded
+  cards; `slide: up|down|left|right` adds a 10 px directional slide.
+  Works with `visible`, `visible_conditions` and `visible_template`.
+- **Actions on gauges and labels** — `tap_action`, `hold_action` and
+  `double_tap_action` are now supported on gauges (incl. radial) and labels;
+  elements with actions become focusable buttons (Enter/Space work).
+- **Editor** — new Basic settings fields for mobile breakpoint and
+  pan & zoom; element/gauge/label YAML hints updated; `fade`/`slide`/`mobile`
+  keys round-trip safely through the GUI editor.
+
+### Changed
+- Group fade now cooperates with per-element fade state (an element hidden by
+  its own condition stays hidden when its group reappears).
+- Smoke-test suite extended to 41 assertions (mobile merge, Kelvin→RGB,
+  tint filter).
+
+---
+
 ## [1.4.0] – 2026-06-10
 
 Feature release delivering the complete v1.4 roadmap: templates on every

@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.4.0 — MIT License
+ * room-overlay-card v1.5.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.4.0';
+const ROC_VERSION='1.5.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -34,6 +34,30 @@ function relTime(ts,lang){
   else{v=Math.trunc(s/86400);u='day';}
   try{return new Intl.RelativeTimeFormat(lang||'en',{numeric:'auto'}).format(v,u);}
   catch(_){return(s<0?'-':'+')+Math.abs(v)+' '+u;}
+}
+// Merge mobile: overrides into an item when the mobile profile is active
+function mApply(it,act){return act&&it&&it.mobile?Object.assign({},it,it.mobile):it;}
+// Approximate colour temperature (Kelvin) → RGB (Tanner Helland, compact)
+function kelvinToRgb(k){
+  k=Math.max(1000,Math.min(12000,k))/100;
+  let r,g,b;
+  r=k<=66?255:Math.min(255,Math.max(0,329.7*Math.pow(k-60,-0.1332)));
+  g=k<=66?Math.min(255,Math.max(0,99.47*Math.log(k)-161.12)):Math.min(255,Math.max(0,288.12*Math.pow(k-60,-0.0755)));
+  b=k>=66?255:(k<=19?0:Math.min(255,Math.max(0,138.52*Math.log(k-10)-305.04)));
+  return[Math.round(r),Math.round(g),Math.round(b)];
+}
+// CSS filter chain that tints a (grayscale-ish) overlay PNG toward a target RGB
+function tintFilter(rgb){
+  const r=rgb[0]/255,g=rgb[1]/255,b=rgb[2]/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+  let h=0,sat=0;const l=(mx+mn)/2;
+  if(mx!==mn){
+    const d=mx-mn;
+    sat=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    h=mx===r?((g-b)/d+(g<b?6:0)):mx===g?((b-r)/d+2):((r-g)/d+4);
+    h*=60;
+  }
+  return'sepia(1) saturate('+Math.max(0.2,sat*3).toFixed(2)+') hue-rotate('+Math.round(h-38)+'deg) brightness('+(0.6+l*0.9).toFixed(2)+')';
 }
 
 function evalCond(c,s){
@@ -170,7 +194,7 @@ class RoomOverlayCard extends HTMLElement{
     this._selectedTM=null;this._tmKeyHandler=null;
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
-    this._gdH=null;this._gdV=null;
+    this._gdH=null;this._gdV=null;this._mobActive=false;
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -210,6 +234,11 @@ class RoomOverlayCard extends HTMLElement{
     if(typeof obj.entity==='string'){
       ids.add(obj.entity);
       if(typeof obj.attribute==='string')attrs.add(obj.entity+' '+obj.attribute);
+    }
+    if(typeof obj.color_from==='string'){
+      ids.add(obj.color_from);
+      attrs.add(obj.color_from+' rgb_color');
+      attrs.add(obj.color_from+' color_temp_kelvin');
     }
     for(const v of Object.values(obj)){
       if(Array.isArray(v))v.forEach(i=>{
@@ -313,19 +342,23 @@ class RoomOverlayCard extends HTMLElement{
     this._teardownTemplates();
     this._selectedTM=null;
 
+    // Mobile position profile — active below mobile_breakpoint (disabled in test mode,
+    // where dragging edits the desktop profile)
+    const _mob=!tm&&this.offsetWidth>0&&this.offsetWidth<(c.mobile_breakpoint??600);
+    this._mobActive=_mob;
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
-    const zHtml=(c.zones||[]).map(z=>{const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
-    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+b.id+'" style="'+makeBadgePos(b)+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+b.id+'" icon="'+b.icon+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+b.id+'"></span>':'')+'</div>';}).join('');
+    const zHtml=(c.zones||[]).map(z0=>{const z=mApply(z0,_mob);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
+    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+b.id+'" style="'+makeBadgePos(mApply(b,_mob))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+b.id+'" icon="'+b.icon+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+b.id+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
-    const icoHtml=(c.icons||[]).map(ico=>{const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';const a11y=ico.tap_action?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;"></ha-icon></div>';}).join('');
+    const icoHtml=(c.icons||[]).map(ico0=>{const ico=mApply(ico0,_mob);const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';const a11y=ico.tap_action?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;"></ha-icon></div>';}).join('');
 
-    const lblHtml=(c.labels||[]).map(lbl=>{const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+lbl.id+'" style="'+st+'"></div>';}).join('');
+    const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=mApply(lbl0,_mob);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+lbl.id+'" style="'+st+'"></div>';}).join('');
     const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+escA(g.id)+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;transition:opacity .25s ease,visibility .25s ease;visibility:'+(vis?'visible':'hidden')+';opacity:'+(vis?'1':'0')+';"></div>';}).join('');
     const _wx=c.weather_overlay?(typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay):null;
     const wxHtml=_wx?'<div class="layer wx" data-wx style="z-index:'+(_wx.z_index??5)+';opacity:0;"></div>':'';
 
     this._radialMeta={};
-    const _allGaugesRC=[...(c.gauges||[]),...(c.blinds||[]).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';
+    const _allGaugesRC=[...(c.gauges||[]).map(g=>mApply(g,_mob)),...(c.blinds||[]).map(b=>mApply(b,_mob)).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';
     if(_gor==='radial'){
       const arc=Math.max(30,Math.min(360,g.arc??270)),r=42,circ=2*Math.PI*r,arcLen=circ*arc/360;
       const rot=90+(360-arc)/2,th=g.thickness??10;
@@ -345,7 +378,7 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.wx-snow.wx-heavy{background-size:80px 80px,52px 52px;animation-duration:4s;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.wx-snow.wx-heavy{background-size:80px 80px,52px 52px;animation-duration:4s;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -381,11 +414,27 @@ class RoomOverlayCard extends HTMLElement{
     for(const lbl of(c.labels||[])){
       this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+lbl.id+'"]');
       if(lbl.color_gradient)this._sortedLblGrads[lbl.id]=lbl.color_gradient.slice().sort((a,b)=>a.value-b.value);
+      const lel=this._lblEls[lbl.id];
+      if(lel&&(lbl.tap_action||lbl.hold_action||lbl.double_tap_action)){
+        lel.style.pointerEvents='auto';lel.style.cursor='pointer';
+        lel.setAttribute('tabindex','0');lel.setAttribute('role','button');
+        this._addZoneListeners(lel,lbl.tap_action,lbl.hold_action,lbl.double_tap_action,lbl.hold_delay);
+      }
     }
     this._sortedBmFg=c.brightness_model?.filter_gradient?.length?c.brightness_model.filter_gradient.slice().sort((a,b)=>a.value-b.value):null;
-    this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+bg.id+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
+    this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).map(b=>mApply(b,_mob)).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+bg.id+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
+    // Gauges with actions become interactive (default stays pointer-events: none)
+    for(const g of[...(c.gauges||[]),...this._blindGaugeCfgs]){
+      const gel=this._gaugeEls[g.id];
+      if(gel&&(g.tap_action||g.hold_action||g.double_tap_action)){
+        gel.style.pointerEvents='auto';gel.style.cursor='pointer';
+        gel.setAttribute('tabindex','0');gel.setAttribute('role','button');
+        this._addZoneListeners(gel,g.tap_action,g.hold_action,g.double_tap_action,g.hold_delay);
+      }
+    }
     this._cardEls={};this._contEls={};
-    for(const el of(c.elements||[])){
+    for(const el0 of(c.elements||[])){
+      const el=mApply(el0,_mob);
       const cont=document.createElement('div');
       cont.className='elcont';cont.setAttribute('data-el',el.id);
       const _elVPos=el.bottom!==undefined?'bottom:'+el.bottom+';':'top:'+(el.top||'0')+';';
@@ -621,6 +670,50 @@ class RoomOverlayCard extends HTMLElement{
       // Click on card background → deselect
       const _hacard=this.shadowRoot.querySelector('ha-card');
       if(_hacard)_hacard.addEventListener('click',_deselectTM);
+      // Draw-to-create: drag on an empty area sketches a new zone
+      const drawSelf=this;
+      let _dwBox=null,_dwJustDrew=false;
+      content.addEventListener('click',function(ce){if(_dwJustDrew){ce.stopImmediatePropagation();ce.preventDefault();}},true);
+      content.addEventListener('mousedown',function(e){
+        if(e.button!==0)return;
+        const t=e.target;
+        if(!(t===content||(t.classList&&t.classList.contains('layer'))))return; // only empty areas
+        const rect=content.getBoundingClientRect();
+        const sx=e.clientX,sy=e.clientY;
+        function mv(ev){
+          if(!_dwBox){
+            if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<8)return;
+            _dwBox=document.createElement('div');
+            _dwBox.style.cssText='position:absolute;border:2px dashed var(--primary-color,#03a9f4);background:rgba(3,169,244,0.12);z-index:997;pointer-events:none;';
+            content.appendChild(_dwBox);
+          }
+          _dwBox.style.left=((Math.min(sx,ev.clientX)-rect.left)/rect.width*100)+'%';
+          _dwBox.style.top=((Math.min(sy,ev.clientY)-rect.top)/rect.height*100)+'%';
+          _dwBox.style.width=(Math.abs(ev.clientX-sx)/rect.width*100)+'%';
+          _dwBox.style.height=(Math.abs(ev.clientY-sy)/rect.height*100)+'%';
+        }
+        function up(){
+          document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+          if(!_dwBox)return;
+          const l=parseFloat(_dwBox.style.left),tp=parseFloat(_dwBox.style.top),w=parseFloat(_dwBox.style.width),h=parseFloat(_dwBox.style.height);
+          _dwBox.remove();_dwBox=null;
+          _dwJustDrew=true;setTimeout(function(){_dwJustDrew=false;},300);
+          if(w<2||h<2)return; // too small — ignore accidental drags
+          const nc=JSON.parse(JSON.stringify(drawSelf._config));
+          if(!nc.zones)nc.zones=[];
+          let n=nc.zones.length+1,id='zone_'+n;
+          while(nc.zones.some(function(z){return z.id===id;})){n++;id='zone_'+n;}
+          nc.zones.push({id:id,top:tp.toFixed(1)+'%',left:l.toFixed(1)+'%',width:w.toFixed(1)+'%',height:h.toFixed(1)+'%'});
+          drawSelf._config=nc;
+          window.dispatchEvent(new CustomEvent('roc-pos-update',{detail:{config:Object.assign({type:'custom:room-overlay-card'},nc)}}));
+          drawSelf._rendered=false;drawSelf._render();
+        }
+        document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+      });
+    }
+    if(c.zoom&&!tm){
+      const wrapEl=this.shadowRoot.querySelector('.wrap');
+      if(wrapEl&&content)this._attachZoom(wrapEl,content);
     }
     // IntersectionObserver — zastav updates když karta není ve viewportu
     if(this._io)this._io.disconnect();
@@ -759,30 +852,99 @@ class RoomOverlayCard extends HTMLElement{
       });
     }
     // visible_template — zones, icons, badges, overlays, elements, gauges (incl. blinds)
-    const vis=function(key,tpl,el,showDisp){
+    const vis=function(key,tpl,el,showDisp,it){
       if(!tpl||!el)return;
       sub(tpl,function(r){
         const ok=tmplTruthy(r);
         self._tmplVis[key]=ok;
-        setSt(el,'display',ok?showDisp:'none');
+        self._setVis(el,ok,showDisp,it&&it.fade,it&&it.slide);
       });
     };
-    for(const z of(c.zones||[]))vis('z:'+z.id,z.visible_template,this._zoneEls[z.id],'');
-    for(const ico of(c.icons||[]))vis('i:'+ico.id,ico.visible_template,this._icoEls[ico.id],'flex');
-    for(const b of(c.badges||[]))vis('b:'+b.id,b.visible_template,this._bcontEls[b.id],'flex');
-    for(const ov of(c.overlays||[]))vis('o:'+ov.id,ov.visible_template,this._ovEls[ov.id],'');
-    for(const e of(c.elements||[]))vis('e:'+e.id,e.visible_template,this._contEls[e.id],'block');
-    for(const g of[...(c.gauges||[]),...(this._blindGaugeCfgs||[])])vis('g:'+g.id,g.visible_template,this._gaugeEls[g.id],'');
+    for(const z of(c.zones||[]))vis('z:'+z.id,z.visible_template,this._zoneEls[z.id],'',z);
+    for(const ico of(c.icons||[]))vis('i:'+ico.id,ico.visible_template,this._icoEls[ico.id],'flex',ico);
+    for(const b of(c.badges||[]))vis('b:'+b.id,b.visible_template,this._bcontEls[b.id],'flex',b);
+    for(const ov of(c.overlays||[]))vis('o:'+ov.id,ov.visible_template,this._ovEls[ov.id],'',null);
+    for(const e of(c.elements||[]))vis('e:'+e.id,e.visible_template,this._contEls[e.id],'block',e);
+    for(const g of[...(c.gauges||[]),...(this._blindGaugeCfgs||[])])vis('g:'+g.id,g.visible_template,this._gaugeEls[g.id],'',g);
   }
 
   _setGrpVis(el,show){
     if(!el)return;
-    const v=show?'':'hidden';
-    if(el.dataset.rocGv!==v){
-      el.dataset.rocGv=v;
+    // Respect item-level fade state (rocFv) when the group comes back
+    const v=(!show||el.dataset.rocFv==='0')?'hidden':'';
+    if(el.style.visibility!==v){
       el.style.visibility=v;
-      el.style.opacity=show?'':'0';
+      el.style.opacity=v?'0':'';
     }
+  }
+
+  // Item visibility with optional fade/slide animation.
+  // fd: true|seconds, sl: up|down|left|right (slide implies fade)
+  _setVis(el,show,disp,fd,sl){
+    if(!el)return;
+    if(!fd&&!sl){setSt(el,'display',show?disp:'none');return;}
+    setSt(el,'display',disp); // keep in layout — animate via opacity/visibility
+    if(typeof fd==='number'&&fd>0)el.style.transitionDuration=fd+'s';
+    const key=show?'1':'0';
+    if(el.dataset.rocFv!==key){
+      el.dataset.rocFv=key;
+      el.style.visibility=show?'':'hidden';
+      el.style.opacity=show?'':'0';
+      if(sl){
+        const ax=(sl==='up'||sl==='down')?'Y':'X';
+        const sign=(sl==='down'||sl==='right')?'-':'';
+        el.style.transform=show?'':'translate'+ax+'('+sign+'10px)';
+      }
+    }
+  }
+
+  _attachZoom(wrap,content){
+    const ptrs=new Map();
+    let scale=1,tx=0,ty=0,lastDist=0,lastTap=0;
+    const apply=function(){
+      const r=wrap.getBoundingClientRect();
+      const maxX=(scale-1)*r.width/2,maxY=(scale-1)*r.height/2;
+      tx=Math.max(-maxX,Math.min(maxX,tx));
+      ty=Math.max(-maxY,Math.min(maxY,ty));
+      content.style.transform=scale>1?'translate('+tx+'px,'+ty+'px) scale('+scale+')':'';
+      wrap.style.touchAction=scale>1?'none':'';
+    };
+    wrap.addEventListener('pointerdown',function(e){
+      ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(ptrs.size===2){const a=[...ptrs.values()];lastDist=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);}
+    });
+    wrap.addEventListener('pointermove',function(e){
+      if(!ptrs.has(e.pointerId))return;
+      const p=ptrs.get(e.pointerId);
+      if(ptrs.size===2){
+        ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+        const a=[...ptrs.values()];
+        const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
+        if(lastDist>0){scale=Math.max(1,Math.min(4,scale*d/lastDist));apply();}
+        lastDist=d;
+        e.preventDefault();
+      }else if(ptrs.size===1&&scale>1){
+        tx+=e.clientX-p.x;ty+=e.clientY-p.y;
+        ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+        apply();
+        e.preventDefault();
+      }
+    });
+    const end=function(e){
+      ptrs.delete(e.pointerId);
+      lastDist=0;
+      const now=Date.now();
+      if(now-lastTap<300){scale=1;tx=0;ty=0;apply();} // double tap resets
+      lastTap=now;
+    };
+    wrap.addEventListener('pointerup',end);
+    wrap.addEventListener('pointercancel',function(e){ptrs.delete(e.pointerId);lastDist=0;});
+    wrap.addEventListener('wheel',function(e){ // desktop: Ctrl+wheel
+      if(!e.ctrlKey)return;
+      e.preventDefault();
+      scale=Math.max(1,Math.min(4,scale*(e.deltaY<0?1.15:0.87)));
+      apply();
+    },{passive:false});
   }
 
   _attachSlider(el,z){
@@ -922,6 +1084,9 @@ class RoomOverlayCard extends HTMLElement{
   _update(){
     if(!this._hass||!this._config||!this._rendered)return;
     const s=this._hass.states,c=this._config;
+    // Re-render when the mobile profile activates/deactivates (resize/rotation)
+    const _mobNow=!(c.test_mode??false)&&this.offsetWidth>0&&this.offsetWidth<(c.mobile_breakpoint??600);
+    if(_mobNow!==this._mobActive){this._rendered=false;this._render();return;}
     const flipped=(c.test_mode??false)&&this._testFlipped;
     if(this._baseEl){
       let _bf;
@@ -962,7 +1127,16 @@ class RoomOverlayCard extends HTMLElement{
       if(img){const bg='url(\''+img+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
       const rawOp=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
       const showOp=flipped?String(rawOp>0.5?0:1):String(rawOp);if(parseFloat(showOp)>0&&ov.animation){el.style.animation='roc-'+ov.animation+' '+(ov.animation==='blink'?'1s step-end':'2s ease-in-out')+' infinite';el.style.opacity='';}else{el.style.animation='none';el.style.opacity=showOp;}
-      el.style.filter=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
+      let _ovF=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
+      if(ov.color_from){
+        // Tint the overlay toward the light's current colour
+        const _cf=s[ov.color_from];
+        if(_cf&&_cf.state==='on'){
+          const _rgb=_cf.attributes.rgb_color||(_cf.attributes.color_temp_kelvin?kelvinToRgb(_cf.attributes.color_temp_kelvin):null);
+          if(_rgb)_ovF=tintFilter(_rgb);
+        }
+      }
+      setSt(el,'filter',_ovF);
     }
     // Weather overlay
     if(this._wxEl&&c.weather_overlay){
@@ -986,16 +1160,16 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!z.group||(this._groupState[z.group]??true);
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
-      if(z.visible_template!==undefined)setSt(el,'display',(this._tmplVis['z:'+z.id]??true)?'':'none');
-      else setSt(el,'display',(z.visible&&!evalCond(z.visible,s))?'none':'');
+      const zShow=z.visible_template!==undefined?(this._tmplVis['z:'+z.id]??true):!(z.visible&&!evalCond(z.visible,s));
+      this._setVis(el,zShow,'',z.fade,z.slide);
     }
     for(const b of(c.badges||[])){
       const bel=this._bcontEls[b.id];if(!bel)continue;
       const gShow=!b.group||(this._groupState[b.group]??true);
       this._setGrpVis(bel,gShow);
       if(!gShow)continue;
-      if(b.visible_template!==undefined)setSt(bel,'display',(this._tmplVis['b:'+b.id]??true)?'flex':'none');
-      else setSt(bel,'display',b.visible?(evalCond(b.visible,s)?'flex':'none'):'flex');
+      const bShow=b.visible_template!==undefined?(this._tmplVis['b:'+b.id]??true):(b.visible?evalCond(b.visible,s):true);
+      this._setVis(bel,bShow,'flex',b.fade,b.slide);
       const iel=this._biconEls[b.id];
       if(iel&&b.icon_color)setSt(iel,'color',resolveVal(b.icon_color,s,'white'));
       const lel=this._blabelEls[b.id];
@@ -1007,11 +1181,11 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!ico.group||(this._groupState[ico.group]??true);
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
-      if(ico.visible_template!==undefined)setSt(el,'display',(this._tmplVis['i:'+ico.id]??true)?'flex':'none');
-      else setSt(el,'display',ico.visible?(evalCond(ico.visible,s)?'flex':'none'):'flex');
+      const iShow=ico.visible_template!==undefined?(this._tmplVis['i:'+ico.id]??true):(ico.visible?evalCond(ico.visible,s):true);
+      this._setVis(el,iShow,'flex',ico.fade,ico.slide);
       const haicon=el.querySelector('ha-icon');
       if(haicon){
-        const sz=resolveSize(ico.size||'20px',_icoW);
+        const sz=resolveSize((this._mobActive&&ico.mobile&&ico.mobile.size)||ico.size||'20px',_icoW);
         if(haicon.style.getPropertyValue('--mdc-icon-size')!==sz){haicon.style.setProperty('--mdc-icon-size',sz);haicon.style.width=sz;haicon.style.height=sz;}
         if(ico.color)setSt(haicon,'color',resolveVal(ico.color,s,'white'));
       }
@@ -1021,8 +1195,8 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!el.group||(this._groupState[el.group]??true);
       this._setGrpVis(cont,gShow);
       if(!gShow)continue;
-      if(el.visible_template!==undefined)setSt(cont,'display',(this._tmplVis['e:'+el.id]??true)?'block':'none');
-      else setSt(cont,'display',el.visible?(evalCond(el.visible,s)?'block':'none'):'block');
+      const eShow=el.visible_template!==undefined?(this._tmplVis['e:'+el.id]??true):(el.visible?evalCond(el.visible,s):true);
+      this._setVis(cont,eShow,'block',el.fade,el.slide);
     }
     for(const lbl of(c.labels||[])){
       const el=this._lblEls[lbl.id];if(!el)continue;
@@ -1030,8 +1204,9 @@ class RoomOverlayCard extends HTMLElement{
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
       const lblVis=lbl.visible_conditions!==undefined?lbl.visible_conditions:lbl.visible;
-      setSt(el,'display',lblVis!==undefined?(evalCond(lblVis,s)?'block':'none'):'');
-      if(lbl.font_size){const _fs=resolveSize(lbl.font_size,_icoW);if(_fs)setSt(el,'fontSize',_fs);}
+      this._setVis(el,lblVis!==undefined?evalCond(lblVis,s):true,'',lbl.fade,lbl.slide);
+      const _lfsRaw=(this._mobActive&&lbl.mobile&&lbl.mobile.font_size)||lbl.font_size;
+      if(_lfsRaw){const _fs=resolveSize(_lfsRaw,_icoW);if(_fs)setSt(el,'fontSize',_fs);}
       if(lbl.template){
         // Text and gradient colour come from the template subscription
         const tv=this._tmplVals[lbl.id];
@@ -1060,8 +1235,8 @@ class RoomOverlayCard extends HTMLElement{
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
       const gVis=g.visible_conditions!==undefined?g.visible_conditions:g.visible;
-      if(g.visible_template!==undefined)setSt(el,'display',(this._tmplVis['g:'+g.id]??true)?'':'none');
-      else setSt(el,'display',gVis!==undefined?(evalCond(gVis,s)?'block':'none'):'');
+      const gShow2=g.visible_template!==undefined?(this._tmplVis['g:'+g.id]??true):(gVis!==undefined?evalCond(gVis,s):true);
+      this._setVis(el,gShow2,'',g.fade,g.slide);
       if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
       const val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
@@ -1441,6 +1616,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(_oldWo.z_index!==undefined)_wo.z_index=_oldWo.z_index;
       c.weather_overlay=_wo;
     }else delete c.weather_overlay;
+    const _mbp=parseFloat(v('mobile_breakpoint',''));
+    if(!isNaN(_mbp)&&_mbp>0&&_mbp!==600)c.mobile_breakpoint=_mbp;else delete c.mobile_breakpoint;
+    const _zm=q('#zoom');
+    if(_zm&&_zm.checked)c.zoom=true;else delete c.zoom;
     const _bicR=this._pYaml(this.querySelector('#base_image_conditions'));
     if(_bicR.ok){if(Array.isArray(_bicR.val))c.base_image_conditions=_bicR.val;else delete c.base_image_conditions;}
     c.aspect_ratio=v('aspect_ratio','16/9');
@@ -1900,6 +2079,9 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(el.card)elCopy.card=el.card;
     if(el.visible!==undefined)elCopy.visible=el.visible;
     if(el.visible_template!==undefined)elCopy.visible_template=el.visible_template;
+    if(el.fade!==undefined)elCopy.fade=el.fade;
+    if(el.slide!==undefined)elCopy.slide=el.slide;
+    if(el.mobile!==undefined)elCopy.mobile=el.mobile;
     if(el.z_index!==undefined)elCopy.z_index=el.z_index;
     if(el.border_radius)elCopy.border_radius=el.border_radius;
     if(el.overflow)elCopy.overflow=el.overflow;
@@ -1974,7 +2156,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<input type="color" data-lbl-ac="'+i+'" value="'+(lbl.animation_color?this._toHex(lbl.animation_color):'#ff4444')+'"'+this._inp('height:32px;cursor:pointer;')+'></div>';
     h+='</div>';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">Template (Jinja — replaces entity value, e.g. {{ states(\'sensor.x\') | round(1) }})</label><textarea data-lbl-tmpl="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(lbl.template||'')+'</textarea></div>';
-    h+='<div><label class="roc-l">font_size / font_weight / color / visible / visible_conditions / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div><label class="roc-l">font_size / color / visible / visible_template / format / tap_action / fade / mobile / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
     h+=this._mvBtns('lbl',i);
     h+='<button data-dup-lbl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
@@ -2017,7 +2199,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Value</label>';
     h+='<input data-g-alert-val="'+i+'" type="number" value="'+this._e(String(g.alert_conditions&&g.alert_conditions.value!==undefined?g.alert_conditions.value:''))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
-    h+='<div><label class="roc-l">background / border_radius / transition / visible / visible_conditions / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div><label class="roc-l">background / transition / visible / visible_template / tap_action / fade / mobile / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
     h+=this._mvBtns('g',i);
     h+='<button data-dup-g="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
@@ -2114,6 +2296,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div><label class="roc-l">Aspect ratio</label><input id="aspect_ratio" type="text" value="'+this._e(c.aspect_ratio||'16/9')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Border radius</label><input id="border_radius" type="text" value="'+this._e(c.border_radius||'12px')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
+    basicInner+='</div>';
+    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+    basicInner+='<div><label class="roc-l">Mobile breakpoint (px — mobile: overrides apply below this card width)</label><input id="mobile_breakpoint" type="number" min="0" step="10" value="'+(c.mobile_breakpoint??600)+'"'+this._inp('')+'></div>';
+    basicInner+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><input id="zoom" type="checkbox"'+(c.zoom?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="zoom">Pan &amp; pinch-zoom (floorplan mode)</label></div>';
     basicInner+='</div>';
     basicInner+='<div style="display:flex;align-items:center;gap:8px;"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="test_mode">Test mode (show zone &amp; element outlines)</label></div>';
     basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
@@ -2312,7 +2498,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
 
-    ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity'].forEach(function(id){
+    ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     const undoBtn=this.querySelector('#roc-undo');
