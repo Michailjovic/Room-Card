@@ -544,10 +544,41 @@ type: custom:room-overlay-card
 base_camera: camera.living_room      # base_image becomes optional
 camera_refresh: 5                    # seconds (paused off-screen)
 weather_overlay:
-  entity: weather.home               # rainy/pouring → rain, snowy → snow
-  # effect: rain                     # or force an effect manually
+  entity: weather.home               # auto: rainy→rain, pouring→heavy rain,
+                                     # snowy→snow, hail→heavy snow, fog→fog,
+                                     # lightning-rainy→rain+flashes
+  # effect: rain                     # manual: rain | rain-heavy | snow |
+                                     #         snow-heavy | fog | lightning
+  angle: 115deg                      # optional — tilt rain (wind)
   opacity: 0.45
   z_index: 5
+```
+
+---
+
+### Template visibility & relative time
+
+Any zone, icon, badge, overlay, embedded card, gauge or blind can be driven by
+a Jinja2 template (rendered live over WebSocket). `visible_template` takes
+precedence over `visible` / `visible_conditions`:
+
+```yaml
+zones:
+  - id: tv_zone
+    visible_template: "{{ is_state('media_player.tv', 'on') and now().hour >= 18 }}"
+    ...
+
+badges:
+  - id: power_chip
+    icon: mdi:flash
+    label_template: "{{ states('sensor.power') | round(0) }} W"
+
+labels:
+  - id: last_motion
+    entity: binary_sensor.bedroom_motion
+    attribute: last_changed_ts        # or any timestamp state/attribute
+    format: relative                  # "5 minutes ago", localized, 30 s refresh
+    prefix: "Motion: "
 ```
 
 ---
@@ -642,6 +673,13 @@ All `top`, `left`, `width`, `height` values are percentage strings relative to t
 ```yaml
 test_mode: true
 ```
+
+In test mode you can **drag** elements (snaps to a 0.5 % grid and magnetically
+aligns to other elements with live guide lines — hold **Alt** for free
+movement), **resize** zones/elements/gauges with handles, **nudge** a selected
+element with arrow keys (Shift = 0.1 %), and **Save** directly back to the
+dashboard. The GUI editor supports **undo/redo** (↶ ↷ buttons or
+Ctrl+Z / Ctrl+Y) across all configuration changes.
 
 ---
 

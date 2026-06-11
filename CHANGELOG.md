@@ -1,5 +1,56 @@
 # Changelog
 
+## [1.4.0] – 2026-06-10
+
+Feature release delivering the complete v1.4 roadmap: templates on every
+element type, relative-time labels, weather effects v2, snap-to-grid editing
+with alignment guides, editor undo/redo, live icon previews and a CI test
+suite. Verified against Home Assistant 2026.6.
+
+### Added
+- **`visible_template` on every element type** — zones, icons, badges,
+  overlays, embedded cards, gauges and blinds can now be shown/hidden by any
+  Jinja2 template, rendered live over the `render_template` WebSocket
+  subscription. Takes precedence over `visible` / `visible_conditions` when
+  both are set. Truthiness follows HA conventions (`false`, `off`, `no`, `0`,
+  empty, `unknown` and `unavailable` hide the element).
+- **`label_template` on badges** — badge chip text driven by a Jinja2
+  template, same live mechanism as label templates.
+- **Relative-time labels** — `format: relative` renders timestamps as
+  localized relative time ("5 minutes ago" / "před 5 minutami") using
+  `Intl.RelativeTimeFormat` in the dashboard language, refreshed every 30 s
+  (paused while the card is off-screen). Works with `prefix`/`suffix`.
+- **Weather effects v2** — new effects `fog` (drifting banks) and `lightning`
+  (screen flash); `pouring` now renders denser, faster rain and `hail` dense
+  snow via a new heavy tier; `lightning-rainy` combines rain + flashes. New
+  `angle:` option tilts the rain direction (e.g. `angle: 115deg` for wind).
+  Manual `effect:` accepts `rain`, `rain-heavy`, `snow`, `snow-heavy`, `fog`,
+  `lightning`.
+- **Snap-to-grid + alignment guides** — test-mode dragging snaps to a 0.5 %
+  grid and magnetically aligns to the top/left edges of other elements, with
+  live guide lines; hold **Alt** for free movement. Resize handles snap to the
+  same 0.5 % grid.
+- **Editor undo/redo** — 50-step history of every config change with ↶ / ↷
+  header buttons and Ctrl+Z / Ctrl+Y (Cmd on macOS) shortcuts. Native
+  text-field undo inside inputs is left untouched.
+- **Live icon previews** — icon and badge `mdi:` inputs in the editor render
+  the actual icon next to the field as you type.
+- **CI test suite** — `tests/smoke.test.js` (34 assertions over the pure
+  helpers: conditions, gradients, YAML parser round-trip, filters, template
+  truthiness, relative time) + a GitHub Actions workflow running syntax check
+  and tests on every push/PR. `npm test` runs them locally.
+
+### Fixed
+- Weather CSS could not previously express a flash overlay (`content` quoting
+  in the embedded stylesheet) — caught by the new verification flow before
+  release.
+
+### Changed
+- Editor weather effect selector offers the full v2 effect list.
+- Embedded-card YAML textarea now round-trips `visible_template` correctly.
+
+---
+
 ## [1.3.1] – 2026-06-10
 
 ### Fixed

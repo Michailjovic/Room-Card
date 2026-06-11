@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.3.1 — MIT License
+ * room-overlay-card v1.4.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.3.1';
+const ROC_VERSION='1.4.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -14,6 +14,27 @@ window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',descr
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
+// Truthiness for template visibility results (render_template returns native types)
+function tmplTruthy(v){
+  if(v===true)return true;
+  if(v===false||v===null||v===undefined)return false;
+  const s=String(v).trim().toLowerCase();
+  return!(s===''||s==='false'||s==='off'||s==='no'||s==='0'||s==='none'||s==='unknown'||s==='unavailable');
+}
+// Localized relative time ("5 minutes ago") for label format: relative
+function relTime(ts,lang){
+  const d=new Date(ts);
+  if(isNaN(d.getTime()))return String(ts??'');
+  let s=Math.round((d.getTime()-Date.now())/1000);
+  const a=Math.abs(s);
+  let v,u;
+  if(a<60){v=s;u='second';}
+  else if(a<3600){v=Math.trunc(s/60);u='minute';}
+  else if(a<86400){v=Math.trunc(s/3600);u='hour';}
+  else{v=Math.trunc(s/86400);u='day';}
+  try{return new Intl.RelativeTimeFormat(lang||'en',{numeric:'auto'}).format(v,u);}
+  catch(_){return(s<0?'-':'+')+Math.abs(v)+' '+u;}
+}
 
 function evalCond(c,s){
   const e=s[c.entity];if(!e)return false;
@@ -80,6 +101,7 @@ function blindToGaugeConfig(b){
   if(b.transition!==undefined)base.transition=b.transition;
   if(b.visible!==undefined)base.visible=b.visible;
   if(b.visible_conditions!==undefined)base.visible_conditions=b.visible_conditions;
+  if(b.visible_template!==undefined)base.visible_template=b.visible_template;
   if(type==='roller'){
     return[Object.assign({},base,{color:sc})];
   }else if(type==='day_night'){
@@ -147,7 +169,8 @@ class RoomOverlayCard extends HTMLElement{
     this._groupState={};this._grpPanelEls={};
     this._selectedTM=null;this._tmKeyHandler=null;
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
-    this._tmplUnsubs=[];this._tmplVals={};
+    this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
+    this._gdH=null;this._gdV=null;
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -286,6 +309,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
     if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
+    if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
     this._teardownTemplates();
     this._selectedTM=null;
 
@@ -321,11 +345,12 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(105deg,rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(100deg,rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.wx-snow.wx-heavy{background-size:80px 80px,52px 52px;animation-duration:4s;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._wxEl=this.shadowRoot.querySelector('[data-wx]');
+    if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
     for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+ov.id+'"]');}
     this._grpPanelEls={};
@@ -382,6 +407,11 @@ class RoomOverlayCard extends HTMLElement{
       });
     }
     if(tm){
+      // Alignment guide lines for drag snapping
+      const _gdc=this.shadowRoot.querySelector('.content');
+      this._gdH=document.createElement('div');this._gdH.className='roc-gd roc-gd-h';
+      this._gdV=document.createElement('div');this._gdV.className='roc-gd roc-gd-v';
+      if(_gdc){_gdc.appendChild(this._gdH);_gdc.appendChild(this._gdV);}
       const flipBtn=this.shadowRoot.querySelector('.tm-flip');
       if(flipBtn){
         const self=this;
@@ -631,7 +661,42 @@ class RoomOverlayCard extends HTMLElement{
     window.addEventListener('roc-highlight',this._hlHandler);
     this._startCamera();
     this._setupTemplates();
+    // 30 s ticker for labels with format: relative
+    if((c.labels||[]).some(function(l){return l.format==='relative';})){
+      const rtSelf=this;
+      this._relTimer=setInterval(function(){
+        if(rtSelf._visible&&rtSelf._hass&&rtSelf._rendered)rtSelf._update();
+      },30000);
+    }
     this._update();
+  }
+
+  _snapCandidates(){
+    const c=this._config,tops=[],lefts=[];
+    ['zones','icons','labels','gauges','blinds','elements'].forEach(function(k){
+      (c[k]||[]).forEach(function(it){
+        const t=parseFloat(it.top),l=parseFloat(it.left);
+        if(!isNaN(t))tops.push(t);
+        if(!isNaN(l))lefts.push(l);
+      });
+    });
+    return{tops:tops,lefts:lefts};
+  }
+
+  _snapPos(t,l,free,cands){
+    if(free){this._hideGuides();return{t:t,l:l};}
+    t=Math.round(t*2)/2;l=Math.round(l*2)/2; // 0.5 % grid
+    let gh=null,gv=null;
+    for(const ct of cands.tops)if(Math.abs(t-ct)<0.45){t=ct;gh=ct;break;}
+    for(const cl of cands.lefts)if(Math.abs(l-cl)<0.45){l=cl;gv=cl;break;}
+    if(this._gdH){if(gh!==null){this._gdH.style.top=gh+'%';this._gdH.style.display='block';}else this._gdH.style.display='none';}
+    if(this._gdV){if(gv!==null){this._gdV.style.left=gv+'%';this._gdV.style.display='block';}else this._gdV.style.display='none';}
+    return{t:t,l:l};
+  }
+
+  _hideGuides(){
+    if(this._gdH)this._gdH.style.display='none';
+    if(this._gdV)this._gdV.style.display='none';
   }
 
   _startCamera(){
@@ -660,26 +725,54 @@ class RoomOverlayCard extends HTMLElement{
         else if(typeof u==='function')u();
       }catch(_){}
     });
-    this._tmplUnsubs=[];this._tmplVals={};
+    this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};
   }
 
   _setupTemplates(){
     const c=this._config,self=this;
     if(!this._hass||!this._hass.connection)return;
+    const sub=function(tpl,cb){
+      try{
+        const p=self._hass.connection.subscribeMessage(function(msg){cb(msg?msg.result:undefined);},{type:'render_template',template:tpl});
+        self._tmplUnsubs.push(p);
+      }catch(e){console.warn('[room-overlay-card] template subscribe failed:',e);}
+    };
+    // Label text templates
     for(const lbl of(c.labels||[])){
       if(!lbl.template)continue;
       const el=this._lblEls[lbl.id];if(!el)continue;
       const lblId=lbl.id,grad=this._sortedLblGrads[lblId];
-      try{
-        const p=this._hass.connection.subscribeMessage(function(msg){
-          const v=msg&&msg.result!==undefined&&msg.result!==null?String(msg.result):'';
-          self._tmplVals[lblId]=v;
-          if(el.textContent!==v)el.textContent=v;
-          if(grad){const nv=parseFloat(v);if(!isNaN(nv))el.style.color=lerpColorGradient(grad,nv,true);}
-        },{type:'render_template',template:lbl.template});
-        this._tmplUnsubs.push(p);
-      }catch(e){console.warn('[room-overlay-card] template subscribe failed:',lblId,e);}
+      sub(lbl.template,function(r){
+        const v=r!==undefined&&r!==null?String(r):'';
+        self._tmplVals[lblId]=v;
+        if(el.textContent!==v)el.textContent=v;
+        if(grad){const nv=parseFloat(v);if(!isNaN(nv))el.style.color=lerpColorGradient(grad,nv,true);}
+      });
     }
+    // Badge label templates
+    for(const b of(c.badges||[])){
+      if(!b.label_template)continue;
+      const lel=this._blabelEls[b.id];if(!lel)continue;
+      sub(b.label_template,function(r){
+        const v=r!==undefined&&r!==null?String(r):'';
+        if(lel.textContent!==v)lel.textContent=v;
+      });
+    }
+    // visible_template — zones, icons, badges, overlays, elements, gauges (incl. blinds)
+    const vis=function(key,tpl,el,showDisp){
+      if(!tpl||!el)return;
+      sub(tpl,function(r){
+        const ok=tmplTruthy(r);
+        self._tmplVis[key]=ok;
+        setSt(el,'display',ok?showDisp:'none');
+      });
+    };
+    for(const z of(c.zones||[]))vis('z:'+z.id,z.visible_template,this._zoneEls[z.id],'');
+    for(const ico of(c.icons||[]))vis('i:'+ico.id,ico.visible_template,this._icoEls[ico.id],'flex');
+    for(const b of(c.badges||[]))vis('b:'+b.id,b.visible_template,this._bcontEls[b.id],'flex');
+    for(const ov of(c.overlays||[]))vis('o:'+ov.id,ov.visible_template,this._ovEls[ov.id],'');
+    for(const e of(c.elements||[]))vis('e:'+e.id,e.visible_template,this._contEls[e.id],'block');
+    for(const g of[...(c.gauges||[]),...(this._blindGaugeCfgs||[])])vis('g:'+g.id,g.visible_template,this._gaugeEls[g.id],'');
   }
 
   _setGrpVis(el,show){
@@ -775,8 +868,9 @@ class RoomOverlayCard extends HTMLElement{
         const sw=parseFloat(el.style.width)||10,sh=parseFloat(el.style.height)||10;
         function onMove(ev){
           const dx=(ev.clientX-sx)/rect.width*100,dy=(ev.clientY-sy)/rect.height*100;
-          if(hd.w!==0){const nw=Math.max(2,sw+hd.w*dx);el.style.width=nw.toFixed(1)+'%';if(hd.ml)el.style.left=(sl+dx).toFixed(1)+'%';}
-          if(hd.h!==0){const nh=Math.max(2,sh+hd.h*dy);el.style.height=nh.toFixed(1)+'%';if(hd.mt)el.style.top=(st+dy).toFixed(1)+'%';}
+          const snap=function(v){return ev.altKey?v:Math.round(v*2)/2;}; // 0.5 % grid, Alt = free
+          if(hd.w!==0){const nw=Math.max(2,snap(sw+hd.w*dx));el.style.width=nw.toFixed(1)+'%';if(hd.ml)el.style.left=snap(sl+dx).toFixed(1)+'%';}
+          if(hd.h!==0){const nh=Math.max(2,snap(sh+hd.h*dy));el.style.height=nh.toFixed(1)+'%';if(hd.mt)el.style.top=snap(st+dy).toFixed(1)+'%';}
         }
         function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);onResize(el.style.top,el.style.left,el.style.width,el.style.height);}
         document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
@@ -794,15 +888,20 @@ class RoomOverlayCard extends HTMLElement{
       const rect=cont.getBoundingClientRect();
       const startX=e.clientX,startY=e.clientY;
       const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
+      const cands=self._snapCandidates();
       let moved=false;
       function onMove(e){
         const dx=e.clientX-startX,dy=e.clientY-startY;
         if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;
         moved=true;e.preventDefault();e.stopPropagation();
-        el.style.top=Math.max(0,Math.min(98,startTop+dy/rect.height*100)).toFixed(1)+'%';
-        el.style.left=Math.max(0,Math.min(98,startLeft+dx/rect.width*100)).toFixed(1)+'%';
+        const sp=self._snapPos(
+          Math.max(0,Math.min(98,startTop+dy/rect.height*100)),
+          Math.max(0,Math.min(98,startLeft+dx/rect.width*100)),
+          e.altKey,cands);
+        el.style.top=sp.t.toFixed(1)+'%';
+        el.style.left=sp.l.toFixed(1)+'%';
       }
-      function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
+      function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);self._hideGuides();if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
       document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
     });
     el.addEventListener('touchstart',function(e){
@@ -811,8 +910,9 @@ class RoomOverlayCard extends HTMLElement{
       const t0=e.touches[0],startX=t0.clientX,startY=t0.clientY;
       const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
       let moved=false;
-      function onTMove(e){const t=e.touches[0],dx=t.clientX-startX,dy=t.clientY-startY;if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;moved=true;e.preventDefault();e.stopPropagation();el.style.top=Math.max(0,Math.min(98,startTop+dy/rect.height*100)).toFixed(1)+'%';el.style.left=Math.max(0,Math.min(98,startLeft+dx/rect.width*100)).toFixed(1)+'%';}
-      function onTEnd(){el.removeEventListener('touchmove',onTMove);el.removeEventListener('touchend',onTEnd);if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
+      const tCands=self._snapCandidates();
+      function onTMove(e){const t=e.touches[0],dx=t.clientX-startX,dy=t.clientY-startY;if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;moved=true;e.preventDefault();e.stopPropagation();const sp=self._snapPos(Math.max(0,Math.min(98,startTop+dy/rect.height*100)),Math.max(0,Math.min(98,startLeft+dx/rect.width*100)),false,tCands);el.style.top=sp.t.toFixed(1)+'%';el.style.left=sp.l.toFixed(1)+'%';}
+      function onTEnd(){el.removeEventListener('touchmove',onTMove);el.removeEventListener('touchend',onTEnd);self._hideGuides();if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
       el.addEventListener('touchmove',onTMove,{passive:false});el.addEventListener('touchend',onTEnd);
     },{passive:true});
     // Suppress click after drag — capture phase fires before zone/icon tap listeners
@@ -857,6 +957,7 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!ov.group||(this._groupState[ov.group]??true);
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
+      if(ov.visible_template!==undefined)setSt(el,'display',(this._tmplVis['o:'+ov.id]??true)?'':'none');
       const img=this._ovImg(ov);
       if(img){const bg='url(\''+img+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
       const rawOp=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
@@ -869,11 +970,12 @@ class RoomOverlayCard extends HTMLElement{
       let eff=wx.effect&&wx.effect!=='auto'?wx.effect:null;
       if(!eff&&wx.entity){
         const wst=s[wx.entity]?.state;
-        eff=({rainy:'rain',pouring:'rain','lightning-rainy':'rain',hail:'snow',snowy:'snow','snowy-rainy':'snow'})[wst]||null;
+        eff=({rainy:'rain',pouring:'rain-heavy','lightning-rainy':'rain-lightning',lightning:'lightning',hail:'snow-heavy',snowy:'snow','snowy-rainy':'snow',fog:'fog'})[wst]||null;
       }
-      const wcls='layer wx'+(eff?' wx-'+eff:'');
+      const effCls=({'rain':' wx-rain','rain-heavy':' wx-rain wx-heavy','rain-lightning':' wx-rain wx-lightning','lightning':' wx-lightning','snow':' wx-snow','snow-heavy':' wx-snow wx-heavy','fog':' wx-fog'})[eff]||'';
+      const wcls='layer wx'+effCls;
       if(this._wxEl.className!==wcls)this._wxEl.className=wcls;
-      setSt(this._wxEl,'opacity',eff?String(wx.opacity??0.45):'0');
+      setSt(this._wxEl,'opacity',effCls?String(wx.opacity??(eff&&eff.indexOf('heavy')>=0?0.55:0.45)):'0');
     }
     // Group panels (fade via visibility/opacity)
     for(const g of(c.groups||[])){
@@ -884,14 +986,16 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!z.group||(this._groupState[z.group]??true);
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
-      setSt(el,'display',(z.visible&&!evalCond(z.visible,s))?'none':'');
+      if(z.visible_template!==undefined)setSt(el,'display',(this._tmplVis['z:'+z.id]??true)?'':'none');
+      else setSt(el,'display',(z.visible&&!evalCond(z.visible,s))?'none':'');
     }
     for(const b of(c.badges||[])){
       const bel=this._bcontEls[b.id];if(!bel)continue;
       const gShow=!b.group||(this._groupState[b.group]??true);
       this._setGrpVis(bel,gShow);
       if(!gShow)continue;
-      setSt(bel,'display',b.visible?(evalCond(b.visible,s)?'flex':'none'):'flex');
+      if(b.visible_template!==undefined)setSt(bel,'display',(this._tmplVis['b:'+b.id]??true)?'flex':'none');
+      else setSt(bel,'display',b.visible?(evalCond(b.visible,s)?'flex':'none'):'flex');
       const iel=this._biconEls[b.id];
       if(iel&&b.icon_color)setSt(iel,'color',resolveVal(b.icon_color,s,'white'));
       const lel=this._blabelEls[b.id];
@@ -903,7 +1007,8 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!ico.group||(this._groupState[ico.group]??true);
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
-      setSt(el,'display',ico.visible?(evalCond(ico.visible,s)?'flex':'none'):'flex');
+      if(ico.visible_template!==undefined)setSt(el,'display',(this._tmplVis['i:'+ico.id]??true)?'flex':'none');
+      else setSt(el,'display',ico.visible?(evalCond(ico.visible,s)?'flex':'none'):'flex');
       const haicon=el.querySelector('ha-icon');
       if(haicon){
         const sz=resolveSize(ico.size||'20px',_icoW);
@@ -916,7 +1021,8 @@ class RoomOverlayCard extends HTMLElement{
       const gShow=!el.group||(this._groupState[el.group]??true);
       this._setGrpVis(cont,gShow);
       if(!gShow)continue;
-      setSt(cont,'display',el.visible?(evalCond(el.visible,s)?'block':'none'):'block');
+      if(el.visible_template!==undefined)setSt(cont,'display',(this._tmplVis['e:'+el.id]??true)?'block':'none');
+      else setSt(cont,'display',el.visible?(evalCond(el.visible,s)?'block':'none'):'block');
     }
     for(const lbl of(c.labels||[])){
       const el=this._lblEls[lbl.id];if(!el)continue;
@@ -934,6 +1040,11 @@ class RoomOverlayCard extends HTMLElement{
       }
       const ent=s[lbl.entity];if(!ent)continue;
       const rawVal=lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state;
+      if(lbl.format==='relative'){
+        const _rt=(lbl.prefix||'')+relTime(rawVal,this._hass.locale?.language)+(lbl.suffix&&lbl.suffix!=='auto'?lbl.suffix:'');
+        if(el.textContent!==_rt)el.textContent=_rt;
+        continue;
+      }
       const numVal=parseFloat(rawVal);
       const dispVal=!isNaN(numVal)?(lbl.decimals!==undefined?numVal.toFixed(lbl.decimals):String(Math.round(numVal))):String(rawVal??'');
       let _sfx=lbl.suffix||lbl.unit||'';
@@ -949,7 +1060,8 @@ class RoomOverlayCard extends HTMLElement{
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
       const gVis=g.visible_conditions!==undefined?g.visible_conditions:g.visible;
-      setSt(el,'display',gVis!==undefined?(evalCond(gVis,s)?'block':'none'):'');
+      if(g.visible_template!==undefined)setSt(el,'display',(this._tmplVis['g:'+g.id]??true)?'':'none');
+      else setSt(el,'display',gVis!==undefined?(evalCond(gVis,s)?'block':'none'):'');
       if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
       const val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
@@ -1031,6 +1143,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
     if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
+    if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
     this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
     if(this._io){this._io.disconnect();this._io=null;}
@@ -1213,7 +1326,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;}
 
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
@@ -1244,6 +1357,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   setConfig(cfg){
     const prev=this._config;
     this._config=cfg;
+    if(!this._hist.length){try{this._hist=[JSON.stringify(cfg)];this._histIdx=0;}catch(_){}}
     if(prev&&this.innerHTML.trim()){
       const same=
         (prev.overlays||[]).length===(cfg.overlays||[]).length&&
@@ -1273,7 +1387,29 @@ class RoomOverlayCardEditor extends HTMLElement{
   _e(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
   _fire(c){
+    this._pushHist(c);
     this.dispatchEvent(new CustomEvent('config-changed',{bubbles:true,composed:true,detail:{config:Object.assign({type:'custom:room-overlay-card'},c)}}));
+  }
+
+  _pushHist(c){
+    if(this._histMuted)return;
+    try{
+      const j=JSON.stringify(c);
+      if(this._hist[this._histIdx]===j)return;
+      this._hist=this._hist.slice(0,this._histIdx+1);
+      this._hist.push(j);
+      if(this._hist.length>50)this._hist.shift();
+      this._histIdx=this._hist.length-1;
+    }catch(_){}
+  }
+
+  _undo(){if(this._histIdx>0)this._histGo(this._histIdx-1);}
+  _redo(){if(this._histIdx<this._hist.length-1)this._histGo(this._histIdx+1);}
+  _histGo(i){
+    this._histIdx=i;
+    this._config=JSON.parse(this._hist[i]);
+    this._histMuted=true;
+    try{this._render();this._fire(this._config);}finally{this._histMuted=false;}
   }
 
   _fireDebounced(){
@@ -1732,7 +1868,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">ID</label><input data-b-id="'+i+'" type="text" value="'+this._e(b.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label class="roc-l">Icon (mdi:...)</label><input data-b-icon="'+i+'" type="text" value="'+this._e(b.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon (mdi:...)</label><div style="display:flex;gap:6px;align-items:center;"><ha-icon data-roc-prev icon="'+this._e(b.icon||'')+'" style="--mdc-icon-size:20px;flex:none;color:var(--primary-text-color);"></ha-icon><input data-b-icon="'+i+'" type="text" value="'+this._e(b.icon||'')+'"'+this._inp('')+'></div></div>';
     h+='<div><label class="roc-l">Position</label>';
     h+='<select data-b-pos="'+i+'"'+this._inp('')+'>';
     const bp=b.position||'bottom-left';
@@ -1763,6 +1899,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const elCopy={};
     if(el.card)elCopy.card=el.card;
     if(el.visible!==undefined)elCopy.visible=el.visible;
+    if(el.visible_template!==undefined)elCopy.visible_template=el.visible_template;
     if(el.z_index!==undefined)elCopy.z_index=el.z_index;
     if(el.border_radius)elCopy.border_radius=el.border_radius;
     if(el.overflow)elCopy.overflow=el.overflow;
@@ -1801,7 +1938,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">ID</label><input data-ico-id="'+i+'" type="text" value="'+this._e(ico.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label class="roc-l">Icon (mdi:...)</label><input data-ico-icon="'+i+'" type="text" value="'+this._e(ico.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon (mdi:...)</label><div style="display:flex;gap:6px;align-items:center;"><ha-icon data-roc-prev icon="'+this._e(ico.icon||'')+'" style="--mdc-icon-size:20px;flex:none;color:var(--primary-text-color);"></ha-icon><input data-ico-icon="'+i+'" type="text" value="'+this._e(ico.icon||'')+'"'+this._inp('')+'></div></div>';
     h+='<div><label class="roc-l">Size (px or %)</label><input data-ico-size="'+i+'" type="text" placeholder="20px or 2%" value="'+this._e(ico.size||'20px')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">z-index</label><input data-ico-z="'+i+'" type="number" value="'+this._e(String(ico.z_index||6))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='<div><label class="roc-l">Background (circle, optional)</label><input data-ico-bg="'+i+'" type="text" placeholder="rgba(0,0,0,0.55)" value="'+this._e(ico.background||'')+'"'+this._inp('')+'></div>';
@@ -1969,7 +2106,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">';
     basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-entities" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Effect</label><select id="weather_effect"'+this._inp('')+'>';
-    ['auto','rain','snow'].forEach(function(ef){basicInner+='<option value="'+ef+'"'+((_woEd.effect||'auto')===ef?' selected':'')+'>'+ef+'</option>';});
+    ['auto','rain','rain-heavy','snow','snow-heavy','fog','lightning'].forEach(function(ef){basicInner+='<option value="'+ef+'"'+((_woEd.effect||'auto')===ef?' selected':'')+'>'+ef+'</option>';});
     basicInner+='</select></div>';
     basicInner+='<div><label class="roc-l">Opacity</label><input id="weather_opacity" type="number" step="0.05" min="0" max="1" value="'+(_woEd.opacity??0.45)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
@@ -2076,7 +2213,11 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
       +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}</style>'
       +'<div class="roc-ed" style="padding:8px;">'
-      +'<div style="display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 8px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span><span style="font-size:11px;color:var(--secondary-text-color);">v'+ROC_VERSION+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 8px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span>'
+      +'<span style="display:flex;gap:6px;align-items:center;">'
+      +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
+      +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
+      +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
       +sec('basic','Basic settings',undefined,basicInner)
       +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
       +sec('brightness','Brightness model (filter interpolation)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
@@ -2089,6 +2230,18 @@ class RoomOverlayCardEditor extends HTMLElement{
       +sec('groups','Element groups',(c.groups||[]).length,grpInner)
       +'</div>';
 
+    if(!this._keysBound){
+      this._keysBound=true;
+      const kbSelf=this;
+      this.addEventListener('keydown',function(e){
+        if(!(e.ctrlKey||e.metaKey))return;
+        const tag=(e.target&&e.target.tagName||'').toLowerCase();
+        if(tag==='input'||tag==='textarea'||tag==='select')return; // keep native undo inside fields
+        const k=e.key.toLowerCase();
+        if(k==='z'&&!e.shiftKey){e.preventDefault();kbSelf._undo();}
+        else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();kbSelf._redo();}
+      });
+    }
     this._listen();
     this._bindHassComponents();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
@@ -2161,6 +2314,17 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
+    });
+    const undoBtn=this.querySelector('#roc-undo');
+    if(undoBtn)undoBtn.addEventListener('click',function(){self._undo();});
+    const redoBtn=this.querySelector('#roc-redo');
+    if(redoBtn)redoBtn.addEventListener('click',function(){self._redo();});
+    // Live icon previews
+    this.querySelectorAll('[data-ico-icon],[data-b-icon]').forEach(function(inp){
+      inp.addEventListener('input',function(){
+        const prev=inp.parentElement&&inp.parentElement.querySelector('ha-icon[data-roc-prev]');
+        if(prev)prev.setAttribute('icon',inp.value.trim());
+      });
     });
     // Reorder (▲▼) — one generic handler for all item lists
     const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds'};
