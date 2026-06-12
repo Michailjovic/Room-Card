@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.1] – 2026-06-12
+
+### Fixed
+- **Room swipe no longer hijacks gestures inside embedded HA cards** —
+  horizontal drags starting on an `elements[]` card (bubble-card sliders,
+  cover controls, maps…) are now left to the embedded card, same as slider
+  zones. Swiping between rooms still works everywhere else on the image.
+
+---
+
 ## [1.11.0] – 2026-06-12
 
 Presence-follow polish: follow modes, a follow button, active-room state

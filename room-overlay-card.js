@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.11.0 — MIT License
+ * room-overlay-card v1.11.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.11.0';
+const ROC_VERSION='1.11.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1226,7 +1226,8 @@ class RoomOverlayCard extends HTMLElement{
     wrap.addEventListener('pointerdown',function(e){
       if(self._zoomScale>1)return;
       const path=e.composedPath?e.composedPath():[];
-      if(path.some(function(n){return n.dataset&&n.dataset.rocSlider;}))return; // slider zones own the gesture
+      // Slider zones and embedded HA cards (sliders, covers…) own their gestures
+      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&n.classList.contains('elcont'));}))return;
       pid=e.pointerId;sx=e.clientX;sy=e.clientY;active=true;engaged=false;dx=0;
       lastX=e.clientX;lastT=Date.now();vx=0;
       w=wrap.getBoundingClientRect().width||1;
