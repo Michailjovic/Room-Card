@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.map
 bedroom-card.yaml
+flat-multiroom.yaml

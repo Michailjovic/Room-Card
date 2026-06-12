@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.10.1] – 2026-06-12
+
+### Fixed
+- **Side-rail nav collapsed to a thin strip with `nav.width: auto`** — a
+  vertical rail has no intrinsic width to stretch into, so `width: 100%`
+  items made the whole rail collapse. With `position: left/right/auto`,
+  `width: auto` now falls back to the aspect-derived thumbnail width
+  (explicit CSS widths keep working). Horizontal strips are unaffected.
+
+---
+
 ## [1.10.0] – 2026-06-12
 
 Per-device presence follow and nav chip styling.

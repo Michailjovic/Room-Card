@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.10.0 — MIT License
+ * room-overlay-card v1.10.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.10.0';
+const ROC_VERSION='1.10.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -384,9 +384,12 @@ class RoomOverlayCard extends HTMLElement{
       const navSelfIdx=this._roomIdx;
       // nav.width: css size | 'auto' (stretch items across the available strip)
       const nwRaw=navCfg.width;
+      const _thDerived='calc('+nh+' * '+_nr.toFixed(3)+')';
       let _thFlex;
-      if(nwRaw==='auto')_thFlex=_navSide?'flex:none;width:100%;':'flex:1 1 0;min-width:0;';
-      else _thFlex='flex:none;width:'+(nwRaw||('calc('+nh+' * '+_nr.toFixed(3)+')'))+';';
+      // 'auto' stretches items in horizontal strips; a vertical side rail has no
+      // intrinsic width to stretch into, so it falls back to the derived width
+      if(nwRaw==='auto')_thFlex=_navSide?('flex:none;width:'+_thDerived+';'):'flex:1 1 0;min-width:0;';
+      else _thFlex='flex:none;width:'+(nwRaw||_thDerived)+';';
       const _tabFlex=(nwRaw==='auto'&&!_navSide)?'flex:1 1 0;min-width:0;justify-content:center;':'flex:none;';
       // nav.cards: arbitrary HA cards inside the strip ({width, card} or plain card config)
       const _navCardsHtml=(navCfg.cards||[]).map(function(cc,ci){
