@@ -634,6 +634,10 @@ nav:
   position: auto                # top | bottom | left | right | auto
   auto_breakpoint: 1100         # auto: side rail above this card width (ultrawide)
   height: 64px
+  width: auto                   # css size | auto = stretch items across the strip
+  cards:                        # custom HA cards inside the strip (optional)
+    - width: 38%
+      card: {type: markdown, content: "💧 Vlhkost: {{ states('sensor.livingroom_humidity') }} %"}
   chips:                        # {room} → room id; per-room `chips:` overrides
     - entity: sensor.{room}_temperature
       decimals: 1
@@ -757,6 +761,21 @@ badges:
 
 ---
 
+### Parallax tilt
+
+```yaml
+parallax:           # or just `parallax: true`
+  strength: 6       # max tilt in degrees
+  scale: 1.04
+  source: auto      # pointer | orientation | auto
+```
+
+Mutually exclusive with `zoom:`. See **[PRESETS.md](PRESETS.md)** for a gallery
+of copy-paste recipes (day/night filters, weather moods, dimmer zones, door
+portals, Bermuda presence multiroom…).
+
+---
+
 ## Positioning tips
 
 All `top`, `left`, `width`, `height` values are percentage strings relative to the card dimensions. Enable `test_mode: true` to show red outlines on zones and blue outlines on elements while you fine-tune positions.
@@ -770,7 +789,9 @@ aligns to other elements with live guide lines — hold **Alt** for free
 movement), **resize** zones/elements/gauges with handles, **nudge** a selected
 element with arrow keys (Shift = 0.1 %), and **Save** directly back to the
 dashboard. The GUI editor supports **undo/redo** (↶ ↷ buttons or
-Ctrl+Z / Ctrl+Y) across all configuration changes.
+Ctrl+Z / Ctrl+Y) across all configuration changes, and an **interactive
+preview** checkbox that gives you all the test-mode editing tools inside the
+editor dialog without enabling `test_mode` on the saved card.
 
 ---
 

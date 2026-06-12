@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.9.0] – 2026-06-10
+
+Multi-room navigation strip customization. Verified against Home Assistant 2026.6.
+
+### Added
+- **`nav.width`** — item width in the navigation strip: any CSS size
+  (e.g. `120px`), or **`auto`** to stretch room thumbnails/tabs evenly across
+  the full available width. Default stays height × aspect ratio. In a side
+  rail, `auto` makes items fill the rail width.
+- **`nav.cards`** — embed arbitrary HA cards directly in the navigation strip
+  (alert tiles, markdown, mushroom chips…). Entries are either a plain card
+  config or `{width: 320px, card: {...}}`; without `width` the card flexes to
+  fill the remaining strip space. Cards receive live `hass` updates and work
+  in top/bottom strips as well as side rails.
+
+```yaml
+nav:
+  style: thumbnails
+  height: 64px
+  width: auto                  # stretch thumbs across the strip
+  cards:
+    - width: 40%
+      card:
+        type: markdown
+        content: >-
+          💧 Zvýšená vlhkost v obýváku — {{ states('sensor.livingroom_humidity') }} %
+```
+
+---
+
+## [1.8.0] – 2026-06-10
+
+Final roadmap items: interactive preview inside the GUI editor, 3D parallax
+tilt, a copy-paste preset gallery and HACS validation in CI.
+Verified against Home Assistant 2026.6.
+
+### Added
+- **Interactive editor preview** — a checkbox at the top of the GUI editor
+  mounts a live card instance with test mode forced on, directly inside the
+  editor dialog: drag, resize, draw-to-create zones and keyboard-nudge there,
+  with every change synced back to the form and the dashboard preview —
+  **without ever enabling `test_mode` on the saved card**. The preview hides
+  the Save button (the editor owns saving) and strips its forced flags from
+  outgoing config updates.
+- **3D parallax tilt** — `parallax: true` (or
+  `{strength: 6, scale: 1.04, source: pointer|orientation|auto}`) tilts the
+  scene toward the mouse on desktop and with device orientation where the
+  platform allows it without a permission prompt. Pauses automatically during
+  room drags; mutually exclusive with `zoom:`.
+- **Preset gallery** — new `PRESETS.md` with copy-paste recipes: day/night
+  filters, lux-driven dusk, weather moods, gauge palettes, dimmer zones, door
+  portals, RGB glow via `color_from`, last-motion labels, Bermuda multiroom.
+- **CI: HACS validation** — `hacs/action` job runs next to the smoke tests on
+  every push/PR (groundwork for HACS default-repository submission).
+
+---
+
 ## [1.7.0] – 2026-06-10
 
 Multi-room phase 2 (adaptive navigation + finger-attached room drag) and a

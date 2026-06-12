@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.7.0 — MIT License
+ * room-overlay-card v1.9.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.7.0';
+const ROC_VERSION='1.9.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -224,8 +224,9 @@ class RoomOverlayCard extends HTMLElement{
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._mobActive=false;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
-    this._navThumbEls={};this._navChipEls=[];this._zoomScale=1;
+    this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
+    this._orientHandler=null;this._roomDragActive=false;
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -249,6 +250,7 @@ class RoomOverlayCard extends HTMLElement{
     if(!this._visible)return;
     // Embedded cards do their own change detection — always forward hass
     for(const k in this._cardEls){try{this._cardEls[k].hass=h;}catch(_){}}
+    for(const el of(this._navCardEls||[]))try{el.hass=h;}catch(_){}
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
       if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))
@@ -380,17 +382,31 @@ class RoomOverlayCard extends HTMLElement{
       const _np=String(c.aspect_ratio||'16/9').split('/');
       const _nr=(parseFloat(_np[0])>0&&parseFloat(_np[1])>0)?parseFloat(_np[0])/parseFloat(_np[1]):16/9;
       const navSelfIdx=this._roomIdx;
+      // nav.width: css size | 'auto' (stretch items across the available strip)
+      const nwRaw=navCfg.width;
+      let _thFlex;
+      if(nwRaw==='auto')_thFlex=_navSide?'flex:none;width:100%;':'flex:1 1 0;min-width:0;';
+      else _thFlex='flex:none;width:'+(nwRaw||('calc('+nh+' * '+_nr.toFixed(3)+')'))+';';
+      const _tabFlex=(nwRaw==='auto'&&!_navSide)?'flex:1 1 0;min-width:0;justify-content:center;':'flex:none;';
+      // nav.cards: arbitrary HA cards inside the strip ({width, card} or plain card config)
+      const _navCardsHtml=(navCfg.cards||[]).map(function(cc,ci){
+        const w=cc&&cc.width;
+        const sz=_navSide
+          ?('width:100%;'+(w?'height:'+w+';':'min-height:'+nh+';'))
+          :('height:'+nh+';'+(w?'flex:none;width:'+w+';':'flex:1 1 auto;min-width:140px;'));
+        return'<div data-nav-card="'+ci+'" style="'+sz+'overflow:hidden;border-radius:6px;position:relative;"></div>';
+      }).join('');
       navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':'overflow-x:auto;')+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
         +cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
           if(navStyle==='dots')
             return'<button data-nav-room="'+ri+'" aria-label="'+escA(r.name||r.id)+'" style="width:10px;height:10px;border-radius:50%;border:none;cursor:pointer;background:'+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#666)')+';padding:0;flex:none;"></button>';
           if(navStyle==='tabs')
-            return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;flex:none;">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
+            return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
           // thumbnails — live mini-render: base image + filter + sensor chips
-          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;flex:none;height:'+nh+';width:calc('+nh+' * '+_nr.toFixed(3)+');border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;height:'+nh+';'+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
-        }).join('')+'</div>';
+        }).join('')+_navCardsHtml+'</div>';
     }
     const _navTop=!_navSide&&navPos!=='bottom'?navHtml:'';
     const _navBot=!_navSide&&navPos==='bottom'?navHtml:'';
@@ -409,6 +425,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
+    if(this._orientHandler){window.removeEventListener('deviceorientation',this._orientHandler);this._orientHandler=null;}
     this._teardownTemplates();
     this._selectedTM=null;
 
@@ -448,13 +465,13 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="wrap"'+_wrapStyle+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div>'+_flexPost+_navBot+'</ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="wrap"'+_wrapStyle+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+_flexPost+_navBot+'</ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._wxEl=this.shadowRoot.querySelector('[data-wx]');
     // ---- Nav wiring -------------------------------------------------------
-    this._navThumbEls={};this._navChipEls=[];
+    this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];
     if(navStyle!=='none'){
       const navSelf=this;
       this.shadowRoot.querySelectorAll('[data-nav-room]').forEach(function(btn){
@@ -477,6 +494,18 @@ class RoomOverlayCard extends HTMLElement{
           });
         });
       }
+      // Custom HA cards embedded in the nav strip
+      (navCfg.cards||[]).forEach(function(cc,ci){
+        const host=navSelf.shadowRoot.querySelector('[data-nav-card="'+ci+'"]');
+        if(!host)return;
+        const cardCfg=cc&&cc.card?cc.card:cc;
+        if(!cardCfg||!cardCfg.type)return;
+        const wrapEl=makeHACard(cardCfg,function(el){
+          navSelf._navCardEls.push(el);
+          if(navSelf._hass)try{el.hass=navSelf._hass;}catch(_){}
+        });
+        if(wrapEl)host.appendChild(wrapEl);
+      });
     }
     // ---- Finger-attached room drag (filmstrip feel) -------------------------
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&!tm){
@@ -815,6 +844,12 @@ class RoomOverlayCard extends HTMLElement{
       const wrapEl=this.shadowRoot.querySelector('.wrap');
       if(wrapEl&&content)this._attachZoom(wrapEl,content);
     }
+    // Parallax tilt — pointer-driven (and device orientation where allowed).
+    // Mutually exclusive with zoom (both own the content transform).
+    if(c.parallax&&!tm&&!c.zoom){
+      const wrapPx=this.shadowRoot.querySelector('.wrap');
+      if(wrapPx&&content)this._attachParallax(wrapPx,content);
+    }
     // IntersectionObserver — zastav updates když karta není ve viewportu
     if(this._io)this._io.disconnect();
     if(typeof IntersectionObserver!=='undefined'){
@@ -1057,6 +1092,45 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
+  // 3D parallax tilt of the whole scene. Pointer-driven on desktop; device
+  // orientation on platforms that expose it without a permission prompt
+  // (iOS requires a user-gesture prompt, deliberately not triggered here).
+  _attachParallax(wrap,content){
+    const self=this;
+    const pc=typeof this._roomCfg.parallax==='object'&&this._roomCfg.parallax?this._roomCfg.parallax:{};
+    const strength=pc.strength??6,scale=pc.scale??1.04;
+    const src=pc.source||'auto';
+    wrap.style.perspective='900px';
+    let raf=0,tx=0,ty=0;
+    const apply=function(){
+      raf=0;
+      if(self._zoomScale>1||self._roomDragActive)return; // those gestures own the transform
+      content.style.transition='transform .12s ease-out';
+      content.style.transform=(tx===0&&ty===0)?'':'scale('+scale+') rotateX('+ty.toFixed(2)+'deg) rotateY('+tx.toFixed(2)+'deg)';
+    };
+    const queue=function(){if(!raf)raf=requestAnimationFrame(apply);};
+    if(src!=='orientation'){
+      wrap.addEventListener('pointermove',function(e){
+        if(e.pointerType==='touch')return;
+        const r=wrap.getBoundingClientRect();
+        tx=((e.clientX-r.left)/r.width-0.5)*2*strength;
+        ty=-((e.clientY-r.top)/r.height-0.5)*2*strength;
+        queue();
+      });
+      wrap.addEventListener('pointerleave',function(){tx=0;ty=0;queue();});
+    }
+    if((src==='orientation'||src==='auto')&&typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission!=='function'){
+      const oh=function(ev){
+        if(ev.gamma===null||ev.beta===null)return;
+        tx=Math.max(-strength,Math.min(strength,ev.gamma/4));
+        ty=Math.max(-strength,Math.min(strength,-(ev.beta-45)/4));
+        queue();
+      };
+      window.addEventListener('deviceorientation',oh);
+      this._orientHandler=oh;
+    }
+  }
+
   // Live room drag: content follows the finger, the neighbour's base image is
   // revealed alongside; release past 25 % width (or fling) commits the switch.
   _attachRoomDrag(wrap){
@@ -1081,7 +1155,7 @@ class RoomOverlayCard extends HTMLElement{
       if(!engaged){
         const dy=e.clientY-sy;
         if(Math.abs(dx)<12||Math.abs(dx)<1.5*Math.abs(dy))return; // horizontal intent only
-        engaged=true;moved=true;
+        engaged=true;moved=true;self._roomDragActive=true;
         try{wrap.setPointerCapture(pid);}catch(_){}
         dir2=dx<0?1:-1;
         const n=self._config.rooms.length;
@@ -1107,7 +1181,7 @@ class RoomOverlayCard extends HTMLElement{
       if(!active)return;
       active=false;
       if(!engaged)return;
-      engaged=false;
+      engaged=false;self._roomDragActive=false;
       const ct=content();
       const fling=Math.abs(vx)>0.5&&(vx<0)===(dir2>0);
       const commit=Math.abs(dx)>w*0.25||fling;
@@ -1131,7 +1205,7 @@ class RoomOverlayCard extends HTMLElement{
     wrap.addEventListener('pointercancel',function(){
       if(prev){prev.remove();prev=null;}
       const ct=content();if(ct){ct.style.transition='';ct.style.transform='';}
-      active=false;engaged=false;
+      active=false;engaged=false;self._roomDragActive=false;
     });
     // Swallow the click that follows a drag (capture phase beats zone handlers)
     wrap.addEventListener('click',function(e){if(moved){moved=false;e.stopImmediatePropagation();e.preventDefault();}},true);
@@ -1608,6 +1682,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
+    if(this._orientHandler){window.removeEventListener('deviceorientation',this._orientHandler);this._orientHandler=null;}
     this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
     if(this._io){this._io.disconnect();this._io=null;}
@@ -1790,7 +1865,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;}
 
   // Active room view for editing (the room whose sections are shown)
   _roomView(){
@@ -1867,9 +1942,27 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   set hass(h){
     this._hass=h;
+    if(this._prevCard)try{this._prevCard.hass=h;}catch(_){}
     const dl=this.querySelector('#roc-entities');
     if(dl&&!dl.hasChildNodes())
       dl.innerHTML=Object.keys(h.states).sort().map(function(id){return'<option value="'+id+'">';}).join('');
+  }
+
+  // Interactive preview inside the editor — a real card instance with
+  // test_mode forced on, without touching the dashboard config
+  _mountPreview(){
+    const host=this.querySelector('#roc-prev-host');
+    this._prevCard=null;
+    if(!host||!this._prevOn)return;
+    try{
+      const el=document.createElement('room-overlay-card');
+      const cfg=JSON.parse(JSON.stringify(this._config));
+      cfg.test_mode=true;cfg._roc_preview=true;
+      el.setConfig(cfg);
+      if(this._hass)el.hass=this._hass;
+      host.appendChild(el);
+      this._prevCard=el;
+    }catch(e){console.warn('[room-overlay-card] editor preview failed:',e);}
   }
 
   _e(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
@@ -2760,7 +2853,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<div><label class="roc-l">card_id (pairing key)</label><input id="card_id" type="text" value="'+this._e(c.card_id||'')+'"'+this._inp('')+'></div>';
       roomsInner+='</div>';
       const _navY=c.nav?_yaml.s(c.nav):'';
-      roomsInner+='<div><label class="roc-l">nav (YAML — style: thumbnails|tabs|dots|none, position: top|bottom, height, chips)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
+      roomsInner+='<div><label class="roc-l">nav (YAML — style, position: top|bottom|left|right|auto, height, width (css or auto), chips, cards)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
@@ -2775,6 +2868,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
+      +'<div style="display:flex;align-items:center;gap:8px;padding:0 4px 8px;"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="prev-on" style="font-size:12px;cursor:pointer;color:var(--secondary-text-color);">Interactive preview (drag, resize, draw &amp; nudge here — without enabling test mode on the dashboard)</label></div>'
+      +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +sec('rooms','Rooms (multi-room)'+(hasRooms?' — editing: '+this._e(cR.name||cR.id||''):''),(c.rooms||[]).length,roomsInner)
       +sec('basic','Basic settings'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
       +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
@@ -2802,9 +2897,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     }
     this._listen();
     this._bindHassComponents();
+    this._mountPreview();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
-    if(c.test_mode){
+    if(c.test_mode||this._prevOn){
       this._rocPosHandler=this._makeRocPosHandler();
       window.addEventListener('roc-pos-update',this._rocPosHandler);
     }
@@ -2817,6 +2913,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(!nc)return;
       // Only accept updates from "our" card (two cards in test mode = cross-talk)
       if(cfgKey(nc)!==cfgKey(self._config))return;
+      // Updates from the embedded editor preview carry forced flags — strip them
+      if(nc._roc_preview){
+        delete nc._roc_preview;
+        if(!self._config.test_mode)delete nc.test_mode;
+      }
       self._config=nc;
       self._render(); // refresh position inputs, otherwise the next edit reverts the drag
       self._fire(nc);
@@ -2902,6 +3003,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
+    const prevOnEl=this.querySelector('#prev-on');
+    if(prevOnEl)prevOnEl.addEventListener('change',function(){self._prevOn=prevOnEl.checked;self._render();});
     const undoBtn=this.querySelector('#roc-undo');
     if(undoBtn)undoBtn.addEventListener('click',function(){self._undo();});
     const redoBtn=this.querySelector('#roc-redo');

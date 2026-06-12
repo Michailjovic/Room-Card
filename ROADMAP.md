@@ -1,6 +1,7 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v1.7.0** (2026-06-10). Verified against Home Assistant 2026.6.
+Current release: **v1.8.0** (2026-06-10). Verified against Home Assistant 2026.6.
+**The original roadmap is complete** — remaining items below are maintenance and future ideas.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
@@ -34,13 +35,13 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 | # | Item | Why |
 |---|---|---|
 | 14 | ✅ **Multi-room navigation** — v1.6.0: `rooms:`, thumbnail nav with live filters + `{room}` chips, `switch-room` door zones, `room_entity` presence follow (Bermuda), `card_id`. v1.7.0: `nav.position: auto` side rail on ultrawide, finger-attached filmstrip drag, snow effect v3 | One card per flat instead of one per room |
-| 15 | 🔭 **Editor revamp** — split-pane live preview + form; evaluate `getConfigForm` hybrid for basic settings | Today preview lives in the dashboard behind the editor dialog |
-| 16 | 🔭 **3D parallax tilt** (device orientation / mouse) | Depth illusion from layered PNGs |
-| 17 | 🔭 **Theme preset gallery** — shareable YAML snippets (night modes, seasons) | Community building block |
+| 15 | ✅ **Editor live preview** — SHIPPED in v1.8.0: interactive preview (forced test mode) inside the editor dialog; `getConfigForm` hybrid evaluated and rejected (custom editor is richer) | Today preview lives in the dashboard behind the editor dialog |
+| 16 | ✅ **3D parallax tilt** — SHIPPED in v1.8.0: `parallax:` pointer + device orientation, pauses during gestures | Depth illusion from layered PNGs |
+| 17 | ✅ **Theme preset gallery** — SHIPPED in v1.8.0: `PRESETS.md` copy-paste recipes | Community building block |
 
 ## Maintenance (ongoing)
 
-- **HACS default repository submission** — add HACS validation action, repo topics; README/CHANGELOG already compliant.
+- **HACS default repository submission** — validation action added in v1.8.0 ✅; remaining: repo topics + submission PR to hacs/default.
 - **Screenshots refresh** for 1.3 features (radial gauges, sliders, weather, templates).
 - **Watch-list of internal APIs** (re-verify on each HA major):
   - `lovelace/config` + `lovelace/config/save` WS (test-mode Save button) — undocumented but stable; sections layout handled.

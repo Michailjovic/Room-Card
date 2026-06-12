@@ -22,3 +22,14 @@ jobs:
 
       - name: Smoke tests (pure functions)
         run: node tests/smoke.test.js
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: plugin
