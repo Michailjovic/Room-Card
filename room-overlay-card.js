@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.10.1 — MIT License
+ * room-overlay-card v1.11.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.10.1';
+const ROC_VERSION='1.11.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -227,6 +227,7 @@ class RoomOverlayCard extends HTMLElement{
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
     this._orientHandler=null;this._roomDragActive=false;
+    this._lastRoomDragEnd=0;this._followInit=false;this._navFollowEl=null;
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -391,15 +392,22 @@ class RoomOverlayCard extends HTMLElement{
       if(nwRaw==='auto')_thFlex=_navSide?('flex:none;width:'+_thDerived+';'):'flex:1 1 0;min-width:0;';
       else _thFlex='flex:none;width:'+(nwRaw||_thDerived)+';';
       const _tabFlex=(nwRaw==='auto'&&!_navSide)?'flex:1 1 0;min-width:0;justify-content:center;':'flex:none;';
-      // nav.cards: arbitrary HA cards inside the strip ({width, card} or plain card config)
-      const _navCardsHtml=(navCfg.cards||[]).map(function(cc,ci){
+      // nav.cards: arbitrary HA cards inside the strip ({width, card, placement} or plain card config)
+      const _navCardOne=function(cc,ci){
         const w=cc&&cc.width;
         const sz=_navSide
           ?('width:100%;'+(w?'height:'+w+';':'min-height:'+nh+';'))
           :('height:'+nh+';'+(w?'flex:none;width:'+w+';':'flex:1 1 auto;min-width:140px;'));
         return'<div data-nav-card="'+ci+'" style="'+sz+'overflow:hidden;border-radius:6px;position:relative;"></div>';
-      }).join('');
+      };
+      const _navCardsStart=(navCfg.cards||[]).map(function(cc,ci){return cc&&cc.placement==='start'?_navCardOne(cc,ci):'';}).join('');
+      const _navCardsEnd=(navCfg.cards||[]).map(function(cc,ci){return cc&&cc.placement==='start'?'':_navCardOne(cc,ci);}).join('');
+      // Follow button — jump back to the presence room (room_entity)
+      const _fbHtml=(cAll.room_entity&&navCfg.follow_button!==false)
+        ?'<button data-nav-follow title="Jump to my room (presence)" style="flex:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--divider-color,#555);background:none;color:var(--primary-text-color,#fff);cursor:pointer;"><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size:18px;"></ha-icon></button>'
+        :'';
       navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':'overflow-x:auto;')+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
+        +_navCardsStart
         +cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
           if(navStyle==='dots')
@@ -409,7 +417,7 @@ class RoomOverlayCard extends HTMLElement{
           // thumbnails — live mini-render: base image + filter + sensor chips
           return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;height:'+nh+';'+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
-        }).join('')+_navCardsHtml+'</div>';
+        }).join('')+_fbHtml+_navCardsEnd+'</div>';
     }
     const _navTop=!_navSide&&navPos!=='bottom'?navHtml:'';
     const _navBot=!_navSide&&navPos==='bottom'?navHtml:'';
@@ -474,7 +482,7 @@ class RoomOverlayCard extends HTMLElement{
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._wxEl=this.shadowRoot.querySelector('[data-wx]');
     // ---- Nav wiring -------------------------------------------------------
-    this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];
+    this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._navFollowEl=null;
     if(navStyle!=='none'){
       const navSelf=this;
       this.shadowRoot.querySelectorAll('[data-nav-room]').forEach(function(btn){
@@ -517,6 +525,11 @@ class RoomOverlayCard extends HTMLElement{
         });
         if(wrapEl)host.appendChild(wrapEl);
       });
+      this._navFollowEl=this.shadowRoot.querySelector('[data-nav-follow]');
+      if(this._navFollowEl){
+        const fbSelf=this;
+        this._navFollowEl.addEventListener('click',function(e){e.stopPropagation();fbSelf._followNow();});
+      }
     }
     // ---- Finger-attached room drag (filmstrip feel) -------------------------
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&!tm){
@@ -916,6 +929,7 @@ class RoomOverlayCard extends HTMLElement{
       },30000);
     }
     this._update();
+    this._syncRoomState();
   }
 
   _snapCandidates(){
@@ -953,10 +967,9 @@ class RoomOverlayCard extends HTMLElement{
     return t[key];
   }
 
-  // Resolve room_entity: plain string, or per-device mapping
+  // Resolve an entity option: plain string, or per-device mapping
   // {default, by_user: {<HA user name>: entity}, by_browser: {<browser_mod id>: entity}}
-  _roomEntityId(){
-    const re=this._config?this._config.room_entity:null;
+  _resolveMapEntity(re){
     if(!re)return null;
     if(typeof re==='string')return re;
     const bid=window.browser_mod?.browserID||window.browser_mod?.browser_id;
@@ -967,6 +980,42 @@ class RoomOverlayCard extends HTMLElement{
         if(String(k).toLowerCase()===String(un).toLowerCase())return re.by_user[k];
     }
     return re.default||null;
+  }
+
+  _roomEntityId(){return this._resolveMapEntity(this._config?this._config.room_entity:null);}
+
+  // Mirror the active room into a writable helper entity (input_text /
+  // input_select) so automations and other cards can react to it
+  _syncRoomState(){
+    const cAll=this._config;
+    if(!this._hass||!Array.isArray(cAll.rooms)||!cAll.rooms.length)return;
+    const rse=this._resolveMapEntity(cAll.room_state_entity);
+    if(!rse)return;
+    const r=cAll.rooms[Math.max(0,Math.min(this._roomIdx,cAll.rooms.length-1))];
+    const val=r.name||r.id||'';
+    const cur=this._hass.states[rse]?.state;
+    const dom=rse.split('.')[0];
+    if(dom==='input_text'){
+      if(cur!==val)this._hass.callService('input_text','set_value',{entity_id:rse,value:val});
+    }else if(dom==='input_select'||dom==='select'){
+      const opts=this._hass.states[rse]?.attributes?.options||[];
+      const opt=opts.find(function(o){
+        const ol=String(o).toLowerCase();
+        return ol===String(r.id||'').toLowerCase()||ol===String(r.name||'').toLowerCase();
+      });
+      if(opt&&opt!==cur)this._hass.callService(dom,'select_option',{entity_id:rse,option:opt});
+    }
+  }
+
+  // Jump to the room reported by the presence sensor (used by the nav button
+  // and the follow-room action); clears the manual-navigation hold
+  _followNow(){
+    const reId=this._roomEntityId();
+    if(!reId||!this._hass)return;
+    const ri=roomMatch(this._config,this._hass.states[reId]?.state);
+    if(ri<0)return;
+    this._manualHoldUntil=0;
+    if(ri!==this._roomIdx)this._switchRoom(ri,ri>this._roomIdx?1:-1,false);
   }
 
   _switchRoom(idx,dir,manual){
@@ -1018,6 +1067,7 @@ class RoomOverlayCard extends HTMLElement{
         if(opt)this._hass.callService(dom,'select_option',{entity_id:_reW,option:opt});
       }
     }
+    this._syncRoomState();
   }
 
   _startCamera(){
@@ -1215,7 +1265,7 @@ class RoomOverlayCard extends HTMLElement{
       if(!active)return;
       active=false;
       if(!engaged)return;
-      engaged=false;self._roomDragActive=false;
+      engaged=false;self._roomDragActive=false;self._lastRoomDragEnd=Date.now();
       const ct=content();
       const fling=Math.abs(vx)>0.5&&(vx<0)===(dir2>0);
       const commit=Math.abs(dx)>w*0.25||fling;
@@ -1239,7 +1289,7 @@ class RoomOverlayCard extends HTMLElement{
     wrap.addEventListener('pointercancel',function(){
       if(prev){prev.remove();prev=null;}
       const ct=content();if(ct){ct.style.transition='';ct.style.transform='';}
-      active=false;engaged=false;self._roomDragActive=false;
+      active=false;engaged=false;self._roomDragActive=false;self._lastRoomDragEnd=Date.now();
     });
     // Swallow the click that follows a drag (capture phase beats zone handlers)
     wrap.addEventListener('click',function(e){if(moved){moved=false;e.stopImmediatePropagation();e.preventDefault();}},true);
@@ -1436,14 +1486,24 @@ class RoomOverlayCard extends HTMLElement{
     const s=this._hass.states;
     const cAll=this._config;
     const c=this._roomCfg||roomMerge(cAll,this._roomIdx); // active room view
-    // room_entity follow (e.g. Bermuda area sensor) — manual switches hold priority
+    // room_entity follow (e.g. Bermuda area sensor) — manual switches hold priority.
+    // follow_mode: always (default) | initial (only the first match after load) | manual (button/action only)
     const _reId=this._roomEntityId();
-    if(_reId&&Array.isArray(cAll.rooms)&&cAll.rooms.length){
+    const _fMode=cAll.follow_mode||'always';
+    if(_reId&&Array.isArray(cAll.rooms)&&cAll.rooms.length&&_fMode!=='manual'&&!(_fMode==='initial'&&this._followInit)){
       const ri=roomMatch(cAll,s[_reId]?.state);
-      if(ri>=0&&ri!==this._roomIdx&&Date.now()>this._manualHoldUntil){
-        this._switchRoom(ri,0,false);
-        return;
+      if(ri>=0){
+        this._followInit=true;
+        if(ri!==this._roomIdx&&Date.now()>this._manualHoldUntil){
+          this._switchRoom(ri,0,false);
+          return;
+        }
       }
+    }
+    // Follow button: accent colour while we're away from the presence room
+    if(this._navFollowEl&&_reId){
+      const _fri=roomMatch(cAll,s[_reId]?.state);
+      setSt(this._navFollowEl,'color',(_fri>=0&&_fri!==this._roomIdx)?'var(--primary-color,#03a9f4)':'');
     }
     // Re-render when the mobile profile activates/deactivates (resize/rotation)
     const _mobNow=!(c.test_mode??false)&&this.offsetWidth>0&&this.offsetWidth<(c.mobile_breakpoint??600);
@@ -1669,6 +1729,9 @@ class RoomOverlayCard extends HTMLElement{
     if(event){event.stopPropagation();event.preventDefault();}
     const a=this._resolveAct(tapAction);
     if(!a||a.action==='none')return;
+    // Swallow taps generated by a room swipe (zones fire on touchend, which the
+    // wrap-level click suppressor cannot catch)
+    if(this._roomDragActive||(this._lastRoomDragEnd&&Date.now()-this._lastRoomDragEnd<400))return;
     if(a.confirmation){
       const _ct=typeof a.confirmation==='object'?(a.confirmation.text||'Are you sure?'):'Are you sure?';
       if(!window.confirm(_ct))return;
@@ -1697,6 +1760,7 @@ class RoomOverlayCard extends HTMLElement{
         if(Array.isArray(this._config.rooms)&&this._config.rooms.length)
           this._switchRoom((this._roomIdx-1+this._config.rooms.length)%this._config.rooms.length,-1,true);
         break;
+      case'follow-room':this._followNow();break;
       case'toggle-group':
       case'show-group':
       case'hide-group':
@@ -2367,6 +2431,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(reEl&&!(typeof c.room_entity==='object'&&c.room_entity)){ // object mapping is YAML-managed
         if(reEl.value.trim())c.room_entity=reEl.value.trim();else delete c.room_entity;
       }
+      const fmEl=q('#follow_mode');
+      if(fmEl){if(fmEl.value&&fmEl.value!=='always')c.follow_mode=fmEl.value;else delete c.follow_mode;}
+      const rseEl=q('#room_state_entity');
+      if(rseEl&&!(typeof c.room_state_entity==='object'&&c.room_state_entity)){
+        if(rseEl.value.trim())c.room_state_entity=rseEl.value.trim();else delete c.room_state_entity;
+      }
       const fhEl=q('#follow_hold');
       if(fhEl){const fv=parseFloat(fhEl.value);if(!isNaN(fv)&&fv>=0&&fv!==60)c.follow_hold=fv;else delete c.follow_hold;}
       const cidEl=q('#card_id');if(cidEl){if(cidEl.value.trim())c.card_id=cidEl.value.trim();else delete c.card_id;}
@@ -2891,8 +2961,26 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<div><label class="roc-l">Follow hold (s after manual switch)</label><input id="follow_hold" type="number" min="0" step="5" value="'+(c.follow_hold??60)+'"'+this._inp('')+'></div>';
       roomsInner+='<div><label class="roc-l">card_id (pairing key)</label><input id="card_id" type="text" value="'+this._e(c.card_id||'')+'"'+this._inp('')+'></div>';
       roomsInner+='</div>';
+      roomsInner+='<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">';
+      roomsInner+='<div><label class="roc-l">Follow mode</label><select id="follow_mode"'+this._inp('')+'>';
+      [['always','always — follow continuously'],['initial','initial — only when the card loads'],['manual','manual — button / action only']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((c.follow_mode||'always')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      roomsInner+='</select></div>';
+      const _rseIsObj=typeof c.room_state_entity==='object'&&c.room_state_entity;
+      roomsInner+='<div><label class="roc-l">room_state_entity (card writes the active room here — input_text / input_select)</label><input id="room_state_entity" type="text" list="roc-entities"'+(_rseIsObj?' disabled placeholder="per-device mapping — edit in YAML"':' placeholder="input_text.active_room"')+' value="'+this._e(typeof c.room_state_entity==='string'?c.room_state_entity:'')+'"'+this._inp('')+'></div>';
+      roomsInner+='</div>';
+      const _bidNow=window.browser_mod?.browserID||window.browser_mod?.browser_id||'';
+      roomsInner+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
+      roomsInner+='<label class="roc-l">This device — browser_mod ID: <b>'+this._e(_bidNow||'(browser_mod not detected)')+'</b></label>';
+      if(_bidNow){
+        roomsInner+='<div style="display:grid;grid-template-columns:2fr auto;gap:8px;align-items:end;">';
+        roomsInner+='<div><label class="roc-l">Presence sensor for this device (e.g. its Bermuda area sensor)</label><input id="bid-entity" type="text" list="roc-entities" placeholder="sensor.tablet_area"'+this._inp('')+'></div>';
+        roomsInner+='<button id="bid-map" style="'+btnStyle+'">Map this device</button>';
+        roomsInner+='</div>';
+        roomsInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Adds/updates room_entity.by_browser for this device. Open the editor on each device you want to map.</p>';
+      }
+      roomsInner+='</div>';
       const _navY=c.nav?_yaml.s(c.nav):'';
-      roomsInner+='<div><label class="roc-l">nav (YAML — style, position: top|bottom|left|right|auto, height, width (css or auto), chips, cards)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
+      roomsInner+='<div><label class="roc-l">nav (YAML — style, position, height, width (css|auto), chips, cards (placement: start|end), follow_button)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
@@ -3035,8 +3123,21 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     const convRooms=this.querySelector('#conv-rooms');
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
-    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','nav_yaml'].forEach(function(id){
+    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','nav_yaml','follow_mode','room_state_entity'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
+    });
+    const bidMap=this.querySelector('#bid-map');
+    if(bidMap)bidMap.addEventListener('click',function(){
+      const entEl=self.querySelector('#bid-entity');
+      const bid=window.browser_mod?.browserID||window.browser_mod?.browser_id;
+      if(!bid||!entEl||!entEl.value.trim())return;
+      const c=self._collectConfig();
+      if(typeof c.room_entity==='string')c.room_entity={default:c.room_entity};
+      else if(!c.room_entity||typeof c.room_entity!=='object')c.room_entity={};
+      else c.room_entity=Object.assign({},c.room_entity);
+      c.room_entity.by_browser=Object.assign({},c.room_entity.by_browser||{});
+      c.room_entity.by_browser[bid]=entEl.value.trim();
+      self._config=c;self._render();self._fire(c);
     });
 
     ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){

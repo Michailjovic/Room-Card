@@ -635,6 +635,9 @@ room_entity:                    # string, or per-device mapping:
   by_browser:                   # browser_mod browser ID (wall tablets)
     wall_tablet_living: sensor.phone_alice_area
 follow_hold: 60                 # s — manual navigation outranks presence
+follow_mode: always             # always | initial (only on load) | manual (button only)
+room_state_entity: input_text.active_room   # card mirrors the active room here
+                                # (input_text/input_select; per-device mapping supported)
 nav:
   style: thumbnails             # thumbnails | tabs | dots | none
   position: auto                # top | bottom | left | right | auto
@@ -678,9 +681,10 @@ rooms:
     area_match: [Bedroom, Ložnice]
 ```
 
-Switching works four ways: nav thumbnails, **finger-attached drag** (the room
-follows your finger, neighbour revealed alongside; release past 25 % or fling
-to commit),
+Switching works five ways: nav thumbnails, the **follow button** (crosshair at
+the end of the strip — lights up when you're away from your presence room;
+also `{action: follow-room}`), **finger-attached drag** (the room follows your
+finger, neighbour revealed alongside; release past 25 % or fling to commit),
 `switch-room` / `next-room` / `prev-room` actions, and automatic
 **presence follow** via `room_entity` (writable `input_select` entities are
 synced back on manual switches). Updates, templates and camera refresh run

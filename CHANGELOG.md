@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.11.0] – 2026-06-12
+
+Presence-follow polish: follow modes, a follow button, active-room state
+mirroring, an in-editor device mapper, and a swipe-vs-tap fix.
+Verified against Home Assistant 2026.6.
+
+### Added
+- **`follow_mode`** — `always` (default, continuous follow), `initial` (jump
+  to the presence room only once when the card loads — then navigation is
+  fully manual) or `manual` (presence never moves the card by itself; only
+  the follow button / `follow-room` action do).
+- **Follow button** — a crosshair button at the end of the nav strip jumps to
+  the presence room and clears the manual-navigation hold. It lights up in
+  the accent colour whenever you're viewing a different room than the one
+  presence reports. Hide with `nav.follow_button: false`. Also available as
+  an action: `{action: follow-room}` on any zone/icon/badge.
+- **`room_state_entity`** — the card mirrors the active room into a writable
+  helper (`input_text` or `input_select`), so automations and other cards can
+  react to where you're looking. Accepts the same per-device mapping object
+  as `room_entity` (each device mirrors into its own helper).
+- **Editor: "Map this device"** — the Rooms section now shows the
+  browser_mod ID of the device the editor is open on, with an entity picker
+  and a one-click button that writes `room_entity.by_browser` for you. Open
+  the editor on each device, pick its presence sensor, click — done. Plus
+  GUI fields for `follow_mode` and `room_state_entity`.
+- **`nav.cards` placement** — `placement: start` puts a custom card before
+  the room thumbnails (default `end`).
+
+### Fixed
+- **Swiping that started on a clickable zone no longer triggers the zone's
+  action** — zones fire on `touchend`, which the previous click-only
+  suppressor couldn't catch; actions are now suppressed during a room drag
+  and for 400 ms after it.
+
+---
+
 ## [1.10.1] – 2026-06-12
 
 ### Fixed
