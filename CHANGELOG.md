@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.7.0] – 2026-06-10
+
+Multi-room phase 2 (adaptive navigation + finger-attached room drag) and a
+complete snow rework. Verified against Home Assistant 2026.6.
+
+### Added
+- **Adaptive navigation position** — `nav.position` now accepts `left`,
+  `right` and `auto` in addition to `top`/`bottom`. With `auto` the strip
+  renders as a **vertical side rail** when the card is wider than
+  `nav.auto_breakpoint` (default 1100 px) — on ultrawide screens the 16/9
+  image doesn't fill the height, so the rail uses that dead space instead of
+  eating vertical room; on narrow widths it falls back to the top strip.
+  Flips live on resize/rotation.
+- **Finger-attached room drag** — swiping between rooms is now a real
+  filmstrip gesture: the room follows your finger, the neighbour's image is
+  revealed alongside, release past 25 % of the width (or a quick fling)
+  commits the switch, otherwise the room snaps back. Direction can be
+  reversed mid-drag. Vertical page scrolling stays untouched
+  (`touch-action: pan-y`), slider zones and zoomed state still own their
+  gestures.
+
+### Changed
+- **Snow effect rebuilt** — the old snow was nearly invisible. Now three
+  parallax layers of larger, soft-edged flakes (bright core + glow falloff)
+  with opposing horizontal drift, seamless loops, and a denser/faster heavy
+  tier for `hail`. Default opacity is now per-effect: snow 0.7, heavy snow
+  0.8, rain 0.45, heavy rain 0.55, fog 0.5, lightning 0.6 (explicit
+  `opacity:` still overrides).
+
+---
+
 ## [1.6.0] – 2026-06-10
 
 **Multi-room.** One card, your whole home: per-room configs, an auto-generated

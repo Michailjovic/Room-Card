@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.6.0 — MIT License
+ * room-overlay-card v1.7.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.6.0';
+const ROC_VERSION='1.7.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -225,6 +225,7 @@ class RoomOverlayCard extends HTMLElement{
     this._gdH=null;this._gdV=null;this._mobActive=false;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._zoomScale=1;
+    this._navPos='top';this._wrapTA='';
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -361,19 +362,25 @@ class RoomOverlayCard extends HTMLElement{
     const cAll=this._config;
     const c=roomMerge(cAll,this._roomIdx); // active room view (or plain config)
     this._roomCfg=c;
-    this._zoomScale=1;
+    this._zoomScale=1;this._wrapTA='';
     const tm=c.test_mode??false;
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
     // ---- Multi-room navigation strip -------------------------------------
     let navHtml='';
     const navCfg=cAll.nav||{};
     const navStyle=Array.isArray(cAll.rooms)&&cAll.rooms.length>1?(navCfg.style||'thumbnails'):'none';
+    // position: top | bottom | left | right | auto (auto = side rail on wide cards)
+    let navPos=navCfg.position||'top';
+    if(navPos==='auto')navPos=(this.offsetWidth||0)>=(navCfg.auto_breakpoint??1100)?'left':'top';
+    if(navStyle==='none')navPos='top';
+    this._navPos=navPos;
+    const _navSide=navPos==='left'||navPos==='right';
     if(navStyle!=='none'){
       const nh=navCfg.height||'64px';
       const _np=String(c.aspect_ratio||'16/9').split('/');
       const _nr=(parseFloat(_np[0])>0&&parseFloat(_np[1])>0)?parseFloat(_np[0])/parseFloat(_np[1]):16/9;
       const navSelfIdx=this._roomIdx;
-      navHtml='<div class="roc-nav" style="display:flex;gap:6px;padding:6px;overflow-x:auto;align-items:center;scrollbar-width:thin;">'
+      navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':'overflow-x:auto;')+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
         +cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
           if(navStyle==='dots')
@@ -385,8 +392,11 @@ class RoomOverlayCard extends HTMLElement{
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
         }).join('')+'</div>';
     }
-    const _navTop=navCfg.position!=='bottom'?navHtml:'';
-    const _navBot=navCfg.position==='bottom'?navHtml:'';
+    const _navTop=!_navSide&&navPos!=='bottom'?navHtml:'';
+    const _navBot=!_navSide&&navPos==='bottom'?navHtml:'';
+    const _flexPre=_navSide?'<div style="display:flex;align-items:stretch;">'+(navPos==='left'?navHtml:''):'';
+    const _flexPost=_navSide?(navPos==='right'?navHtml:'')+'</div>':'';
+    const _wrapStyle=_navSide?' style="flex:1 1 auto;min-width:0;"':'';
 
     // Inicializace group state — zachovat existující stav, přidat nové skupiny
     const _prevGS=this._groupState||{};
@@ -438,7 +448,7 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.wx-snow.wx-heavy{background-size:80px 80px,52px 52px;animation-duration:4s;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+'<div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div>'+_navBot+'</ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="wrap"'+_wrapStyle+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div>'+_flexPost+_navBot+'</ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -468,27 +478,10 @@ class RoomOverlayCard extends HTMLElement{
         });
       }
     }
-    // ---- Swipe between rooms (horizontal intent, inactive while zoomed) ----
+    // ---- Finger-attached room drag (filmstrip feel) -------------------------
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&!tm){
-      const swSelf=this;
       const wrapSw=this.shadowRoot.querySelector('.wrap');
-      if(wrapSw){
-        let sx=0,sy=0,actv=false,pid=null;
-        wrapSw.addEventListener('pointerdown',function(e){sx=e.clientX;sy=e.clientY;actv=true;pid=e.pointerId;});
-        wrapSw.addEventListener('pointerup',function(e){
-          if(!actv||e.pointerId!==pid)return;
-          actv=false;
-          if(swSelf._zoomScale>1)return;
-          const dx=e.clientX-sx,dy=e.clientY-sy;
-          if(Math.abs(dx)<48||Math.abs(dx)<2*Math.abs(dy))return;
-          const path=e.composedPath?e.composedPath():[];
-          if(path.some(function(n){return n.dataset&&n.dataset.rocSlider;}))return; // started on a slider zone
-          const n=cAll.rooms.length;
-          if(dx<0)swSelf._switchRoom((swSelf._roomIdx+1)%n,1,true);
-          else swSelf._switchRoom((swSelf._roomIdx-1+n)%n,-1,true);
-        });
-        wrapSw.addEventListener('pointercancel',function(){actv=false;});
-      }
+      if(wrapSw)this._attachRoomDrag(wrapSw);
     }
     if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
@@ -1064,6 +1057,86 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
+  // Live room drag: content follows the finger, the neighbour's base image is
+  // revealed alongside; release past 25 % width (or fling) commits the switch.
+  _attachRoomDrag(wrap){
+    const self=this;
+    this._wrapTA='pan-y';
+    wrap.style.touchAction='pan-y';
+    let pid=null,sx=0,sy=0,active=false,engaged=false,dx=0,prev=null,dir2=0,w=0,moved=false,lastX=0,lastT=0,vx=0;
+    const content=function(){return self.shadowRoot?self.shadowRoot.querySelector('.wrap .content'):null;};
+    wrap.addEventListener('pointerdown',function(e){
+      if(self._zoomScale>1)return;
+      const path=e.composedPath?e.composedPath():[];
+      if(path.some(function(n){return n.dataset&&n.dataset.rocSlider;}))return; // slider zones own the gesture
+      pid=e.pointerId;sx=e.clientX;sy=e.clientY;active=true;engaged=false;dx=0;
+      lastX=e.clientX;lastT=Date.now();vx=0;
+      w=wrap.getBoundingClientRect().width||1;
+    });
+    wrap.addEventListener('pointermove',function(e){
+      if(!active||e.pointerId!==pid)return;
+      dx=e.clientX-sx;
+      const now=Date.now();
+      if(now>lastT){vx=(e.clientX-lastX)/(now-lastT);lastX=e.clientX;lastT=now;}
+      if(!engaged){
+        const dy=e.clientY-sy;
+        if(Math.abs(dx)<12||Math.abs(dx)<1.5*Math.abs(dy))return; // horizontal intent only
+        engaged=true;moved=true;
+        try{wrap.setPointerCapture(pid);}catch(_){}
+        dir2=dx<0?1:-1;
+        const n=self._config.rooms.length;
+        const nr=self._config.rooms[(self._roomIdx+dir2+n)%n];
+        prev=document.createElement('div');
+        prev.style.cssText='position:absolute;inset:0;z-index:590;pointer-events:none;background-size:cover;background-position:center;'+(nr&&nr.base_image?'background-image:url("'+String(nr.base_image).replace(/"/g,'%22')+'");':'background:#000;');
+        wrap.appendChild(prev);
+        const ct=content();if(ct)ct.style.transition='none';
+      }
+      e.preventDefault();
+      const ndir=dx<0?1:-1;
+      if(ndir!==dir2&&prev){ // direction flipped mid-drag → swap neighbour preview
+        dir2=ndir;
+        const n=self._config.rooms.length;
+        const nr=self._config.rooms[(self._roomIdx+dir2+n)%n];
+        prev.style.backgroundImage=nr&&nr.base_image?'url("'+String(nr.base_image).replace(/"/g,'%22')+'")':'';
+      }
+      const ct=content();
+      if(ct)ct.style.transform='translateX('+dx+'px)';
+      if(prev)prev.style.transform='translateX('+(dir2>0?w+dx:-w+dx)+'px)';
+    });
+    wrap.addEventListener('pointerup',function(){
+      if(!active)return;
+      active=false;
+      if(!engaged)return;
+      engaged=false;
+      const ct=content();
+      const fling=Math.abs(vx)>0.5&&(vx<0)===(dir2>0);
+      const commit=Math.abs(dx)>w*0.25||fling;
+      const pv=prev;prev=null;
+      if(commit){
+        const n=self._config.rooms.length;
+        const ni=(self._roomIdx+dir2+n)%n;
+        const target=dir2>0?-w:w;
+        if(ct){ct.style.transition='transform .18s ease-out';ct.style.transform='translateX('+target+'px)';}
+        if(pv){pv.style.transition='transform .18s ease-out';pv.style.transform='translateX(0)';}
+        setTimeout(function(){
+          self._switchRoom(ni,0,true); // re-render under the settled preview
+          setTimeout(function(){if(pv)pv.remove();},80);
+        },180);
+      }else{
+        if(ct){ct.style.transition='transform .2s ease';ct.style.transform='';}
+        if(pv){pv.style.transition='transform .2s ease';pv.style.transform='translateX('+(dir2>0?w:-w)+'px)';setTimeout(function(){pv.remove();},230);}
+        setTimeout(function(){const c2=content();if(c2)c2.style.transition='';},230);
+      }
+    });
+    wrap.addEventListener('pointercancel',function(){
+      if(prev){prev.remove();prev=null;}
+      const ct=content();if(ct){ct.style.transition='';ct.style.transform='';}
+      active=false;engaged=false;
+    });
+    // Swallow the click that follows a drag (capture phase beats zone handlers)
+    wrap.addEventListener('click',function(e){if(moved){moved=false;e.stopImmediatePropagation();e.preventDefault();}},true);
+  }
+
   _attachZoom(wrap,content){
     const ptrs=new Map();
     const zSelf=this;
@@ -1074,7 +1147,7 @@ class RoomOverlayCard extends HTMLElement{
       tx=Math.max(-maxX,Math.min(maxX,tx));
       ty=Math.max(-maxY,Math.min(maxY,ty));
       content.style.transform=scale>1?'translate('+tx+'px,'+ty+'px) scale('+scale+')':'';
-      wrap.style.touchAction=scale>1?'none':'';
+      wrap.style.touchAction=scale>1?'none':(zSelf._wrapTA||'');
       zSelf._zoomScale=scale;
     };
     wrap.addEventListener('pointerdown',function(e){
@@ -1266,6 +1339,11 @@ class RoomOverlayCard extends HTMLElement{
     // Re-render when the mobile profile activates/deactivates (resize/rotation)
     const _mobNow=!(c.test_mode??false)&&this.offsetWidth>0&&this.offsetWidth<(c.mobile_breakpoint??600);
     if(_mobNow!==this._mobActive){this._rendered=false;this._render();return;}
+    // Re-render when nav position: auto flips between top and side rail
+    if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&(cAll.nav&&cAll.nav.position)==='auto'&&this.offsetWidth>0){
+      const _wantPos=this.offsetWidth>=((cAll.nav&&cAll.nav.auto_breakpoint)??1100)?'left':'top';
+      if(_wantPos!==this._navPos){this._rendered=false;this._render();return;}
+    }
     const flipped=(c.test_mode??false)&&this._testFlipped;
     if(this._baseEl){
       let _bf;
@@ -1328,7 +1406,9 @@ class RoomOverlayCard extends HTMLElement{
       const effCls=({'rain':' wx-rain','rain-heavy':' wx-rain wx-heavy','rain-lightning':' wx-rain wx-lightning','lightning':' wx-lightning','snow':' wx-snow','snow-heavy':' wx-snow wx-heavy','fog':' wx-fog'})[eff]||'';
       const wcls='layer wx'+effCls;
       if(this._wxEl.className!==wcls)this._wxEl.className=wcls;
-      setSt(this._wxEl,'opacity',effCls?String(wx.opacity??(eff&&eff.indexOf('heavy')>=0?0.55:0.45)):'0');
+      // Per-effect default opacity — snow needs more presence than rain
+      const _defOp=({'rain':0.45,'rain-heavy':0.55,'rain-lightning':0.5,'lightning':0.6,'snow':0.7,'snow-heavy':0.8,'fog':0.5})[eff]??0.45;
+      setSt(this._wxEl,'opacity',effCls?String(wx.opacity??_defOp):'0');
     }
     // Group panels (fade via visibility/opacity)
     for(const g of(c.groups||[])){

@@ -631,7 +631,8 @@ room_entity: sensor.michael_phone_area   # Bermuda area sensor or input_select
 follow_hold: 60                 # s — manual navigation outranks presence
 nav:
   style: thumbnails             # thumbnails | tabs | dots | none
-  position: top
+  position: auto                # top | bottom | left | right | auto
+  auto_breakpoint: 1100         # auto: side rail above this card width (ultrawide)
   height: 64px
   chips:                        # {room} → room id; per-room `chips:` overrides
     - entity: sensor.{room}_temperature
@@ -661,7 +662,9 @@ rooms:
     area_match: [Bedroom, Ložnice]
 ```
 
-Switching works four ways: nav thumbnails, horizontal **swipe**,
+Switching works four ways: nav thumbnails, **finger-attached drag** (the room
+follows your finger, neighbour revealed alongside; release past 25 % or fling
+to commit),
 `switch-room` / `next-room` / `prev-room` actions, and automatic
 **presence follow** via `room_entity` (writable `input_select` entities are
 synced back on manual switches). Updates, templates and camera refresh run
