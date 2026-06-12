@@ -111,5 +111,22 @@ t('tintFilter format',/sepia\(1\) saturate\([\d.]+\) hue-rotate\(-?\d+deg\) brig
 const tfB=g.tintFilter([0,0,255]);
 t('tintFilter blue rotates further',tfB.includes('hue-rotate(202deg)'));
 
+// ---- v1.6: multiroom helpers -------------------------------------------------
+const mc={aspect_ratio:'16/9',haptic:false,rooms:[{id:'livingroom',name:'Obývák',base_image:'/local/a.webp',zones:[{id:'z1'}]},{id:'bedroom',name:'Bedroom',base_image:'/local/b.webp',area_match:['Ložnice','Bed Room']}]};
+const m0=g.roomMerge(mc,0),m1=g.roomMerge(mc,1);
+t('roomMerge room 0 inherits shared keys',m0.base_image==='/local/a.webp'&&m0.aspect_ratio==='16/9'&&m0.haptic===false&&m0.zones.length===1);
+t('roomMerge room 1 does not leak room 0',m1.base_image==='/local/b.webp'&&m1.zones===undefined);
+t('roomMerge passthrough without rooms',g.roomMerge({base_image:'/x.png'},0).base_image==='/x.png');
+t('roomMerge clamps index',g.roomMerge(mc,99).base_image==='/local/b.webp');
+t('roomMatch by id',g.roomMatch(mc,'bedroom')===1);
+t('roomMatch by name',g.roomMatch(mc,'Obývák')===0);
+t('roomMatch by area alias (ci)',g.roomMatch(mc,'ložnice')===1);
+t('roomMatch miss',g.roomMatch(mc,'garage')===-1);
+t('roomMatch empty/null',g.roomMatch(mc,'')===-1&&g.roomMatch(mc,null)===-1);
+t('cfgKey from rooms[0]',g.cfgKey(mc)==='img:/local/a.webp|');
+t('cfgKey card_id wins',g.cfgKey({card_id:'flat1',base_image:'/x'})==='id:flat1');
+t('cfgKey single-room',g.cfgKey({base_image:'/x.png'})==='img:/x.png|');
+t('shared defaults: top-level zones inherited by rooms',g.roomMerge({zones:[{id:'s'}],rooms:[{id:'a',base_image:'/a'}]},0).zones[0].id==='s');
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);

@@ -621,6 +621,56 @@ exact spot (rubber-band rectangle, auto-named, synced into the editor).
 
 ---
 
+### Multi-room (one card = whole home)
+
+```yaml
+type: custom:room-overlay-card
+aspect_ratio: "16/9"            # card-level keys are shared by all rooms
+card_id: flat_main              # pairing key (editor/save matching)
+room_entity: sensor.michael_phone_area   # Bermuda area sensor or input_select
+follow_hold: 60                 # s — manual navigation outranks presence
+nav:
+  style: thumbnails             # thumbnails | tabs | dots | none
+  position: top
+  height: 64px
+  chips:                        # {room} → room id; per-room `chips:` overrides
+    - entity: sensor.{room}_temperature
+      decimals: 1
+      suffix: "°"
+      color_gradient:
+        - {value: 18, color: "#4CAF50"}
+        - {value: 26, color: "#FF5722"}
+    - entity: sensor.{room}_humidity
+      suffix: "%"
+rooms:
+  - id: livingroom
+    name: Obývák
+    base_image: /local/livingroom.webp
+    area_match: [Living room]   # states of room_entity mapping here
+    filter_conditions: [...]    # thumbnails inherit the live filter (night dim)
+    zones:
+      - id: door_bedroom        # a door as a portal to another room
+        top: "30%"
+        left: "70%"
+        width: "10%"
+        height: "40%"
+        tap_action: {action: switch-room, room: bedroom}
+  - id: bedroom
+    name: Bedroom
+    base_image: /local/bedroom.webp
+    area_match: [Bedroom, Ložnice]
+```
+
+Switching works four ways: nav thumbnails, horizontal **swipe**,
+`switch-room` / `next-room` / `prev-room` actions, and automatic
+**presence follow** via `room_entity` (writable `input_select` entities are
+synced back on manual switches). Updates, templates and camera refresh run
+only for the active room. Top-level room-scoped keys (e.g. a shared badge)
+act as defaults for every room. Without `rooms:` the card behaves exactly as
+before; the GUI editor has a one-click **Convert to multi-room** button.
+
+---
+
 ## Complete example
 
 ```yaml

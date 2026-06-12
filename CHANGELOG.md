@@ -1,5 +1,54 @@
 # Changelog
 
+## [1.6.0] – 2026-06-10
+
+**Multi-room.** One card, your whole home: per-room configs, an auto-generated
+thumbnail navigation strip with live filters and sensor chips, swipe and
+door-zone navigation, and presence-driven room switching (Bermuda/BLE ready).
+Fully backward compatible — without `rooms:` nothing changes.
+Verified against Home Assistant 2026.6.
+
+### Added
+- **`rooms:` array** — each entry is a complete room config (`base_image`,
+  `overlays`, `zones`, `gauges`, …) plus `id`, `name`, `icon`, `area_match`,
+  `chips`. Top-level room-scoped keys act as shared defaults inherited by
+  every room; card-level keys (`aspect_ratio`, `border_radius`, `zoom`,
+  `mobile_breakpoint`, `haptic`) stay shared.
+- **Auto-generated navigation** — `nav.style: thumbnails` (default) renders a
+  strip of live room miniatures: each thumb shows the room's base image with
+  its *active filter conditions applied* (night dim follows automatically)
+  plus up to 3 sensor chips. `nav.chips` defines chips once for all rooms with
+  a `{room}` placeholder (e.g. `sensor.{room}_temperature`), per-room `chips:`
+  overrides. Styles: `thumbnails | tabs | dots | none`; `position: top|bottom`;
+  `height`. Active room is highlighted; thumbnails are keyboard-accessible.
+- **Room switching, four ways** — tap a nav thumbnail; **swipe** horizontally
+  on the image (intent-detected, ignores slider zones, inactive while zoomed);
+  **`switch-room` / `next-room` / `prev-room` actions** on anything clickable
+  (doors on the floorplan become portals between rooms); or…
+- **`room_entity:` presence follow** — point it at any entity whose state
+  names a room (Bermuda trilateration area sensor, `input_select`, template
+  sensor). The card follows it automatically; `area_match:` per room maps
+  arbitrary state values (e.g. Bermuda area names) to rooms. Manual navigation
+  takes priority for `follow_hold:` seconds (default 60). Writable entities
+  (`input_select`/`select`) are synced back on manual switches — replaces
+  browser_mod dashboard-switching scripts.
+- **Animated transitions** — directional slide between adjacent rooms,
+  crossfade for jumps; updates, template subscriptions, camera and tickers
+  always run only for the active room.
+- **`card_id:`** — explicit pairing key for editor/save/highlight matching;
+  also lifts the old "two cards with the same base_image" limitation.
+- **Editor: Rooms section** — room selector (all sections below edit the
+  chosen room), add/remove room, id/name/icon/area_match/chips fields,
+  room_entity + follow_hold + card_id + nav YAML, and a one-click
+  **Convert to multi-room** migration for existing configs. Test-mode
+  drag/resize/draw and Save write into the active room.
+
+### Changed
+- Smoke-test suite extended to 54 assertions (room merge, room matching,
+  pairing keys, shared defaults).
+
+---
+
 ## [1.5.0] – 2026-06-10
 
 Layout & interaction release — the complete v1.5 roadmap: responsive mobile

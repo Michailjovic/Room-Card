@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.5.0 — MIT License
+ * room-overlay-card v1.6.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.5.0';
+const ROC_VERSION='1.6.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -58,6 +58,34 @@ function tintFilter(rgb){
     h*=60;
   }
   return'sepia(1) saturate('+Math.max(0.2,sat*3).toFixed(2)+') hue-rotate('+Math.round(h-38)+'deg) brightness('+(0.6+l*0.9).toFixed(2)+')';
+}
+// ----- Multi-room helpers -----------------------------------------------------
+// Keys that live per-room; top-level values act as shared defaults for all rooms
+const ROOM_KEYS=['base_image','base_camera','camera_refresh','base_image_conditions','weather_overlay','filter_conditions','brightness_model','overlays','zones','badges','elements','icons','labels','gauges','blinds','groups','tap_action'];
+function roomMerge(c,idx){
+  if(!Array.isArray(c.rooms)||!c.rooms.length)return c;
+  const i=Math.max(0,Math.min(idx||0,c.rooms.length-1));
+  const base=Object.assign({},c);
+  delete base.rooms;delete base.nav;
+  return Object.assign(base,c.rooms[i]);
+}
+function roomMatch(c,state){
+  if(!Array.isArray(c.rooms)||state===null||state===undefined)return -1;
+  const sv=String(state).trim().toLowerCase();
+  if(sv==='')return -1;
+  for(let i=0;i<c.rooms.length;i++){
+    const r=c.rooms[i];
+    if(String(r.id||'').toLowerCase()===sv||String(r.name||'').toLowerCase()===sv)return i;
+    if(Array.isArray(r.area_match)&&r.area_match.some(function(a){return String(a).toLowerCase()===sv;}))return i;
+  }
+  return -1;
+}
+// Identity key used to pair card ↔ editor ↔ dashboard save
+function cfgKey(c){
+  if(!c)return'';
+  if(c.card_id)return'id:'+c.card_id;
+  const r=Array.isArray(c.rooms)&&c.rooms.length?c.rooms[0]:c;
+  return'img:'+(r.base_image||'')+'|'+(r.base_camera||'');
 }
 
 function evalCond(c,s){
@@ -195,6 +223,8 @@ class RoomOverlayCard extends HTMLElement{
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._mobActive=false;
+    this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
+    this._navThumbEls={};this._navChipEls=[];this._zoomScale=1;
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -202,10 +232,13 @@ class RoomOverlayCard extends HTMLElement{
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
 
   setConfig(cfg){
-    if(!cfg.base_image&&!cfg.base_camera)throw new Error('[room-overlay-card] base_image (or base_camera) is required');
+    const hasRooms=Array.isArray(cfg.rooms)&&cfg.rooms.length;
+    if(!cfg.base_image&&!cfg.base_camera&&!(hasRooms&&cfg.rooms.some(function(r){return r.base_image||r.base_camera;})))
+      throw new Error('[room-overlay-card] base_image (or base_camera) is required — directly or in rooms[]');
     const j=JSON.stringify(cfg);
     if(this._rendered&&this._cfgJson===j)return; // identical config — skip full rebuild
     this._cfgJson=j;
+    if(hasRooms&&this._roomIdx>=cfg.rooms.length)this._roomIdx=0;
     this._config=cfg;this._rendered=false;if(this._hass)this._render();
   }
 
@@ -325,8 +358,35 @@ class RoomOverlayCard extends HTMLElement{
 
   _render(){
     if(!this._config)return;
-    const c=this._config,tm=c.test_mode??false;
+    const cAll=this._config;
+    const c=roomMerge(cAll,this._roomIdx); // active room view (or plain config)
+    this._roomCfg=c;
+    this._zoomScale=1;
+    const tm=c.test_mode??false;
     const pad=this._pad(c.aspect_ratio),br=c.border_radius??'12px';
+    // ---- Multi-room navigation strip -------------------------------------
+    let navHtml='';
+    const navCfg=cAll.nav||{};
+    const navStyle=Array.isArray(cAll.rooms)&&cAll.rooms.length>1?(navCfg.style||'thumbnails'):'none';
+    if(navStyle!=='none'){
+      const nh=navCfg.height||'64px';
+      const _np=String(c.aspect_ratio||'16/9').split('/');
+      const _nr=(parseFloat(_np[0])>0&&parseFloat(_np[1])>0)?parseFloat(_np[0])/parseFloat(_np[1]):16/9;
+      const navSelfIdx=this._roomIdx;
+      navHtml='<div class="roc-nav" style="display:flex;gap:6px;padding:6px;overflow-x:auto;align-items:center;scrollbar-width:thin;">'
+        +cAll.rooms.map(function(r,ri){
+          const act=ri===navSelfIdx;
+          if(navStyle==='dots')
+            return'<button data-nav-room="'+ri+'" aria-label="'+escA(r.name||r.id)+'" style="width:10px;height:10px;border-radius:50%;border:none;cursor:pointer;background:'+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#666)')+';padding:0;flex:none;"></button>';
+          if(navStyle==='tabs')
+            return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;flex:none;">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
+          // thumbnails — live mini-render: base image + filter + sensor chips
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;flex:none;height:'+nh+';width:calc('+nh+' * '+_nr.toFixed(3)+');border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+            +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
+        }).join('')+'</div>';
+    }
+    const _navTop=navCfg.position!=='bottom'?navHtml:'';
+    const _navBot=navCfg.position==='bottom'?navHtml:'';
 
     // Inicializace group state — zachovat existující stav, přidat nové skupiny
     const _prevGS=this._groupState||{};
@@ -378,11 +438,58 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.wx-snow.wx-heavy{background-size:80px 80px,52px 52px;animation-duration:4s;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card><div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{from{background-position:0 0,0 0}to{background-position:34px 300px,-22px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 25% 35%,rgba(255,255,255,0.85) 1.4px,transparent 2px),radial-gradient(circle at 70% 65%,rgba(255,255,255,0.6) 1.1px,transparent 1.8px);background-size:110px 110px,70px 70px;animation:roc-snow 7s linear infinite;}.wx-snow.wx-heavy{background-size:80px 80px,52px 52px;animation-duration:4s;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+'<div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>':'')+'</div></div>'+_navBot+'</ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._wxEl=this.shadowRoot.querySelector('[data-wx]');
+    // ---- Nav wiring -------------------------------------------------------
+    this._navThumbEls={};this._navChipEls=[];
+    if(navStyle!=='none'){
+      const navSelf=this;
+      this.shadowRoot.querySelectorAll('[data-nav-room]').forEach(function(btn){
+        btn.addEventListener('click',function(e){
+          e.stopPropagation();
+          const ri=parseInt(btn.dataset.navRoom);
+          navSelf._switchRoom(ri,ri>navSelf._roomIdx?1:(ri<navSelf._roomIdx?-1:0),true);
+        });
+        btn.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();btn.click();}});
+      });
+      if(navStyle==='thumbnails'){
+        cAll.rooms.forEach(function(r,ri){
+          navSelf._navThumbEls[ri]=navSelf.shadowRoot.querySelector('[data-thumb="'+ri+'"]');
+          const chipCont=navSelf.shadowRoot.querySelector('[data-thumb-chips="'+ri+'"]');
+          if(!chipCont)return;
+          (r.chips||navCfg.chips||[]).slice(0,3).forEach(function(chCfg){
+            const span=document.createElement('span');
+            chipCont.appendChild(span);
+            navSelf._navChipEls.push({el:span,cfg:chCfg,entity:String(chCfg.entity||'').replace(/\{room\}/g,r.id||'')});
+          });
+        });
+      }
+    }
+    // ---- Swipe between rooms (horizontal intent, inactive while zoomed) ----
+    if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&!tm){
+      const swSelf=this;
+      const wrapSw=this.shadowRoot.querySelector('.wrap');
+      if(wrapSw){
+        let sx=0,sy=0,actv=false,pid=null;
+        wrapSw.addEventListener('pointerdown',function(e){sx=e.clientX;sy=e.clientY;actv=true;pid=e.pointerId;});
+        wrapSw.addEventListener('pointerup',function(e){
+          if(!actv||e.pointerId!==pid)return;
+          actv=false;
+          if(swSelf._zoomScale>1)return;
+          const dx=e.clientX-sx,dy=e.clientY-sy;
+          if(Math.abs(dx)<48||Math.abs(dx)<2*Math.abs(dy))return;
+          const path=e.composedPath?e.composedPath():[];
+          if(path.some(function(n){return n.dataset&&n.dataset.rocSlider;}))return; // started on a slider zone
+          const n=cAll.rooms.length;
+          if(dx<0)swSelf._switchRoom((swSelf._roomIdx+1)%n,1,true);
+          else swSelf._switchRoom((swSelf._roomIdx-1+n)%n,-1,true);
+        });
+        wrapSw.addEventListener('pointercancel',function(){actv=false;});
+      }
+    }
     if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
     for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+ov.id+'"]');}
@@ -533,7 +640,7 @@ class RoomOverlayCard extends HTMLElement{
                   if(!Array.isArray(cards))return;
                   for(let i=0;i<cards.length;i++){
                     const card=cards[i];
-                    if(card.type==='custom:room-overlay-card'&&card.base_image===self._config.base_image&&card.base_camera===self._config.base_camera){
+                    if(card.type==='custom:room-overlay-card'&&cfgKey(card)===cfgKey(self._config)){
                       matches.push({arr:cards,idx:i});
                     }
                     if(card.cards)_walk(card.cards);
@@ -573,7 +680,7 @@ class RoomOverlayCard extends HTMLElement{
         el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const zc=(nc.zones||[]).find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;}
+          const zc=this._roomArr(nc,'zones').find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;}
           _dpFire(nc);this._update();
         });
       }
@@ -582,7 +689,7 @@ class RoomOverlayCard extends HTMLElement{
         el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const ic=(nc.icons||[]).find(x=>x.id===ico.id);if(ic){ic.top=top;ic.left=left;}
+          const ic=this._roomArr(nc,'icons').find(x=>x.id===ico.id);if(ic){ic.top=top;ic.left=left;}
           _dpFire(nc);this._update();
         });
       }
@@ -591,7 +698,7 @@ class RoomOverlayCard extends HTMLElement{
         el.style.pointerEvents='auto';el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const lc=(nc.labels||[]).find(x=>x.id===lbl.id);if(lc){lc.top=top;lc.left=left;}
+          const lc=this._roomArr(nc,'labels').find(x=>x.id===lbl.id);if(lc){lc.top=top;lc.left=left;}
           _dpFire(nc);this._update();
         });
       }
@@ -600,7 +707,7 @@ class RoomOverlayCard extends HTMLElement{
         const el=this._zoneEls[z.id];if(!el)continue;
         this._makeResizable(el,(top,left,width,height)=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const zc=(nc.zones||[]).find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;zc.width=width;zc.height=height;}
+          const zc=this._roomArr(nc,'zones').find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;zc.width=width;zc.height=height;}
           _dpFire(nc);this._update();
         });
       }
@@ -608,7 +715,7 @@ class RoomOverlayCard extends HTMLElement{
         const cont=this._contEls[elCfg.id];if(!cont)continue;
         this._makeResizable(cont,(top,left,width,height)=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const ec=(nc.elements||[]).find(x=>x.id===elCfg.id);if(ec){ec.top=top;ec.left=left;ec.width=width;ec.height=height;}
+          const ec=this._roomArr(nc,'elements').find(x=>x.id===elCfg.id);if(ec){ec.top=top;ec.left=left;ec.width=width;ec.height=height;}
           _dpFire(nc);this._update();
         });
       }
@@ -616,7 +723,7 @@ class RoomOverlayCard extends HTMLElement{
         const el=this._gaugeEls[g.id];if(!el)continue;
         this._makeResizable(el,(top,left,width,height)=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const gc=(nc.gauges||[]).find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;gc.width=width;gc.height=height;}
+          const gc=this._roomArr(nc,'gauges').find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;gc.width=width;gc.height=height;}
           _dpFire(nc);this._update();
         });
       }
@@ -646,7 +753,7 @@ class RoomOverlayCard extends HTMLElement{
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const arr=type==='zone'?nc.zones:type==='icon'?nc.icons:nc.labels;
+          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):this._roomArr(nc,'labels');
           const item=(arr||[]).find(x=>x.id===id);
           if(item){item.top=el.style.top;item.left=el.style.left;}
           _dpFire(nc);
@@ -700,10 +807,10 @@ class RoomOverlayCard extends HTMLElement{
           _dwJustDrew=true;setTimeout(function(){_dwJustDrew=false;},300);
           if(w<2||h<2)return; // too small — ignore accidental drags
           const nc=JSON.parse(JSON.stringify(drawSelf._config));
-          if(!nc.zones)nc.zones=[];
-          let n=nc.zones.length+1,id='zone_'+n;
-          while(nc.zones.some(function(z){return z.id===id;})){n++;id='zone_'+n;}
-          nc.zones.push({id:id,top:tp.toFixed(1)+'%',left:l.toFixed(1)+'%',width:w.toFixed(1)+'%',height:h.toFixed(1)+'%'});
+          const dwZones=drawSelf._roomArr(nc,'zones');
+          let n=dwZones.length+1,id='zone_'+n;
+          while(dwZones.some(function(z){return z.id===id;})){n++;id='zone_'+n;}
+          dwZones.push({id:id,top:tp.toFixed(1)+'%',left:l.toFixed(1)+'%',width:w.toFixed(1)+'%',height:h.toFixed(1)+'%'});
           drawSelf._config=nc;
           window.dispatchEvent(new CustomEvent('roc-pos-update',{detail:{config:Object.assign({type:'custom:room-overlay-card'},nc)}}));
           drawSelf._rendered=false;drawSelf._render();
@@ -732,6 +839,8 @@ class RoomOverlayCard extends HTMLElement{
       this._ro.observe(this);
     }
     const _ex=this._extractEntities(this._config);
+    if(cAll.room_entity)_ex.ids.add(cAll.room_entity);
+    for(const ch of this._navChipEls)if(ch.entity)_ex.ids.add(ch.entity);
     this._relevantEntities=[..._ex.ids];
     this._relevantAttrSources=[...this._extractAttrSources(this._config),...[..._ex.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};})];
     this._prevStates={};
@@ -741,7 +850,7 @@ class RoomOverlayCard extends HTMLElement{
     const hlSelf=this;
     this._hlHandler=function(e){
       const d=e.detail||{};
-      if(d.base_image!==hlSelf._config.base_image||d.base_camera!==hlSelf._config.base_camera)return;
+      if(d.key!==cfgKey(hlSelf._config))return;
       const pre={zone:'[data-z="',icon:'[data-ico="',label:'[data-lbl="',gauge:'[data-gauge="',badge:'[data-b="',element:'[data-el="',overlay:'[data-ov="'}[d.kind];
       if(!pre)return;
       const el=hlSelf.shadowRoot.querySelector(pre+d.id+'"]');
@@ -790,6 +899,63 @@ class RoomOverlayCard extends HTMLElement{
   _hideGuides(){
     if(this._gdH)this._gdH.style.display='none';
     if(this._gdV)this._gdV.style.display='none';
+  }
+
+  // Active-room scoped array access for test-mode editing (drag/resize/draw)
+  _roomArr(nc,key){
+    const t=Array.isArray(nc.rooms)&&nc.rooms.length?nc.rooms[Math.max(0,Math.min(this._roomIdx,nc.rooms.length-1))]:nc;
+    if(!t[key])t[key]=[];
+    return t[key];
+  }
+
+  _switchRoom(idx,dir,manual){
+    const cAll=this._config;
+    if(!Array.isArray(cAll.rooms)||idx<0||idx>=cAll.rooms.length||idx===this._roomIdx)return;
+    if(manual)this._manualHoldUntil=Date.now()+((cAll.follow_hold??60)*1000);
+    if(Math.abs(idx-this._roomIdx)>1)dir=0; // non-adjacent → crossfade
+    // Ghost of the old room for the transition (embedded cards render blank in
+    // the clone for ~0.3 s — acceptable)
+    const oldContent=this.shadowRoot?this.shadowRoot.querySelector('.wrap .content'):null;
+    let ghost=null;
+    if(oldContent){
+      ghost=oldContent.cloneNode(true);
+      ghost.style.position='absolute';ghost.style.inset='0';ghost.style.zIndex='600';
+      ghost.style.pointerEvents='none';
+      ghost.style.transition='transform .3s ease,opacity .3s ease';
+    }
+    this._roomIdx=idx;
+    this._rendered=false;
+    this._render();
+    const wrap=this.shadowRoot.querySelector('.wrap');
+    const ncontent=this.shadowRoot.querySelector('.content');
+    if(ghost&&wrap&&ncontent){
+      wrap.appendChild(ghost);
+      if(dir){
+        ncontent.style.transition='none';
+        ncontent.style.transform='translateX('+(dir*100)+'%)';
+        requestAnimationFrame(function(){
+          ncontent.style.transition='transform .3s ease';
+          ncontent.style.transform='';
+          ghost.style.transform='translateX('+(-dir*100)+'%)';
+        });
+      }else{
+        requestAnimationFrame(function(){ghost.style.opacity='0';});
+      }
+      setTimeout(function(){ghost.remove();if(ncontent)ncontent.style.transition='';},380);
+    }
+    // Manual switches sync back to a writable room_entity (input_select/select)
+    if(manual&&cAll.room_entity&&this._hass){
+      const dom=cAll.room_entity.split('.')[0];
+      if(dom==='input_select'||dom==='select'){
+        const r=cAll.rooms[idx];
+        const opts=this._hass.states[cAll.room_entity]?.attributes?.options||[];
+        const opt=opts.find(function(o){
+          const ol=String(o).toLowerCase();
+          return ol===String(r.id||'').toLowerCase()||ol===String(r.name||'').toLowerCase()||(Array.isArray(r.area_match)&&r.area_match.some(function(a){return String(a).toLowerCase()===ol;}));
+        });
+        if(opt)this._hass.callService(dom,'select_option',{entity_id:cAll.room_entity,option:opt});
+      }
+    }
   }
 
   _startCamera(){
@@ -900,6 +1066,7 @@ class RoomOverlayCard extends HTMLElement{
 
   _attachZoom(wrap,content){
     const ptrs=new Map();
+    const zSelf=this;
     let scale=1,tx=0,ty=0,lastDist=0,lastTap=0;
     const apply=function(){
       const r=wrap.getBoundingClientRect();
@@ -908,6 +1075,7 @@ class RoomOverlayCard extends HTMLElement{
       ty=Math.max(-maxY,Math.min(maxY,ty));
       content.style.transform=scale>1?'translate('+tx+'px,'+ty+'px) scale('+scale+')':'';
       wrap.style.touchAction=scale>1?'none':'';
+      zSelf._zoomScale=scale;
     };
     wrap.addEventListener('pointerdown',function(e){
       ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
@@ -950,6 +1118,7 @@ class RoomOverlayCard extends HTMLElement{
   _attachSlider(el,z){
     const self=this,sl=z.slider;
     el.style.touchAction='none';
+    el.dataset.rocSlider='1';
     const horiz=sl.direction==='horizontal';
     const fill=document.createElement('div');
     fill.className='zslider-fill';
@@ -1083,7 +1252,17 @@ class RoomOverlayCard extends HTMLElement{
 
   _update(){
     if(!this._hass||!this._config||!this._rendered)return;
-    const s=this._hass.states,c=this._config;
+    const s=this._hass.states;
+    const cAll=this._config;
+    const c=this._roomCfg||roomMerge(cAll,this._roomIdx); // active room view
+    // room_entity follow (e.g. Bermuda area sensor) — manual switches hold priority
+    if(cAll.room_entity&&Array.isArray(cAll.rooms)&&cAll.rooms.length){
+      const ri=roomMatch(cAll,s[cAll.room_entity]?.state);
+      if(ri>=0&&ri!==this._roomIdx&&Date.now()>this._manualHoldUntil){
+        this._switchRoom(ri,0,false);
+        return;
+      }
+    }
     // Re-render when the mobile profile activates/deactivates (resize/rotation)
     const _mobNow=!(c.test_mode??false)&&this.offsetWidth>0&&this.offsetWidth<(c.mobile_breakpoint??600);
     if(_mobNow!==this._mobActive){this._rendered=false;this._render();return;}
@@ -1258,6 +1437,24 @@ class RoomOverlayCard extends HTMLElement{
       }
       else{const _go=g.orientation||'vertical';const _pv=(Math.round(pct*1000)/10)+'%';if(_go==='horizontal'||_go==='right')setSt(fill,'width',_pv);else setSt(fill,'height',_pv);if(g.color_gradient)setSt(fill,'background',lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val,!!this._sortedGrads[g.id]));else if(g.color)setSt(fill,'background',Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color);}}
     }
+    // Nav thumbnails — live filters + sensor chips
+    if(Array.isArray(cAll.rooms)&&cAll.rooms.length){
+      for(let ri=0;ri<cAll.rooms.length;ri++){
+        const tEl=this._navThumbEls[ri];if(!tEl)continue;
+        const r=cAll.rooms[ri];
+        let tf='';
+        if(r.filter_conditions?.length){const f=resolveFilter(r.filter_conditions,s);if(f&&f!=='none')tf=f;}
+        setSt(tEl,'filter',tf);
+      }
+      for(const ch of this._navChipEls){
+        const ent=s[ch.entity];if(!ent)continue;
+        const nv=parseFloat(ent.state);
+        const txt=(isNaN(nv)?String(ent.state):(ch.cfg.decimals!==undefined?nv.toFixed(ch.cfg.decimals):String(Math.round(nv))))+(ch.cfg.suffix||'');
+        if(ch.el.textContent!==txt)ch.el.textContent=txt;
+        if(ch.cfg.color_gradient&&!isNaN(nv))setSt(ch.el,'color',lerpColorGradient(ch.cfg.color_gradient,nv));
+        else if(ch.cfg.color)setSt(ch.el,'color',ch.cfg.color);
+      }
+    }
     if(this._relevantEntities){
       for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
       if(this._relevantAttrSources)for(const a of this._relevantAttrSources)this._prevStates[a.entity+'.'+a.attr]=s[a.entity]?.attributes[a.attr];
@@ -1299,6 +1496,18 @@ class RoomOverlayCard extends HTMLElement{
       }break;
       case'browser-mod-popup':{const _bmData={title:a.title??'',size:a.size??'normal',content:a.content??{}};const _bmId=window.browser_mod?.browserID||window.browser_mod?.browser_id;if(_bmId)_bmData.browser_id=_bmId;this._hass.callService('browser_mod','popup',_bmData);}break;
       case'toggle':if(a.entity)this._hass.callService('homeassistant','toggle',{entity_id:a.entity});break;
+      case'switch-room':{
+        const ri=roomMatch(this._config,a.room);
+        if(ri>=0)this._switchRoom(ri,ri>this._roomIdx?1:-1,true);
+      }break;
+      case'next-room':
+        if(Array.isArray(this._config.rooms)&&this._config.rooms.length)
+          this._switchRoom((this._roomIdx+1)%this._config.rooms.length,1,true);
+        break;
+      case'prev-room':
+        if(Array.isArray(this._config.rooms)&&this._config.rooms.length)
+          this._switchRoom((this._roomIdx-1+this._config.rooms.length)%this._config.rooms.length,-1,true);
+        break;
       case'toggle-group':
       case'show-group':
       case'hide-group':
@@ -1501,7 +1710,27 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;}
+
+  // Active room view for editing (the room whose sections are shown)
+  _roomView(){
+    const c=this._config||{};
+    if(Array.isArray(c.rooms)&&c.rooms.length){
+      this._editRoomIdx=Math.max(0,Math.min(this._editRoomIdx,c.rooms.length-1));
+      return c.rooms[this._editRoomIdx];
+    }
+    return c;
+  }
+
+  _convertToRooms(){
+    const c=this._collectConfig();
+    if(Array.isArray(c.rooms)&&c.rooms.length)return;
+    const room={id:'room_1',name:'Room 1'};
+    ROOM_KEYS.forEach(function(k){if(c[k]!==undefined){room[k]=c[k];delete c[k];}});
+    c.rooms=[room];
+    this._editRoomIdx=0;
+    this._config=c;this._render();this._fire(c);
+  }
 
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
@@ -1534,19 +1763,23 @@ class RoomOverlayCardEditor extends HTMLElement{
     this._config=cfg;
     if(!this._hist.length){try{this._hist=[JSON.stringify(cfg)];this._histIdx=0;}catch(_){}}
     if(prev&&this.innerHTML.trim()){
+      const _ri=this._editRoomIdx;
+      const _sc=function(x){return Array.isArray(x.rooms)&&x.rooms.length?x.rooms[Math.max(0,Math.min(_ri,x.rooms.length-1))]:x;};
+      const pR=_sc(prev),cR=_sc(cfg);
       const same=
-        (prev.overlays||[]).length===(cfg.overlays||[]).length&&
-        (prev.zones||[]).length===(cfg.zones||[]).length&&
-        (prev.badges||[]).length===(cfg.badges||[]).length&&
-        (prev.elements||[]).length===(cfg.elements||[]).length&&
-        (prev.icons||[]).length===(cfg.icons||[]).length&&
-        (prev.filter_conditions||[]).length===(cfg.filter_conditions||[]).length&&
-        (prev.labels||[]).length===(cfg.labels||[]).length&&
-        (prev.gauges||[]).length===(cfg.gauges||[]).length&&
-        (prev.blinds||[]).length===(cfg.blinds||[]).length&&
-        ((prev.brightness_model?.source||[]).length===(cfg.brightness_model?.source||[]).length)&&
-        ((prev.brightness_model?.filter_gradient||[]).length===(cfg.brightness_model?.filter_gradient||[]).length)&&
-        (prev.groups||[]).length===(cfg.groups||[]).length;
+        (prev.rooms||[]).length===(cfg.rooms||[]).length&&
+        (pR.overlays||[]).length===(cR.overlays||[]).length&&
+        (pR.zones||[]).length===(cR.zones||[]).length&&
+        (pR.badges||[]).length===(cR.badges||[]).length&&
+        (pR.elements||[]).length===(cR.elements||[]).length&&
+        (pR.icons||[]).length===(cR.icons||[]).length&&
+        (pR.filter_conditions||[]).length===(cR.filter_conditions||[]).length&&
+        (pR.labels||[]).length===(cR.labels||[]).length&&
+        (pR.gauges||[]).length===(cR.gauges||[]).length&&
+        (pR.blinds||[]).length===(cR.blinds||[]).length&&
+        ((pR.brightness_model?.source||[]).length===(cR.brightness_model?.source||[]).length)&&
+        ((pR.brightness_model?.filter_gradient||[]).length===(cR.brightness_model?.filter_gradient||[]).length)&&
+        (pR.groups||[]).length===(cR.groups||[]).length;
       if(same)return;
     }
     this._render();
@@ -1598,12 +1831,16 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const q=function(s){return this.querySelector(s);}.bind(this);
     const v=function(id,fb){const el=q('#'+id);return el?el.value:fb;};
-    c.base_image=v('base_image',c.base_image||'');
-    if(!c.base_image)delete c.base_image;
+    // Multi-room: sections write into the room being edited; shared keys stay top-level
+    const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
+    if(hasRooms)c.rooms=c.rooms.map(function(r){return Object.assign({},r);});
+    const tgt=hasRooms?c.rooms[Math.max(0,Math.min(this._editRoomIdx,c.rooms.length-1))]:c;
+    tgt.base_image=v('base_image',tgt.base_image||'');
+    if(!tgt.base_image)delete tgt.base_image;
     const _bcam=v('base_camera','').trim();
-    if(_bcam)c.base_camera=_bcam;else delete c.base_camera;
+    if(_bcam)tgt.base_camera=_bcam;else delete tgt.base_camera;
     const _bcr=parseFloat(v('camera_refresh',''));
-    if(_bcam&&!isNaN(_bcr)&&_bcr>0&&_bcr!==10)c.camera_refresh=_bcr;else delete c.camera_refresh;
+    if(_bcam&&!isNaN(_bcr)&&_bcr>0&&_bcr!==10)tgt.camera_refresh=_bcr;else delete tgt.camera_refresh;
     const _wxEnt=v('weather_entity','').trim();
     const _wxEff=v('weather_effect','');
     const _wxOp=parseFloat(v('weather_opacity',''));
@@ -1612,22 +1849,23 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(_wxEnt)_wo.entity=_wxEnt;
       if(_wxEff&&_wxEff!=='auto')_wo.effect=_wxEff;
       if(!isNaN(_wxOp)&&_wxOp!==0.45)_wo.opacity=_wxOp;
-      const _oldWo=typeof c.weather_overlay==='object'&&c.weather_overlay?c.weather_overlay:{};
+      const _oldWo=typeof tgt.weather_overlay==='object'&&tgt.weather_overlay?tgt.weather_overlay:{};
       if(_oldWo.z_index!==undefined)_wo.z_index=_oldWo.z_index;
-      c.weather_overlay=_wo;
-    }else delete c.weather_overlay;
+      if(_oldWo.angle!==undefined)_wo.angle=_oldWo.angle;
+      tgt.weather_overlay=_wo;
+    }else delete tgt.weather_overlay;
     const _mbp=parseFloat(v('mobile_breakpoint',''));
     if(!isNaN(_mbp)&&_mbp>0&&_mbp!==600)c.mobile_breakpoint=_mbp;else delete c.mobile_breakpoint;
     const _zm=q('#zoom');
     if(_zm&&_zm.checked)c.zoom=true;else delete c.zoom;
     const _bicR=this._pYaml(this.querySelector('#base_image_conditions'));
-    if(_bicR.ok){if(Array.isArray(_bicR.val))c.base_image_conditions=_bicR.val;else delete c.base_image_conditions;}
+    if(_bicR.ok){if(Array.isArray(_bicR.val))tgt.base_image_conditions=_bicR.val;else delete tgt.base_image_conditions;}
     c.aspect_ratio=v('aspect_ratio','16/9');
     c.border_radius=v('border_radius','12px');
     c.filter_transition=v('filter_transition','2s ease');
     const tm=q('#test_mode');c.test_mode=tm?tm.checked:false;
     const _taR=this._pYaml(q('#tap_action_yaml'));
-    if(_taR.ok){if(_taR.val)c.tap_action=_taR.val;else delete c.tap_action;}
+    if(_taR.ok){if(_taR.val)tgt.tap_action=_taR.val;else delete tgt.tap_action;}
 
     const _bmSrcs=[];
     self.querySelectorAll('[data-bm-src-ent]').forEach(function(el,i){
@@ -1635,7 +1873,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _cc=self.querySelector('[data-bm-src-cond="'+i+'"]');
       const _ccR=self._pYaml(_cc);
       if(_ccR.ok){if(_ccR.val)_s.condition=_ccR.val;}
-      else{const _oldS=(self._config.brightness_model?.source||[])[i];if(_oldS&&_oldS.condition)_s.condition=_oldS.condition;}
+      else{const _oldS=(self._roomView().brightness_model?.source||[])[i];if(_oldS&&_oldS.condition)_s.condition=_oldS.condition;}
       const _at=self.querySelector('[data-bm-src-attr="'+i+'"]');
       if(_at&&_at.value.trim())_s.attribute=_at.value.trim();
       const _mn=self.querySelector('[data-bm-src-min="'+i+'"]');
@@ -1650,10 +1888,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _fe=self.querySelector('[data-bm-fg-filt="'+i+'"]');
       if(_fe)_bmFg.push({value:_v,filter:_fe.value.trim()||'none'});
     });
-    if(_bmSrcs.length||_bmFg.length)c.brightness_model={source:_bmSrcs,filter_gradient:_bmFg};
-    else delete c.brightness_model;
+    if(_bmSrcs.length||_bmFg.length)tgt.brightness_model={source:_bmSrcs,filter_gradient:_bmFg};
+    else delete tgt.brightness_model;
 
-    c.filter_conditions=[];
+    tgt.filter_conditions=[];
     this.querySelectorAll('.filter-block').forEach(function(block,i){
       const entry={};
       const entEl=block.querySelector('[data-filter-entity="'+i+'"]');
@@ -1692,17 +1930,17 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
       let _ff=buildFilterStr(filters);
       // Preserve filter functions the sliders don't cover (grayscale, invert, drop-shadow, …)
-      const _origFc=(self._config.filter_conditions||[])[i];
+      const _origFc=(self._roomView().filter_conditions||[])[i];
       if(_origFc&&_origFc.filter&&_origFc.filter!=='none'){
         const _known=FILTER_PROPS.map(function(p){return p.key;});
         const _extras=(String(_origFc.filter).match(/[a-z-]+\((?:[^()]|\([^()]*\))*\)/g)||[]).filter(function(f){return!_known.includes(f.slice(0,f.indexOf('(')));});
         if(_extras.length)_ff=(_ff==='none'?'':_ff+' ')+_extras.join(' ');
       }
       entry.filter=_ff;
-      c.filter_conditions.push(entry);
+      tgt.filter_conditions.push(entry);
     });
 
-    c.overlays=(c.overlays||[]).map(function(ov,i){
+    tgt.overlays=(tgt.overlays||[]).map(function(ov,i){
       const o=Object.assign({},ov);
       const idEl=q('[data-ov-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const imgEl=q('[data-ov-img="'+i+'"]');if(imgEl){if(imgEl.value)o.image=imgEl.value;else delete o.image;}
@@ -1721,7 +1959,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
-    c.zones=(c.zones||[]).map(function(z,i){
+    tgt.zones=(tgt.zones||[]).map(function(z,i){
       const o=Object.assign({},z);
       const idEl=q('[data-z-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const topEl=q('[data-z-top="'+i+'"]');if(topEl)o.top=topEl.value;
@@ -1744,7 +1982,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
-    c.badges=(c.badges||[]).map(function(b,i){
+    tgt.badges=(tgt.badges||[]).map(function(b,i){
       const o=Object.assign({},b);
       const idEl=q('[data-b-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const posEl=q('[data-b-pos="'+i+'"]');if(posEl)o.position=posEl.value;
@@ -1762,7 +2000,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
-    c.elements=(c.elements||[]).map(function(el,i){
+    tgt.elements=(tgt.elements||[]).map(function(el,i){
       const o=Object.assign({},el);
       const idEl=q('[data-el-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const topEl=q('[data-el-top="'+i+'"]');if(topEl&&topEl.value.trim()){o.top=topEl.value.trim();delete o.bottom;}else delete o.top;
@@ -1780,7 +2018,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
-    c.icons=(c.icons||[]).map(function(ico,i){
+    tgt.icons=(tgt.icons||[]).map(function(ico,i){
       const o=Object.assign({},ico);
       const idEl=q('[data-ico-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const iconEl=q('[data-ico-icon="'+i+'"]');if(iconEl)o.icon=iconEl.value;
@@ -1806,7 +2044,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
 
 
-    c.labels=(c.labels||[]).map(function(lbl,i){
+    tgt.labels=(tgt.labels||[]).map(function(lbl,i){
       const o=Object.assign({},lbl);
       const idEl=q('[data-lbl-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const topEl=q('[data-lbl-top="'+i+'"]');if(topEl)o.top=topEl.value;
@@ -1834,7 +2072,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
-    c.gauges=(c.gauges||[]).map(function(g,i){
+    tgt.gauges=(tgt.gauges||[]).map(function(g,i){
       const o=Object.assign({},g);
       const idEl=q('[data-g-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const topEl=q('[data-g-top="'+i+'"]');if(topEl)o.top=topEl.value;
@@ -1867,7 +2105,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gGrpEl=q('[data-g-grp="'+i+'"]');if(gGrpEl&&gGrpEl.value.trim())o.group=gGrpEl.value.trim();else delete o.group;
       return o;
     });
-    c.blinds=(c.blinds||[]).map(function(b,i){
+    tgt.blinds=(tgt.blinds||[]).map(function(b,i){
       const o=Object.assign({},b);
       const idEl=q('[data-bl-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const topEl=q('[data-bl-top="'+i+'"]');if(topEl)o.top=topEl.value;
@@ -1895,7 +2133,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
-    c.groups=(c.groups||[]).map(function(g,i){
+    tgt.groups=(tgt.groups||[]).map(function(g,i){
       const o=Object.assign({},g);
       const idEl=q('[data-grp-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const visEl=q('[data-grp-vis="'+i+'"]');if(visEl)o.visible=visEl.checked;
@@ -1904,6 +2142,26 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(yaR.ok){if(yaR.val&&yaR.val.style)o.style=yaR.val.style;else delete o.style;}
       return o;
     });
+
+    // ---- Multi-room meta + card-level multiroom fields ----------------------
+    if(hasRooms){
+      const ridEl=q('#room-id');if(ridEl&&ridEl.value.trim())tgt.id=ridEl.value.trim();
+      const rnmEl=q('#room-name');if(rnmEl){if(rnmEl.value.trim())tgt.name=rnmEl.value.trim();else delete tgt.name;}
+      const ricEl=q('#room-icon');if(ricEl){if(ricEl.value.trim())tgt.icon=ricEl.value.trim();else delete tgt.icon;}
+      const ramEl=q('#room-area-match');
+      if(ramEl){
+        const vv=ramEl.value.split(',').map(function(x){return x.trim();}).filter(Boolean);
+        if(vv.length)tgt.area_match=vv;else delete tgt.area_match;
+      }
+      const rchR=this._pYaml(q('#room-chips'));
+      if(rchR.ok){if(rchR.val)tgt.chips=rchR.val;else delete tgt.chips;}
+      const reEl=q('#room_entity');if(reEl){if(reEl.value.trim())c.room_entity=reEl.value.trim();else delete c.room_entity;}
+      const fhEl=q('#follow_hold');
+      if(fhEl){const fv=parseFloat(fhEl.value);if(!isNaN(fv)&&fv>=0&&fv!==60)c.follow_hold=fv;else delete c.follow_hold;}
+      const cidEl=q('#card_id');if(cidEl){if(cidEl.value.trim())c.card_id=cidEl.value.trim();else delete c.card_id;}
+      const navR=this._pYaml(q('#nav_yaml'));
+      if(navR.ok){if(navR.val)c.nav=navR.val;else delete c.nav;}
+    }
 
     return c;
   }
@@ -2257,12 +2515,14 @@ class RoomOverlayCardEditor extends HTMLElement{
   _render(){
     if(!this._config)return;
     const c=this._config;
+    const cR=this._roomView();
+    const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
     const open=new Set();
     this.querySelectorAll('details[data-panel]').forEach(function(d){if(d.open)open.add(d.dataset.panel);});
     this._openPanels=open;
     const firstRender=open.size===0;
 
-    const tapYaml=c.tap_action?_yaml.s(c.tap_action):'';
+    const tapYaml=cR.tap_action?_yaml.s(cR.tap_action):'';
     const sec=function(id,label,count,inner){
       const isOpen=open.has(id)||(firstRender&&id==='basic');
       return '<details data-panel="'+id+'"'+(isOpen?' open':'')+' style="margin-bottom:8px;">'
@@ -2277,14 +2537,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     const btnStyle='padding:6px 14px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:13px;';
 
     let basicInner='<div style="display:grid;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Base image URL *</label><input id="base_image" type="text" value="'+this._e(c.base_image||'')+'"'+this._inp('')+'></div>';
-    const _bicYaml=c.base_image_conditions?_yaml.s(c.base_image_conditions):'';
+    basicInner+='<div><label class="roc-l">Base image URL *</label><input id="base_image" type="text" value="'+this._e(cR.base_image||'')+'"'+this._inp('')+'></div>';
+    const _bicYaml=cR.base_image_conditions?_yaml.s(cR.base_image_conditions):'';
     basicInner+='<div><label class="roc-l">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
     basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Base camera (optional — live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(c.base_camera||'')+'"'+this._inp('')+'></div>';
-    basicInner+='<div><label class="roc-l">Camera refresh (s)</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(c.camera_refresh??10)+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Base camera (optional — live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Camera refresh (s)</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(cR.camera_refresh??10)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
-    const _woEd=typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:(c.weather_overlay||{});
+    const _woEd=typeof cR.weather_overlay==='string'?{entity:cR.weather_overlay}:(cR.weather_overlay||{});
     basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">';
     basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-entities" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Effect</label><select id="weather_effect"'+this._inp('')+'>';
@@ -2308,11 +2568,11 @@ class RoomOverlayCardEditor extends HTMLElement{
     let filterInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Conditions are evaluated in order — first match wins. A block without an entity is the default (fallback).</p>';
     filterInner+='<div id="filter-blocks">';
     const self=this;
-    (c.filter_conditions||[]).forEach(function(fc,i){filterInner+=self._filterBlock(fc,i);});
+    (cR.filter_conditions||[]).forEach(function(fc,i){filterInner+=self._filterBlock(fc,i);});
     filterInner+='</div>';
     filterInner+='<button id="add-filter" style="'+btnStyle+'">+ Add filter condition</button>';
 
-    const bm=c.brightness_model||{};
+    const bm=cR.brightness_model||{};
     const bmSrcList=bm.source||[];
     const bmFgList=bm.filter_gradient||[];
     let bmInner='';
@@ -2360,40 +2620,71 @@ class RoomOverlayCardEditor extends HTMLElement{
     bmInner+='</div>';
 
     let ovInner='<div id="ov-list">';
-    (c.overlays||[]).forEach(function(ov,i){ovInner+=self._ovItem(ov,i);});
+    (cR.overlays||[]).forEach(function(ov,i){ovInner+=self._ovItem(ov,i);});
     ovInner+='</div><button id="add-ov" style="'+btnStyle+'margin-top:4px;">+ Add overlay</button>';
 
     let zInner='<div id="z-list">';
-    (c.zones||[]).forEach(function(z,i){zInner+=self._zoneItem(z,i);});
+    (cR.zones||[]).forEach(function(z,i){zInner+=self._zoneItem(z,i);});
     zInner+='</div><button id="add-z" style="'+btnStyle+'margin-top:4px;">+ Add zone</button>';
 
     let bInner='<div id="b-list">';
-    (c.badges||[]).forEach(function(b,i){bInner+=self._badgeItem(b,i);});
+    (cR.badges||[]).forEach(function(b,i){bInner+=self._badgeItem(b,i);});
     bInner+='</div><button id="add-b" style="'+btnStyle+'margin-top:4px;">+ Add badge</button>';
 
     let elInner='<div id="el-list">';
-    (c.elements||[]).forEach(function(el,i){elInner+=self._elItem(el,i);});
+    (cR.elements||[]).forEach(function(el,i){elInner+=self._elItem(el,i);});
     elInner+='</div><button id="add-el" style="'+btnStyle+'margin-top:4px;">+ Add element</button>';
 
     let icoInner='<div id="ico-list">';
-    (c.icons||[]).forEach(function(ico,i){icoInner+=self._icoItem(ico,i);});
+    (cR.icons||[]).forEach(function(ico,i){icoInner+=self._icoItem(ico,i);});
     icoInner+='</div><button id="add-ico" style="'+btnStyle+'margin-top:4px;">+ Add icon</button>';
 
     let lblInner='<div id="lbl-list">';
-    (c.labels||[]).forEach(function(lbl,i){lblInner+=self._lblItem(lbl,i);});
+    (cR.labels||[]).forEach(function(lbl,i){lblInner+=self._lblItem(lbl,i);});
     lblInner+='</div><button id="add-lbl" style="'+btnStyle+'margin-top:4px;">+ Add label</button>';
 
     let gInner='<div id="g-list">';
-    (c.gauges||[]).forEach(function(g,i){gInner+=self._gaugeItem(g,i);});
+    (cR.gauges||[]).forEach(function(g,i){gInner+=self._gaugeItem(g,i);});
     gInner+='</div><button id="add-g" style="'+btnStyle+'margin-top:4px;">+ Add gauge</button>';
 
     let blInner='<div id="bl-list">';
-    (c.blinds||[]).forEach(function(b,i){blInner+=self._blindItem(b,i);});
+    (cR.blinds||[]).forEach(function(b,i){blInner+=self._blindItem(b,i);});
     blInner+='</div><button id="add-bl" style="'+btnStyle+'margin-top:4px;">+ Add blind</button>';
 
     let grpInner='<div id="grp-list">';
-    (c.groups||[]).forEach(function(g,i){grpInner+=self._groupItem(g,i);});
+    (cR.groups||[]).forEach(function(g,i){grpInner+=self._groupItem(g,i);});
     grpInner+='</div><button id="add-grp" style="'+btnStyle+'margin-top:4px;">+ Add group</button>';
+
+    // ---- Rooms (multi-room) section ----------------------------------------
+    let roomsInner='';
+    if(hasRooms){
+      const er=cR;
+      roomsInner+='<div style="display:grid;grid-template-columns:2fr auto auto;gap:8px;margin-bottom:8px;align-items:end;">';
+      roomsInner+='<div><label class="roc-l">Editing room (sections below edit this room)</label><select id="room-select"'+this._inp('')+'>';
+      c.rooms.forEach(function(r,i){roomsInner+='<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';});
+      roomsInner+='</select></div>';
+      roomsInner+='<button id="add-room" style="'+btnStyle+'">+ Room</button>';
+      roomsInner+='<button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button>';
+      roomsInner+='</div>';
+      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+      roomsInner+='<div><label class="roc-l">Room id</label><input id="room-id" type="text" value="'+this._e(er.id||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Name</label><input id="room-name" type="text" value="'+this._e(er.name||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Icon (tabs nav)</label><input id="room-icon" type="text" placeholder="mdi:sofa" value="'+this._e(er.icon||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='</div>';
+      roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Area match (comma-separated states of room_entity that map to this room, e.g. Bermuda area names)</label><input id="room-area-match" type="text" placeholder="Bedroom, Ložnice" value="'+this._e(Array.isArray(er.area_match)?er.area_match.join(', '):'')+'"'+this._inp('')+'></div>';
+      const _rch=er.chips?_yaml.s(er.chips):'';
+      roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Thumbnail chips override (YAML list — falls back to nav.chips; {room} = room id)</label><textarea id="room-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_rch)+'</textarea></div>';
+      roomsInner+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+      roomsInner+='<div><label class="roc-l">room_entity (active room follows it — e.g. Bermuda area sensor or input_select)</label><input id="room_entity" type="text" list="roc-entities" placeholder="sensor.phone_area" value="'+this._e(c.room_entity||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Follow hold (s after manual switch)</label><input id="follow_hold" type="number" min="0" step="5" value="'+(c.follow_hold??60)+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">card_id (pairing key)</label><input id="card_id" type="text" value="'+this._e(c.card_id||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='</div>';
+      const _navY=c.nav?_yaml.s(c.nav):'';
+      roomsInner+='<div><label class="roc-l">nav (YAML — style: thumbnails|tabs|dots|none, position: top|bottom, height, chips)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
+    }else{
+      roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
+      roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
+    }
 
     const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
@@ -2404,16 +2695,17 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
-      +sec('basic','Basic settings',undefined,basicInner)
-      +sec('filters','Base image filters',(c.filter_conditions||[]).length,filterInner)
+      +sec('rooms','Rooms (multi-room)'+(hasRooms?' — editing: '+this._e(cR.name||cR.id||''):''),(c.rooms||[]).length,roomsInner)
+      +sec('basic','Basic settings'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
+      +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
       +sec('brightness','Brightness model (filter interpolation)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
-      +sec('overlays','Overlay layers',(c.overlays||[]).length,ovInner)
-      +sec('zones','Clickable zones',(c.zones||[]).length,zInner)
-      +sec('badges','Status badges',(c.badges||[]).length,bInner)
-      +sec('elements','Embedded HA cards',(c.elements||[]).length,elInner)
-      +sec('icons','Icon overlays',(c.icons||[]).length,icoInner)+sec('labels','Value labels',(c.labels||[]).length,lblInner)+sec('gauges','Gauge bars',(c.gauges||[]).length,gInner)
-      +sec('blinds','Window blinds',(c.blinds||[]).length,blInner)
-      +sec('groups','Element groups',(c.groups||[]).length,grpInner)
+      +sec('overlays','Overlay layers',(cR.overlays||[]).length,ovInner)
+      +sec('zones','Clickable zones',(cR.zones||[]).length,zInner)
+      +sec('badges','Status badges',(cR.badges||[]).length,bInner)
+      +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
+      +sec('icons','Icon overlays',(cR.icons||[]).length,icoInner)+sec('labels','Value labels',(cR.labels||[]).length,lblInner)+sec('gauges','Gauge bars',(cR.gauges||[]).length,gInner)
+      +sec('blinds','Window blinds',(cR.blinds||[]).length,blInner)
+      +sec('groups','Element groups',(cR.groups||[]).length,grpInner)
       +'</div>';
 
     if(!this._keysBound){
@@ -2444,7 +2736,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const nc=e.detail&&e.detail.config;
       if(!nc)return;
       // Only accept updates from "our" card (two cards in test mode = cross-talk)
-      if(nc.base_image!==self._config.base_image||nc.base_camera!==self._config.base_camera)return;
+      if(cfgKey(nc)!==cfgKey(self._config))return;
       self._config=nc;
       self._render(); // refresh position inputs, otherwise the next edit reverts the drag
       self._fire(nc);
@@ -2497,6 +2789,35 @@ class RoomOverlayCardEditor extends HTMLElement{
   _listen(){
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
+    // Room-scoped access for add/remove/duplicate/move handlers
+    const T=function(c){return Array.isArray(c.rooms)&&c.rooms.length?c.rooms[Math.max(0,Math.min(self._editRoomIdx,c.rooms.length-1))]:c;};
+    const A=function(c,key){const t=T(c);if(!t[key])t[key]=[];return t[key];};
+    // Rooms section
+    const roomSel=this.querySelector('#room-select');
+    if(roomSel)roomSel.addEventListener('change',function(){self._editRoomIdx=parseInt(roomSel.value)||0;self._render();});
+    const addRoom=this.querySelector('#add-room');
+    if(addRoom)addRoom.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!Array.isArray(c.rooms))c.rooms=[];
+      let n=c.rooms.length+1,id='room_'+n;
+      while(c.rooms.some(function(r){return r.id===id;})){n++;id='room_'+n;}
+      c.rooms.push({id:id,name:'Room '+n});
+      self._editRoomIdx=c.rooms.length-1;
+      self._config=c;self._render();self._fire(c);
+    });
+    const rmRoom=this.querySelector('#rm-room');
+    if(rmRoom)rmRoom.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!Array.isArray(c.rooms)||c.rooms.length<=1)return; // keep at least one room
+      c.rooms.splice(self._editRoomIdx,1);
+      self._editRoomIdx=Math.max(0,self._editRoomIdx-1);
+      self._config=c;self._render();self._fire(c);
+    });
+    const convRooms=this.querySelector('#conv-rooms');
+    if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
+    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','nav_yaml'].forEach(function(id){
+      const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
+    });
 
     ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
@@ -2520,7 +2841,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         const key=_mvKinds[p[0]];if(!key)return;
         const i=parseInt(p[1]),dir=parseInt(p[2]),j=i+dir;
         const c=self._collectConfig();
-        const arr=c[key];
+        const arr=T(c)[key];
         if(!arr||j<0||j>=arr.length)return;
         const t=arr[i];arr[i]=arr[j];arr[j]=t;
         // keep the moved panel open at its new index
@@ -2541,9 +2862,9 @@ class RoomOverlayCardEditor extends HTMLElement{
         const m=d.dataset.panel.match(/^(ov|z|b|el|ico|lbl|g|bl)-(\d+)$/);
         if(!m)return;
         const k=_hlKinds[m[1]];
-        const item=(self._config[k[0]]||[])[parseInt(m[2])];
+        const item=(self._roomView()[k[0]]||[])[parseInt(m[2])];
         if(!item)return;
-        window.dispatchEvent(new CustomEvent('roc-highlight',{detail:{kind:k[1],id:m[1]==='bl'?'__bl_'+item.id:item.id,base_image:self._config.base_image,base_camera:self._config.base_camera}}));
+        window.dispatchEvent(new CustomEvent('roc-highlight',{detail:{kind:k[1],id:m[1]==='bl'?'__bl_'+item.id:item.id,key:cfgKey(self._config)}}));
       });
     });
     const tm=this.querySelector('#test_mode');
@@ -2564,15 +2885,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addF=this.querySelector('#add-filter');
     if(addF)addF.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.filter_conditions)c.filter_conditions=[];
-      c.filter_conditions.push({filter:'none'});
+      A(c,'filter_conditions').push({filter:'none'});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-filter]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmFilter);
         const c=self._collectConfig();
-        if(c.filter_conditions)c.filter_conditions.splice(i,1);
+        A(c,'filter_conditions').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2584,16 +2904,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addBmSrc=this.querySelector('#add-bm-src');
     if(addBmSrc)addBmSrc.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.brightness_model)c.brightness_model={source:[],filter_gradient:[]};
-      if(!c.brightness_model.source)c.brightness_model.source=[];
-      c.brightness_model.source.push({entity:'',min_input:0,max_input:100});
+      const t=T(c);
+      if(!t.brightness_model)t.brightness_model={source:[],filter_gradient:[]};
+      if(!t.brightness_model.source)t.brightness_model.source=[];
+      t.brightness_model.source.push({entity:'',min_input:0,max_input:100});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-bm-src]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmBmSrc);
         const c=self._collectConfig();
-        if(c.brightness_model&&c.brightness_model.source)c.brightness_model.source.splice(i,1);
+        const t=T(c);if(t.brightness_model&&t.brightness_model.source)t.brightness_model.source.splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2603,9 +2924,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addBmFg=this.querySelector('#add-bm-fg');
     if(addBmFg)addBmFg.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.brightness_model)c.brightness_model={source:[],filter_gradient:[]};
-      if(!c.brightness_model.filter_gradient)c.brightness_model.filter_gradient=[];
-      const fg=c.brightness_model.filter_gradient;
+      const t=T(c);
+      if(!t.brightness_model)t.brightness_model={source:[],filter_gradient:[]};
+      if(!t.brightness_model.filter_gradient)t.brightness_model.filter_gradient=[];
+      const fg=t.brightness_model.filter_gradient;
       const last=fg[fg.length-1];
       fg.push({value:last?Math.min(100,last.value+25):0,filter:'none'});
       self._config=c;self._render();self._fire(c);
@@ -2614,7 +2936,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmBmFg);
         const c=self._collectConfig();
-        if(c.brightness_model&&c.brightness_model.filter_gradient)c.brightness_model.filter_gradient.splice(i,1);
+        const t=T(c);if(t.brightness_model&&t.brightness_model.filter_gradient)t.brightness_model.filter_gradient.splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2626,15 +2948,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addOv=this.querySelector('#add-ov');
     if(addOv)addOv.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.overlays)c.overlays=[];
-      c.overlays.push({id:'overlay_'+(c.overlays.length+1),image:'',transition:'2s ease'});
+      const ovA=A(c,'overlays');
+      ovA.push({id:'overlay_'+(ovA.length+1),image:'',transition:'2s ease'});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-ov]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmOv);
         const c=self._collectConfig();
-        if(c.overlays)c.overlays.splice(i,1);
+        A(c,'overlays').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2646,15 +2968,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addZ=this.querySelector('#add-z');
     if(addZ)addZ.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.zones)c.zones=[];
-      c.zones.push({id:'zone_'+(c.zones.length+1),top:'0%',left:'0%',width:'10%',height:'10%'});
+      const zA=A(c,'zones');
+      zA.push({id:'zone_'+(zA.length+1),top:'0%',left:'0%',width:'10%',height:'10%'});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-z]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmZ);
         const c=self._collectConfig();
-        if(c.zones)c.zones.splice(i,1);
+        A(c,'zones').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2666,15 +2988,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addB=this.querySelector('#add-b');
     if(addB)addB.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.badges)c.badges=[];
-      c.badges.push({id:'badge_'+(c.badges.length+1),position:'bottom-left'});
+      const bA=A(c,'badges');
+      bA.push({id:'badge_'+(bA.length+1),position:'bottom-left'});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-b]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmB);
         const c=self._collectConfig();
-        if(c.badges)c.badges.splice(i,1);
+        A(c,'badges').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2686,15 +3008,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addIco=this.querySelector('#add-ico');
     if(addIco)addIco.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.icons)c.icons=[];
-      c.icons.push({id:'icon_'+(c.icons.length+1),icon:'mdi:help',top:'10%',left:'10%',size:'24px'});
+      const icoA=A(c,'icons');
+      icoA.push({id:'icon_'+(icoA.length+1),icon:'mdi:help',top:'10%',left:'10%',size:'24px'});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-ico]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmIco);
         const c=self._collectConfig();
-        if(c.icons)c.icons.splice(i,1);
+        A(c,'icons').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2706,15 +3028,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addLbl=this.querySelector('#add-lbl');
     if(addLbl)addLbl.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.labels)c.labels=[];
-      c.labels.push({id:'label_'+(c.labels.length+1),top:'10%',left:'10%',entity:''});
+      const lblA=A(c,'labels');
+      lblA.push({id:'label_'+(lblA.length+1),top:'10%',left:'10%',entity:''});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-lbl]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmLbl);
         const c=self._collectConfig();
-        if(c.labels)c.labels.splice(i,1);
+        A(c,'labels').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2723,9 +3045,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.addLg);
         const c=self._collectConfig();
-        if(!c.labels||!c.labels[i])return;
-        if(!c.labels[i].color_gradient)c.labels[i].color_gradient=[];
-        const ls=c.labels[i].color_gradient;
+        const lblArr=A(c,'labels');
+        if(!lblArr[i])return;
+        if(!lblArr[i].color_gradient)lblArr[i].color_gradient=[];
+        const ls=lblArr[i].color_gradient;
         const last=ls[ls.length-1];
         const nv=last?last.value+10:0;
         ls.push({value:nv,color:'#ffffff'});
@@ -2737,9 +3060,10 @@ class RoomOverlayCardEditor extends HTMLElement{
         const parts=btn.dataset.rmLg.split('-');
         const i=parseInt(parts[0]),j=parseInt(parts[1]);
         const c=self._collectConfig();
-        if(c.labels&&c.labels[i]&&c.labels[i].color_gradient){
-          c.labels[i].color_gradient.splice(j,1);
-          if(!c.labels[i].color_gradient.length)delete c.labels[i].color_gradient;
+        const lblArr=A(c,'labels');
+        if(lblArr[i]&&lblArr[i].color_gradient){
+          lblArr[i].color_gradient.splice(j,1);
+          if(!lblArr[i].color_gradient.length)delete lblArr[i].color_gradient;
         }
         self._config=c;self._render();self._fire(c);
       });
@@ -2752,15 +3076,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addG=this.querySelector('#add-g');
     if(addG)addG.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.gauges)c.gauges=[];
-      c.gauges.push({id:'gauge_'+(c.gauges.length+1),top:'10%',left:'10%',width:'2%',height:'20%',entity:'',min:0,max:100});
+      const gA=A(c,'gauges');
+      gA.push({id:'gauge_'+(gA.length+1),top:'10%',left:'10%',width:'2%',height:'20%',entity:'',min:0,max:100});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-g]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmG);
         const c=self._collectConfig();
-        if(c.gauges)c.gauges.splice(i,1);
+        A(c,'gauges').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2769,11 +3093,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.addGg);
         const c=self._collectConfig();
-        if(!c.gauges||!c.gauges[i])return;
-        if(!c.gauges[i].color_gradient)c.gauges[i].color_gradient=[];
-        const gs=c.gauges[i].color_gradient;
+        const gArr=A(c,'gauges');
+        if(!gArr[i])return;
+        if(!gArr[i].color_gradient)gArr[i].color_gradient=[];
+        const gs=gArr[i].color_gradient;
         const last=gs[gs.length-1];
-        const mn=c.gauges[i].min??0,mx=c.gauges[i].max??100;
+        const mn=gArr[i].min??0,mx=gArr[i].max??100;
         const nv=last?Math.min(last.value+Math.round((mx-mn)/6),mx):mn;
         gs.push({value:nv,color:'#00ff44'});
         self._config=c;self._render();self._fire(c);
@@ -2784,9 +3109,10 @@ class RoomOverlayCardEditor extends HTMLElement{
         const parts=btn.dataset.rmGg.split('-');
         const i=parseInt(parts[0]),j=parseInt(parts[1]);
         const c=self._collectConfig();
-        if(c.gauges&&c.gauges[i]&&c.gauges[i].color_gradient){
-          c.gauges[i].color_gradient.splice(j,1);
-          if(!c.gauges[i].color_gradient.length)delete c.gauges[i].color_gradient;
+        const gArr=A(c,'gauges');
+        if(gArr[i]&&gArr[i].color_gradient){
+          gArr[i].color_gradient.splice(j,1);
+          if(!gArr[i].color_gradient.length)delete gArr[i].color_gradient;
         }
         self._config=c;self._render();self._fire(c);
       });
@@ -2799,15 +3125,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addEl=this.querySelector('#add-el');
     if(addEl)addEl.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.elements)c.elements=[];
-      c.elements.push({id:'el_'+(c.elements.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
+      const elA=A(c,'elements');
+      elA.push({id:'el_'+(elA.length+1),top:'0%',left:'0%',width:'30%',height:'20%',card:{type:'tile',entity:''}});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-el]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmEl);
         const c=self._collectConfig();
-        if(c.elements)c.elements.splice(i,1);
+        A(c,'elements').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2818,15 +3144,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addBl=this.querySelector('#add-bl');
     if(addBl)addBl.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.blinds)c.blinds=[];
-      c.blinds.push({id:'blind_'+(c.blinds.length+1),top:'10%',left:'30%',width:'20%',height:'40%',entity:'',min:0,max:100,blind_type:'roller'});
+      const blA=A(c,'blinds');
+      blA.push({id:'blind_'+(blA.length+1),top:'10%',left:'30%',width:'20%',height:'40%',entity:'',min:0,max:100,blind_type:'roller'});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-bl]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmBl);
         const c=self._collectConfig();
-        if(c.blinds)c.blinds.splice(i,1);
+        A(c,'blinds').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });
@@ -2834,12 +3160,12 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     // Duplicate (clone) handlers
     function _cp(v,dflt){if(!v)return dflt||'3%';const n=parseFloat(v);return(!isNaN(n)&&String(v).trim().endsWith('%'))?Math.min(n+3,95).toFixed(1)+'%':v;}
-    this.querySelectorAll('[data-dup-ico]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupIco),c=self._collectConfig();if(!c.icons||!c.icons[i])return;const cl=JSON.parse(JSON.stringify(c.icons[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.icons.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-lbl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupLbl),c=self._collectConfig();if(!c.labels||!c.labels[i])return;const cl=JSON.parse(JSON.stringify(c.labels[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.labels.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-g]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupG),c=self._collectConfig();if(!c.gauges||!c.gauges[i])return;const cl=JSON.parse(JSON.stringify(c.gauges[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.gauges.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-bl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupBl),c=self._collectConfig();if(!c.blinds||!c.blinds[i])return;const cl=JSON.parse(JSON.stringify(c.blinds[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.blinds.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-el]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupEl),c=self._collectConfig();if(!c.elements||!c.elements[i])return;const cl=JSON.parse(JSON.stringify(c.elements[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.elements.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-z]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupZ),c=self._collectConfig();if(!c.zones||!c.zones[i])return;const cl=JSON.parse(JSON.stringify(c.zones[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);c.zones.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-ico]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupIco),c=self._collectConfig();const dA=A(c,'icons');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-lbl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupLbl),c=self._collectConfig();const dA=A(c,'labels');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-g]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupG),c=self._collectConfig();const dA=A(c,'gauges');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-bl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupBl),c=self._collectConfig();const dA=A(c,'blinds');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-el]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupEl),c=self._collectConfig();const dA=A(c,'elements');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-z]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupZ),c=self._collectConfig();const dA=A(c,'zones');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
 
     // Group fields on elements
     this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp]').forEach(function(el){el.addEventListener('change',fire);});
@@ -2848,15 +3174,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const addGrp=this.querySelector('#add-grp');
     if(addGrp)addGrp.addEventListener('click',function(){
       const c=self._collectConfig();
-      if(!c.groups)c.groups=[];
-      c.groups.push({id:'group_'+(c.groups.length+1),visible:false});
+      const grpA=A(c,'groups');
+      grpA.push({id:'group_'+(grpA.length+1),visible:false});
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-grp]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmGrp);
         const c=self._collectConfig();
-        if(c.groups)c.groups.splice(i,1);
+        A(c,'groups').splice(i,1);
         self._config=c;self._render();self._fire(c);
       });
     });

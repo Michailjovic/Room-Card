@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v1.5.0** (2026-06-10). Verified against Home Assistant 2026.6.
+Current release: **v1.6.0** (2026-06-10). Verified against Home Assistant 2026.6.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
@@ -33,7 +33,7 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
 | # | Item | Why |
 |---|---|---|
-| 14 | 🔭 **Multi-room navigation** — room switcher / swipe between room configs inside one card | One card per flat instead of one per room |
+| 14 | ✅ **Multi-room navigation** — SHIPPED in v1.6.0: `rooms:`, thumbnail nav with live filters + `{room}` chips, swipe, `switch-room` door zones, `room_entity` presence follow (Bermuda), `card_id`. Phase 2 (v1.7): breakpoint-aware nav `position: auto` with side rail on ultrawide, finger-attached filmstrip drag | One card per flat instead of one per room |
 | 15 | 🔭 **Editor revamp** — split-pane live preview + form; evaluate `getConfigForm` hybrid for basic settings | Today preview lives in the dashboard behind the editor dialog |
 | 16 | 🔭 **3D parallax tilt** (device orientation / mouse) | Depth illusion from layered PNGs |
 | 17 | 🔭 **Theme preset gallery** — shareable YAML snippets (night modes, seasons) | Community building block |
