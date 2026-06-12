@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.12.0 — MIT License
+ * room-overlay-card v1.12.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.12.0';
+const ROC_VERSION='1.12.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -393,6 +393,12 @@ class RoomOverlayCard extends HTMLElement{
       // intrinsic width to stretch into, so it falls back to the derived width
       if(nwRaw==='auto')_thFlex=_navSide?('flex:none;width:'+_thDerived+';'):'flex:1 1 0;min-width:0;';
       else _thFlex='flex:none;width:'+(nwRaw||_thDerived)+';';
+      // Mobile: wrap the strip — all thumbnails shrink onto row 1 (keeping
+      // aspect via aspect-ratio), custom cards + follow button wrap to row 2
+      const _navMob=!_navSide&&(this.offsetWidth||0)>0&&(this.offsetWidth||0)<(cAll.mobile_breakpoint??600);
+      if(_navMob)_thFlex='flex:1 1 0;min-width:0;';
+      const _thSize=_navMob?('aspect-ratio:'+_nr.toFixed(3)+';height:auto;'):('height:'+nh+';');
+      const _navBreak=_navMob?'<div style="flex-basis:100%;height:0;"></div>':'';
       const _tabFlex=(nwRaw==='auto'&&!_navSide)?'flex:1 1 0;min-width:0;justify-content:center;':'flex:none;';
       // nav.cards: arbitrary HA cards inside the strip ({width, card, placement} or plain card config)
       const _navCardOne=function(cc,ci){
@@ -408,7 +414,7 @@ class RoomOverlayCard extends HTMLElement{
       const _fbHtml=(cAll.room_entity&&navCfg.follow_button!==false)
         ?'<button data-nav-follow title="Jump to my room (presence)" style="flex:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--divider-color,#555);background:none;color:var(--primary-text-color,#fff);cursor:pointer;"><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size:18px;"></ha-icon></button>'
         :'';
-      navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':'overflow-x:auto;')+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
+      navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':(_navMob?'flex-wrap:wrap;':'overflow-x:auto;'))+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
         +_navCardsStart
         +cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
@@ -417,9 +423,9 @@ class RoomOverlayCard extends HTMLElement{
           if(navStyle==='tabs')
             return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
           // thumbnails — live mini-render: base image + filter + sensor chips
-          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;height:'+nh+';'+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
-        }).join('')+_fbHtml+_navCardsEnd+'</div>';
+        }).join('')+_navBreak+_navCardsEnd+_fbHtml+'</div>';
     }
     const _navTop=!_navSide&&navPos!=='bottom'?navHtml:'';
     const _navBot=!_navSide&&navPos==='bottom'?navHtml:'';

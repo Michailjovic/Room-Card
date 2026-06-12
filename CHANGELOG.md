@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.12.1] – 2026-06-12
+
+### Fixed
+- **Mobile navigation strip** — on narrow cards the horizontal strip used to
+  overflow (only ~3 room thumbnails visible, rest behind a scroll). Below
+  `mobile_breakpoint` the strip now wraps: all room thumbnails shrink to fit
+  on the first row (aspect ratio preserved via CSS `aspect-ratio`), embedded
+  nav cards (e.g. an alert ticker) move to the second row and stretch, and
+  the follow button sits at the very end. Desktop keeps the single row.
+
+### Changed
+- The follow button now renders after `nav.cards` (far end of the strip) on
+  all screen sizes, for consistent ordering.
+
+---
+
 ## [1.12.0] – 2026-06-12
 
 ### Added
