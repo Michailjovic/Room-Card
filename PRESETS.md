@@ -140,7 +140,7 @@ labels:
 ## Presence-driven multiroom (Bermuda)
 
 ```yaml
-room_entity: sensor.michael_phone_area
+room_entity: sensor.phone_alice_area
 follow_hold: 60
 rooms:
   - id: bedroom

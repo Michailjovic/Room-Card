@@ -627,7 +627,13 @@ exact spot (rubber-band rectangle, auto-named, synced into the editor).
 type: custom:room-overlay-card
 aspect_ratio: "16/9"            # card-level keys are shared by all rooms
 card_id: flat_main              # pairing key (editor/save matching)
-room_entity: sensor.michael_phone_area   # Bermuda area sensor or input_select
+room_entity:                    # string, or per-device mapping:
+  default: sensor.phone_alice_area       # Bermuda area sensor / input_select
+  by_user:                      # logged-in HA user (case-insensitive)
+    Alice: sensor.phone_alice_area
+    Bob: sensor.phone_bob_area
+  by_browser:                   # browser_mod browser ID (wall tablets)
+    wall_tablet_living: sensor.phone_alice_area
 follow_hold: 60                 # s — manual navigation outranks presence
 nav:
   style: thumbnails             # thumbnails | tabs | dots | none
@@ -642,11 +648,17 @@ nav:
     - entity: sensor.{room}_temperature
       decimals: 1
       suffix: "°"
+      background: "rgba(0,0,0,0.55)"   # optional pill styling
+      border_radius: 8px
+      padding: 1px 6px
       color_gradient:
         - {value: 18, color: "#4CAF50"}
         - {value: 26, color: "#FF5722"}
     - entity: sensor.{room}_humidity
       suffix: "%"
+      background: "rgba(0,0,0,0.55)"
+      border_radius: 8px
+      padding: 1px 6px
 rooms:
   - id: livingroom
     name: Obývák

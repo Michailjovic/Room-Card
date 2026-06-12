@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.9.0 — MIT License
+ * room-overlay-card v1.10.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.9.0';
+const ROC_VERSION='1.10.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -489,6 +489,14 @@ class RoomOverlayCard extends HTMLElement{
           if(!chipCont)return;
           (r.chips||navCfg.chips||[]).slice(0,3).forEach(function(chCfg){
             const span=document.createElement('span');
+            // Optional pill styling per chip
+            let _cs='pointer-events:none;';
+            if(chCfg.background)_cs+='background:'+chCfg.background+';';
+            if(chCfg.border_radius)_cs+='border-radius:'+chCfg.border_radius+';';
+            if(chCfg.padding)_cs+='padding:'+chCfg.padding+';';
+            if(chCfg.font_size)_cs+='font-size:'+chCfg.font_size+';';
+            if(chCfg.border)_cs+='border:'+chCfg.border+';';
+            span.style.cssText=_cs;
             chipCont.appendChild(span);
             navSelf._navChipEls.push({el:span,cfg:chCfg,entity:String(chCfg.entity||'').replace(/\{room\}/g,r.id||'')});
           });
@@ -867,7 +875,13 @@ class RoomOverlayCard extends HTMLElement{
       this._ro.observe(this);
     }
     const _ex=this._extractEntities(this._config);
-    if(cAll.room_entity)_ex.ids.add(cAll.room_entity);
+    const _reCfg=cAll.room_entity;
+    if(typeof _reCfg==='string')_ex.ids.add(_reCfg);
+    else if(_reCfg&&typeof _reCfg==='object'){
+      if(_reCfg.default)_ex.ids.add(_reCfg.default);
+      for(const k in(_reCfg.by_user||{}))_ex.ids.add(_reCfg.by_user[k]);
+      for(const k in(_reCfg.by_browser||{}))_ex.ids.add(_reCfg.by_browser[k]);
+    }
     for(const ch of this._navChipEls)if(ch.entity)_ex.ids.add(ch.entity);
     this._relevantEntities=[..._ex.ids];
     this._relevantAttrSources=[...this._extractAttrSources(this._config),...[..._ex.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};})];
@@ -936,6 +950,22 @@ class RoomOverlayCard extends HTMLElement{
     return t[key];
   }
 
+  // Resolve room_entity: plain string, or per-device mapping
+  // {default, by_user: {<HA user name>: entity}, by_browser: {<browser_mod id>: entity}}
+  _roomEntityId(){
+    const re=this._config?this._config.room_entity:null;
+    if(!re)return null;
+    if(typeof re==='string')return re;
+    const bid=window.browser_mod?.browserID||window.browser_mod?.browser_id;
+    if(re.by_browser&&bid&&re.by_browser[bid])return re.by_browser[bid];
+    const un=this._hass&&this._hass.user&&this._hass.user.name;
+    if(re.by_user&&un){
+      for(const k in re.by_user)
+        if(String(k).toLowerCase()===String(un).toLowerCase())return re.by_user[k];
+    }
+    return re.default||null;
+  }
+
   _switchRoom(idx,dir,manual){
     const cAll=this._config;
     if(!Array.isArray(cAll.rooms)||idx<0||idx>=cAll.rooms.length||idx===this._roomIdx)return;
@@ -972,16 +1002,17 @@ class RoomOverlayCard extends HTMLElement{
       setTimeout(function(){ghost.remove();if(ncontent)ncontent.style.transition='';},380);
     }
     // Manual switches sync back to a writable room_entity (input_select/select)
-    if(manual&&cAll.room_entity&&this._hass){
-      const dom=cAll.room_entity.split('.')[0];
+    const _reW=this._roomEntityId();
+    if(manual&&_reW&&this._hass){
+      const dom=_reW.split('.')[0];
       if(dom==='input_select'||dom==='select'){
         const r=cAll.rooms[idx];
-        const opts=this._hass.states[cAll.room_entity]?.attributes?.options||[];
+        const opts=this._hass.states[_reW]?.attributes?.options||[];
         const opt=opts.find(function(o){
           const ol=String(o).toLowerCase();
           return ol===String(r.id||'').toLowerCase()||ol===String(r.name||'').toLowerCase()||(Array.isArray(r.area_match)&&r.area_match.some(function(a){return String(a).toLowerCase()===ol;}));
         });
-        if(opt)this._hass.callService(dom,'select_option',{entity_id:cAll.room_entity,option:opt});
+        if(opt)this._hass.callService(dom,'select_option',{entity_id:_reW,option:opt});
       }
     }
   }
@@ -1403,8 +1434,9 @@ class RoomOverlayCard extends HTMLElement{
     const cAll=this._config;
     const c=this._roomCfg||roomMerge(cAll,this._roomIdx); // active room view
     // room_entity follow (e.g. Bermuda area sensor) — manual switches hold priority
-    if(cAll.room_entity&&Array.isArray(cAll.rooms)&&cAll.rooms.length){
-      const ri=roomMatch(cAll,s[cAll.room_entity]?.state);
+    const _reId=this._roomEntityId();
+    if(_reId&&Array.isArray(cAll.rooms)&&cAll.rooms.length){
+      const ri=roomMatch(cAll,s[_reId]?.state);
       if(ri>=0&&ri!==this._roomIdx&&Date.now()>this._manualHoldUntil){
         this._switchRoom(ri,0,false);
         return;
@@ -2328,7 +2360,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       }
       const rchR=this._pYaml(q('#room-chips'));
       if(rchR.ok){if(rchR.val)tgt.chips=rchR.val;else delete tgt.chips;}
-      const reEl=q('#room_entity');if(reEl){if(reEl.value.trim())c.room_entity=reEl.value.trim();else delete c.room_entity;}
+      const reEl=q('#room_entity');
+      if(reEl&&!(typeof c.room_entity==='object'&&c.room_entity)){ // object mapping is YAML-managed
+        if(reEl.value.trim())c.room_entity=reEl.value.trim();else delete c.room_entity;
+      }
       const fhEl=q('#follow_hold');
       if(fhEl){const fv=parseFloat(fhEl.value);if(!isNaN(fv)&&fv>=0&&fv!==60)c.follow_hold=fv;else delete c.follow_hold;}
       const cidEl=q('#card_id');if(cidEl){if(cidEl.value.trim())c.card_id=cidEl.value.trim();else delete c.card_id;}
@@ -2848,7 +2883,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _rch=er.chips?_yaml.s(er.chips):'';
       roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Thumbnail chips override (YAML list — falls back to nav.chips; {room} = room id)</label><textarea id="room-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_rch)+'</textarea></div>';
       roomsInner+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
-      roomsInner+='<div><label class="roc-l">room_entity (active room follows it — e.g. Bermuda area sensor or input_select)</label><input id="room_entity" type="text" list="roc-entities" placeholder="sensor.phone_area" value="'+this._e(c.room_entity||'')+'"'+this._inp('')+'></div>';
+      const _reIsObj=typeof c.room_entity==='object'&&c.room_entity;
+      roomsInner+='<div><label class="roc-l">room_entity (active room follows it — e.g. Bermuda area sensor or input_select)</label><input id="room_entity" type="text" list="roc-entities"'+(_reIsObj?' disabled placeholder="per-device mapping active — edit by_user/by_browser in YAML"':' placeholder="sensor.phone_area"')+' value="'+this._e(typeof c.room_entity==='string'?c.room_entity:'')+'"'+this._inp('')+'></div>';
       roomsInner+='<div><label class="roc-l">Follow hold (s after manual switch)</label><input id="follow_hold" type="number" min="0" step="5" value="'+(c.follow_hold??60)+'"'+this._inp('')+'></div>';
       roomsInner+='<div><label class="roc-l">card_id (pairing key)</label><input id="card_id" type="text" value="'+this._e(c.card_id||'')+'"'+this._inp('')+'></div>';
       roomsInner+='</div>';

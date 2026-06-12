@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.10.0] – 2026-06-12
+
+Per-device presence follow and nav chip styling.
+Verified against Home Assistant 2026.6.
+
+### Added
+- **Per-device / per-user `room_entity` mapping** — `room_entity` now also
+  accepts an object, so every device follows *its own* Bermuda sensor:
+
+  ```yaml
+  room_entity:
+    default: sensor.phone_alice_area
+    by_user:                      # matched against the logged-in HA user
+      Alice: sensor.phone_alice_area
+      Bob: sensor.phone_bob_area
+    by_browser:                   # matched against browser_mod browser ID
+      wall_tablet_living: sensor.phone_alice_area
+  ```
+
+  Resolution order: `by_browser` (exact browser_mod ID) → `by_user`
+  (case-insensitive HA user name) → `default`. All mapped entities are part
+  of change detection; manual-switch write-back targets the resolved entity.
+  The editor field shows a hint and defers to YAML when a mapping is active.
+- **Nav chip styling** — chips accept optional `background`,
+  `border_radius`, `padding`, `border` and `font_size`, e.g. pill style:
+
+  ```yaml
+  nav:
+    chips:
+      - entity: sensor.{room}_temperature
+        decimals: 1
+        suffix: "°"
+        background: "rgba(0,0,0,0.55)"
+        border_radius: 8px
+        padding: 1px 6px
+        color_gradient: [...]
+  ```
+
+---
+
 ## [1.9.0] – 2026-06-10
 
 Multi-room navigation strip customization. Verified against Home Assistant 2026.6.
