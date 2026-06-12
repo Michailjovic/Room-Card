@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.12.1 — MIT License
+ * room-overlay-card v1.12.2 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.12.1';
+const ROC_VERSION='1.12.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -397,7 +397,8 @@ class RoomOverlayCard extends HTMLElement{
       // aspect via aspect-ratio), custom cards + follow button wrap to row 2
       const _navMob=!_navSide&&(this.offsetWidth||0)>0&&(this.offsetWidth||0)<(cAll.mobile_breakpoint??600);
       if(_navMob)_thFlex='flex:1 1 0;min-width:0;';
-      const _thSize=_navMob?('aspect-ratio:'+_nr.toFixed(3)+';height:auto;'):('height:'+nh+';');
+      // Mobile thumbs: fixed (shorter) height so both chips fit; image crops to cover
+      const _thSize='height:'+(_navMob?(navCfg.mobile_height||'48px'):nh)+';';
       const _navBreak=_navMob?'<div style="flex-basis:100%;height:0;"></div>':'';
       const _tabFlex=(nwRaw==='auto'&&!_navSide)?'flex:1 1 0;min-width:0;justify-content:center;':'flex:none;';
       // nav.cards: arbitrary HA cards inside the strip ({width, card, placement} or plain card config)
@@ -405,7 +406,7 @@ class RoomOverlayCard extends HTMLElement{
         const w=cc&&cc.width;
         const sz=_navSide
           ?('width:100%;'+(w?'height:'+w+';':'min-height:'+nh+';'))
-          :('height:'+nh+';'+(w?'flex:none;width:'+w+';':'flex:1 1 auto;min-width:140px;'));
+          :('height:'+nh+';'+(w?'flex:none;width:'+w+';':(_navMob?'flex:1 1 0;min-width:0;':'flex:1 1 auto;min-width:140px;')));
         return'<div data-nav-card="'+ci+'" style="'+sz+'overflow:hidden;border-radius:6px;position:relative;"></div>';
       };
       const _navCardsStart=(navCfg.cards||[]).map(function(cc,ci){return cc&&cc.placement==='start'?_navCardOne(cc,ci):'';}).join('');

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.2] – 2026-06-12
+
+### Fixed
+- **Mobile nav polish** — thumbnails on the wrapped mobile strip now use a
+  fixed height (`nav.mobile_height`, default `48px`) instead of preserving
+  the aspect ratio, so both sensor chips fit again (the image crops to cover).
+  Embedded nav cards get `flex-basis: 0` on mobile, so the ticker always
+  shares its row with the follow button and takes exactly the remaining
+  space — no more orphaned third row.
+
+---
+
 ## [1.12.1] – 2026-06-12
 
 ### Fixed
