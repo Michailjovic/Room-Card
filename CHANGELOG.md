@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.12.0] – 2026-06-12
+
+### Added
+- **Per-room companion strips** — new room keys `cards_above:` and
+  `cards_below:` render full-width HA cards in normal document flow above and
+  below the room image (inside the card, switching together with the room).
+  Built for mobile, where positioned overlays get cramped. Entries are plain
+  card configs or `{card, height, media}`; `media: all|mobile|desktop`
+  (default `all`) shows an entry only below/above `mobile_breakpoint` — so
+  you can keep elegant overlay panels on desktop and get stacked control
+  strips on the phone, from one config.
+
+  ```yaml
+  rooms:
+    - id: bedroom
+      cards_above:
+        - media: mobile
+          card: {type: grid, columns: 3, cards: [...]}   # lights
+      cards_below:
+        - media: mobile
+          card: {type: custom:bubble-card, ...}          # blinds
+  ```
+
+---
+
 ## [1.11.1] – 2026-06-12
 
 ### Fixed
