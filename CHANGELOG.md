@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.13.2] – 2026-06-13
+
+### Added
+- **Hold gesture feedback** — elements with a `hold_action` now show a circular
+  progress ring while you press. It fills over the hold delay and turns green
+  the moment the hold registers, so you know you've held long enough (no more
+  guessing). A short grace period keeps quick taps from flashing the ring.
+  Opt out globally with `hold_feedback: false`; customize via `hold_color`
+  (in-progress ring) — the "registered" colour is green by default.
+
+---
+
 ## [1.13.1] – 2026-06-13
 
 ### Added
