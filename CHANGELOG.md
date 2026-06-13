@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.13.5] – 2026-06-13
+
+### Fixed
+- **Per-tier values now apply in test mode** — `test_mode` disables per-element
+  tier overrides (so dragging always edits the base), but it was also forcing
+  per-tier *scalars* (`aspect_ratio`, `border_radius`, `max_height`) to the
+  desktop value. So on an ultrawide screen the test-mode readout correctly said
+  `ultrawide` while the card still rendered the desktop aspect ratio. These
+  scalars now follow the actual detected tier even in test mode, and crossing a
+  tier boundary while resizing in test mode re-renders to pick up the new value.
+  Live (non-test) rendering was already correct.
+
+---
+
 ## [1.13.4] – 2026-06-13
 
 ### Added

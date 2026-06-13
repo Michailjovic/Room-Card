@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.13.4 — MIT License
+ * room-overlay-card v1.13.5 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.13.4';
+const ROC_VERSION='1.13.5';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -260,7 +260,7 @@ class RoomOverlayCard extends HTMLElement{
     this._selectedTM=null;this._tmKeyHandler=null;
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
-    this._gdH=null;this._gdV=null;this._mobActive=false;this._tier=null;
+    this._gdH=null;this._gdV=null;this._mobActive=false;this._tier=null;this._vt=null;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -426,9 +426,11 @@ class RoomOverlayCard extends HTMLElement{
     const tm=c.test_mode??false;
     // Active responsive tier (by the card's own width). Null in test mode so that
     // dragging always edits the base profile (tier deltas merge over the base).
-    const _tier=tm?null:rocTier(this.offsetWidth,c);
+    const _rt=rocTier(this.offsetWidth,c); // real tier by the card's own width
+    const _tier=tm?null:_rt; // element tier-overrides are off in test mode (so dragging edits the base profile)
     this._tier=_tier;this._mobActive=(_tier==='mobile');
-    const _vt=_tier||'desktop'; // tier used for resolving per-tier scalar values
+    const _vt=_rt; // per-tier SCALARS (aspect_ratio/border_radius/max_height) follow the real tier even in test mode
+    this._vt=_vt;
     const _arResolved=tVal(c.aspect_ratio,_vt)||'16/9';
     const pad=this._pad(_arResolved),br=(tVal(c.border_radius,_vt)??'12px');
     // Optional per-tier height cap. The image box keeps its aspect ratio (so % positions
@@ -1625,8 +1627,9 @@ class RoomOverlayCard extends HTMLElement{
       setSt(this._navFollowEl,'color',(_fri>=0&&_fri!==this._roomIdx)?'var(--primary-color,#03a9f4)':'');
     }
     // Re-render when the active responsive tier changes (resize/rotation/column change)
-    const _tierNow=(c.test_mode??false)?null:rocTier(this.offsetWidth,c);
-    if(_tierNow!==this._tier){this._rendered=false;this._render();return;}
+    const _rtNow=rocTier(this.offsetWidth,c);
+    const _tierNow=(c.test_mode??false)?null:_rtNow;
+    if(_tierNow!==this._tier||_rtNow!==this._vt){this._rendered=false;this._render();return;}
     // Live width/tier readout in test mode (updates on resize without re-render)
     if(this._tmInfoEl)this._tmInfoEl.innerHTML='&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span>';
     // Re-render when nav position: auto flips between top and side rail
