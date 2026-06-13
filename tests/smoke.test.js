@@ -103,6 +103,28 @@ const ma=g.mApply(mi,true);
 t('mApply active',ma.top==='50%'&&ma.size==='30px'&&ma.left==='20%');
 t('mApply inactive',g.mApply(mi,false).top==='10%');
 t('mApply no mobile key',g.mApply({top:'1%'},true).top==='1%');
+
+// ---- v1.13: responsive tiers ------------------------------------------------
+t('rocTier mobile',g.rocTier(500,{})==='mobile');
+t('rocTier tablet',g.rocTier(800,{})==='tablet');
+t('rocTier desktop',g.rocTier(1200,{})==='desktop');
+t('rocTier ultrawide',g.rocTier(1800,{})==='ultrawide');
+t('rocTier boundary 600=tablet',g.rocTier(600,{})==='tablet');
+t('rocTier zero width → desktop',g.rocTier(0,{})==='desktop');
+t('rocTier legacy mobile_breakpoint',g.rocTier(550,{mobile_breakpoint:600})==='mobile'&&g.rocTier(650,{mobile_breakpoint:600})==='tablet');
+t('rocTier custom breakpoints',g.rocTier(900,{breakpoints:{mobile:500,tablet:800,desktop:1200}})==='desktop');
+const _ti={top:'10%',size:'20px',tablet:{top:'8%'},ultrawide:{top:'12%',size:'30px'}};
+t('tApply tablet merges over base',g.tApply(_ti,'tablet').top==='8%'&&g.tApply(_ti,'tablet').size==='20px');
+t('tApply ultrawide merges',g.tApply(_ti,'ultrawide').top==='12%'&&g.tApply(_ti,'ultrawide').size==='30px');
+t('tApply desktop (no block) = base',g.tApply(_ti,'desktop').top==='10%');
+t('tApply null = base',g.tApply(_ti,null).top==='10%');
+t('tApply legacy mobile block',g.tApply({top:'1%',mobile:{top:'9%'}},'mobile').top==='9%');
+t('tVal scalar passthrough',g.tVal('16/9','mobile')==='16/9');
+t('tVal per-tier exact',g.tVal({mobile:'4/3',desktop:'16/9'},'mobile')==='4/3');
+t('tVal fallback smaller-first',g.tVal({mobile:'4/3',ultrawide:'21/9'},'tablet')==='4/3');
+t('tVal fallback larger when no smaller',g.tVal({ultrawide:'21/9'},'tablet')==='21/9');
+t('tVal empty → undefined',g.tVal({},'mobile')===undefined);
+t('tVal null tier → desktop',g.tVal({desktop:'16/9',mobile:'4/3'},null)==='16/9');
 const warm=g.kelvinToRgb(2700),cold=g.kelvinToRgb(6500);
 t('kelvin warm is reddish',warm[0]===255&&warm[2]<warm[0]);
 t('kelvin cold has blue',cold[2]>200);

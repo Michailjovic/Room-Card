@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.13.0] – 2026-06-13
+
+### Added
+- **Responsive tiers** — the single binary mobile/desktop profile is now a
+  four-tier system driven by the card's own width (container width, not the
+  viewport — correct for HA dashboard columns): `mobile` (`< 600px`),
+  `tablet` (`600–1024px`), `desktop` (`1024–1600px`) and `ultrawide`
+  (`≥ 1600px`). One card now adapts to phone, tablet, PC and ultrawide
+  without maintaining separate cards.
+- **Per-element tier overrides** — every element (zones, badges, icons,
+  labels, gauges, blinds, embedded cards) accepts `tablet:`, `desktop:` and
+  `ultrawide:` override blocks in addition to the existing `mobile:`. Each
+  block merges over the base element, so you only specify the deltas that
+  differ on that tier:
+  ```yaml
+  - id: temp
+    top: 10%
+    left: 80%
+    font_size: 2%
+    mobile:    { top: 6%,  left: 70%, font_size: 4% }
+    ultrawide: { top: 12%, left: 85%, font_size: 1.5% }
+  ```
+- **Per-tier `aspect_ratio` and `border_radius`** — these accept either a
+  single value (as before) or a per-tier object. A missing tier falls back to
+  the nearest defined tier (smaller first, then larger):
+  ```yaml
+  aspect_ratio: { mobile: 4/3, tablet: 16/10, desktop: 16/9, ultrawide: 21/9 }
+  ```
+- **Custom breakpoints** — override the tier thresholds with a top-level
+  `breakpoints: { mobile, tablet, desktop }` (each value is the exclusive
+  upper bound; `ultrawide` is the rest).
+- **Strip media tiers** — `cards_above`/`cards_below` `media:` now also accepts
+  individual tier names and comma lists (e.g. `media: tablet,ultrawide`)
+  alongside the legacy `all` / `mobile` / `desktop` (`desktop` = any non-mobile).
+
+### Changed
+- Tier changes (resize, rotation, moving the card to a different dashboard
+  column) re-render the card automatically, just like the old mobile flip.
+
+### Compatibility
+- Fully backward compatible: existing `mobile:` blocks and `mobile_breakpoint`
+  keep working unchanged (`mobile_breakpoint` overrides the mobile threshold).
+- The GUI editor exposes per-tier `aspect_ratio`/`border_radius` and per-element
+  tier blocks via YAML for now; a dedicated centralized "Responsive" panel with
+  a tier switcher is planned for the next release.
+
+---
+
 ## [1.12.2] – 2026-06-12
 
 ### Fixed
