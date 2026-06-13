@@ -1,6 +1,25 @@
 # Changelog
 
-## [1.14.0] – 2026-06-13
+## [1.14.1] – 2026-06-13
+
+### Changed
+- **Editor is now tab-based** — the grouped sections moved into five top tabs:
+  **Image** (background, filters, brightness), **Elements** (zones, icons, labels,
+  badges, gauges, blinds, embedded cards, overlays, groups), **Responsive**,
+  **Rooms &amp; menu** (room list, presence, nav strip), and **Code**. Switching
+  tabs no longer scrolls a long wall of accordions, and your active tab is kept
+  while you work. The first-run onboarding (set a background first) is unchanged.
+
+### Added
+- **Responsive tab** — set the tier breakpoints (mobile / tablet / desktop upper
+  bounds in px) directly in the GUI instead of YAML, with a reminder that tiers
+  follow the card's own width and that Test mode shows a live width + tier badge.
+- **Code tab** — a read-only preview of the full card config as YAML.
+
+### Notes
+- This supersedes the 1.14.0 accordion grouping with the tabbed layout agreed for
+  the v1.14 editor pass. Per-tier `aspect_ratio` / `max_height` GUI fields and a
+  dedicated menu/nav editor are coming in the next iterations.
 
 ### Changed
 - **Editor restructured into four groups** — the flat wall of ~14 accordions is

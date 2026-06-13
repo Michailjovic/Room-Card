@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.14.0 — MIT License
+ * room-overlay-card v1.14.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.14.0';
+const ROC_VERSION='1.14.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2252,6 +2252,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     }else delete tgt.weather_overlay;
     const _mbp=parseFloat(v('mobile_breakpoint',''));
     if(!isNaN(_mbp)&&_mbp>0&&_mbp!==600)c.mobile_breakpoint=_mbp;else delete c.mobile_breakpoint;
+    const _bpO={};['mobile','tablet','desktop'].forEach(function(k){const _bv=parseFloat(v('bp_'+k,''));if(!isNaN(_bv)&&_bv>0)_bpO[k]=_bv;});
+    if(Object.keys(_bpO).length)c.breakpoints=_bpO;else delete c.breakpoints;
     const _zm=q('#zoom');
     if(_zm&&_zm.checked)c.zoom=true;else delete c.zoom;
     const _bicR=this._pYaml(this.querySelector('#base_image_conditions'));
@@ -3122,10 +3124,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
     }
 
-    // ---- Section grouping + first-run onboarding (v1.14.0) ------------------
-    const _ghdr=function(label,hint){
-      return '<div style="margin:16px 4px 6px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--primary-color);border-bottom:1px solid var(--divider-color);padding-bottom:4px;">'+label+(hint?'<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--secondary-text-color);font-size:11px;"> — '+hint+'</span>':'')+'</div>';
-    };
+    // ---- First-run onboarding + tabbed editor (v1.14.1) ---------------------
     const _nArr=function(k){return Array.isArray(cR[k])?cR[k].length:0;};
     const _realImg=cR.base_image&&cR.base_image!=='/local/room.webp';
     const _isEmpty=!hasRooms&&!_realImg&&!cR.base_camera&&(_nArr('zones')+_nArr('icons')+_nArr('labels')+_nArr('badges')+_nArr('gauges')+_nArr('blinds')+_nArr('elements')+_nArr('overlays'))===0;
@@ -3139,24 +3138,52 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<div style="font-size:11px;color:var(--secondary-text-color);margin:10px 0 4px;">… or use a live camera snapshot instead:</div>'
       +'<input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'>'
       +'</div></div>';
-    const _groupedHtml=
-       _ghdr('Start here')
-      +sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
-      +_ghdr('Lighting &amp; atmosphere','how the room image reacts to state')
-      +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
-      +sec('brightness','Brightness model (smooth filter)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
-      +_ghdr('Elements','things you place on the image')
-      +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner)
-      +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner)
-      +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner)
-      +sec('badges','Badges — pill chips',(cR.badges||[]).length,bInner)
-      +sec('gauges','Gauges — bar / radial meters',(cR.gauges||[]).length,gInner)
-      +sec('blinds','Blinds — window covers',(cR.blinds||[]).length,blInner)
-      +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
-      +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner)
-      +_ghdr('Advanced')
-      +sec('groups','Element groups (show / hide panels)',(cR.groups||[]).length,grpInner)
-      +sec('rooms','Multi-room'+(hasRooms?' — editing: '+this._e(cR.name||cR.id||''):''),(c.rooms||[]).length,roomsInner);
+    // Responsive tab — breakpoint thresholds (per-tier aspect/max_height stay in Image for now)
+    const _bp=c.breakpoints||{};
+    let respInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">Tiers follow the card’s own width (its dashboard column), not the screen resolution. Each value is the upper bound in px; <b>ultrawide</b> is everything above the last. Turn on <b>Test mode</b> to see a live width + tier badge on the card.</p>';
+    respInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    respInner+='<div><label class="roc-l">Mobile below (px)</label><input id="bp_mobile" type="number" min="0" step="10" placeholder="600" value="'+this._e(_bp.mobile!=null?String(_bp.mobile):'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Tablet below (px)</label><input id="bp_tablet" type="number" min="0" step="10" placeholder="1024" value="'+this._e(_bp.tablet!=null?String(_bp.tablet):'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Desktop below (px)</label><input id="bp_desktop" type="number" min="0" step="10" placeholder="1600" value="'+this._e(_bp.desktop!=null?String(_bp.desktop):'')+'"'+this._inp('')+'></div>';
+    respInner+='</div>';
+    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0;line-height:1.5;">Per-tier image shape: set <code>aspect_ratio</code> / <code>border_radius</code> / <code>max_height</code> in the <b>Image</b> tab as per-tier objects, e.g. <code>{mobile: 4/3, ultrawide: 21/9}</code> (dedicated per-tier fields land in a later update). Legacy <code>mobile_breakpoint</code> in the Image tab still overrides the mobile threshold.</p>';
+    // Code tab — read-only preview of the full config
+    let codeInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 8px;line-height:1.5;">Read-only preview of the full card config. To edit YAML directly, use Home Assistant’s built-in code editor.</p>';
+    codeInner+='<textarea readonly rows="18"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;white-space:pre;')+'>'+this._e(_yaml.s(this._config))+'</textarea>';
+    // Tabbed shell — all panels render; the active one is shown, others hidden via CSS
+    const _tab=this._tab||'image';
+    const _tabBtn=function(id,icon,label){
+      const on=_tab===id;
+      return '<button data-roctab="'+id+'" type="button" style="padding:9px 11px;font-size:13px;white-space:nowrap;background:none;border:none;border-bottom:2px solid '+(on?'var(--primary-color)':'transparent')+';color:'+(on?'var(--primary-color)':'var(--secondary-text-color)')+';cursor:pointer;font-weight:'+(on?'600':'400')+';"><ha-icon icon="'+icon+'" style="--mdc-icon-size:16px;vertical-align:-3px;"></ha-icon> '+label+'</button>';
+    };
+    const _panel=function(id,inner){
+      return '<div data-rocpanel="'+id+'" style="display:'+(_tab===id?'block':'none')+';">'+inner+'</div>';
+    };
+    const _tabbedHtml=
+      '<div style="display:flex;gap:2px;border-bottom:1px solid var(--divider-color);overflow-x:auto;margin-bottom:12px;">'
+      +_tabBtn('image','mdi:image','Image')
+      +_tabBtn('elements','mdi:shape','Elements')
+      +_tabBtn('responsive','mdi:monitor-cellphone','Responsive')
+      +_tabBtn('rooms','mdi:floor-plan','Rooms &amp; menu')
+      +_tabBtn('code','mdi:code-tags','Code')
+      +'</div>'
+      +_panel('image',
+          sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
+         +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
+         +sec('brightness','Brightness model (smooth filter)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner))
+      +_panel('elements',
+          sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner)
+         +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner)
+         +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner)
+         +sec('badges','Badges — pill chips',(cR.badges||[]).length,bInner)
+         +sec('gauges','Gauges — bar / radial meters',(cR.gauges||[]).length,gInner)
+         +sec('blinds','Blinds — window covers',(cR.blinds||[]).length,blInner)
+         +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
+         +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner)
+         +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner))
+      +_panel('responsive',respInner)
+      +_panel('rooms',roomsInner)
+      +_panel('code',codeInner);
     const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
       +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}</style>'
@@ -3168,7 +3195,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
       +'<div style="display:flex;align-items:center;gap:8px;padding:0 4px 8px;"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="prev-on" style="font-size:12px;cursor:pointer;color:var(--secondary-text-color);">Interactive preview (drag, resize, draw &amp; nudge here — without enabling test mode on the dashboard)</label></div>'
       +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
-      +(_isEmpty?_onboardHtml:_groupedHtml)
+      +(_isEmpty?_onboardHtml:_tabbedHtml)
       +'</div>';
 
     // Onboarding: once a background is set, re-render into the full grouped editor
@@ -3185,6 +3212,22 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(_obEl)_obEl.addEventListener('change',_go);
       if(_ocEl)_ocEl.addEventListener('change',_go);
     }
+
+    // Tab switching — toggle panel visibility without a full re-render (keeps focus)
+    const _tabBtns=this.querySelectorAll('[data-roctab]');
+    if(_tabBtns.length){
+      _tabBtns.forEach(function(btn){
+        btn.addEventListener('click',function(){
+          const id=btn.dataset.roctab;self._tab=id;
+          self.querySelectorAll('[data-rocpanel]').forEach(function(p){p.style.display=(p.dataset.rocpanel===id)?'block':'none';});
+          _tabBtns.forEach(function(b){const on=b.dataset.roctab===id;b.style.borderBottomColor=on?'var(--primary-color)':'transparent';b.style.color=on?'var(--primary-color)':'var(--secondary-text-color)';b.style.fontWeight=on?'600':'400';});
+        });
+      });
+    }
+    // Responsive tab — breakpoint fields save on change
+    this.querySelectorAll('#bp_mobile,#bp_tablet,#bp_desktop').forEach(function(el){
+      el.addEventListener('change',function(){self._fire(self._collectConfig());});
+    });
 
     if(!this._keysBound){
       this._keysBound=true;
