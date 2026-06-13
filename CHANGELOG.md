@@ -1,6 +1,20 @@
 # Changelog
 
-## [1.15.0] – 2026-06-13
+## [1.15.1] – 2026-06-13
+
+### Fixed
+- **Drag-edit preview now follows the selected room** — the in-editor preview used
+  to always show the default/last room (e.g. living room) regardless of which room
+  you were editing. It now renders the room picked in the header and stays on it
+  (presence-following is disabled inside the preview). Renamed "Interactive
+  preview" → "Drag-edit preview" with a tooltip explaining it's a live, draggable
+  copy (and that the panel on the right is Home Assistant's own preview, which
+  follows live presence and won't track the room selector).
+
+### Added
+- **Reorder rooms from the GUI** — move-up / move-down arrows next to + Room /
+  Remove in the Rooms &amp; menu tab let you change room order (which is also the
+  order of the thumbnail navigation) without editing YAML.
 
 ### Changed
 - **Room picker, Test mode &amp; Interactive preview moved to a persistent header**

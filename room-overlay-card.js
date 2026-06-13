@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.15.0 — MIT License
+ * room-overlay-card v1.15.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.15.0';
+const ROC_VERSION='1.15.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2181,7 +2181,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       const el=document.createElement('room-overlay-card');
       const cfg=JSON.parse(JSON.stringify(this._config));
       cfg.test_mode=true;cfg._roc_preview=true;
+      const _multi=Array.isArray(cfg.rooms)&&cfg.rooms.length>0;
+      if(_multi)cfg.follow_mode='manual'; // lock the preview to the room being edited (no presence jumps)
       el.setConfig(cfg);
+      if(_multi)el._roomIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
       if(this._hass)el.hass=this._hass;
       host.appendChild(el);
       this._prevCard=el;
@@ -3069,7 +3072,14 @@ class RoomOverlayCardEditor extends HTMLElement{
       const er=cR;
       roomsInner+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">';
       roomsInner+='<span style="font-size:12px;color:var(--secondary-text-color);">Editing <b>'+self._e(er.name||er.id||('room_'+(self._editRoomIdx+1)))+'</b> — pick the room in the header above.</span>';
-      roomsInner+='<span style="display:flex;gap:8px;flex:none;"><button id="add-room" style="'+btnStyle+'">+ Room</button><button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button></span>';
+      const _rcnt=c.rooms.length,_ri=self._editRoomIdx;
+      const _navBtn='padding:6px 10px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:13px;line-height:1;';
+      roomsInner+='<span style="display:flex;gap:8px;flex:none;align-items:center;">';
+      roomsInner+='<button id="room-up" title="Move room earlier"'+(_ri<=0?' disabled':'')+' style="'+_navBtn+(_ri<=0?'opacity:0.4;cursor:default;':'')+'">&#9650;</button>';
+      roomsInner+='<button id="room-down" title="Move room later"'+(_ri>=_rcnt-1?' disabled':'')+' style="'+_navBtn+(_ri>=_rcnt-1?'opacity:0.4;cursor:default;':'')+'">&#9660;</button>';
+      roomsInner+='<button id="add-room" style="'+btnStyle+'">+ Room</button>';
+      roomsInner+='<button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button>';
+      roomsInner+='</span>';
       roomsInner+='</div>';
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
       roomsInner+='<div><label class="roc-l">Room id</label><input id="room-id" type="text" value="'+this._e(er.id||'')+'"'+this._inp('')+'></div>';
@@ -3187,7 +3197,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
       +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);">Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
       +'<label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Test mode</label>'
-      +'<label for="prev-on" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Interactive preview</label>'
+      +'<label for="prev-on" title="A live, editable copy of the card shown right here — drag and resize elements directly, and it shows the room picked above. (The preview panel on the right is Home Assistant&#39;s own and follows live presence, so it won&#39;t track the room selector.)" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Drag-edit preview</label>'
       +'</div>'
       +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
@@ -3334,6 +3344,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       c.rooms.splice(self._editRoomIdx,1);
       self._editRoomIdx=Math.max(0,self._editRoomIdx-1);
       self._config=c;self._render();self._fire(c);
+    });
+    const roomUp=this.querySelector('#room-up');
+    if(roomUp)roomUp.addEventListener('click',function(){
+      const i=self._editRoomIdx;if(i<=0)return;
+      const c=self._collectConfig();if(!Array.isArray(c.rooms)||i>=c.rooms.length)return;
+      const tmp=c.rooms[i-1];c.rooms[i-1]=c.rooms[i];c.rooms[i]=tmp;
+      self._editRoomIdx=i-1;self._config=c;self._render();self._fire(c);
+    });
+    const roomDown=this.querySelector('#room-down');
+    if(roomDown)roomDown.addEventListener('click',function(){
+      const i=self._editRoomIdx;const c=self._collectConfig();
+      if(!Array.isArray(c.rooms)||i>=c.rooms.length-1)return;
+      const tmp=c.rooms[i+1];c.rooms[i+1]=c.rooms[i];c.rooms[i]=tmp;
+      self._editRoomIdx=i+1;self._config=c;self._render();self._fire(c);
     });
     const convRooms=this.querySelector('#conv-rooms');
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
