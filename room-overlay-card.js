@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.15.2 — MIT License
+ * room-overlay-card v2.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.15.2';
+const ROC_VERSION='2.0.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -897,11 +897,13 @@ class RoomOverlayCard extends HTMLElement{
       const _tmOutline=(type)=>type==='zone'?'3px solid red':'';
       const _selectTM=(el,type,id)=>{
         if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';}
+        this.shadowRoot.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='none';}); // hide every resize handle
         el.style.outline='2px dashed var(--primary-color,#03a9f4)';
         el.style.outlineOffset='2px';
+        el.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='block';}); // show only the selected element's handles
         this._selectedTM={el,type,id};
       };
-      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';this._selectedTM=null;}};
+      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';this._selectedTM.el.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='none';});this._selectedTM=null;}};
       let _nudgeTimer=null;
       const _nudgeFn=(e)=>{
         if(!this._selectedTM)return;
@@ -919,7 +921,7 @@ class RoomOverlayCard extends HTMLElement{
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
           const nc=JSON.parse(JSON.stringify(this._config));
-          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):this._roomArr(nc,'labels');
+          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):null;
           const item=(arr||[]).find(x=>x.id===id);
           if(item){item.top=el.style.top;item.left=el.style.left;}
           _dpFire(nc);
@@ -939,6 +941,14 @@ class RoomOverlayCard extends HTMLElement{
       for(const lbl of(c.labels||[])){
         const el=this._lblEls[lbl.id];if(!el)continue;
         el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'label',lbl.id);},true);
+      }
+      for(const elCfg of(c.elements||[])){
+        const el=this._contEls[elCfg.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'element',elCfg.id);},true);
+      }
+      for(const g of(c.gauges||[])){
+        const el=this._gaugeEls[g.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'gauge',g.id);},true);
       }
       // Click on card background → deselect
       const _hacard=this.shadowRoot.querySelector('ha-card');
@@ -1540,7 +1550,8 @@ class RoomOverlayCard extends HTMLElement{
     const self=this;
     hs.forEach(function(hd){
       const h=document.createElement('div');
-      h.style.cssText='position:absolute;'+hd.p+';width:10px;height:10px;background:var(--primary-color,#03a9f4);border:2px solid #fff;border-radius:2px;z-index:1000;cursor:'+hd.c+';box-sizing:border-box;pointer-events:auto;';
+      h.className='roc-rh';
+      h.style.cssText='position:absolute;'+hd.p+';width:10px;height:10px;background:var(--primary-color,#03a9f4);border:2px solid #fff;border-radius:2px;z-index:1000;cursor:'+hd.c+';box-sizing:border-box;pointer-events:auto;display:none;';
       el.appendChild(h);
       h.addEventListener('mousedown',function(e){
         e.stopPropagation();e.preventDefault();

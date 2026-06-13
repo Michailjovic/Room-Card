@@ -163,3 +163,95 @@ parallax:
   scale: 1.04
   source: auto      # pointer on desktop, orientation where permitted
 ```
+
+---
+
+# Responsive & layout (v2.0.0)
+
+## One card, every screen — crop per device
+
+```yaml
+# Full width on each device, image cropped top/bottom to a different shape.
+aspect_ratio:
+  mobile: 4/3
+  tablet: 16/10
+  desktop: 16/9
+  ultrawide: 21/9
+```
+
+## Cap the image height on big screens
+
+```yaml
+# Stops the image growing huge on FHD/2K — caps height, centers, letterboxes sides.
+max_height:
+  desktop: 70vh
+  ultrawide: 80vh
+```
+
+## Custom tier thresholds
+
+```yaml
+# Each value is the exclusive upper bound (px); ultrawide is the rest.
+# Tip: turn on Test mode to read the live width + active tier on the card.
+breakpoints:
+  mobile: 600
+  tablet: 1280
+  desktop: 1920
+```
+
+## Nudge one element per tier
+
+```yaml
+labels:
+  - id: temp
+    top: 10%
+    left: 80%
+    font_size: 2%
+    mobile:    { top: 6%,  left: 70%, font_size: 4% }
+    ultrawide: { top: 12%, left: 85%, font_size: 1.5% }
+```
+
+## Companion cards on mobile only
+
+```yaml
+# Full HA cards stacked below the image, shown only on phones.
+cards_below:
+  - card: { type: thermostat, entity: climate.bedroom }
+    media: mobile
+  - card:
+      type: entities
+      entities: [light.bedroom_ceiling, fan.bedroom]
+    media: mobile
+```
+
+## Hold feedback ring colour
+
+```yaml
+hold_color: "#03a9f4"   # in-progress ring; turns green when the hold registers
+# hold_feedback: false  # disable the ring entirely
+```
+
+## Pop-up control panel (group)
+
+```yaml
+icons:
+  - id: open_controls
+    icon: mdi:tune
+    top: 84%
+    left: 92%
+    tap_action: { action: toggle-group, group: controls }
+
+groups:
+  - id: controls
+    visible: false
+    style: { top: 58%, left: 58%, width: 40%, height: 38%, background: "rgba(0,0,0,0.6)", border_radius: 12px }
+
+elements:
+  - id: light_tile
+    group: controls
+    top: 60%
+    left: 60%
+    width: 36%
+    height: 14%
+    card: { type: tile, entity: light.bedroom }
+```

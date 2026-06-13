@@ -1,5 +1,42 @@
 # Changelog
 
+## [2.0.0] – 2026-06-13
+
+The "one card rules them all" release — responsive across phone, tablet, desktop
+and ultrawide from a single card, plus a fully reorganised tabbed editor.
+
+### Highlights (since 1.12)
+- **Responsive tiers.** A four-tier system (`mobile` / `tablet` / `desktop` /
+  `ultrawide`) driven by the card's own width. Per-element `tablet:` / `desktop:` /
+  `ultrawide:` override blocks (joining `mobile:`), per-tier `aspect_ratio` /
+  `border_radius` / `max_height`, and configurable `breakpoints`. One card adapts
+  everywhere — no more maintaining a separate card per device.
+- **`max_height` height cap.** Stops the image growing too tall on wide screens —
+  caps the height and centres the box (letterbox), keeping element positions valid.
+- **Tabbed editor.** The old wall of accordions is now four tabs — **Image**,
+  **Elements**, **Responsive**, **Rooms & menu** — with a persistent header holding
+  the room picker, Test mode and the Drag-edit preview. First-run onboarding guides
+  you to set a background before the rest of the editor appears.
+- **Drag-edit preview** follows the selected room and lets you drag/resize elements
+  right in the editor.
+- **Hold-gesture feedback.** Elements with a `hold_action` show a progress ring that
+  fills and turns green when the hold registers.
+- **GUI for more things.** Breakpoints, companion cards (`cards_above` /
+  `cards_below`), and room reordering are now editable in the GUI instead of YAML.
+- **Test-mode size readout.** A live width + active-tier badge to help tune
+  breakpoints on each device.
+
+### This release also adds
+- **Cleaner test mode** — resize handles now appear only on the element you've
+  selected (click to select), instead of on every element at once. Embedded cards,
+  zones and gauges are all click-to-select; arrow keys nudge the selection.
+
+### Compatibility
+- Backwards compatible with 1.x configs: existing `mobile:` blocks and
+  `mobile_breakpoint` keep working.
+
+---
+
 ## [1.15.2] – 2026-06-13
 
 ### Added
