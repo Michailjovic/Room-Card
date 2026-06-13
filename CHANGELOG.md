@@ -1,6 +1,22 @@
 # Changelog
 
-## [1.14.1] – 2026-06-13
+## [1.15.0] – 2026-06-13
+
+### Changed
+- **Room picker, Test mode &amp; Interactive preview moved to a persistent header**
+  — the active-room dropdown now lives at the top of the editor (visible on every
+  tab), so you can switch which room you're editing without leaving the Image or
+  Elements tab. Test mode and Interactive preview sit next to it.
+- **Responsive tab now owns the image shape** — `aspect_ratio`, `border_radius`,
+  `max_height` and the breakpoint thresholds (incl. legacy `mobile_breakpoint`)
+  all live together in the Responsive tab. The Image tab keeps just the
+  background, filters, weather, filter-transition and zoom.
+- **Removed the Code tab** — it duplicated Home Assistant's built-in "Show code
+  editor". Editor is now four tabs: Image / Elements / Responsive / Rooms &amp; menu.
+
+### Notes
+- Remaining v1.15.x editor work: a proper GUI block for the menu/nav strip
+  (currently still YAML), plus optional per-tier inputs for aspect ratio.
 
 ### Changed
 - **Editor is now tab-based** — the grouped sections moved into five top tabs:

@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.14.1 — MIT License
+ * room-overlay-card v1.15.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.14.1';
+const ROC_VERSION='1.15.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2966,21 +2966,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='</select></div>';
     basicInner+='<div><label class="roc-l">Opacity</label><input id="weather_opacity" type="number" step="0.05" min="0" max="1" value="'+(_woEd.opacity??0.45)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
-    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
-    const _arObj=c.aspect_ratio&&typeof c.aspect_ratio==='object';
-    const _arShow=_arObj?ROC_TIERS.map(function(tt){return c.aspect_ratio[tt]?tt+': '+c.aspect_ratio[tt]:'';}).filter(Boolean).join('   '):(c.aspect_ratio||'16/9');
-    basicInner+='<div><label class="roc-l">Aspect ratio'+(_arObj?' (per-tier — edit in YAML mode)':'')+'</label><input id="aspect_ratio" type="text"'+(_arObj?' disabled':'')+' placeholder="16/9 or per-tier {mobile: 4/3, ultrawide: 21/9}" value="'+this._e(_arShow)+'"'+this._inp('')+'></div>';
-    const _brObj=c.border_radius&&typeof c.border_radius==='object';
-    basicInner+='<div><label class="roc-l">Border radius'+(_brObj?' (per-tier)':'')+'</label><input id="border_radius" type="text"'+(_brObj?' disabled':'')+' value="'+this._e(_brObj?'per-tier in YAML':(c.border_radius||'12px'))+'"'+this._inp('')+'></div>';
+    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;">';
     basicInner+='<div><label class="roc-l">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
-    basicInner+='</div>';
-    const _mhObj=c.max_height&&typeof c.max_height==='object';
-    basicInner+='<div><label class="roc-l">Max height (optional — caps &amp; centers the image on wide screens; e.g. 70vh or 600px)'+(_mhObj?' — per-tier in YAML':'')+'</label><input id="max_height" type="text"'+(_mhObj?' disabled':'')+' placeholder="e.g. 70vh" value="'+this._e(_mhObj?'per-tier in YAML':(c.max_height||''))+'"'+this._inp('')+'></div>';
-    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Mobile breakpoint (px — mobile: overrides apply below this card width)</label><input id="mobile_breakpoint" type="number" min="0" step="10" value="'+(c.mobile_breakpoint??600)+'"'+this._inp('')+'></div>';
     basicInner+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><input id="zoom" type="checkbox"'+(c.zoom?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="zoom">Pan &amp; pinch-zoom (floorplan mode)</label></div>';
     basicInner+='</div>';
-    basicInner+='<div style="display:flex;align-items:center;gap:8px;"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="test_mode">Test mode (show zone &amp; element outlines)</label></div>';
     basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
     basicInner+='</div>';
 
@@ -3078,12 +3067,9 @@ class RoomOverlayCardEditor extends HTMLElement{
     let roomsInner='';
     if(hasRooms){
       const er=cR;
-      roomsInner+='<div style="display:grid;grid-template-columns:2fr auto auto;gap:8px;margin-bottom:8px;align-items:end;">';
-      roomsInner+='<div><label class="roc-l">Editing room (sections below edit this room)</label><select id="room-select"'+this._inp('')+'>';
-      c.rooms.forEach(function(r,i){roomsInner+='<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';});
-      roomsInner+='</select></div>';
-      roomsInner+='<button id="add-room" style="'+btnStyle+'">+ Room</button>';
-      roomsInner+='<button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button>';
+      roomsInner+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">';
+      roomsInner+='<span style="font-size:12px;color:var(--secondary-text-color);">Editing <b>'+self._e(er.name||er.id||('room_'+(self._editRoomIdx+1)))+'</b> — pick the room in the header above.</span>';
+      roomsInner+='<span style="display:flex;gap:8px;flex:none;"><button id="add-room" style="'+btnStyle+'">+ Room</button><button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button></span>';
       roomsInner+='</div>';
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
       roomsInner+='<div><label class="roc-l">Room id</label><input id="room-id" type="text" value="'+this._e(er.id||'')+'"'+this._inp('')+'></div>';
@@ -3140,16 +3126,23 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'</div></div>';
     // Responsive tab — breakpoint thresholds (per-tier aspect/max_height stay in Image for now)
     const _bp=c.breakpoints||{};
-    let respInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">Tiers follow the card’s own width (its dashboard column), not the screen resolution. Each value is the upper bound in px; <b>ultrawide</b> is everything above the last. Turn on <b>Test mode</b> to see a live width + tier badge on the card.</p>';
-    respInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    let respInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">Tiers follow the card’s own width (its dashboard column), not the screen resolution. Each breakpoint is the upper bound in px; <b>ultrawide</b> is everything above the last. Turn on <b>Test mode</b> (header) to see a live width + tier badge on the card.</p>';
+    respInner+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
     respInner+='<div><label class="roc-l">Mobile below (px)</label><input id="bp_mobile" type="number" min="0" step="10" placeholder="600" value="'+this._e(_bp.mobile!=null?String(_bp.mobile):'')+'"'+this._inp('')+'></div>';
-    respInner+='<div><label class="roc-l">Tablet below (px)</label><input id="bp_tablet" type="number" min="0" step="10" placeholder="1024" value="'+this._e(_bp.tablet!=null?String(_bp.tablet):'')+'"'+this._inp('')+'></div>';
-    respInner+='<div><label class="roc-l">Desktop below (px)</label><input id="bp_desktop" type="number" min="0" step="10" placeholder="1600" value="'+this._e(_bp.desktop!=null?String(_bp.desktop):'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Tablet below</label><input id="bp_tablet" type="number" min="0" step="10" placeholder="1024" value="'+this._e(_bp.tablet!=null?String(_bp.tablet):'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Desktop below</label><input id="bp_desktop" type="number" min="0" step="10" placeholder="1600" value="'+this._e(_bp.desktop!=null?String(_bp.desktop):'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Legacy mobile_bp</label><input id="mobile_breakpoint" type="number" min="0" step="10" placeholder="600" value="'+(c.mobile_breakpoint!=null?c.mobile_breakpoint:'')+'"'+this._inp('')+'></div>';
     respInner+='</div>';
-    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0;line-height:1.5;">Per-tier image shape: set <code>aspect_ratio</code> / <code>border_radius</code> / <code>max_height</code> in the <b>Image</b> tab as per-tier objects, e.g. <code>{mobile: 4/3, ultrawide: 21/9}</code> (dedicated per-tier fields land in a later update). Legacy <code>mobile_breakpoint</code> in the Image tab still overrides the mobile threshold.</p>';
-    // Code tab — read-only preview of the full config
-    let codeInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 8px;line-height:1.5;">Read-only preview of the full card config. To edit YAML directly, use Home Assistant’s built-in code editor.</p>';
-    codeInner+='<textarea readonly rows="18"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;white-space:pre;')+'>'+this._e(_yaml.s(this._config))+'</textarea>';
+    const _arObj=c.aspect_ratio&&typeof c.aspect_ratio==='object';
+    const _arShow=_arObj?ROC_TIERS.map(function(tt){return c.aspect_ratio[tt]?tt+': '+c.aspect_ratio[tt]:'';}).filter(Boolean).join('   '):(c.aspect_ratio||'16/9');
+    respInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    respInner+='<div><label class="roc-l">Aspect ratio'+(_arObj?' (per-tier — edit in YAML)':'')+'</label><input id="aspect_ratio" type="text"'+(_arObj?' disabled':'')+' placeholder="16/9 or {mobile: 4/3, ultrawide: 21/9}" value="'+this._e(_arShow)+'"'+this._inp('')+'></div>';
+    const _brObj=c.border_radius&&typeof c.border_radius==='object';
+    respInner+='<div><label class="roc-l">Border radius'+(_brObj?' (per-tier)':'')+'</label><input id="border_radius" type="text"'+(_brObj?' disabled':'')+' value="'+this._e(_brObj?'per-tier in YAML':(c.border_radius||'12px'))+'"'+this._inp('')+'></div>';
+    respInner+='</div>';
+    const _mhObj=c.max_height&&typeof c.max_height==='object';
+    respInner+='<div style="margin-bottom:8px;"><label class="roc-l">Max height (caps &amp; centers the image on wide screens; e.g. 70vh or 600px)'+(_mhObj?' — per-tier in YAML':'')+'</label><input id="max_height" type="text"'+(_mhObj?' disabled':'')+' placeholder="e.g. 70vh" value="'+this._e(_mhObj?'per-tier in YAML':(c.max_height||''))+'"'+this._inp('')+'></div>';
+    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0;line-height:1.5;">Want a different shape per device? Set these as per-tier objects in YAML, e.g. <code>aspect_ratio: {mobile: 4/3, tablet: 16/10, desktop: 16/9, ultrawide: 21/9}</code> — the field then shows “per-tier in YAML” and locks. Dedicated per-tier inputs are coming.</p>';
     // Tabbed shell — all panels render; the active one is shown, others hidden via CSS
     const _tab=this._tab||'image';
     const _tabBtn=function(id,icon,label){
@@ -3165,7 +3158,6 @@ class RoomOverlayCardEditor extends HTMLElement{
       +_tabBtn('elements','mdi:shape','Elements')
       +_tabBtn('responsive','mdi:monitor-cellphone','Responsive')
       +_tabBtn('rooms','mdi:floor-plan','Rooms &amp; menu')
-      +_tabBtn('code','mdi:code-tags','Code')
       +'</div>'
       +_panel('image',
           sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
@@ -3182,8 +3174,7 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner)
          +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner))
       +_panel('responsive',respInner)
-      +_panel('rooms',roomsInner)
-      +_panel('code',codeInner);
+      +_panel('rooms',roomsInner);
     const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
       +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}</style>'
@@ -3193,7 +3184,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
-      +'<div style="display:flex;align-items:center;gap:8px;padding:0 4px 8px;"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="prev-on" style="font-size:12px;cursor:pointer;color:var(--secondary-text-color);">Interactive preview (drag, resize, draw &amp; nudge here — without enabling test mode on the dashboard)</label></div>'
+      +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
+      +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);">Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
+      +'<label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Test mode</label>'
+      +'<label for="prev-on" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Interactive preview</label>'
+      +'</div>'
       +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
       +'</div>';
