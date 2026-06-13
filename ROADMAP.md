@@ -1,7 +1,8 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v1.8.0** (2026-06-10). Verified against Home Assistant 2026.6.
-**The original roadmap is complete** — remaining items below are maintenance and future ideas.
+Current release: **v1.12.2** (2026-06-12). Verified against Home Assistant 2026.6.
+**The original roadmap is complete.** Post-roadmap releases (driven by real-world
+multiroom usage) and the current backlog are listed at the bottom.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
@@ -38,6 +39,36 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 | 15 | ✅ **Editor live preview** — SHIPPED in v1.8.0: interactive preview (forced test mode) inside the editor dialog; `getConfigForm` hybrid evaluated and rejected (custom editor is richer) | Today preview lives in the dashboard behind the editor dialog |
 | 16 | ✅ **3D parallax tilt** — SHIPPED in v1.8.0: `parallax:` pointer + device orientation, pauses during gestures | Depth illusion from layered PNGs |
 | 17 | ✅ **Theme preset gallery** — SHIPPED in v1.8.0: `PRESETS.md` copy-paste recipes | Community building block |
+
+## Post-roadmap releases (v1.9 – v1.12)
+
+| Version | Highlights |
+|---|---|
+| v1.9.0 | `nav.width` (css / `auto` stretch), `nav.cards` — custom HA cards embedded in the strip |
+| v1.10.0 | `room_entity` per-device mapping (`by_user` / `by_browser`), nav chip pill styling |
+| v1.10.1 | Side-rail `width: auto` collapse fix |
+| v1.11.0 | `follow_mode` (always/initial/manual), nav **follow button** + `follow-room` action, `room_state_entity` mirror, editor **Map this device**, swipe-vs-tap fix, `nav.cards` placement |
+| v1.11.1 | Room swipe leaves gestures inside embedded cards alone |
+| v1.12.0 | **`cards_above` / `cards_below`** — per-room companion strips in document flow, `media: all\|mobile\|desktop` |
+| v1.12.1–2 | Mobile nav: wrap to rows (thumbs → ticker + follow button), `nav.mobile_height` |
+
+## v2.0.0 (planned — after a real-world testing period)
+
+1. **GUI for `cards_above` / `cards_below`** — add/remove/reorder entries,
+   YAML card content, `media` + `height` fields, per room.
+2. **Row-builder for `room_entity` / `room_state_entity` mappings** — editable
+   list of by_browser/by_user rows (today only "Map this device" covers the
+   common path).
+3. **UX pass over the whole GUI editor** — consistency, grouping, labels,
+   discoverability of YAML-only options, mobile editor usability.
+4. **README rework + fresh screenshots** covering multiroom, nav, presence
+   follow, companion strips, weather v3, radial gauges, sliders.
+5. Release **v2.0.0** (then HACS default-repository submission).
+
+## Backlog (candidates, not committed)
+
+- URL hash deep-linking (`#room=bedroom`) — bookmarkable rooms, navigate-to-room from other dashboards, per-browser path conditioning via browser_mod.
+- Full-room render in the finger-drag neighbour preview (currently base image only).
 
 ## Maintenance (ongoing)
 
