@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.15.1 — MIT License
+ * room-overlay-card v1.15.2 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.15.1';
+const ROC_VERSION='1.15.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2274,6 +2274,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     const tm=q('#test_mode');c.test_mode=tm?tm.checked:false;
     const _taR=this._pYaml(q('#tap_action_yaml'));
     if(_taR.ok){if(_taR.val)tgt.tap_action=_taR.val;else delete tgt.tap_action;}
+    const _caR=this._pYaml(q('#cards_above_yaml'));
+    if(_caR.ok){if(_caR.val)tgt.cards_above=_caR.val;else delete tgt.cards_above;}
+    const _cbR=this._pYaml(q('#cards_below_yaml'));
+    if(_cbR.ok){if(_cbR.val)tgt.cards_below=_cbR.val;else delete tgt.cards_below;}
 
     const _bmSrcs=[];
     self.querySelectorAll('[data-bm-src-ent]').forEach(function(el,i){
@@ -2974,6 +2978,11 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><input id="zoom" type="checkbox"'+(c.zoom?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="zoom">Pan &amp; pinch-zoom (floorplan mode)</label></div>';
     basicInner+='</div>';
     basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    const _caY=cR.cards_above?_yaml.s(cR.cards_above):'';
+    const _cbY=cR.cards_below?_yaml.s(cR.cards_below):'';
+    basicInner+='<div style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;"><label class="roc-l" style="margin-bottom:2px;">Companion cards — paste card YAML to stack full Home Assistant cards above / below the image (handy on mobile). A YAML list; each item is a card config, or <code>{card: {...}, height, media: all|mobile|tablet|desktop|ultrawide}</code>.</label></div>';
+    basicInner+='<div><label class="roc-l">Cards above image (YAML)</label><textarea id="cards_above_yaml" rows="4" placeholder="- type: entities&#10;  entities: [light.kitchen]"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_caY)+'</textarea></div>';
+    basicInner+='<div><label class="roc-l">Cards below image (YAML)</label><textarea id="cards_below_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cbY)+'</textarea></div>';
     basicInner+='</div>';
 
     let filterInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Conditions are evaluated in order — first match wins. A block without an entity is the default (fallback).</p>';
@@ -3084,7 +3093,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
       roomsInner+='<div><label class="roc-l">Room id</label><input id="room-id" type="text" value="'+this._e(er.id||'')+'"'+this._inp('')+'></div>';
       roomsInner+='<div><label class="roc-l">Name</label><input id="room-name" type="text" value="'+this._e(er.name||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Icon (tabs nav)</label><input id="room-icon" type="text" placeholder="mdi:sofa" value="'+this._e(er.icon||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Room icon (shown only when nav style = tabs)</label><input id="room-icon" type="text" placeholder="mdi:sofa" value="'+this._e(er.icon||'')+'"'+this._inp('')+'></div>';
       roomsInner+='</div>';
       roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Area match (comma-separated states of room_entity that map to this room, e.g. Bermuda area names)</label><input id="room-area-match" type="text" placeholder="Bedroom, Ložnice" value="'+this._e(Array.isArray(er.area_match)?er.area_match.join(', '):'')+'"'+this._inp('')+'></div>';
       const _rch=er.chips?_yaml.s(er.chips):'';
@@ -3441,6 +3450,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     }
     const ta=this.querySelector('#tap_action_yaml');if(ta)ta.addEventListener('change',fire);
+    const caTa=this.querySelector('#cards_above_yaml');if(caTa)caTa.addEventListener('change',fire);
+    const cbTa=this.querySelector('#cards_below_yaml');if(cbTa)cbTa.addEventListener('change',fire);
 
     // Filter conditions
     const addF=this.querySelector('#add-filter');

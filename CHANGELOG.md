@@ -1,6 +1,19 @@
 # Changelog
 
-## [1.15.1] – 2026-06-13
+## [1.15.2] – 2026-06-13
+
+### Added
+- **Companion cards in the GUI** — the Image tab now has *Cards above image* and
+  *Cards below image* YAML fields. Paste a card config you built elsewhere to stack
+  full Home Assistant cards above/below the room image (handy on mobile). Per room;
+  each list item is a card config, or `{card, height, media}`
+  (`media: all|mobile|tablet|desktop|ultrawide`). Previously `cards_above` /
+  `cards_below` were YAML-only with no editor field.
+
+### Changed
+- **Clearer room-icon label** — the per-room *Room icon* field now states it's
+  only shown when the nav style is `tabs` (it doesn't appear with the default
+  `thumbnails` navigation, which uses the room image instead).
 
 ### Fixed
 - **Drag-edit preview now follows the selected room** — the in-editor preview used
