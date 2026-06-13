@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.14.0] – 2026-06-13
+
+### Changed
+- **Editor restructured into four groups** — the flat wall of ~14 accordions is
+  now organized under labelled headings: **Start here** (Background &amp; basics),
+  **Lighting &amp; atmosphere** (filters, brightness model), **Elements** (zones,
+  icons, labels, badges, gauges, blinds, embedded cards, overlays) and
+  **Advanced** (element groups, multi-room). Background is first and open by
+  default; multi-room and groups moved to Advanced.
+- **Clearer section names** — each element section now says what it is at a
+  glance ("Zones — invisible tap areas", "Icons — state-aware mdi icons",
+  "Labels — entity values as text", …) instead of bare jargon.
+
+### Added
+- **First-run onboarding** — a brand-new card (no background, no elements) now
+  opens to a single focused step: set a background image (or camera), with a
+  short hint to enable Interactive preview and drag elements on. The full grouped
+  editor appears automatically once a background is set.
+
+---
+
 ## [1.13.5] – 2026-06-13
 
 ### Fixed

@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v1.13.5 — MIT License
+ * room-overlay-card v1.14.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='1.13.5';
+const ROC_VERSION='1.14.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -3122,6 +3122,41 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
     }
 
+    // ---- Section grouping + first-run onboarding (v1.14.0) ------------------
+    const _ghdr=function(label,hint){
+      return '<div style="margin:16px 4px 6px;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--primary-color);border-bottom:1px solid var(--divider-color);padding-bottom:4px;">'+label+(hint?'<span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--secondary-text-color);font-size:11px;"> — '+hint+'</span>':'')+'</div>';
+    };
+    const _nArr=function(k){return Array.isArray(cR[k])?cR[k].length:0;};
+    const _realImg=cR.base_image&&cR.base_image!=='/local/room.webp';
+    const _isEmpty=!hasRooms&&!_realImg&&!cR.base_camera&&(_nArr('zones')+_nArr('icons')+_nArr('labels')+_nArr('badges')+_nArr('gauges')+_nArr('blinds')+_nArr('elements')+_nArr('overlays'))===0;
+    const _onboardHtml=
+      '<div style="padding:18px 14px;border:1px dashed var(--divider-color);border-radius:10px;text-align:center;">'
+      +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">Build your room card</div>'
+      +'<div style="font-size:12px;color:var(--secondary-text-color);margin:0 auto 14px;max-width:430px;line-height:1.5;">Start with a background — a floor-plan or room photo. Then turn on <b>Interactive preview</b> above and drag elements onto it. The rest of the editor appears once a background is set.</div>'
+      +'<div style="max-width:430px;margin:0 auto;text-align:left;">'
+      +'<label class="roc-l">Background image URL *</label>'
+      +'<input id="base_image" type="text" placeholder="/local/room.webp or https://…" value="'+this._e(_realImg?cR.base_image:'')+'"'+this._inp('')+'>'
+      +'<div style="font-size:11px;color:var(--secondary-text-color);margin:10px 0 4px;">… or use a live camera snapshot instead:</div>'
+      +'<input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'>'
+      +'</div></div>';
+    const _groupedHtml=
+       _ghdr('Start here')
+      +sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
+      +_ghdr('Lighting &amp; atmosphere','how the room image reacts to state')
+      +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
+      +sec('brightness','Brightness model (smooth filter)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
+      +_ghdr('Elements','things you place on the image')
+      +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner)
+      +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner)
+      +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner)
+      +sec('badges','Badges — pill chips',(cR.badges||[]).length,bInner)
+      +sec('gauges','Gauges — bar / radial meters',(cR.gauges||[]).length,gInner)
+      +sec('blinds','Blinds — window covers',(cR.blinds||[]).length,blInner)
+      +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
+      +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner)
+      +_ghdr('Advanced')
+      +sec('groups','Element groups (show / hide panels)',(cR.groups||[]).length,grpInner)
+      +sec('rooms','Multi-room'+(hasRooms?' — editing: '+this._e(cR.name||cR.id||''):''),(c.rooms||[]).length,roomsInner);
     const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
       +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}</style>'
@@ -3133,18 +3168,23 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
       +'<div style="display:flex;align-items:center;gap:8px;padding:0 4px 8px;"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="prev-on" style="font-size:12px;cursor:pointer;color:var(--secondary-text-color);">Interactive preview (drag, resize, draw &amp; nudge here — without enabling test mode on the dashboard)</label></div>'
       +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
-      +sec('rooms','Rooms (multi-room)'+(hasRooms?' — editing: '+this._e(cR.name||cR.id||''):''),(c.rooms||[]).length,roomsInner)
-      +sec('basic','Basic settings'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
-      +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
-      +sec('brightness','Brightness model (filter interpolation)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner)
-      +sec('overlays','Overlay layers',(cR.overlays||[]).length,ovInner)
-      +sec('zones','Clickable zones',(cR.zones||[]).length,zInner)
-      +sec('badges','Status badges',(cR.badges||[]).length,bInner)
-      +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
-      +sec('icons','Icon overlays',(cR.icons||[]).length,icoInner)+sec('labels','Value labels',(cR.labels||[]).length,lblInner)+sec('gauges','Gauge bars',(cR.gauges||[]).length,gInner)
-      +sec('blinds','Window blinds',(cR.blinds||[]).length,blInner)
-      +sec('groups','Element groups',(cR.groups||[]).length,grpInner)
+      +(_isEmpty?_onboardHtml:_groupedHtml)
       +'</div>';
+
+    // Onboarding: once a background is set, re-render into the full grouped editor
+    if(_isEmpty){
+      const _go=function(){
+        const nc=Object.assign({},self._config);
+        const _ob=self.querySelector('#base_image'),_oc=self.querySelector('#base_camera');
+        const _bi=_ob?_ob.value.trim():'',_bc=_oc?_oc.value.trim():'';
+        if(_bi)nc.base_image=_bi;else delete nc.base_image;
+        if(_bc)nc.base_camera=_bc;else delete nc.base_camera;
+        self._config=nc;self._render();self._fire(nc);
+      };
+      const _obEl=this.querySelector('#base_image'),_ocEl=this.querySelector('#base_camera');
+      if(_obEl)_obEl.addEventListener('change',_go);
+      if(_ocEl)_ocEl.addEventListener('change',_go);
+    }
 
     if(!this._keysBound){
       this._keysBound=true;
