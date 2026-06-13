@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.13.3] – 2026-06-13
+
+### Added
+- **Test-mode size readout** — enabling `test_mode` now shows a small badge in
+  the top-left corner with the card's current width in pixels and, below it, the
+  responsive tier that width maps to (mobile/tablet/desktop/ultrawide). It
+  updates live as the card resizes, so you can read the exact width on each
+  device and set `breakpoints:` to match. Note the tier is detected from the
+  card's own width (its dashboard column), not the device screen resolution.
+
+### Docs
+- Tier thresholds are configurable via a top-level `breakpoints:` map, e.g.
+  `breakpoints: { mobile: 600, tablet: 1024, desktop: 1600 }` (each value is the
+  exclusive upper bound; `ultrawide` is the rest). Legacy `mobile_breakpoint`
+  still overrides the mobile bound.
+
+---
+
 ## [1.13.2] – 2026-06-13
 
 ### Added
