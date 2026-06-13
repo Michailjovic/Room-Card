@@ -39,17 +39,19 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 
 ## Screenshots
 
-> Capturing fresh screenshots for the v2.0.0 release. Files live in `screenshots/`.
-> Suggested set: `hero.png` (a finished room card), `day.png` / `night.png` (the same room with the brightness filter off/on), `gauges.png`, `blinds.png`, `editor.png` (the tabbed editor), `responsive.png` (the same card at two widths side by side), `testmode.png` (test mode with one element selected).
-
 | | |
 |---|---|
+| ![Responsive — one card across devices](screenshots/responsive.png) | ![Tabbed GUI editor](screenshots/editor.png) |
+| *One card, every screen — the same card at different widths* | *Tabbed GUI editor — build it without YAML* |
 | ![Day scene](screenshots/day.png) | ![Night scene](screenshots/night.png) |
 | *Day scene — full brightness* | *Night mode — dim filter active* |
 | ![Gauges](screenshots/gauges.png) | ![Blinds](screenshots/blinds.png) |
 | *Gauges — temperature, humidity, CO₂* | *Day/night zebra blind at 60 %* |
-| ![Editor](screenshots/editor.png) | |
-| *Tabbed GUI editor — no YAML needed* | |
+| ![Test mode](screenshots/testmode.png) | |
+| *Test mode — click to select, drag to position* | |
+
+> **Screenshots to capture** for v2.0.0 (drop the files into `screenshots/`):
+> `hero.png` (finished card, shown at the top), `responsive.png` (the same card at two widths side by side — the headline feature), `editor.png` (the tabbed editor), `day.png` / `night.png` (same room, brightness filter off/on), `gauges.png`, `blinds.png`, `testmode.png` (test mode with one element selected). Until a file exists, GitHub shows a broken-image icon for that slot.
 
 ---
 
