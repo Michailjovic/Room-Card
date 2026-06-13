@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.13.0] – 2026-06-13
+## [1.13.1] – 2026-06-13
 
 ### Added
 - **Responsive tiers** — the single binary mobile/desktop profile is now a
@@ -34,6 +34,12 @@
 - **Strip media tiers** — `cards_above`/`cards_below` `media:` now also accepts
   individual tier names and comma lists (e.g. `media: tablet,ultrawide`)
   alongside the legacy `all` / `mobile` / `desktop` (`desktop` = any non-mobile).
+- **`max_height` height cap** — optional per-tier ceiling for the image box. On
+  wide screens (FHD/2K) a fixed aspect ratio makes the image grow tall with the
+  card width; `max_height` caps the height and centers the box, letterboxing the
+  sides instead. Accepts a single value or a per-tier object, e.g.
+  `max_height: { desktop: 70vh, ultrawide: 80vh }`. The box keeps its aspect
+  ratio, so all `%` element positions stay valid.
 
 ### Changed
 - Tier changes (resize, rotation, moving the card to a different dashboard
