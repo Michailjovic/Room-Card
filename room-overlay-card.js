@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v2.0.0 — MIT License
+ * room-overlay-card v2.1.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='2.0.0';
+const ROC_VERSION='2.1.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -14,6 +14,15 @@ window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',descr
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
+// lock_aspect: size a fixed-design-aspect stage to COVER the (per-tier) box,
+// centered. Elements live on this stage → glued to the image, identical across
+// tiers; the per-tier aspect_ratio only changes how much is cropped.
+function coverStage(boxW,boxH,da){
+  if(!(da>0)||!(boxW>0)||!(boxH>0))return null;
+  let w,h;
+  if(boxW/boxH>=da){w=boxW;h=boxW/da;}else{h=boxH;w=boxH*da;}
+  return{w:w,h:h,left:(boxW-w)/2,top:(boxH-h)/2};
+}
 // Truthiness for template visibility results (render_template returns native types)
 function tmplTruthy(v){
   if(v===true)return true;
@@ -266,7 +275,7 @@ class RoomOverlayCard extends HTMLElement{
     this._navPos='top';this._wrapTA='';
     this._orientHandler=null;this._roomDragActive=false;
     this._lastRoomDragEnd=0;this._followInit=false;this._navFollowEl=null;
-    this._stripCardEls=[];
+    this._stripCardEls=[];this._imgRatio=null;
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -414,7 +423,35 @@ class RoomOverlayCard extends HTMLElement{
       if(ov.image)urls.add(ov.image);
       if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
     }
-    this._preloadImgs=[];const _plSelf=this;urls.forEach(function(url){const img=new Image();img.src=url;_plSelf._preloadImgs.push(img);});
+    this._preloadImgs=[];const _plSelf=this;urls.forEach(function(url){const img=new Image();if(url===c.base_image){img.onload=function(){if(img.naturalWidth&&img.naturalHeight){_plSelf._imgRatio=img.naturalWidth/img.naturalHeight;_plSelf._layoutStage();}};}img.src=url;_plSelf._preloadImgs.push(img);});
+  }
+
+  // Design aspect for lock_aspect: true → base image's natural ratio (auto),
+  // or an explicit "W/H" / number. null = feature off (default behaviour).
+  _designAspect(){
+    const la=(this._roomCfg&&this._roomCfg.lock_aspect)??(this._config&&this._config.lock_aspect);
+    if(!la)return null;
+    if(la===true)return this._imgRatio||null;
+    const p=String(la).split('/');
+    if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);if(w>0&&h>0)return w/h;}
+    const n=parseFloat(la);return n>0?n:null;
+  }
+
+  _layoutStage(){
+    if(!this.shadowRoot)return;
+    const content=this.shadowRoot.querySelector('.content');
+    const wrap=this.shadowRoot.querySelector('.wrap');
+    if(!content||!wrap)return;
+    const da=this._designAspect();
+    if(!da)return; // off → leave .content to its class CSS (inset:0) / swipe transforms; config changes rebuild it fresh
+    if(content.dataset.rocStageW===String(this.offsetWidth)&&content.dataset.rocStageDa===String(da))return; // unchanged
+    const r=wrap.getBoundingClientRect();
+    const st=coverStage(r.width,r.height,da);
+    if(!st)return;
+    content.style.position='absolute';content.style.inset='auto';
+    content.style.width=st.w+'px';content.style.height=st.h+'px';
+    content.style.left=st.left+'px';content.style.top=st.top+'px';
+    content.dataset.rocStageW=String(this.offsetWidth);content.dataset.rocStageDa=String(da);
   }
 
   _render(){
@@ -1017,7 +1054,7 @@ class RoomOverlayCard extends HTMLElement{
     if(window.ResizeObserver){
       if(this._ro)this._ro.disconnect();
       const self=this;
-      this._ro=new ResizeObserver(function(){if(self._rendered&&self._hass&&self._visible)self._update();});
+      this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutStage();if(self._hass&&self._visible)self._update();}});
       this._ro.observe(this);
     }
     const _ex=this._extractEntities(this._config);
@@ -1060,6 +1097,7 @@ class RoomOverlayCard extends HTMLElement{
     }
     this._update();
     this._syncRoomState();
+    this._layoutStage();
   }
 
   _snapCandidates(){
@@ -2281,6 +2319,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     const _mhOld=this._config.max_height;
     if(_mhOld&&typeof _mhOld==='object')c.max_height=_mhOld;
     else{const _mhv=v('max_height','').trim();if(_mhv)c.max_height=_mhv;else delete c.max_height;}
+    const _lav=v('lock_aspect','').trim().toLowerCase();
+    if(_lav==='true'||_lav==='on'||_lav==='yes'||_lav==='auto')c.lock_aspect=true;
+    else if(_lav)c.lock_aspect=v('lock_aspect','').trim();
+    else delete c.lock_aspect;
     c.filter_transition=v('filter_transition','2s ease');
     const tm=q('#test_mode');c.test_mode=tm?tm.checked:false;
     const _taR=this._pYaml(q('#tap_action_yaml'));
@@ -3172,7 +3214,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     respInner+='</div>';
     const _mhObj=c.max_height&&typeof c.max_height==='object';
     respInner+='<div style="margin-bottom:8px;"><label class="roc-l">Max height (caps &amp; centers the image on wide screens; e.g. 70vh or 600px)'+(_mhObj?' — per-tier in YAML':'')+'</label><input id="max_height" type="text"'+(_mhObj?' disabled':'')+' placeholder="e.g. 70vh" value="'+this._e(_mhObj?'per-tier in YAML':(c.max_height||''))+'"'+this._inp('')+'></div>';
-    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0;line-height:1.5;">Want a different shape per device? Set these as per-tier objects in YAML, e.g. <code>aspect_ratio: {mobile: 4/3, tablet: 16/10, desktop: 16/9, ultrawide: 21/9}</code> — the field then shows “per-tier in YAML” and locks. Dedicated per-tier inputs are coming.</p>';
+    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 12px;line-height:1.5;">Want a different shape per device? Set these as per-tier objects in YAML, e.g. <code>aspect_ratio: {mobile: 4/3, tablet: 16/10, desktop: 16/9, ultrawide: 21/9}</code> — the field then shows “per-tier in YAML” and locks. Dedicated per-tier inputs are coming.</p>';
+    respInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;"><label class="roc-l">Lock layout to image</label>';
+    respInner+='<input id="lock_aspect" type="text" placeholder="off — or: true (auto from image) / 16/9" value="'+this._e(c.lock_aspect===true?'true':(c.lock_aspect||''))+'"'+this._inp('')+'>';
+    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;line-height:1.5;">When set, zones / icons / blinds etc. stay glued to the image across every tier — per-tier <code>aspect_ratio</code> then only changes how much of the image is cropped, not where elements sit. Use <b>true</b> to take the design shape from the image automatically, or pin an explicit aspect like <b>1720/968</b> (your source image’s real W/H).</p></div>';
     // Tabbed shell — all panels render; the active one is shown, others hidden via CSS
     const _tab=this._tab||'image';
     const _tabBtn=function(id,icon,label){
@@ -3250,7 +3295,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     }
     // Responsive tab — breakpoint fields save on change
-    this.querySelectorAll('#bp_mobile,#bp_tablet,#bp_desktop').forEach(function(el){
+    this.querySelectorAll('#bp_mobile,#bp_tablet,#bp_desktop,#lock_aspect').forEach(function(el){
       el.addEventListener('change',function(){self._fire(self._collectConfig());});
     });
 

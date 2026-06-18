@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.1.0] – 2026-06-13
+
+### Added
+- **`lock_aspect` — keep overlays glued to the image across every tier.** With
+  per-tier `aspect_ratio` the single source image is cropped differently on
+  each device (`cover`), so percentage-positioned zones/icons/blinds drifted
+  off their features. `lock_aspect` builds a fixed-design-aspect stage that
+  *covers* the per-tier box and centers it; all elements live on that stage,
+  so they stay locked to the image — per-tier `aspect_ratio` now only changes
+  **how much** of the image is cropped, not **where** elements sit.
+  - `lock_aspect: true` — design shape auto-detected from the base image's
+    natural dimensions.
+  - `lock_aspect: "1720/968"` — pin an explicit design aspect (your source
+    image's real W/H), useful with `base_camera` or when you want a specific
+    frame.
+  - Off by default; existing cards are unchanged. New field in the editor's
+    **Responsive** tab.
+
+```yaml
+breakpoints: {mobile: 600, tablet: 1281, desktop: 1925}
+aspect_ratio:
+  mobile: 1720/914
+  tablet: 1720/807
+  desktop: 1720/668
+  ultrawide: 1720/670
+lock_aspect: 1720/968        # ← elements now stay put across all four
+```
+
+---
+
 ## [2.0.0] – 2026-06-13
 
 The "one card rules them all" release — responsive across phone, tablet, desktop

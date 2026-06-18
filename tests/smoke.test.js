@@ -150,5 +150,19 @@ t('cfgKey card_id wins',g.cfgKey({card_id:'flat1',base_image:'/x'})==='id:flat1'
 t('cfgKey single-room',g.cfgKey({base_image:'/x.png'})==='img:/x.png|');
 t('shared defaults: top-level zones inherited by rooms',g.roomMerge({zones:[{id:'s'}],rooms:[{id:'a',base_image:'/a'}]},0).zones[0].id==='s');
 
+// ---- v2.1: coverStage (lock_aspect) ----------------------------------------
+// Box wider than design → scaled by width, overflows vertically (top/bottom crop)
+const cs1=g.coverStage(1000,400,1); // da=1 (square design) in a 1000x400 box
+t('coverStage wide box: width fills',cs1.w===1000&&cs1.h===1000);
+t('coverStage wide box: centered vertically',cs1.left===0&&cs1.top===-300);
+// Box taller than design → scaled by height, overflows horizontally
+const cs2=g.coverStage(400,1000,1);
+t('coverStage tall box: height fills',cs2.h===1000&&cs2.w===1000);
+t('coverStage tall box: centered horizontally',cs2.top===0&&cs2.left===-300);
+// Exact match → no crop, no offset
+const cs3=g.coverStage(1600,900,1600/900);
+t('coverStage exact: no offset',Math.abs(cs3.left)<1e-6&&Math.abs(cs3.top)<1e-6&&Math.round(cs3.w)===1600&&Math.round(cs3.h)===900);
+t('coverStage guards bad input',g.coverStage(0,100,1)===null&&g.coverStage(100,100,0)===null&&g.coverStage(100,100,-1)===null);
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);
