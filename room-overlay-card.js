@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev2 — MIT License
+ * room-overlay-card v3.0.0-dev3 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev2';
+const ROC_VERSION='3.0.0-dev3';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2673,8 +2673,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       const fhEl=q('#follow_hold');
       if(fhEl){const fv=parseFloat(fhEl.value);if(!isNaN(fv)&&fv>=0&&fv!==60)c.follow_hold=fv;else delete c.follow_hold;}
       const cidEl=q('#card_id');if(cidEl){if(cidEl.value.trim())c.card_id=cidEl.value.trim();else delete c.card_id;}
-      const navR=this._pYaml(q('#nav_yaml'));
-      if(navR.ok){if(navR.val)c.nav=navR.val;else delete c.nav;}
+      // Navigation menu — structured fields (chips/cards stay YAML lists)
+      const _oldNav=(this._config.nav&&typeof this._config.nav==='object')?this._config.nav:{};
+      const _navO={};
+      const _ns=v('nav-style','thumbnails');if(_ns&&_ns!=='thumbnails')_navO.style=_ns;
+      const _np=v('nav-position','top');if(_np&&_np!=='top')_navO.position=_np;
+      const _nh=v('nav-height','').trim();if(_nh)_navO.height=_nh;
+      const _nw=v('nav-width','').trim();if(_nw)_navO.width=_nw;
+      const _nmh=v('nav-mobile-height','').trim();if(_nmh)_navO.mobile_height=_nmh;
+      const _nab=parseFloat(v('nav-auto-bp',''));if(!isNaN(_nab))_navO.auto_breakpoint=_nab;
+      const _nwh=v('nav-wheel','');if(_nwh)_navO.wheel=_nwh;
+      const _nfbEl=q('#nav-follow-btn');if(_nfbEl&&!_nfbEl.checked)_navO.follow_button=false;
+      const _chR=this._pYaml(q('#nav-chips'));if(_chR.ok){if(_chR.val)_navO.chips=_chR.val;}else if(_oldNav.chips)_navO.chips=_oldNav.chips;
+      const _cdR=this._pYaml(q('#nav-cards'));if(_cdR.ok){if(_cdR.val)_navO.cards=_cdR.val;}else if(_oldNav.cards)_navO.cards=_oldNav.cards;
+      if(Object.keys(_navO).length)c.nav=_navO;else delete c.nav;
     }
 
     return c;
@@ -3215,8 +3227,34 @@ class RoomOverlayCardEditor extends HTMLElement{
         roomsInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Adds/updates room_entity.by_browser for this device. Open the editor on each device you want to map.</p>';
       }
       roomsInner+='</div>';
-      const _navY=c.nav?_yaml.s(c.nav):'';
-      roomsInner+='<div><label class="roc-l">nav (YAML — style, position, height, width (css|auto), chips, cards (placement: start|end), follow_button, wheel: horizontal|vertical|both)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
+      const _nav=(c.nav&&typeof c.nav==='object')?c.nav:{};
+      roomsInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;margin-top:4px;"><label class="roc-l" style="font-weight:600;">Navigation menu</label>';
+      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+      roomsInner+='<div><label class="roc-l">Style</label><select id="nav-style"'+this._inp('')+'>';
+      [['thumbnails','thumbnails — live room minis'],['tabs','tabs — icon + name'],['dots','dots'],['none','none (hide menu)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.style||'thumbnails')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      roomsInner+='</select></div>';
+      roomsInner+='<div><label class="roc-l">Position</label><select id="nav-position"'+this._inp('')+'>';
+      [['top','top'],['bottom','bottom'],['left','left (side rail)'],['right','right (side rail)'],['auto','auto (rail on wide)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.position||'top')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      roomsInner+='</select></div>';
+      roomsInner+='</div>';
+      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+      roomsInner+='<div><label class="roc-l">Height</label><input id="nav-height" type="text" placeholder="64px" value="'+this._e(_nav.height||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Item width (css or auto)</label><input id="nav-width" type="text" placeholder="auto / 120px" value="'+this._e(_nav.width||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Mobile height</label><input id="nav-mobile-height" type="text" placeholder="48px" value="'+this._e(_nav.mobile_height||'')+'"'+this._inp('')+'></div>';
+      roomsInner+='</div>';
+      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center;">';
+      roomsInner+='<div><label class="roc-l">Auto breakpoint (px)</label><input id="nav-auto-bp" type="number" min="0" step="10" placeholder="1100" value="'+(_nav.auto_breakpoint!=null?_nav.auto_breakpoint:'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Wheel switch</label><select id="nav-wheel"'+this._inp('')+'>';
+      const _whCur=(_nav.wheel===true?'horizontal':(_nav.wheel||''));
+      [['','off'],['horizontal','horizontal'],['vertical','vertical'],['both','both']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+(_whCur===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      roomsInner+='</select></div>';
+      roomsInner+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="nav-follow-btn" type="checkbox"'+(_nav.follow_button!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-follow-btn" style="font-size:12px;cursor:pointer;">Follow button</label></div>';
+      roomsInner+='</div>';
+      const _chY=_nav.chips?_yaml.s(_nav.chips):'';
+      roomsInner+='<div><label class="roc-l">Chips (YAML list — sensor pills on thumbnails; {room} = room id)</label><textarea id="nav-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_chY)+'</textarea></div>';
+      const _cdY=_nav.cards?_yaml.s(_nav.cards):'';
+      roomsInner+='<div style="margin-top:6px;"><label class="roc-l">Cards (YAML list — custom HA cards in the strip; keys: card, width, placement, media)</label><textarea id="nav-cards" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cdY)+'</textarea></div>';
+      roomsInner+='</div>';
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
@@ -3487,7 +3525,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     const convRooms=this.querySelector('#conv-rooms');
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
-    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','nav_yaml','follow_mode','room_state_entity'].forEach(function(id){
+    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     const bidMap=this.querySelector('#bid-map');
