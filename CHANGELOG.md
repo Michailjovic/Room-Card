@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.1] – 2026-06-13
+
+### Fixed
+- **`lock_aspect: true` now detects each room's own image.** The natural-aspect
+  auto-detection cached only a single image, so in a multi-room card where each
+  room uses a different background (and the images have different resolutions),
+  rooms other than the first kept drifting. The card now caches the natural
+  aspect of every image separately (keyed by URL) and measures already-cached
+  images synchronously, so each room locks to its own image. **For
+  different-resolution images per room, use `lock_aspect: true`** (not a single
+  explicit aspect, which can only match one of them).
+
+---
+
 ## [2.1.0] – 2026-06-13
 
 ### Added

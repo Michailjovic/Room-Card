@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v2.1.0 — MIT License
+ * room-overlay-card v2.1.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='2.1.0';
+const ROC_VERSION='2.1.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -275,7 +275,7 @@ class RoomOverlayCard extends HTMLElement{
     this._navPos='top';this._wrapTA='';
     this._orientHandler=null;this._roomDragActive=false;
     this._lastRoomDragEnd=0;this._followInit=false;this._navFollowEl=null;
-    this._stripCardEls=[];this._imgRatio=null;
+    this._stripCardEls=[];this._imgRatios={};
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
     this._cfgJson=null;
   }
@@ -423,7 +423,17 @@ class RoomOverlayCard extends HTMLElement{
       if(ov.image)urls.add(ov.image);
       if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
     }
-    this._preloadImgs=[];const _plSelf=this;urls.forEach(function(url){const img=new Image();if(url===c.base_image){img.onload=function(){if(img.naturalWidth&&img.naturalHeight){_plSelf._imgRatio=img.naturalWidth/img.naturalHeight;_plSelf._layoutStage();}};}img.src=url;_plSelf._preloadImgs.push(img);});
+    // Per-image natural aspect cache — every room may use a different image with a
+    // different resolution, so lock_aspect:true must detect each one separately.
+    this._preloadImgs=[];const _plSelf=this;
+    urls.forEach(function(url){
+      const img=new Image();
+      const grab=function(){if(img.naturalWidth&&img.naturalHeight){_plSelf._imgRatios[url]=img.naturalWidth/img.naturalHeight;_plSelf._layoutStage();}};
+      img.onload=grab;
+      img.src=url;
+      if(img.complete)grab(); // already cached → measure synchronously
+      _plSelf._preloadImgs.push(img);
+    });
   }
 
   // Design aspect for lock_aspect: true → base image's natural ratio (auto),
@@ -431,7 +441,7 @@ class RoomOverlayCard extends HTMLElement{
   _designAspect(){
     const la=(this._roomCfg&&this._roomCfg.lock_aspect)??(this._config&&this._config.lock_aspect);
     if(!la)return null;
-    if(la===true)return this._imgRatio||null;
+    if(la===true){const bi=this._roomCfg&&this._roomCfg.base_image;return(bi&&this._imgRatios[bi])||null;}
     const p=String(la).split('/');
     if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);if(w>0&&h>0)return w/h;}
     const n=parseFloat(la);return n>0?n:null;
