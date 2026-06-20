@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.0.2] – 2026-06-20
+
+### Fixed
+- **Day/night blind looked open even when closed.** The covered region was drawn
+  with transparent gaps between slats, so the image showed through and a closed
+  blind read as open (a striped, airy look). The gap is now an **opaque colour**
+  by default, so the covered part reads as a real closed striped blind — dark
+  slats over an opaque band. Height still tracks the motor position
+  (`0 % = open`, `100 % = closed`).
+
+### Added
+- **`gap_color` for `day_night` blinds** (also a field in the editor). Sets the
+  colour of the band between slats. Default `rgba(120,120,120,0.92)` (opaque →
+  closed look); set `gap_color: transparent` to restore the old see-through
+  zebra style. Slat colour stays `slat_color`.
+
+---
+
 ## [3.0.1] – 2026-06-20
 
 ### Fixed

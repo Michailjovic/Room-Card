@@ -17,4 +17,5 @@ jobs:
       - name: Upload room-overlay-card.js to release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.release.tag_name }}
           files: room-overlay-card.js
