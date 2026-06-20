@@ -636,6 +636,11 @@ class RoomOverlayCard extends HTMLElement{
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._tmInfoEl=tm?this.shadowRoot.querySelector('.tm-info'):null;
     this._wxEl=this.shadowRoot.querySelector('[data-wx]');
+    // Corner badges & test-mode controls must pin to the VISIBLE box (.wrap),
+    // not to .content — under lock_aspect .content is a larger cover-stage that
+    // overflows the box, so bottom/top-anchored chips would fall off-screen.
+    const _wrapBox=this.shadowRoot.querySelector('.wrap');
+    if(_wrapBox)this.shadowRoot.querySelectorAll('.content > .badge, .content > .tm-info, .content > .tm-flip, .content > .tm-save').forEach(function(el){_wrapBox.appendChild(el);});
     // ---- Nav wiring -------------------------------------------------------
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._navFollowEl=null;
     if(navStyle!=='none'){
