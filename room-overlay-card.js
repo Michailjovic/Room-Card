@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v2.1.2 — MIT License
+ * room-overlay-card v2.1.3 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='2.1.2';
+const ROC_VERSION='2.1.3';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -841,37 +841,30 @@ class RoomOverlayCard extends HTMLElement{
             // e.g. /my-dash/living-room  →  urlPath='my-dash', viewKey='living-room'
             const _parts=window.location.pathname.split('/').filter(Boolean);
             const _urlPath=_parts[0]==='lovelace'?null:(_parts[0]||null);
-            const _viewKey=_parts.length>1?_parts[_parts.length-1]:null;
             _callWS({type:'lovelace/config',url_path:_urlPath})
               .then(function(lc){
                 const nc=JSON.parse(JSON.stringify(lc));
-                // Find the current view (by index or path slug)
-                let view=null;
-                if(_viewKey!==null){
-                  const idx=parseInt(_viewKey,10);
-                  view=!isNaN(idx)?nc.views[idx]:nc.views.find(function(v){return v.path===_viewKey;});
-                }
-                if(!view&&nc.views&&nc.views.length)view=nc.views[0];
-                if(!view)throw new Error('view_not_found');
-                // Walk only the current view — avoids matching copies in other views/tabs
+                const key=cfgKey(self._config);
+                // Search the WHOLE dashboard (every view + section + nesting),
+                // not just the URL's view — navigation/room switches make the URL
+                // view unreliable. card_id keeps the match unambiguous.
                 const matches=[];
                 function _walk(cards){
                   if(!Array.isArray(cards))return;
                   for(let i=0;i<cards.length;i++){
-                    const card=cards[i];
-                    if(card.type==='custom:room-overlay-card'&&cfgKey(card)===cfgKey(self._config)){
-                      matches.push({arr:cards,idx:i});
-                    }
+                    const card=cards[i];if(!card)continue;
+                    if(card.type==='custom:room-overlay-card'&&cfgKey(card)===key)matches.push({arr:cards,idx:i});
                     if(card.cards)_walk(card.cards);
                     if(card.card)_walk([card.card]);
+                    if(Array.isArray(card.sections))card.sections.forEach(function(sec){_walk(sec&&sec.cards);});
                   }
                 }
-                // Masonry / panel layout: view.cards[]
-                _walk(view.cards);
-                // Sections layout (HA 2024+): view.sections[].cards[]
-                if(Array.isArray(view.sections))for(const sec of view.sections)_walk(sec.cards);
-                if(!matches.length)throw new Error('card_not_found_in_view');
-                if(matches.length>1)throw new Error('multiple matching cards in view (same base image) — copy the YAML manually');
+                (nc.views||[]).forEach(function(v){
+                  _walk(v.cards);
+                  if(Array.isArray(v.sections))v.sections.forEach(function(sec){_walk(sec&&sec.cards);});
+                });
+                if(!matches.length)throw new Error('card not found in dashboard (key: '+key+')');
+                if(matches.length>1)throw new Error(matches.length+' matching cards — set a unique card_id to disambiguate');
                 matches[0].arr[matches[0].idx]=Object.assign({},self._config,{type:'custom:room-overlay-card'});
                 return _callWS({type:'lovelace/config/save',url_path:_urlPath,config:nc});
               })

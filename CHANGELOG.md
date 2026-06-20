@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.1.3] – 2026-06-13
+
+### Fixed
+- **Test-mode Save was intermittent.** It only searched for the card inside the
+  view matching the current URL path — but navigating or switching rooms makes
+  the URL point at a different view than the one the card sits on, so the save
+  failed with “card not found” seemingly at random. Save now searches the
+  **entire dashboard** (every view, section and nested stack/grid) and matches
+  by `cfgKey` (your `card_id`), so it no longer depends on which view the URL is
+  on. Error messages are clearer (`card not found in dashboard` /
+  `N matching cards — set a unique card_id`). **Tip:** keep a unique `card_id`
+  set for rock-solid matching.
+
+---
+
 ## [2.1.2] – 2026-06-13
 
 ### Fixed
