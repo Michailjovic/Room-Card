@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev5 — MIT License
+ * room-overlay-card v3.0.0-dev6 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev5';
+const ROC_VERSION='3.0.0-dev6';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2193,7 +2193,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;this._showAdv=false;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;}
 
   // Active room view for editing (the room whose sections are shown)
   _roomView(){
@@ -2462,6 +2462,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       entry.filter=_ff;
       tgt.filter_conditions.push(entry);
     });
+    // Unified filter section: the mode toggle is authoritative — keep only the
+    // active mode's data so it actually takes effect at runtime (brightness_model
+    // otherwise always wins over filter_conditions).
+    const _fMode=(q('#filter-mode')&&q('#filter-mode').value)||(tgt.brightness_model?'smooth':'conditional');
+    if(_fMode==='smooth'){delete tgt.filter_conditions;}
+    else{delete tgt.brightness_model;if(!tgt.filter_conditions.length)delete tgt.filter_conditions;}
 
     tgt.overlays=(tgt.overlays||[]).map(function(ov,i){
       const o=Object.assign({},ov);
@@ -3159,8 +3165,18 @@ class RoomOverlayCardEditor extends HTMLElement{
       bmInner+='</div>';
     }
     if(!bmFgList.length)bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No stops — add at least 2 stops (value 0 and 100).</p>';
-    bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;">Source value is normalized to 0–100 % and interpolated across stops. When defined, replaces filter_conditions.</p>';
+    bmInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;">Source value is normalized to 0–100 % and interpolated across stops.</p>';
     bmInner+='</div>';
+    // Unified filter section — one mode toggle picks discrete vs smooth; only the
+    // active mode is kept on save (they're mutually exclusive at runtime).
+    const _fMode=this._filterMode||(cR.brightness_model?'smooth':'conditional');
+    const _fCount=_fMode==='smooth'?((bm.source?.length||0)+(bm.filter_gradient?.length||0)):(cR.filter_conditions||[]).length;
+    let filtCombined='<div style="margin-bottom:12px;"><label class="roc-l">Filter mode</label><select id="filter-mode"'+this._inp('')+'>';
+    filtCombined+='<option value="conditional"'+(_fMode==='conditional'?' selected':'')+'>Conditional — discrete states (first match wins)</option>';
+    filtCombined+='<option value="smooth"'+(_fMode==='smooth'?' selected':'')+'>Smooth — interpolate from a sensor (brightness model)</option>';
+    filtCombined+='</select></div>';
+    filtCombined+='<div id="filter-pane-conditional" style="'+(_fMode==='conditional'?'':'display:none;')+'">'+filterInner+'</div>';
+    filtCombined+='<div id="filter-pane-smooth" style="'+(_fMode==='smooth'?'':'display:none;')+'">'+bmInner+'</div>';
 
     let ovInner='<div id="ov-list">';
     (cR.overlays||[]).forEach(function(ov,i){ovInner+=self._ovItem(ov,i);});
@@ -3340,8 +3356,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'</div>'
       +_panel('image',
           sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
-         +sec('filters','Base image filters',(cR.filter_conditions||[]).length,filterInner)
-         +sec('brightness','Brightness model (smooth filter)',(bm.source?.length||0)+(bm.filter_gradient?.length||0),bmInner))
+         +sec('filters','Image filters'+(_fMode==='smooth'?' — smooth':''),_fCount,filtCombined))
       +_panel('elements',
           sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner)
          +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner)
@@ -3630,6 +3645,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const caTa=this.querySelector('#cards_above_yaml');if(caTa)caTa.addEventListener('change',fire);
     const cbTa=this.querySelector('#cards_below_yaml');if(cbTa)cbTa.addEventListener('change',fire);
 
+    // Filter mode toggle — swap panes (no re-render) + persist choice
+    const fmodeEl=this.querySelector('#filter-mode');
+    if(fmodeEl)fmodeEl.addEventListener('change',function(){
+      self._filterMode=fmodeEl.value;
+      const pc=self.querySelector('#filter-pane-conditional'),ps=self.querySelector('#filter-pane-smooth');
+      if(pc)pc.style.display=fmodeEl.value==='conditional'?'':'none';
+      if(ps)ps.style.display=fmodeEl.value==='smooth'?'':'none';
+      self._fire(self._collectConfig());
+    });
     // Filter conditions
     const addF=this.querySelector('#add-filter');
     if(addF)addF.addEventListener('click',function(){
