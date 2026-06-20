@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev3 — MIT License
+ * room-overlay-card v3.0.0-dev4 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev3';
+const ROC_VERSION='3.0.0-dev4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -539,8 +539,11 @@ class RoomOverlayCard extends HTMLElement{
       };
       const _navCardsStart=(navCfg.cards||[]).map(function(cc,ci){return cc&&cc.placement==='start'?_navCardOne(cc,ci):'';}).join('');
       const _navCardsEnd=(navCfg.cards||[]).map(function(cc,ci){return cc&&cc.placement==='start'?'':_navCardOne(cc,ci);}).join('');
-      // Follow button — jump back to the presence room (room_entity)
-      const _fbHtml=(cAll.room_entity&&navCfg.follow_button!==false)
+      // Follow button — only when THIS device resolves room_entity to a real,
+      // existing presence sensor (by_browser → by_user → default). Devices with
+      // no usable presence source (e.g. a phone not in the mapping) don't show it.
+      const _fbEnt=this._roomEntityId();
+      const _fbHtml=(navCfg.follow_button!==false&&_fbEnt&&this._hass&&this._hass.states[_fbEnt])
         ?'<button data-nav-follow title="Jump to my room (presence)" style="flex:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--divider-color,#555);background:none;color:var(--primary-text-color,#fff);cursor:pointer;"><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size:18px;"></ha-icon></button>'
         :'';
       navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':(_navMob?'flex-wrap:wrap;':'overflow-x:auto;'))+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
