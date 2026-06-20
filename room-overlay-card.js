@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v2.2.0 — MIT License
+ * room-overlay-card v3.0.0-dev — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='2.2.0';
+const ROC_VERSION='3.0.0-dev';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2343,15 +2343,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(_zm&&_zm.checked)c.zoom=true;else delete c.zoom;
     const _bicR=this._pYaml(this.querySelector('#base_image_conditions'));
     if(_bicR.ok){if(Array.isArray(_bicR.val))tgt.base_image_conditions=_bicR.val;else delete tgt.base_image_conditions;}
-    // Per-tier objects (aspect_ratio/border_radius as {mobile,tablet,...}) are YAML-only
-    // for now — preserve them instead of overwriting from the single text field.
-    const _arOld=this._config.aspect_ratio;
-    c.aspect_ratio=(_arOld&&typeof _arOld==='object')?_arOld:v('aspect_ratio','16/9');
-    const _brOld=this._config.border_radius;
-    c.border_radius=(_brOld&&typeof _brOld==='object')?_brOld:v('border_radius','12px');
-    const _mhOld=this._config.max_height;
-    if(_mhOld&&typeof _mhOld==='object')c.max_height=_mhOld;
-    else{const _mhv=v('max_height','').trim();if(_mhv)c.max_height=_mhv;else delete c.max_height;}
+    // Per-tier inputs → scalar (one cell filled) or {tier:value} object (≥2 filled)
+    const _collTier=function(idb){
+      const o={};let n=0,last='';
+      ROC_TIERS.forEach(function(tk){const el=q('#'+idb+'__'+tk);if(!el)return;const vv=el.value.trim();if(vv){o[tk]=vv;n++;last=vv;}});
+      if(n===0)return undefined;
+      if(n===1)return last;
+      return o;
+    };
+    const _arV=_collTier('aspect_ratio');c.aspect_ratio=_arV!==undefined?_arV:'16/9';
+    const _brV=_collTier('border_radius');if(_brV!==undefined)c.border_radius=_brV;else delete c.border_radius;
+    const _mhV=_collTier('max_height');if(_mhV!==undefined)c.max_height=_mhV;else delete c.max_height;
     const _lav=v('lock_aspect','').trim().toLowerCase();
     if(_lav==='true'||_lav==='on'||_lav==='yes'||_lav==='auto')c.lock_aspect=true;
     else if(_lav)c.lock_aspect=v('lock_aspect','').trim();
@@ -3238,16 +3240,24 @@ class RoomOverlayCardEditor extends HTMLElement{
     respInner+='<div><label class="roc-l">Desktop below</label><input id="bp_desktop" type="number" min="0" step="10" placeholder="1600" value="'+this._e(_bp.desktop!=null?String(_bp.desktop):'')+'"'+this._inp('')+'></div>';
     respInner+='<div><label class="roc-l">Legacy mobile_bp</label><input id="mobile_breakpoint" type="number" min="0" step="10" placeholder="600" value="'+(c.mobile_breakpoint!=null?c.mobile_breakpoint:'')+'"'+this._inp('')+'></div>';
     respInner+='</div>';
-    const _arObj=c.aspect_ratio&&typeof c.aspect_ratio==='object';
-    const _arShow=_arObj?ROC_TIERS.map(function(tt){return c.aspect_ratio[tt]?tt+': '+c.aspect_ratio[tt]:'';}).filter(Boolean).join('   '):(c.aspect_ratio||'16/9');
-    respInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    respInner+='<div><label class="roc-l">Aspect ratio'+(_arObj?' (per-tier — edit in YAML)':'')+'</label><input id="aspect_ratio" type="text"'+(_arObj?' disabled':'')+' placeholder="16/9 or {mobile: 4/3, ultrawide: 21/9}" value="'+this._e(_arShow)+'"'+this._inp('')+'></div>';
-    const _brObj=c.border_radius&&typeof c.border_radius==='object';
-    respInner+='<div><label class="roc-l">Border radius'+(_brObj?' (per-tier)':'')+'</label><input id="border_radius" type="text"'+(_brObj?' disabled':'')+' value="'+this._e(_brObj?'per-tier in YAML':(c.border_radius||'12px'))+'"'+this._inp('')+'></div>';
-    respInner+='</div>';
-    const _mhObj=c.max_height&&typeof c.max_height==='object';
-    respInner+='<div style="margin-bottom:8px;"><label class="roc-l">Max height (caps &amp; centers the image on wide screens; e.g. 70vh or 600px)'+(_mhObj?' — per-tier in YAML':'')+'</label><input id="max_height" type="text"'+(_mhObj?' disabled':'')+' placeholder="e.g. 70vh" value="'+this._e(_mhObj?'per-tier in YAML':(c.max_height||''))+'"'+this._inp('')+'></div>';
-    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 12px;line-height:1.5;">Want a different shape per device? Set these as per-tier objects in YAML, e.g. <code>aspect_ratio: {mobile: 4/3, tablet: 16/10, desktop: 16/9, ultrawide: 21/9}</code> — the field then shows “per-tier in YAML” and locks. Dedicated per-tier inputs are coming.</p>';
+    // Per-tier inputs — one cell per tier; blank inherits from the nearest set
+    // tier; fill only Desktop to use one value everywhere.
+    const _tierRow=function(idb,label,val,ph){
+      const isObj=val&&typeof val==='object';
+      const sc=(val!=null&&!isObj)?String(val):'';
+      let h='<div style="margin-bottom:8px;"><label class="roc-l">'+label+'</label>';
+      h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">';
+      ROC_TIERS.forEach(function(tk){
+        const v0=isObj?(val[tk]!=null?String(val[tk]):''):(tk==='desktop'?sc:'');
+        h+='<input id="'+idb+'__'+tk+'" type="text" placeholder="'+tk+(ph?' '+ph:'')+'" value="'+self._e(v0)+'"'+self._inp('font-size:12px;')+'>';
+      });
+      h+='</div></div>';
+      return h;
+    };
+    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;line-height:1.5;">Per tier: Mobile / Tablet / Desktop / Ultrawide. Leave a cell blank to inherit from the nearest set tier; fill only <b>Desktop</b> to use one value everywhere.</p>';
+    respInner+=_tierRow('aspect_ratio','Aspect ratio',c.aspect_ratio,'e.g. 16/9');
+    respInner+=_tierRow('border_radius','Border radius',c.border_radius,'e.g. 12px');
+    respInner+=_tierRow('max_height','Max height (caps &amp; centers the image on wide screens)',c.max_height,'e.g. 70vh');
     respInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;"><label class="roc-l">Lock layout to image</label>';
     respInner+='<input id="lock_aspect" type="text" placeholder="off — or: true (auto from image) / 16/9" value="'+this._e(c.lock_aspect===true?'true':(c.lock_aspect||''))+'"'+this._inp('')+'>';
     respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;line-height:1.5;">When set, zones / icons / blinds etc. stay glued to the image across every tier — per-tier <code>aspect_ratio</code> then only changes how much of the image is cropped, not where elements sit. Use <b>true</b> to take the design shape from the image automatically, or pin an explicit aspect like <b>1720/968</b> (your source image’s real W/H).</p></div>';
@@ -3476,9 +3486,13 @@ class RoomOverlayCardEditor extends HTMLElement{
       self._config=c;self._render();self._fire(c);
     });
 
-    ['base_image','aspect_ratio','border_radius','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){
+    ['base_image','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
+    // Per-tier inputs (aspect_ratio / border_radius / max_height — 4 cells each)
+    ROC_TIERS.forEach(function(tk){['aspect_ratio','border_radius','max_height'].forEach(function(idb){
+      const el=self.querySelector('#'+idb+'__'+tk);if(el)el.addEventListener('change',fire);
+    });});
     const prevOnEl=this.querySelector('#prev-on');
     if(prevOnEl)prevOnEl.addEventListener('change',function(){self._prevOn=prevOnEl.checked;self._render();});
     const undoBtn=this.querySelector('#roc-undo');
