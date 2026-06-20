@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0 — MIT License
+ * room-overlay-card v3.0.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0';
+const ROC_VERSION='3.0.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -205,7 +205,7 @@ function blindToGaugeConfig(b){
     return[Object.assign({},base,{color:sc})];
   }else if(type==='day_night'){
     const scount=b.slat_count??6;
-    return[Object.assign({},base,{_dayNight:true,background:'transparent',_slat_count:scount,_slat_color:sc})];
+    return[Object.assign({},base,{_dayNight:true,background:'transparent',_slat_count:scount,_slat_color:sc,slat_snap:b.slat_snap})];
   }else if(type==='venetian'){
     const gc=b.gap_color||'rgba(180,160,140,0.35)';
     const grad='repeating-linear-gradient(to bottom,'+sc+' 0px,'+sc+' '+sw+'px,'+gc+' '+sw+'px,'+gc+' '+(sw+sg)+'px)';
@@ -1989,7 +1989,14 @@ class RoomOverlayCard extends HTMLElement{
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=this._gaugeFills[g.id];
-      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
+      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';
+        // Model A — descending striped fabric: stripes are a single, top-anchored
+        // texture; only the covered height tracks the position. (The old build used
+        // a second layer offset by pct*slat_count*(perDN/2) — that wrapped the tile
+        // several times across the travel, so the bands oscillated open/closed = the
+        // "drift". Removed.) Optional slat_snap rounds the covered height to whole
+        // slats so the leading edge lands on a slat boundary instead of mid-band.
+        const _hDN=g.slat_snap?(Math.round(pct*_nDN)/_nDN*100):(Math.round(pct*1000)/10);fill.style.height=_hDN+'%';fill.style.backgroundImage=_gradDN;fill.style.backgroundPositionY='0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
       else if((g.orientation||'vertical')==='radial'){
         const meta=this._radialMeta[g.id];
         if(meta){

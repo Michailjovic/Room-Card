@@ -1,5 +1,23 @@
 # Changelog
 
+## [3.0.1] – 2026-06-20
+
+### Fixed
+- **Day/night blind animation drifted as it closed.** The `day_night` blind drew
+  its stripes with two gradient layers, the second offset by
+  `position × slat_count × (slat_pitch / 2)`. Because that offset is many times
+  the tile size, the two layers' alignment wrapped around several times across
+  the travel, so the bands visibly oscillated open/closed instead of closing
+  once — plus a snap at exactly 100 %. The blind is now a **single, top-anchored
+  striped layer** whose covered height tracks the position (Model A — a
+  descending striped fabric): stripes stay put, the leading edge descends
+  smoothly, and a fully closed blind shows exactly `slat_count` slats.
+- New optional **`slat_snap: true`** rounds the covered height to whole slats, so
+  the leading edge lands on a slat boundary instead of cutting one mid-band
+  (off by default = smooth motion).
+
+---
+
 ## [3.0.0] – 2026-06-20
 
 The roadmap-completion release. Everything that used to be YAML-only in the
