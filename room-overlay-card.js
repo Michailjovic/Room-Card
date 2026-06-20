@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev6 — MIT License
+ * room-overlay-card v3.0.0-dev8 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev6';
+const ROC_VERSION='3.0.0-dev8';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -473,6 +473,14 @@ class RoomOverlayCard extends HTMLElement{
   _render(){
     if(!this._config)return;
     const cAll=this._config;
+    // URL deep-link: the first render honours #<key>=<room> (opt-in via url_sync);
+    // otherwise reflect the starting room so the URL is immediately bookmarkable.
+    if(!this._hashInit){
+      this._hashInit=true;
+      const _hi=this._roomIdxFromHash();
+      if(_hi>=0){this._roomIdx=_hi;this._manualHoldUntil=Date.now()+((cAll.follow_hold??60)*1000);}
+      else this._writeRoomHash(this._roomIdx);
+    }
     const c=roomMerge(cAll,this._roomIdx); // active room view (or plain config)
     this._roomCfg=c;
     this._zoomScale=1;this._wrapTA='';
@@ -577,8 +585,19 @@ class RoomOverlayCard extends HTMLElement{
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
     if(this._orientHandler){window.removeEventListener('deviceorientation',this._orientHandler);this._orientHandler=null;}
+    if(this._hashHandler){window.removeEventListener('hashchange',this._hashHandler);this._hashHandler=null;}
     this._teardownTemplates();
     this._selectedTM=null;
+    // URL deep-link: follow back/forward navigation and external hash edits
+    if(this._urlSyncKey()&&Array.isArray(cAll.rooms)&&cAll.rooms.length>1){
+      const _hashSelf=this;
+      this._hashHandler=function(){
+        if(_hashSelf._hashMuted)return;
+        const hi=_hashSelf._roomIdxFromHash();
+        if(hi>=0&&hi!==_hashSelf._roomIdx)_hashSelf._switchRoom(hi,0,true);
+      };
+      window.addEventListener('hashchange',this._hashHandler);
+    }
 
     // Legacy boolean derived from the tier — used by strip media filtering below.
     const _mob=(_tier==='mobile');
@@ -1231,6 +1250,43 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
+  // ---- URL deep-linking (opt-in via url_sync) --------------------------------
+  // url_sync: true → hash key 'room'; url_sync: 'mykey' → custom key. Produces
+  // bookmarkable URLs like …/lovelace/home#room=bedroom, reacts to back/forward
+  // and external hash edits, and rewrites the hash on every room switch. Off by
+  // default; the room value matches a room id / name / area_match (via roomMatch).
+  _urlSyncKey(){
+    const u=this._config&&this._config.url_sync;
+    if(!u)return null;
+    return(typeof u==='string'&&u.trim())?u.trim():'room';
+  }
+  _roomIdxFromHash(){
+    const key=this._urlSyncKey();
+    if(!key||typeof location==='undefined'||!this._config||!Array.isArray(this._config.rooms))return -1;
+    const h=String(location.hash||'').replace(/^#/,'');
+    if(!h)return -1;
+    let val=null;
+    h.split('&').forEach(function(p){
+      const eq=p.indexOf('=');
+      if(eq>0&&decodeURIComponent(p.slice(0,eq))===key)val=decodeURIComponent(p.slice(eq+1));
+    });
+    return val===null?-1:roomMatch(this._config,val);
+  }
+  _writeRoomHash(idx){
+    const key=this._urlSyncKey();
+    if(!key||typeof location==='undefined'||!this._config||!Array.isArray(this._config.rooms))return;
+    const r=this._config.rooms[Math.max(0,Math.min(idx,this._config.rooms.length-1))];
+    const val=encodeURIComponent(String(r.id||r.name||idx));
+    // Keep any unrelated hash params, replace just our key
+    const parts=String(location.hash||'').replace(/^#/,'').split('&').filter(Boolean)
+      .filter(function(p){const eq=p.indexOf('=');return!(eq>0&&decodeURIComponent(p.slice(0,eq))===key);});
+    parts.push(encodeURIComponent(key)+'='+val);
+    const newHash='#'+parts.join('&');
+    if((location.hash||'')===newHash)return; // already current
+    try{history.replaceState(history.state,'',location.pathname+location.search+newHash);}
+    catch(_){this._hashMuted=true;location.hash=newHash;this._hashMuted=false;}
+  }
+
   // Jump to the room reported by the presence sensor (used by the nav button
   // and the follow-room action); clears the manual-navigation hold
   _followNow(){
@@ -1291,6 +1347,7 @@ class RoomOverlayCard extends HTMLElement{
         if(opt)this._hass.callService(dom,'select_option',{entity_id:_reW,option:opt});
       }
     }
+    this._writeRoomHash(idx); // keep the URL hash in sync (opt-in via url_sync)
     this._syncRoomState();
   }
 
@@ -1468,10 +1525,11 @@ class RoomOverlayCard extends HTMLElement{
         try{wrap.setPointerCapture(pid);}catch(_){}
         dir2=dx<0?1:-1;
         const n=self._config.rooms.length;
-        const nr=self._config.rooms[(self._roomIdx+dir2+n)%n];
+        const ni=(self._roomIdx+dir2+n)%n;
         prev=document.createElement('div');
-        prev.style.cssText='position:absolute;inset:0;z-index:590;pointer-events:none;background-size:cover;background-position:center;'+(nr&&nr.base_image?'background-image:url("'+String(nr.base_image).replace(/"/g,'%22')+'");':'background:#000;');
+        prev.style.cssText='position:absolute;inset:0;z-index:590;pointer-events:none;overflow:hidden;background:#000;';
         wrap.appendChild(prev);
+        self._renderNeighbourPreview(prev,ni); // full-room render (img+filters+overlays+states)
         const ct=content();if(ct)ct.style.transition='none';
       }
       e.preventDefault();
@@ -1479,8 +1537,7 @@ class RoomOverlayCard extends HTMLElement{
       if(ndir!==dir2&&prev){ // direction flipped mid-drag → swap neighbour preview
         dir2=ndir;
         const n=self._config.rooms.length;
-        const nr=self._config.rooms[(self._roomIdx+dir2+n)%n];
-        prev.style.backgroundImage=nr&&nr.base_image?'url("'+String(nr.base_image).replace(/"/g,'%22')+'")':'';
+        self._renderNeighbourPreview(prev,(self._roomIdx+dir2+n)%n);
       }
       const ct=content();
       if(ct)ct.style.transform='translateX('+dx+'px)';
@@ -1518,6 +1575,37 @@ class RoomOverlayCard extends HTMLElement{
     });
     // Swallow the click that follows a drag (capture phase beats zone handlers)
     wrap.addEventListener('click',function(e){if(moved){moved=false;e.stopImmediatePropagation();e.preventDefault();}},true);
+  }
+
+  // Full-room neighbour preview for the finger-drag: a real, non-interactive
+  // card instance rendering the target room — image + filters + overlays + live
+  // states (not just the base image). Falls back to the plain base image if the
+  // instance can't be created. Reuses the same pattern as the editor live preview.
+  _renderNeighbourPreview(prevEl,idx){
+    const cAll=this._config;
+    const r=(cAll.rooms&&cAll.rooms[idx])||null;
+    if(prevEl._ghost){try{prevEl._ghost.remove();}catch(_){}prevEl._ghost=null;}
+    prevEl.style.backgroundImage='';
+    try{
+      const gc=document.createElement('room-overlay-card');
+      const gcfg=JSON.parse(JSON.stringify(cAll));
+      gcfg.follow_mode='manual';                              // no presence jumps in the ghost
+      gcfg._roc_preview=true;                                 // suppress Save button etc.
+      gcfg.test_mode=false;
+      gcfg.nav=Object.assign({},gcfg.nav||{},{style:'none'}); // the real card owns the nav strip
+      delete gcfg.cards_above;delete gcfg.cards_below;        // keep the preview to the image box
+      delete gcfg.url_sync;                                   // the ghost must never touch the URL hash
+      gc.style.cssText='display:block;position:absolute;top:0;left:0;width:100%;';
+      gc.setConfig(gcfg);
+      gc._roomIdx=Math.max(0,Math.min(idx,(cAll.rooms||[]).length-1));
+      if(this._hass)gc.hass=this._hass;
+      prevEl.appendChild(gc);
+      prevEl._ghost=gc;
+    }catch(e){
+      prevEl.style.backgroundSize='cover';
+      prevEl.style.backgroundPosition='center';
+      prevEl.style.backgroundImage=r&&r.base_image?'url("'+String(r.base_image).replace(/"/g,'%22')+'")':'';
+    }
   }
 
   _attachZoom(wrap,content){
@@ -2011,6 +2099,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
     if(this._orientHandler){window.removeEventListener('deviceorientation',this._orientHandler);this._orientHandler=null;}
+    if(this._hashHandler)window.removeEventListener('hashchange',this._hashHandler);
     this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
     if(this._io){this._io.disconnect();this._io=null;}
@@ -2024,6 +2113,7 @@ class RoomOverlayCard extends HTMLElement{
       this._startCamera();
       if(!this._tmplUnsubs.length)this._setupTemplates();
       if(this._hlHandler)window.addEventListener('roc-highlight',this._hlHandler);
+      if(this._hashHandler)window.addEventListener('hashchange',this._hashHandler);
     }
   }
 }
@@ -2286,6 +2376,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const el=document.createElement('room-overlay-card');
       const cfg=JSON.parse(JSON.stringify(this._config));
       cfg.test_mode=true;cfg._roc_preview=true;
+      delete cfg.url_sync; // editor preview must not hijack the dashboard URL
       const _multi=Array.isArray(cfg.rooms)&&cfg.rooms.length>0;
       if(_multi)cfg.follow_mode='manual'; // lock the preview to the room being edited (no presence jumps)
       el.setConfig(cfg);
