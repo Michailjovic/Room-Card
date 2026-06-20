@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.1.2] – 2026-06-13
+
+### Fixed
+- **`lock_aspect` did nothing in multi-room cards (vertical drift).** Image
+  measurement only looked at the root config's `base_image`, but in multi-room
+  every background lives inside `rooms[]` — so no aspect was ever detected,
+  `lock_aspect` silently fell back to the default crop, and elements drifted
+  vertically across tiers (covers/blinds too tall on mobile, too low on
+  ultrawide). The card now measures the background (and overlay) images of
+  **every room** up front, so `lock_aspect: true` locks each room to its own
+  image. Single-room cards are unaffected.
+
+---
+
 ## [2.1.1] – 2026-06-13
 
 ### Fixed

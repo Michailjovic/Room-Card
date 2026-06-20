@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v2.1.1 — MIT License
+ * room-overlay-card v2.1.2 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='2.1.1';
+const ROC_VERSION='2.1.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -417,12 +417,18 @@ class RoomOverlayCard extends HTMLElement{
 
   _preloadImages(){
     const c=this._config,urls=new Set();
-    if(c.base_image)urls.add(c.base_image);
-    for(const bc of(c.base_image_conditions||[])){if(bc.image)urls.add(bc.image);}
-    for(const ov of(c.overlays||[])){
-      if(ov.image)urls.add(ov.image);
-      if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
-    }
+    // Collect images from a room (or the flat config) — in multi-room every room
+    // has its own base_image, so we must walk rooms[], not just the root.
+    const addImgs=function(r){
+      if(!r)return;
+      if(r.base_image)urls.add(r.base_image);
+      for(const bc of(r.base_image_conditions||[])){if(bc.image)urls.add(bc.image);}
+      for(const ov of(r.overlays||[])){
+        if(ov.image)urls.add(ov.image);
+        if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
+      }
+    };
+    if(Array.isArray(c.rooms)&&c.rooms.length)c.rooms.forEach(addImgs);else addImgs(c);
     // Per-image natural aspect cache — every room may use a different image with a
     // different resolution, so lock_aspect:true must detect each one separately.
     this._preloadImgs=[];const _plSelf=this;
