@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev4 — MIT License
+ * room-overlay-card v3.0.0-dev5 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev4';
+const ROC_VERSION='3.0.0-dev5';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -542,7 +542,7 @@ class RoomOverlayCard extends HTMLElement{
       // Follow button — only when THIS device resolves room_entity to a real,
       // existing presence sensor (by_browser → by_user → default). Devices with
       // no usable presence source (e.g. a phone not in the mapping) don't show it.
-      const _fbEnt=this._roomEntityId();
+      const _fbEnt=this._followBtnEntity();
       const _fbHtml=(navCfg.follow_button!==false&&_fbEnt&&this._hass&&this._hass.states[_fbEnt])
         ?'<button data-nav-follow title="Jump to my room (presence)" style="flex:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--divider-color,#555);background:none;color:var(--primary-text-color,#fff);cursor:pointer;"><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size:18px;"></ha-icon></button>'
         :'';
@@ -1192,6 +1192,21 @@ class RoomOverlayCard extends HTMLElement{
   }
 
   _roomEntityId(){return this._resolveMapEntity(this._config?this._config.room_entity:null);}
+
+  // Presence entity for the FOLLOW BUTTON — like _roomEntityId but a per-device
+  // mapping must match THIS device explicitly (by_browser/by_user). 'default'
+  // does NOT count, so unmapped devices (e.g. a laptop not in the browser list)
+  // get no button. A plain-string room_entity applies to every device.
+  _followBtnEntity(){
+    const re=this._config&&this._config.room_entity;
+    if(!re)return null;
+    if(typeof re==='string')return re;
+    const bid=window.browser_mod?.browserID||window.browser_mod?.browser_id;
+    if(re.by_browser&&bid&&re.by_browser[bid])return re.by_browser[bid];
+    const un=this._hass&&this._hass.user&&this._hass.user.name;
+    if(re.by_user&&un){for(const k in re.by_user)if(String(k).toLowerCase()===String(un).toLowerCase())return re.by_user[k];}
+    return null;
+  }
 
   // Mirror the active room into a writable helper entity (input_text /
   // input_select) so automations and other cards can react to it
