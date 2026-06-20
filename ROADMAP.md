@@ -1,9 +1,10 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v2.2.0** (2026-06-13). Verified against Home Assistant 2026.6.
-**The original roadmap and the v2.0.0 milestone are complete.** Post-roadmap
-releases (driven by real-world multiroom usage), the v1.13–v2.0 responsive +
-editor work, the v2.1–v2.2 fixes/features, and the remaining backlog are below.
+Current release: **v3.0.0** (2026-06-20). Verified against Home Assistant 2026.6.
+**The original roadmap, the v2.0.0 milestone and the v3.0 backlog are complete.**
+Post-roadmap releases (driven by real-world multiroom usage), the v1.13–v2.0
+responsive + editor work, the v2.1–v2.2 fixes/features, and the v3.0
+roadmap-completion release are below.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
@@ -77,19 +78,28 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 | v2.1.3 | Test-mode **Save** searches the whole dashboard (no longer URL-view dependent → no more intermittent saves) |
 | **v2.2.0** | **Mouse-wheel room switching** — `nav.wheel: horizontal \| vertical \| both` |
 
-## v2.x — Backlog (candidates, not committed)
+## v3.0 — Roadmap completion — ✅ SHIPPED in v3.0.0 (2026-06-20)
 
-1. **Nav/menu GUI block** — replace the nav YAML textarea in *Rooms & menu* with
-   structured fields (style, position, height, width, chips, cards, follow button).
-2. **Dedicated per-tier inputs** for `aspect_ratio` (today an object set in YAML
-   locks the field with a "per-tier in YAML" hint).
-3. **Unify the two image-filter sections** (`filter_conditions` + `brightness_model`)
-   into one with a mode toggle.
-4. **Hide per-item YAML textareas** behind an "Advanced" toggle inside each element.
-5. **Row-builder for `room_entity` / `room_state_entity` mappings** — editable
-   `by_browser` / `by_user` rows (today only "Map this device" covers the common path).
-6. **URL hash deep-linking** (`#room=bedroom`) — bookmarkable rooms.
-7. **Full-room render** in the finger-drag neighbour preview (currently base image only).
+The v2.x backlog, closed out. Item 5 was dropped (the "Map this device" button
+already covers the common path; full row editing stays YAML).
+
+| # | Item | Status |
+|---|---|---|
+| 1 | **Nav/menu GUI block** — structured fields (style, position, height, width, mobile height, auto breakpoint, wheel, follow button); chips/cards stay YAML | ✅ |
+| 2 | **Dedicated per-tier inputs** for `aspect_ratio` / `border_radius` / `max_height` — one cell per tier | ✅ |
+| 3 | **Unified image-filter section** — `filter_conditions` + `brightness_model` behind one Conditional/Smooth mode switch | ✅ |
+| 4 | **"Advanced" toggle** — hides per-item YAML textareas behind a header checkbox | ✅ |
+| 5 | Row-builder for `room_entity` / `room_state_entity` mappings | ⛔ dropped (YAML stays for full row editing) |
+| 6 | **URL hash deep-linking** — opt-in `url_sync` → bookmarkable `#room=<id>` | ✅ |
+| 7 | **Full-room render** in the finger-drag neighbour preview (was base image only) | ✅ |
+
+Also in v3.0: the nav **follow button** is now conditional — it only shows on
+devices that resolve `room_entity` to a real presence sensor via an explicit
+`by_browser` / `by_user` mapping.
+
+## Future backlog (candidates, not committed)
+
+- Nothing committed. Real-world usage drives the next items.
 
 ## Maintenance (ongoing)
 

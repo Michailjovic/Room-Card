@@ -1,5 +1,64 @@
 # Changelog
 
+## [3.0.0] – 2026-06-20
+
+The roadmap-completion release. Everything that used to be YAML-only in the
+editor now has a proper GUI, the two image-filter systems are unified behind a
+single mode switch, and the active room can be shared and bookmarked through the
+URL. Fully backwards compatible with 2.x configs.
+
+### Editor — GUI completeness
+- **Navigation menu is fully editable in the GUI.** The old single `nav:` YAML
+  textarea in *Rooms & menu* is replaced by structured fields: **style**,
+  **position**, **height**, **item width**, **mobile height**, **auto
+  breakpoint**, **wheel switch** and a **follow button** toggle. Chips and
+  custom strip cards stay as YAML lists (they're arbitrary card/sensor configs),
+  and invalid YAML in those two fields is now preserved instead of being wiped.
+- **Dedicated per-tier inputs** for `aspect_ratio`, `border_radius` and
+  `max_height` in the *Responsive* tab — one cell per tier
+  (mobile / tablet / desktop / ultrawide) instead of having to drop to YAML to
+  set an object. A single value still applies to all tiers; values follow the
+  same nearest-lower-neighbour inheritance as before.
+- **Unified image-filter section.** `filter_conditions` (discrete, first-match)
+  and `brightness_model` (smooth interpolation from a sensor) used to be two
+  separate sections — confusing, because at runtime `brightness_model` always
+  wins. They're now one **Image filters** section with a **mode** switch:
+  **Conditional** or **Smooth**. The switch is authoritative — saving keeps only
+  the active mode and drops the other, so what you pick is what runs.
+- **"Advanced" toggle.** Each element's raw per-item YAML textarea (the escape
+  hatch for fields without a dedicated control) is now hidden behind a global
+  **Advanced** checkbox in the editor header, so the common path stays clean.
+- **URL-sync control.** New checkbox + optional key field in *Rooms & menu*
+  (see `url_sync` below).
+
+### New features
+- **URL deep-linking — `url_sync`.** Opt-in. `url_sync: true` keeps the active
+  room in the page URL as `#room=<id>` (set `url_sync: <key>` for a custom hash
+  key). Rooms become **bookmarkable and shareable**: opening a URL with
+  `#room=bedroom` jumps straight to that room (and holds it against presence for
+  `follow_hold`). Every room switch — swipe, wheel, nav, presence — rewrites the
+  hash, and the card reacts to back/forward navigation and manual hash edits.
+  The room value matches a room `id`, `name` or `area_match`. Off by default; the
+  editor and drag previews never touch the dashboard URL.
+- **Full-room finger-drag preview.** While you drag between rooms, the incoming
+  neighbour is now a **fully rendered room** — background, brightness/darkness
+  filters, overlays, icons, gauges and live entity states — instead of just the
+  static base image. Falls back to the base image if a preview instance can't be
+  built.
+- **Conditional follow button.** The nav **follow button** now appears only on
+  devices that actually resolve `room_entity` to a real presence sensor via an
+  explicit `by_browser` / `by_user` mapping. Devices with no usable presence
+  source (e.g. a laptop not in the Bermuda browser list) no longer show a button
+  that can't do anything. A plain-string `room_entity` still applies everywhere.
+
+### Compatibility
+- Backwards compatible with all 2.x configs. The unified filter editor opens
+  existing cards in the correct mode based on whether they have
+  `brightness_model` or `filter_conditions`. `url_sync` is opt-in, so nothing
+  changes unless you enable it.
+
+---
+
 ## [2.2.0] – 2026-06-13
 
 ### Added

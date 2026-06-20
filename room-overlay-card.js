@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev8 — MIT License
+ * room-overlay-card v3.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev8';
+const ROC_VERSION='3.0.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2802,6 +2802,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _chR=this._pYaml(q('#nav-chips'));if(_chR.ok){if(_chR.val)_navO.chips=_chR.val;}else if(_oldNav.chips)_navO.chips=_oldNav.chips;
       const _cdR=this._pYaml(q('#nav-cards'));if(_cdR.ok){if(_cdR.val)_navO.cards=_cdR.val;}else if(_oldNav.cards)_navO.cards=_oldNav.cards;
       if(Object.keys(_navO).length)c.nav=_navO;else delete c.nav;
+      const _usEl=q('#url-sync');
+      if(_usEl){if(_usEl.checked){const _usk=v('url-sync-key','').trim();c.url_sync=_usk||true;}else delete c.url_sync;}
     }
 
     return c;
@@ -3375,6 +3377,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='</select></div>';
       roomsInner+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="nav-follow-btn" type="checkbox"'+(_nav.follow_button!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-follow-btn" style="font-size:12px;cursor:pointer;">Follow button</label></div>';
       roomsInner+='</div>';
+      // URL deep-linking (top-level url_sync) — bookmarkable #room=<id>
+      const _usCur=c.url_sync,_usOn=!!_usCur,_usKey=(typeof _usCur==='string')?_usCur:'';
+      roomsInner+='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px;margin-bottom:8px;align-items:center;">';
+      roomsInner+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="url-sync" type="checkbox"'+(_usOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="url-sync" style="font-size:12px;cursor:pointer;">Sync room to URL</label></div>';
+      roomsInner+='<div><label class="roc-l">URL hash key (blank = "room" → #room=&lt;id&gt;)</label><input id="url-sync-key" type="text" placeholder="room" value="'+this._e(_usKey)+'"'+this._inp('')+'></div>';
+      roomsInner+='</div>';
       const _chY=_nav.chips?_yaml.s(_nav.chips):'';
       roomsInner+='<div><label class="roc-l">Chips (YAML list — sensor pills on thumbnails; {room} = room id)</label><textarea id="nav-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_chY)+'</textarea></div>';
       const _cdY=_nav.cards?_yaml.s(_nav.cards):'';
@@ -3649,7 +3657,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     const convRooms=this.querySelector('#conv-rooms');
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
-    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards'].forEach(function(id){
+    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards','url-sync','url-sync-key'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     const bidMap=this.querySelector('#bid-map');
