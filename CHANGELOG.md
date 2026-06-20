@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.2.0] – 2026-06-13
+
+### Added
+- **Mouse-wheel room switching** on desktop — `nav.wheel`:
+  - `horizontal` (or `true`) — switch rooms with a **horizontal** scroll wheel
+    (`deltaX`); recommended, since horizontal wheel doesn't scroll the page.
+  - `vertical` — use the normal vertical wheel (`deltaY`) over the card.
+  - `both` — whichever axis the wheel reports.
+
+  One notch = one room (320 ms cooldown), wraps around, and counts as a manual
+  switch (so `follow_hold` applies). `Ctrl`+wheel stays reserved for `zoom`,
+  and the gesture is ignored while zoomed. `preventDefault` blocks the
+  browser's horizontal back/forward swipe.
+
+```yaml
+nav:
+  style: thumbnails
+  wheel: horizontal     # horizontal | vertical | both
+```
+
+---
+
 ## [2.1.3] – 2026-06-13
 
 ### Fixed

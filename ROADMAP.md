@@ -1,9 +1,9 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v2.0.0** (2026-06-13). Verified against Home Assistant 2026.6.
+Current release: **v2.2.0** (2026-06-13). Verified against Home Assistant 2026.6.
 **The original roadmap and the v2.0.0 milestone are complete.** Post-roadmap
 releases (driven by real-world multiroom usage), the v1.13–v2.0 responsive +
-editor work, and the remaining backlog are listed below.
+editor work, the v2.1–v2.2 fixes/features, and the remaining backlog are below.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 
@@ -67,6 +67,16 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 | v1.15.2 | **Companion cards in the GUI**; clearer room-icon label |
 | **v2.0.0** | **Milestone.** Test-mode declutter (handles only on the selected element, click-to-select for all element types); full README rework; consolidated docs |
 
+## v2.1 – v2.2 — post-2.0 fixes & features — ✅ SHIPPED
+
+| Version | Highlights |
+|---|---|
+| v2.1.0 | **`lock_aspect`** — fixed-design-aspect stage so % elements stay glued to the image across tiers (per-tier `aspect_ratio` only changes the crop) |
+| v2.1.1 | `lock_aspect: true` caches each image's natural ratio separately |
+| v2.1.2 | `lock_aspect` measures every room's image (multi-room vertical-drift fix) |
+| v2.1.3 | Test-mode **Save** searches the whole dashboard (no longer URL-view dependent → no more intermittent saves) |
+| **v2.2.0** | **Mouse-wheel room switching** — `nav.wheel: horizontal \| vertical \| both` |
+
 ## v2.x — Backlog (candidates, not committed)
 
 1. **Nav/menu GUI block** — replace the nav YAML textarea in *Rooms & menu* with
@@ -106,7 +116,7 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped
 | `render_template` WebSocket subscription (label templates) | ✅ current documented API |
 | `window.loadCardHelpers().createCardElement` (embedded cards) | ✅ no deprecation; direct-create fallback kept |
 | `config-changed` event from editor | ✅ current documented API |
-| `lovelace/config` (+ `/save`) WS — Save button | ⚠️ internal API, works incl. sections layout; on watch-list |
+| `lovelace/config` (+ `/save`) WS — Save button | ⚠️ internal API, works incl. sections layout + whole-dashboard search (v2.1.3); on watch-list |
 | `haptic` window event | ✅ frontend convention; harmless no-op when unsupported |
 | `browser_mod.popup` service | ⚠️ third-party dependency (user-installed) |
 | Pointer Events, IntersectionObserver, ResizeObserver, CSS filters | ✅ evergreen browser APIs |

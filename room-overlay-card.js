@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v2.1.3 — MIT License
+ * room-overlay-card v2.2.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='2.1.3';
+const ROC_VERSION='2.2.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -708,6 +708,30 @@ class RoomOverlayCard extends HTMLElement{
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&!tm){
       const wrapSw=this.shadowRoot.querySelector('.wrap');
       if(wrapSw)this._attachRoomDrag(wrapSw);
+      // ---- Mouse-wheel room switching (nav.wheel) -------------------------
+      // true|'horizontal' → horizontal wheel (deltaX, safe: doesn't scroll page)
+      // 'vertical' → deltaY · 'both' → either. Ctrl+wheel stays zoom.
+      const _whMode=navCfg.wheel;
+      if(_whMode&&wrapSw){
+        const whSelf=this;
+        const useX=_whMode===true||_whMode==='horizontal'||_whMode==='both';
+        const useY=_whMode==='vertical'||_whMode==='both';
+        wrapSw.addEventListener('wheel',function(e){
+          if(e.ctrlKey||whSelf._zoomScale>1)return; // leave zoom alone
+          let d=0;
+          if(useX&&useY)d=Math.abs(e.deltaX)>=Math.abs(e.deltaY)?e.deltaX:e.deltaY;
+          else if(useX)d=e.deltaX;
+          else if(useY)d=e.deltaY;
+          if(!d||Math.abs(d)<6)return;
+          e.preventDefault(); // block page scroll / browser back-forward swipe
+          const now=Date.now();
+          if(now-(whSelf._lastWheelNav||0)<320)return; // one notch = one room
+          whSelf._lastWheelNav=now;
+          const n=whSelf._config.rooms.length;
+          if(d>0)whSelf._switchRoom((whSelf._roomIdx+1)%n,1,true);
+          else whSelf._switchRoom((whSelf._roomIdx-1+n)%n,-1,true);
+        },{passive:false});
+      }
     }
     if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
@@ -3185,7 +3209,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       }
       roomsInner+='</div>';
       const _navY=c.nav?_yaml.s(c.nav):'';
-      roomsInner+='<div><label class="roc-l">nav (YAML — style, position, height, width (css|auto), chips, cards (placement: start|end), follow_button)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
+      roomsInner+='<div><label class="roc-l">nav (YAML — style, position, height, width (css|auto), chips, cards (placement: start|end), follow_button, wheel: horizontal|vertical|both)</label><textarea id="nav_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_navY)+'</textarea></div>';
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
