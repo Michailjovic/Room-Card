@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.0.3] – 2026-06-20
+
+### Fixed
+- **Day/night blind now uses the correct zebra model.** A `day_night` blind is
+  two layers of alternating opaque/sheer bands; the motor position controls how
+  the two layers are **aligned**, not a descending height. The blind stays fully
+  down (height 100 %) and the position drives the offset between the two layers:
+  bands behind each other (offset 0) = **see-through / open** (`0 %`), bands
+  stacked half a slat apart = **fully opaque / closed** (`100 %`). The offset now
+  sweeps linearly **once** across the travel (`position × slat_pitch / 2`) — no
+  `slat_count` multiplier and no end-snap, which previously made the alignment
+  wrap several times and the bands oscillate ("drift").
+- This reverts the descending-fabric approach from 3.0.1 and the `gap_color`
+  workaround from 3.0.2, which were based on a wrong mental model. The
+  `day_night` config is back to `slat_count` + `slat_color`; `gap_color` is no
+  longer used for `day_night` (still used by `venetian`).
+
+---
+
 ## [3.0.2] – 2026-06-20
 
 ### Fixed
