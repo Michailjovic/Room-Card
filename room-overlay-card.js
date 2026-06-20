@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.0-dev — MIT License
+ * room-overlay-card v3.0.0-dev2 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.0-dev';
+const ROC_VERSION='3.0.0-dev2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2175,7 +2175,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;this._showAdv=false;}
 
   // Active room view for editing (the room whose sections are shown)
   _roomView(){
@@ -3300,8 +3300,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       +_panel('rooms',roomsInner);
     const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
-      +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}</style>'
-      +'<div class="roc-ed" style="padding:8px;">'
+      +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}.roc-ed.roc-hideadv .roc-adv{display:none;}</style>'
+      +'<div class="roc-ed'+(this._showAdv?'':' roc-hideadv')+'" style="padding:8px;">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 8px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span>'
       +'<span style="display:flex;gap:6px;align-items:center;">'
       +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
@@ -3311,6 +3311,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);">Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
       +'<label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Test mode</label>'
       +'<label for="prev-on" title="A live, editable copy of the card shown right here — drag and resize elements directly, and it shows the room picked above. (The preview panel on the right is Home Assistant&#39;s own and follows live presence, so it won&#39;t track the room selector.)" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Drag-edit preview</label>'
+      +'<label title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="roc-adv-toggle" type="checkbox"'+(this._showAdv?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Advanced (YAML)</label>'
       +'</div>'
       +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
@@ -3359,6 +3360,18 @@ class RoomOverlayCardEditor extends HTMLElement{
         else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();kbSelf._redo();}
       });
     }
+    // Tag every YAML textarea's wrapper as "advanced" so the header toggle can
+    // hide them (declutter — basic fields stay visible). Monospace = YAML field.
+    this.querySelectorAll('textarea').forEach(function(ta){
+      const st=ta.getAttribute('style')||'';
+      if(st.indexOf('monospace')>=0){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
+    });
+    const advT=this.querySelector('#roc-adv-toggle');
+    if(advT)advT.addEventListener('change',function(){
+      self._showAdv=advT.checked;
+      const root=self.querySelector('.roc-ed');
+      if(root)root.classList.toggle('roc-hideadv',!advT.checked);
+    });
     this._listen();
     this._bindHassComponents();
     this._mountPreview();
