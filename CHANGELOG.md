@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.5] – 2026-06-20
+
+### Fixed
+- **Finger-swipe between rooms dragged the incoming room's companion cards.** The
+  neighbour preview is a full card instance; it stripped the top-level
+  `cards_above` / `cards_below` but not the **per-room** ones (they're room-scoped
+  in `rooms[]`). So the incoming room pulled its own strips from `rooms[idx]` and
+  rendered them above/below the preview image, and they slid in with it. The
+  preview now strips `cards_above` / `cards_below` from **every room** too, so
+  during the swipe only the room image moves; companion cards switch at commit.
+
+---
+
 ## [3.0.4] – 2026-06-20
 
 ### Changed

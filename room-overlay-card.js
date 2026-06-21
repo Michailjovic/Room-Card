@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.4 — MIT License
+ * room-overlay-card v3.0.5 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.4';
+const ROC_VERSION='3.0.5';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1593,7 +1593,11 @@ class RoomOverlayCard extends HTMLElement{
       gcfg._roc_preview=true;                                 // suppress Save button etc.
       gcfg.test_mode=false;
       gcfg.nav=Object.assign({},gcfg.nav||{},{style:'none'}); // the real card owns the nav strip
-      delete gcfg.cards_above;delete gcfg.cards_below;        // keep the preview to the image box
+      delete gcfg.cards_above;delete gcfg.cards_below;        // keep the preview to the image box…
+      // …and strip the PER-ROOM strips too — cards_above/below are room-scoped
+      // (in ROOM_KEYS), so the previewed room pulls its own from rooms[idx];
+      // without this they render above/below the ghost image and slide in with it.
+      if(Array.isArray(gcfg.rooms))gcfg.rooms.forEach(function(_r){if(_r){delete _r.cards_above;delete _r.cards_below;}});
       delete gcfg.url_sync;                                   // the ghost must never touch the URL hash
       gc.style.cssText='display:block;position:absolute;top:0;left:0;width:100%;';
       gc.setConfig(gcfg);
