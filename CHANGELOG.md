@@ -1,39 +1,18 @@
 # Changelog
 
-## [3.0.3] – 2026-06-20
+## [3.0.4] – 2026-06-20
+
+### Changed
+- **Reverted the day/night blind to the original 3.0.0 model.** The rework in
+  3.0.1 was based on a wrong mental model and didn't match real hardware; the
+  3.0.0 two-layer rendering was the closest, so it's restored. Accurate day/night
+  blind modelling stays an open item to revisit with a real-world reference.
+  (Versions 3.0.2 and 3.0.3 were internal blind-model experiments, never
+  released.)
 
 ### Fixed
-- **Day/night blind now uses the correct zebra model.** A `day_night` blind is
-  two layers of alternating opaque/sheer bands; the motor position controls how
-  the two layers are **aligned**, not a descending height. The blind stays fully
-  down (height 100 %) and the position drives the offset between the two layers:
-  bands behind each other (offset 0) = **see-through / open** (`0 %`), bands
-  stacked half a slat apart = **fully opaque / closed** (`100 %`). The offset now
-  sweeps linearly **once** across the travel (`position × slat_pitch / 2`) — no
-  `slat_count` multiplier and no end-snap, which previously made the alignment
-  wrap several times and the bands oscillate ("drift").
-- This reverts the descending-fabric approach from 3.0.1 and the `gap_color`
-  workaround from 3.0.2, which were based on a wrong mental model. The
-  `day_night` config is back to `slat_count` + `slat_color`; `gap_color` is no
-  longer used for `day_night` (still used by `venetian`).
-
----
-
-## [3.0.2] – 2026-06-20
-
-### Fixed
-- **Day/night blind looked open even when closed.** The covered region was drawn
-  with transparent gaps between slats, so the image showed through and a closed
-  blind read as open (a striped, airy look). The gap is now an **opaque colour**
-  by default, so the covered part reads as a real closed striped blind — dark
-  slats over an opaque band. Height still tracks the motor position
-  (`0 % = open`, `100 % = closed`).
-
-### Added
-- **`gap_color` for `day_night` blinds** (also a field in the editor). Sets the
-  colour of the band between slats. Default `rgba(120,120,120,0.92)` (opaque →
-  closed look); set `gap_color: transparent` to restore the old see-through
-  zebra style. Slat colour stays `slat_color`.
+- **Release workflow** — `action-gh-release` now passes an explicit `tag_name`,
+  fixing the "GitHub Releases requires a tag" failure when publishing a release.
 
 ---
 
