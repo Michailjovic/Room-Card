@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.5 — MIT License
+ * room-overlay-card v3.0.6 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.5';
+const ROC_VERSION='3.0.6';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1298,7 +1298,7 @@ class RoomOverlayCard extends HTMLElement{
     if(ri!==this._roomIdx)this._switchRoom(ri,ri>this._roomIdx?1:-1,false);
   }
 
-  _switchRoom(idx,dir,manual){
+  _switchRoom(idx,dir,manual,noGhost){
     const cAll=this._config;
     if(!Array.isArray(cAll.rooms)||idx<0||idx>=cAll.rooms.length||idx===this._roomIdx)return;
     if(manual)this._manualHoldUntil=Date.now()+((cAll.follow_hold??60)*1000);
@@ -1307,7 +1307,7 @@ class RoomOverlayCard extends HTMLElement{
     // the clone for ~0.3 s — acceptable)
     const oldContent=this.shadowRoot?this.shadowRoot.querySelector('.wrap .content'):null;
     let ghost=null;
-    if(oldContent){
+    if(oldContent&&!noGhost){ // swipe-commit passes noGhost — the drag preview already covers the transition (and a translated clone leaks a sliver under lock_aspect)
       ghost=oldContent.cloneNode(true);
       ghost.style.position='absolute';ghost.style.inset='0';ghost.style.zIndex='600';
       ghost.style.pointerEvents='none';
@@ -1559,7 +1559,7 @@ class RoomOverlayCard extends HTMLElement{
         if(ct){ct.style.transition='transform .18s ease-out';ct.style.transform='translateX('+target+'px)';}
         if(pv){pv.style.transition='transform .18s ease-out';pv.style.transform='translateX(0)';}
         setTimeout(function(){
-          self._switchRoom(ni,0,true); // re-render under the settled preview
+          self._switchRoom(ni,0,true,true); // re-render under the settled preview (no crossfade ghost — pv already covers it)
           setTimeout(function(){if(pv)pv.remove();},80);
         },180);
       }else{

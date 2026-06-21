@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.0.6] – 2026-06-20
+
+### Fixed
+- **Quick flash on the left edge after swiping to the next room (mobile).** On
+  commit, `_switchRoom` laid a crossfade clone of the old room on top and faded
+  it out. With `lock_aspect` the content is a cover-stage wider than the visible
+  box, so the clone's translate didn't push it fully off-screen and a sliver
+  flashed on the left. The swipe commit now re-renders **without** that crossfade
+  clone — the drag preview already covers the transition — so there's no flash.
+  Nav / wheel / presence room changes keep the crossfade as before.
+
+---
+
 ## [3.0.5] – 2026-06-20
 
 ### Fixed
