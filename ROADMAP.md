@@ -97,9 +97,66 @@ Also in v3.0: the nav **follow button** is now conditional — it only shows on
 devices that resolve `room_entity` to a real presence sensor via an explicit
 `by_browser` / `by_user` mapping.
 
+## v3.1 vision — Live mini-room navigation 🎯 (planned, not yet committed to a release)
+
+**Goal:** nav thumbnails become *true miniatures* of the room cards — the same base image,
+filters, overlays, blinds and (optionally) gauges/labels, live-updating — instead of the current
+base image + filter + 3 chips. "The menu is literally a scaled-down copy of what we built."
+
+The card already contains both required building blocks: `_renderNeighbourPreview` (swipe drag)
+and the editor's `_mountPreview` both create a full, non-interactive `room-overlay-card` instance
+pinned to a specific room. The feature generalizes that pattern into the nav strip.
+
+### Phase 1 — composite thumbnails (`nav.live: composite`) — cheap, ships first
+
+Paint the room's *currently active* overlay images as stacked `background-image` layers inside
+the existing thumbnail div, and keep applying the room filter (already done today). Reuses
+`_ovImg()` + `resolveVal()`/`resolveFilter()` per thumbnail inside `_update()` — no extra card
+instances, no template subscriptions, no timers.
+
+| Aspect | Behaviour |
+|---|---|
+| Overlays | shown when opacity resolves > 0 (binary approximation of conditional opacity) |
+| Base filter | as today (`filter_conditions`; add `brightness_model` support via `lerpFilterGradient`) |
+| Blinds / gauges / labels / weather | **not** rendered in this phase |
+| Perf cost | ~zero — a few extra background layers per thumb, updated in the existing `_update()` pass |
+| Limits | `color_from` tint and per-overlay filters approximated or skipped |
+
+### Phase 2 — full live minis (`nav.live: full`)
+
+Each thumbnail hosts a real, non-interactive card instance rendered at a reference width and
+scaled down, so px-based fonts/icons/gauges keep their exact proportions (a true miniature,
+not a reflow):
+
+- **Scaling:** host div = thumb size + `overflow:hidden`; inner `room-overlay-card` styled at
+  `width: W_ref` (the main card's current width) with `transform: scale(thumbW / W_ref);
+  transform-origin: top left;`.
+- **Config transform for minis** (same recipe as `_renderNeighbourPreview`): `_roc_preview: true`,
+  `nav: {style: none}` (recursion guard — a mini must never spawn its own nav), `test_mode: false`,
+  `follow_mode: manual` + pinned `_roomIdx`, strip `url_sync`, `cards_above/below` (top-level and
+  per-room), `zoom`, `parallax`.
+- **Interactivity:** `pointer-events: none` on the mini; the host keeps click/keyboard → switch room.
+- **hass forwarding:** parent forwards in `set hass` exactly like `_navCardEls` today; embedded
+  IntersectionObserver already pauses off-screen minis.
+- **Perf budget & knobs:**
+  - `nav.mini.features:` allowlist — default `[overlays, filters, blinds]`; opt-in `gauges`,
+    `labels`, `icons`, `weather`. Weather animations off by default (N animated layers is the
+    single biggest GPU risk).
+  - Templates: strip `visible_template` / `template` / `label_template` from mini configs by
+    default (avoids rooms × templates WS subscriptions); `nav.mini.templates: true` to opt in.
+  - Cameras: `camera_refresh` in minis clamped to ≥ 30 s (or disabled via `nav.mini.camera: false`).
+  - Reuse instances across `_render()` where the config hash is unchanged; teardown via existing
+    `disconnectedCallback`.
+  - Documented practical cap ~8 rooms; log a console hint above that.
+- **Editor:** nav style select gains "thumbnails — live minis"; chips still overlay on top.
+
+**Risks:** GPU memory on old tablets (mitigated by feature allowlist + D2 `will-change` fix from
+ANALYSIS_v3.0.6.md), template subscription multiplication (mitigated by default stripping),
+recursion (guarded twice: `nav.style none` + `_roc_preview` never spawns minis).
+
 ## Future backlog (candidates, not committed)
 
-- Nothing committed. Real-world usage drives the next items.
+- Findings from **ANALYSIS_v3.0.6.md** (code/GUI/UX review) — fix batches 1–4 pending sign-off.
 
 ## Maintenance (ongoing)
 
