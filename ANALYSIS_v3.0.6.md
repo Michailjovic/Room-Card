@@ -2,7 +2,13 @@
 
 Full-source review of `room-overlay-card.js` (4,075 lines, runtime card + GUI editor).
 Every finding below was verified against the actual code (line numbers refer to v3.0.6).
-Nothing here is fixed yet — this is the review report; fixes land only after sign-off.
+
+> **Status (v3.0.7, 2026-07-02):** implemented — A1, A2, A4–A11, both cheap B items
+> (`location-changed`, Jinja YAML guard), C1–C2, D1–D6, E1 (focus part), E2.
+> **Declined:** A3 (badge keyboard access — impractical in real use, per Michael).
+> **Left as documented trade-offs:** `window.confirm` styling, editor length-only
+> staleness check. **Still open ideas:** E3–E8, D7 full editor round-trip harness
+> (basic tests for the new helpers were added).
 
 **Summary:** 1 high, 4 medium, 6 low bugs · 2 dead-code items · 7 optimizations · 8 UX ideas.
 Overall the codebase is in very good shape: teardown/cleanup is thorough (observers, timers,

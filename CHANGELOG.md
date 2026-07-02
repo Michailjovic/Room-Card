@@ -1,5 +1,76 @@
 # Changelog
 
+## [3.0.7] – 2026-07-02
+
+Full-code-review release — every change traces to a finding in `ANALYSIS_v3.0.6.md`.
+
+### Fixed
+- **Per-room `base_camera` never refreshed** (A1). `_startCamera()` read the
+  top-level config, but `base_camera` / `camera_refresh` are room-scoped keys —
+  a camera defined inside `rooms[i]` never started its refresh timer (and the
+  room showed no background at all without a `base_image`). The camera loop now
+  uses the merged active-room view.
+- **Keyboard focus was invisible on zones** (A2). Zones hard-coded
+  `outline:none`; a `:focus-visible` outline (primary color) is now shown on
+  zones, icons, labels and gauges when navigating by keyboard. Touch/mouse look
+  is unchanged.
+- **Test-mode resize was mouse-only** (A5). Resize handles now use Pointer
+  Events, so zones/elements/gauges can be resized by touch on tablets.
+- **Element ids and image URLs were interpolated unescaped** (A4). Ids are now
+  escaped consistently in generated HTML and via `CSS.escape` in selector
+  lookups; base/overlay image URLs escape quotes for `url('…')`. `setConfig`
+  warns once when an id contains characters outside `A-Za-z0-9_-`.
+- **Embedded cards went stale off-screen** (A6). `hass` is now forwarded to
+  embedded cards (elements, nav cards, companion strips) even while the card is
+  outside the viewport, so they're current the moment it scrolls back.
+- **Numeric `aspect_ratio` was silently ignored** (A7). `aspect_ratio: 1.78`
+  (number or numeric string, incl. per-tier values) now works everywhere —
+  wrap padding, `max_height` cap, nav thumb ratio and `lock_aspect`.
+- **Climate sliders could request absurd temperatures** (A8). Slider min/max
+  now default from entity attributes (`min_temp`/`max_temp` for climate,
+  `min`/`max` for number) before falling back to 0–100.
+- **A tap after a cancelled room swipe was swallowed** (A9). The drag
+  suppression flag resets on `pointercancel`.
+- **Swipe ghost churn** (A10). The neighbour-preview card instance no longer
+  opens `render_template` subscriptions or camera timers (it lives < 0.5 s).
+- **Stale async card mounts** (A11). Card-helper callbacks from an outdated
+  render bail out via a render-generation counter instead of pushing orphaned
+  elements that kept receiving `hass` forever.
+- **`navigate` action** now also fires HA's canonical `location-changed` event
+  (popstate kept for compatibility) (B).
+- **Unquoted Jinja in YAML textareas** is kept as a plain string by the
+  built-in parser instead of being mangled into an inline map (B).
+
+### Changed
+- **Change detection is now scoped to the active room** (D1). Entities that only
+  drive other rooms' nav thumbnails/chips trigger a cheap nav-only refresh
+  instead of the full update pass — a real win on large multi-room configs with
+  busy sensors.
+- **Overlays no longer force permanent GPU layers** (D2). Removed the blanket
+  `will-change:opacity,transform` + `translateZ(0)` from overlay layers;
+  browsers promote layers automatically during the opacity/filter transitions.
+- **Image preload is staged** (D3). The active room + swipe neighbours load
+  immediately; remaining rooms of large configs load on browser idle time.
+- **Editor performance & output** (D4–D6): the entity datalist is cached instead
+  of being rebuilt on every editor render; clones use native `structuredClone`;
+  the editor no longer writes default values into saved YAML
+  (`filter_transition: 2s ease`, `test_mode: false`, gauge/blind `min: 0` /
+  `max: 100`, icon `size: 20px`, empty element arrays).
+- **Dead code removed** (C1–C2): `mApply()` helper and the unused `_mobActive`
+  flag.
+
+### Added
+- **Slider value bubble** (E2). Zone sliders show a live readout while dragging
+  ("72 %", "21.5 °") — the fill alone was hard to read precisely.
+- Smoke tests for the new pure helpers (`rocRatio`, `escSel`, Jinja YAML guard).
+
+### Not done (by decision)
+- A3 (keyboard access for badges) — declined as impractical in real use.
+- B window.confirm styling and the editor's length-only staleness check stay
+  as documented trade-offs.
+
+---
+
 ## [3.0.6] – 2026-06-20
 
 ### Fixed

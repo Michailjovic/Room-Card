@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.0.6 — MIT License
+ * room-overlay-card v3.0.7 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.0.6';
+const ROC_VERSION='3.0.7';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -13,6 +13,20 @@ window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',descr
   }});
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
+// Escape a value for use inside a CSS attribute selector [data-x="..."]
+function escSel(s){return(typeof CSS!=='undefined'&&CSS.escape)?CSS.escape(String(s)):String(s).replace(/["\\\]]/g,'\\$&');}
+// Escape single quotes for CSS url('...') contexts
+function escUrl(s){return String(s??'').replace(/'/g,'%27');}
+// Parse an aspect ratio: number, numeric string, or "W/H" → ratio (w/h) or null
+function rocRatio(r){
+  if(r==null||r==='')return null;
+  if(typeof r==='number')return r>0?r:null;
+  const p=String(r).trim().split('/');
+  if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);return(w>0&&h>0)?w/h:null;}
+  const n=parseFloat(p[0]);return n>0?n:null;
+}
+// Deep clone — native structuredClone with JSON fallback for old webviews
+const rocClone=typeof structuredClone==='function'?structuredClone:function(o){return JSON.parse(JSON.stringify(o));};
 function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
 // lock_aspect: size a fixed-design-aspect stage to COVER the (per-tier) box,
 // centered. Elements live on this stage → glued to the image, identical across
@@ -82,8 +96,6 @@ function tVal(val,tier){
   }
   return undefined;
 }
-// Legacy alias — the mobile profile = the 'mobile' tier.
-function mApply(it,act){return tApply(it,act?'mobile':null);}
 // Approximate colour temperature (Kelvin) → RGB (Tanner Helland, compact)
 function kelvinToRgb(k){
   k=Math.max(1000,Math.min(12000,k))/100;
@@ -269,7 +281,7 @@ class RoomOverlayCard extends HTMLElement{
     this._selectedTM=null;this._tmKeyHandler=null;
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
-    this._gdH=null;this._gdV=null;this._mobActive=false;this._tier=null;this._vt=null;
+    this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -277,7 +289,7 @@ class RoomOverlayCard extends HTMLElement{
     this._lastRoomDragEnd=0;this._followInit=false;this._navFollowEl=null;
     this._stripCardEls=[];this._imgRatios={};
     this._hlHandler=null;this._sortedLblGrads={};this._sortedBmFg=null;this._radialMeta={};
-    this._cfgJson=null;
+    this._cfgJson=null;this._renderGen=0;this._navEntities=null;this._navDirty=false;this._fullDirty=false;
   }
 
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
@@ -289,6 +301,19 @@ class RoomOverlayCard extends HTMLElement{
     const j=JSON.stringify(cfg);
     if(this._rendered&&this._cfgJson===j)return; // identical config — skip full rebuild
     this._cfgJson=j;
+    // Warn once about element ids that would break HTML/selector interpolation
+    const _badId=/[^A-Za-z0-9_-]/;
+    outer:for(const r of(hasRooms?cfg.rooms:[cfg])){
+      if(!r)continue;
+      for(const k of['overlays','zones','badges','icons','labels','gauges','blinds','elements','groups']){
+        for(const it of(r[k]||[])){
+          if(it&&it.id!=null&&_badId.test(String(it.id))){
+            console.warn('[room-overlay-card] element id "'+it.id+'" contains characters outside A-Za-z0-9_- — rendering/selection may misbehave');
+            break outer;
+          }
+        }
+      }
+    }
     if(hasRooms&&this._roomIdx>=cfg.rooms.length)this._roomIdx=0;
     this._config=cfg;this._rendered=false;if(this._hass)this._render();
   }
@@ -296,23 +321,37 @@ class RoomOverlayCard extends HTMLElement{
   set hass(h){
     this._hass=h;if(!this._config)return;
     if(!this._rendered){this._render();return;}
-    if(!this._visible)return;
     // Embedded cards do their own change detection — always forward hass
+    // (even while off-screen, so they're current the moment the card scrolls back)
     for(const k in this._cardEls){try{this._cardEls[k].hass=h;}catch(_){}}
     for(const el of(this._navCardEls||[]))try{el.hass=h;}catch(_){}
     for(const el of(this._stripCardEls||[]))try{el.hass=h;}catch(_){}
+    if(!this._visible)return;
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
-      if(!this._relevantEntities.some(id=>s[id]?.state!==p[id]))
-        {if(!this._relevantAttrSources||!this._relevantAttrSources.some(a=>s[a.entity]?.attributes[a.attr]!==p[a.entity+'.'+a.attr]))return;}
+      const chg=this._relevantEntities.some(id=>s[id]?.state!==p[id])
+        ||(this._relevantAttrSources&&this._relevantAttrSources.some(a=>s[a.entity]?.attributes[a.attr]!==p[a.entity+'.'+a.attr]));
+      if(!chg){
+        // Active room untouched — maybe another room's thumbnail/chip changed
+        if(this._navEntities&&this._navEntities.length&&this._navEntities.some(id=>s[id]?.state!==p[id]))this._schedule(true);
+        return;
+      }
     }
-    if(!this._rafPending){
-      this._rafPending=true;
-      requestAnimationFrame(()=>{
-        this._rafPending=false;
-        if(this._hass&&this._rendered)this._update();
-      });
-    }
+    this._schedule(false);
+  }
+
+  // rAF-batched update; navOnly refreshes just the nav thumbnails/chips.
+  // A pending nav-only frame upgrades to a full one if a full request lands first.
+  _schedule(navOnly){
+    if(navOnly)this._navDirty=true;else this._fullDirty=true;
+    if(this._rafPending)return;
+    this._rafPending=true;
+    requestAnimationFrame(()=>{
+      this._rafPending=false;
+      const full=this._fullDirty;this._fullDirty=false;this._navDirty=false;
+      if(!this._hass||!this._rendered)return;
+      if(full)this._update();else this._updateNav();
+    });
   }
 
   _extractEntities(obj,ids=new Set(),attrs=new Set()){
@@ -410,36 +449,50 @@ class RoomOverlayCard extends HTMLElement{
   }
 
   _pad(r){
-    const p=(r||'16/9').split('/');
-    if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);if(w>0&&h>0)return((h/w)*100).toFixed(4)+'%';}
-    return'56.25%';
+    const ratio=rocRatio(r)||rocRatio('16/9');
+    return ratio?((100/ratio).toFixed(4)+'%'):'56.25%';
   }
 
   _preloadImages(){
-    const c=this._config,urls=new Set();
+    const c=this._config;
     // Collect images from a room (or the flat config) — in multi-room every room
     // has its own base_image, so we must walk rooms[], not just the root.
-    const addImgs=function(r){
+    const addImgs=function(r,set){
       if(!r)return;
-      if(r.base_image)urls.add(r.base_image);
-      for(const bc of(r.base_image_conditions||[])){if(bc.image)urls.add(bc.image);}
+      if(r.base_image)set.add(r.base_image);
+      for(const bc of(r.base_image_conditions||[])){if(bc.image)set.add(bc.image);}
       for(const ov of(r.overlays||[])){
-        if(ov.image)urls.add(ov.image);
-        if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)urls.add(m.image);});
+        if(ov.image)set.add(ov.image);
+        if(ov.state_images)ov.state_images.forEach(function(m){if(m.image)set.add(m.image);});
       }
     };
-    if(Array.isArray(c.rooms)&&c.rooms.length)c.rooms.forEach(addImgs);else addImgs(c);
+    // Active room + swipe neighbours load now; the rest of a large multi-room
+    // config waits for browser idle time (keeps dashboard load light).
+    const now=new Set(),later=new Set();
+    if(Array.isArray(c.rooms)&&c.rooms.length){
+      const n=c.rooms.length,cur=this._roomIdx;
+      c.rooms.forEach(function(r,ri){
+        const near=n<=3||ri===cur||ri===(cur+1)%n||ri===(cur-1+n)%n;
+        addImgs(r,near?now:later);
+      });
+    }else addImgs(c,now);
     // Per-image natural aspect cache — every room may use a different image with a
     // different resolution, so lock_aspect:true must detect each one separately.
     this._preloadImgs=[];const _plSelf=this;
-    urls.forEach(function(url){
+    const load=function(url){
       const img=new Image();
       const grab=function(){if(img.naturalWidth&&img.naturalHeight){_plSelf._imgRatios[url]=img.naturalWidth/img.naturalHeight;_plSelf._layoutStage();}};
       img.onload=grab;
       img.src=url;
       if(img.complete)grab(); // already cached → measure synchronously
       _plSelf._preloadImgs.push(img);
-    });
+    };
+    now.forEach(load);
+    const laterArr=[...later].filter(function(u){return!now.has(u);});
+    if(laterArr.length){
+      const idle=window.requestIdleCallback||function(f){setTimeout(f,1500);};
+      idle(function(){laterArr.forEach(load);});
+    }
   }
 
   // Design aspect for lock_aspect: true → base image's natural ratio (auto),
@@ -448,9 +501,7 @@ class RoomOverlayCard extends HTMLElement{
     const la=(this._roomCfg&&this._roomCfg.lock_aspect)??(this._config&&this._config.lock_aspect);
     if(!la)return null;
     if(la===true){const bi=this._roomCfg&&this._roomCfg.base_image;return(bi&&this._imgRatios[bi])||null;}
-    const p=String(la).split('/');
-    if(p.length===2){const w=parseFloat(p[0]),h=parseFloat(p[1]);if(w>0&&h>0)return w/h;}
-    const n=parseFloat(la);return n>0?n:null;
+    return rocRatio(la);
   }
 
   _layoutStage(){
@@ -472,6 +523,7 @@ class RoomOverlayCard extends HTMLElement{
 
   _render(){
     if(!this._config)return;
+    const _gen=++this._renderGen; // stale async mounts (card helpers) bail via this
     const cAll=this._config;
     // URL deep-link: the first render honours #<key>=<room> (opt-in via url_sync);
     // otherwise reflect the starting room so the URL is immediately bookmarkable.
@@ -489,7 +541,7 @@ class RoomOverlayCard extends HTMLElement{
     // dragging always edits the base profile (tier deltas merge over the base).
     const _rt=rocTier(this.offsetWidth,c); // real tier by the card's own width
     const _tier=tm?null:_rt; // element tier-overrides are off in test mode (so dragging edits the base profile)
-    this._tier=_tier;this._mobActive=(_tier==='mobile');
+    this._tier=_tier;
     const _vt=_rt; // per-tier SCALARS (aspect_ratio/border_radius/max_height) follow the real tier even in test mode
     this._vt=_vt;
     const _arResolved=tVal(c.aspect_ratio,_vt)||'16/9';
@@ -502,8 +554,8 @@ class RoomOverlayCard extends HTMLElement{
       let _mh=tVal(c.max_height,_vt);
       if(typeof _mh==='number')_mh=_mh+'px';
       if(_mh){
-        const _arp=String(_arResolved).split('/');const _aw=parseFloat(_arp[0]),_ah=parseFloat(_arp[1]);
-        if(_aw>0&&_ah>0)_wrapMax=' style="max-width:calc('+_mh+' * '+(_aw/_ah).toFixed(4)+');margin-left:auto;margin-right:auto;"';
+        const _mhr=rocRatio(_arResolved);
+        if(_mhr)_wrapMax=' style="max-width:calc('+_mh+' * '+_mhr.toFixed(4)+');margin-left:auto;margin-right:auto;"';
       }
     }
     // ---- Multi-room navigation strip -------------------------------------
@@ -518,8 +570,7 @@ class RoomOverlayCard extends HTMLElement{
     const _navSide=navPos==='left'||navPos==='right';
     if(navStyle!=='none'){
       const nh=navCfg.height||'64px';
-      const _np=String(tVal(c.aspect_ratio,_vt)||'16/9').split('/');
-      const _nr=(parseFloat(_np[0])>0&&parseFloat(_np[1])>0)?parseFloat(_np[0])/parseFloat(_np[1]):16/9;
+      const _nr=rocRatio(tVal(c.aspect_ratio,_vt))||16/9;
       const navSelfIdx=this._roomIdx;
       // nav.width: css size | 'auto' (stretch items across the available strip)
       const nwRaw=navCfg.width;
@@ -563,7 +614,7 @@ class RoomOverlayCard extends HTMLElement{
           if(navStyle==='tabs')
             return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
           // thumbnails — live mini-render: base image + filter + sensor chips
-          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(r.base_image)+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
         }).join('')+_navBreak+_navCardsEnd+_fbHtml+'</div>';
     }
@@ -601,13 +652,13 @@ class RoomOverlayCard extends HTMLElement{
 
     // Legacy boolean derived from the tier — used by strip media filtering below.
     const _mob=(_tier==='mobile');
-    const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${ov.id}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};will-change:opacity,transform;transform:translateZ(0);"></div>`).join('');
-    const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;outline:none;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
-    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+b.id+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+b.id+'" icon="'+b.icon+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+b.id+'"></span>':'')+'</div>';}).join('');
+    const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${escA(ov.id)}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};"></div>`).join('');
+    const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
+    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+escA(b.id)+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
     const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';const a11y=ico.tap_action?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;"></ha-icon></div>';}).join('');
 
-    const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=tApply(lbl0,_tier);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+lbl.id+'" style="'+st+'"></div>';}).join('');
+    const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=tApply(lbl0,_tier);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+escA(lbl.id)+'" style="'+st+'"></div>';}).join('');
     const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+escA(g.id)+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;transition:opacity .25s ease,visibility .25s ease;visibility:'+(vis?'visible':'hidden')+';opacity:'+(vis?'1':'0')+';"></div>';}).join('');
     const _wx=c.weather_overlay?(typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay):null;
     const wxHtml=_wx?'<div class="layer wx" data-wx style="z-index:'+(_wx.z_index??5)+';opacity:0;"></div>':'';
@@ -651,8 +702,8 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle cx="50" cy="50" r="'+r+'" fill="none" stroke="'+escA(bg)+'" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="'+arcLen.toFixed(2)+' '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)"/>'
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
-    }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+g.id+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="roc-main"'+_wrapStyle+'>'+_aboveHtml+'<div class="wrap"'+_wrapMax+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+c.base_image+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+_belowHtml+'</div>'+_flexPost+_navBot+'</ha-card>';
+    }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+escA(g.id)+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="roc-main"'+_wrapStyle+'>'+_aboveHtml+'<div class="wrap"'+_wrapMax+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+_belowHtml+'</div>'+_flexPost+_navBot+'</ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -702,6 +753,7 @@ class RoomOverlayCard extends HTMLElement{
         const cardCfg=cc&&cc.card?cc.card:cc;
         if(!cardCfg||!cardCfg.type)return;
         const wrapEl=makeHACard(cardCfg,function(el){
+          if(navSelf._renderGen!==_gen)return; // a newer render replaced this DOM
           navSelf._navCardEls.push(el);
           if(navSelf._hass)try{el.hass=navSelf._hass;}catch(_){}
         });
@@ -723,6 +775,7 @@ class RoomOverlayCard extends HTMLElement{
         const cardCfg=cc&&cc.card?cc.card:cc;
         if(!cardCfg||!cardCfg.type)return;
         const w=makeHACard(cardCfg,function(el){
+          if(stSelf._renderGen!==_gen)return; // stale render
           stSelf._stripCardEls.push(el);
           if(stSelf._hass)try{el.hass=stSelf._hass;}catch(_){}
         });
@@ -762,12 +815,12 @@ class RoomOverlayCard extends HTMLElement{
     }
     if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
-    for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+ov.id+'"]');}
+    for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+escSel(ov.id)+'"]');}
     this._grpPanelEls={};
-    for(const g of(c.groups||[])){if(g.style)this._grpPanelEls[g.id]=this.shadowRoot.querySelector('[data-grp-panel="'+g.id+'"]');}
+    for(const g of(c.groups||[])){if(g.style)this._grpPanelEls[g.id]=this.shadowRoot.querySelector('[data-grp-panel="'+escSel(g.id)+'"]');}
     this._zoneEls={};
     for(const z of(c.zones||[])){
-      const el=this.shadowRoot.querySelector('[data-z="'+z.id+'"]');
+      const el=this.shadowRoot.querySelector('[data-z="'+escSel(z.id)+'"]');
       if(!el)continue;this._zoneEls[z.id]=el;
       if(z.tap_action||z.hold_action||z.double_tap_action)
         this._addZoneListeners(el,z.tap_action,z.hold_action,z.double_tap_action,z.hold_delay);
@@ -775,21 +828,21 @@ class RoomOverlayCard extends HTMLElement{
     }
     this._biconEls={};this._blabelEls={};this._bcontEls={};
     for(const b of(c.badges||[])){
-      this._biconEls[b.id]=this.shadowRoot.querySelector('[data-bi="'+b.id+'"]');
-      this._blabelEls[b.id]=this.shadowRoot.querySelector('[data-bl="'+b.id+'"]');
-      const bel=this.shadowRoot.querySelector('[data-b="'+b.id+'"]');
+      this._biconEls[b.id]=this.shadowRoot.querySelector('[data-bi="'+escSel(b.id)+'"]');
+      this._blabelEls[b.id]=this.shadowRoot.querySelector('[data-bl="'+escSel(b.id)+'"]');
+      const bel=this.shadowRoot.querySelector('[data-b="'+escSel(b.id)+'"]');
       this._bcontEls[b.id]=bel;
       if(bel&&b.tap_action){bel.addEventListener('click',e=>this._exec(b.tap_action,e));bel.addEventListener('touchend',e=>this._exec(b.tap_action,e));}
     }
     this._icoEls={};
     for(const ico of(c.icons||[])){
-      const el=this.shadowRoot.querySelector('[data-ico="'+ico.id+'"]');
+      const el=this.shadowRoot.querySelector('[data-ico="'+escSel(ico.id)+'"]');
       if(!el)continue;this._icoEls[ico.id]=el;
       if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
     this._lblEls={};this._sortedLblGrads={};
     for(const lbl of(c.labels||[])){
-      this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+lbl.id+'"]');
+      this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+escSel(lbl.id)+'"]');
       if(lbl.color_gradient)this._sortedLblGrads[lbl.id]=lbl.color_gradient.slice().sort((a,b)=>a.value-b.value);
       const lel=this._lblEls[lbl.id];
       if(lel&&(lbl.tap_action||lbl.hold_action||lbl.double_tap_action)){
@@ -799,7 +852,7 @@ class RoomOverlayCard extends HTMLElement{
       }
     }
     this._sortedBmFg=c.brightness_model?.filter_gradient?.length?c.brightness_model.filter_gradient.slice().sort((a,b)=>a.value-b.value):null;
-    this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).map(b=>tApply(b,_tier)).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+g.id+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+bg.id+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
+    this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).map(b=>tApply(b,_tier)).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+escSel(g.id)+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+escSel(bg.id)+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
     // Gauges with actions become interactive (default stays pointer-events: none)
     for(const g of[...(c.gauges||[]),...this._blindGaugeCfgs]){
       const gel=this._gaugeEls[g.id];
@@ -820,6 +873,7 @@ class RoomOverlayCard extends HTMLElement{
       if(tm)cont.title='[element] '+el.id;
       const self=this,elId=el.id;
       const wrap=makeHACard(el.card,function(cardEl){
+        if(self._renderGen!==_gen)return; // stale render
         self._cardEls[elId]=cardEl;
         if(self._hass)try{cardEl.hass=self._hass;}catch(_){}
       });
@@ -894,7 +948,7 @@ class RoomOverlayCard extends HTMLElement{
             const _urlPath=_parts[0]==='lovelace'?null:(_parts[0]||null);
             _callWS({type:'lovelace/config',url_path:_urlPath})
               .then(function(lc){
-                const nc=JSON.parse(JSON.stringify(lc));
+                const nc=rocClone(lc);
                 const key=cfgKey(self._config);
                 // Search the WHOLE dashboard (every view + section + nesting),
                 // not just the URL's view — navigation/room switches make the URL
@@ -942,7 +996,7 @@ class RoomOverlayCard extends HTMLElement{
         const el=this._zoneEls[z.id];if(!el)continue;
         el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const zc=this._roomArr(nc,'zones').find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;}
           _dpFire(nc);this._update();
         });
@@ -951,7 +1005,7 @@ class RoomOverlayCard extends HTMLElement{
         const el=this._icoEls[ico.id];if(!el)continue;
         el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const ic=this._roomArr(nc,'icons').find(x=>x.id===ico.id);if(ic){ic.top=top;ic.left=left;}
           _dpFire(nc);this._update();
         });
@@ -960,7 +1014,7 @@ class RoomOverlayCard extends HTMLElement{
         const el=this._lblEls[lbl.id];if(!el)continue;
         el.style.pointerEvents='auto';el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const lc=this._roomArr(nc,'labels').find(x=>x.id===lbl.id);if(lc){lc.top=top;lc.left=left;}
           _dpFire(nc);this._update();
         });
@@ -969,7 +1023,7 @@ class RoomOverlayCard extends HTMLElement{
       for(const z of(c.zones||[])){
         const el=this._zoneEls[z.id];if(!el)continue;
         this._makeResizable(el,(top,left,width,height)=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const zc=this._roomArr(nc,'zones').find(x=>x.id===z.id);if(zc){zc.top=top;zc.left=left;zc.width=width;zc.height=height;}
           _dpFire(nc);this._update();
         });
@@ -977,7 +1031,7 @@ class RoomOverlayCard extends HTMLElement{
       for(const elCfg of(c.elements||[])){
         const cont=this._contEls[elCfg.id];if(!cont)continue;
         this._makeResizable(cont,(top,left,width,height)=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const ec=this._roomArr(nc,'elements').find(x=>x.id===elCfg.id);if(ec){ec.top=top;ec.left=left;ec.width=width;ec.height=height;}
           _dpFire(nc);this._update();
         });
@@ -985,7 +1039,7 @@ class RoomOverlayCard extends HTMLElement{
       for(const g of(c.gauges||[])){
         const el=this._gaugeEls[g.id];if(!el)continue;
         this._makeResizable(el,(top,left,width,height)=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const gc=this._roomArr(nc,'gauges').find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;gc.width=width;gc.height=height;}
           _dpFire(nc);this._update();
         });
@@ -1017,7 +1071,7 @@ class RoomOverlayCard extends HTMLElement{
         el.style.top=top.toFixed(1)+'%';el.style.left=left.toFixed(1)+'%';
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
-          const nc=JSON.parse(JSON.stringify(this._config));
+          const nc=rocClone(this._config);
           const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):null;
           const item=(arr||[]).find(x=>x.id===id);
           if(item){item.top=el.style.top;item.left=el.style.left;}
@@ -1079,7 +1133,7 @@ class RoomOverlayCard extends HTMLElement{
           _dwBox.remove();_dwBox=null;
           _dwJustDrew=true;setTimeout(function(){_dwJustDrew=false;},300);
           if(w<2||h<2)return; // too small — ignore accidental drags
-          const nc=JSON.parse(JSON.stringify(drawSelf._config));
+          const nc=rocClone(drawSelf._config);
           const dwZones=drawSelf._roomArr(nc,'zones');
           let n=dwZones.length+1,id='zone_'+n;
           while(dwZones.some(function(z){return z.id===id;})){n++;id='zone_'+n;}
@@ -1117,7 +1171,11 @@ class RoomOverlayCard extends HTMLElement{
       this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutStage();if(self._hass&&self._visible)self._update();}});
       this._ro.observe(this);
     }
-    const _ex=this._extractEntities(this._config);
+    // Change detection: the ACTIVE room (merged view) drives full updates;
+    // entities that only affect nav thumbnails/chips go into a cheaper
+    // nav-only set (see _schedule) so busy sensors in other rooms don't
+    // re-run the whole update pass.
+    const _ex=this._extractEntities(c);
     const _reCfg=cAll.room_entity;
     if(typeof _reCfg==='string')_ex.ids.add(_reCfg);
     else if(_reCfg&&typeof _reCfg==='object'){
@@ -1125,9 +1183,16 @@ class RoomOverlayCard extends HTMLElement{
       for(const k in(_reCfg.by_user||{}))_ex.ids.add(_reCfg.by_user[k]);
       for(const k in(_reCfg.by_browser||{}))_ex.ids.add(_reCfg.by_browser[k]);
     }
-    for(const ch of this._navChipEls)if(ch.entity)_ex.ids.add(ch.entity);
+    const _navEx={ids:new Set(),attrs:new Set()};
+    if(Array.isArray(cAll.rooms))for(let _ri=0;_ri<cAll.rooms.length;_ri++){
+      if(_ri===this._roomIdx)continue;
+      const _rfc=cAll.rooms[_ri]&&cAll.rooms[_ri].filter_conditions;
+      if(_rfc)this._extractEntities(_rfc,_navEx.ids,_navEx.attrs);
+    }
+    for(const ch of this._navChipEls)if(ch.entity)_navEx.ids.add(ch.entity);
     this._relevantEntities=[..._ex.ids];
-    this._relevantAttrSources=[...this._extractAttrSources(this._config),...[..._ex.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};})];
+    this._navEntities=[..._navEx.ids].filter(id=>!_ex.ids.has(id));
+    this._relevantAttrSources=[...this._extractAttrSources(c),...[..._ex.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};})];
     this._prevStates={};
     this._rendered=true;
     this._preloadImages();
@@ -1138,7 +1203,7 @@ class RoomOverlayCard extends HTMLElement{
       if(d.key!==cfgKey(hlSelf._config))return;
       const pre={zone:'[data-z="',icon:'[data-ico="',label:'[data-lbl="',gauge:'[data-gauge="',badge:'[data-b="',element:'[data-el="',overlay:'[data-ov="'}[d.kind];
       if(!pre)return;
-      const el=hlSelf.shadowRoot.querySelector(pre+d.id+'"]');
+      const el=hlSelf.shadowRoot.querySelector(pre+escSel(d.id)+'"]');
       if(!el)return;
       const po=el.style.outline,poo=el.style.outlineOffset;
       el.style.outline='3px solid var(--primary-color,#03a9f4)';el.style.outlineOffset='2px';
@@ -1353,7 +1418,9 @@ class RoomOverlayCard extends HTMLElement{
 
   _startCamera(){
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
-    const c=this._config;if(!c.base_camera)return;
+    if(this._config&&this._config._roc_ghost)return; // swipe ghosts live <0.5 s — no camera churn
+    // base_camera / camera_refresh are room-scoped keys → use the merged room view
+    const c=this._roomCfg||this._config;if(!c||!c.base_camera)return;
     const iv=Math.max(2,c.camera_refresh??10)*1000;
     const self=this;
     const tick=function(){
@@ -1382,7 +1449,7 @@ class RoomOverlayCard extends HTMLElement{
 
   _setupTemplates(){
     const c=this._config,self=this;
-    if(!this._hass||!this._hass.connection)return;
+    if(!this._hass||!this._hass.connection||c._roc_ghost)return;
     const sub=function(tpl,cb){
       try{
         const p=self._hass.connection.subscribeMessage(function(msg){cb(msg?msg.result:undefined);},{type:'render_template',template:tpl});
@@ -1571,7 +1638,7 @@ class RoomOverlayCard extends HTMLElement{
     wrap.addEventListener('pointercancel',function(){
       if(prev){prev.remove();prev=null;}
       const ct=content();if(ct){ct.style.transition='';ct.style.transform='';}
-      active=false;engaged=false;self._roomDragActive=false;self._lastRoomDragEnd=Date.now();
+      active=false;engaged=false;moved=false;self._roomDragActive=false;self._lastRoomDragEnd=Date.now();
     });
     // Swallow the click that follows a drag (capture phase beats zone handlers)
     wrap.addEventListener('click',function(e){if(moved){moved=false;e.stopImmediatePropagation();e.preventDefault();}},true);
@@ -1588,9 +1655,10 @@ class RoomOverlayCard extends HTMLElement{
     prevEl.style.backgroundImage='';
     try{
       const gc=document.createElement('room-overlay-card');
-      const gcfg=JSON.parse(JSON.stringify(cAll));
+      const gcfg=rocClone(cAll);
       gcfg.follow_mode='manual';                              // no presence jumps in the ghost
       gcfg._roc_preview=true;                                 // suppress Save button etc.
+      gcfg._roc_ghost=true;                                   // skip template subscriptions & camera timers (<0.5 s lifetime)
       gcfg.test_mode=false;
       gcfg.nav=Object.assign({},gcfg.nav||{},{style:'none'}); // the real card owns the nav strip
       delete gcfg.cards_above;delete gcfg.cards_below;        // keep the preview to the image box…
@@ -1672,6 +1740,27 @@ class RoomOverlayCard extends HTMLElement{
     fill.className='zslider-fill';
     fill.style.cssText='position:absolute;pointer-events:none;background:'+(sl.color||'rgba(255,255,255,0.28)')+';opacity:0;transition:opacity .2s;'+(horiz?'left:0;top:0;bottom:0;width:0%;':'left:0;right:0;bottom:0;height:0%;');
     el.appendChild(fill);
+    // Value bubble — precise readout while dragging
+    const bub=document.createElement('div');
+    bub.className='zslider-bubble';
+    bub.style.cssText='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;background:rgba(0,0,0,0.78);color:#fff;font-family:monospace;font-size:12px;font-weight:600;padding:3px 9px;border-radius:10px;opacity:0;transition:opacity .15s;white-space:nowrap;z-index:5;';
+    el.appendChild(bub);
+    // min/max: explicit slider config → entity attributes (climate min_temp/max_temp,
+    // number min/max) → generic 0–100. Keeps climate sliders in a sane range.
+    const _range=function(){
+      const dom=sl.entity.split('.')[0];
+      const attr=(self._hass&&self._hass.states[sl.entity]&&self._hass.states[sl.entity].attributes)||{};
+      if(dom==='climate')return[sl.min??attr.min_temp??7,sl.max??attr.max_temp??35];
+      if(dom==='number'||dom==='input_number')return[sl.min??attr.min??0,sl.max??attr.max??100];
+      return[sl.min??0,sl.max??100];
+    };
+    const _fmtVal=function(p){
+      const dom=sl.entity.split('.')[0];
+      if(dom==='light'||dom==='cover'||dom==='fan'||dom==='media_player')return Math.round(p*100)+' %';
+      const r=_range();
+      if(dom==='climate')return(Math.round((r[0]+p*(r[1]-r[0]))*2)/2)+' °';
+      return String(Math.round((r[0]+p*(r[1]-r[0]))*100)/100);
+    };
     let active=false,moved=false,pct=0,sx=0,sy=0,lastSent=0;
     const calc=function(ev){
       const r=el.getBoundingClientRect();
@@ -1682,7 +1771,7 @@ class RoomOverlayCard extends HTMLElement{
     const apply=function(p){
       const h=self._hass;if(!h)return;
       const ent=sl.entity,dom=ent.split('.')[0];
-      const mn=sl.min??0,mx=sl.max??100;
+      const _r=_range(),mn=_r[0],mx=_r[1];
       if(dom==='light')h.callService('light','turn_on',{entity_id:ent,brightness_pct:Math.round(p*100)});
       else if(dom==='cover')h.callService('cover','set_cover_position',{entity_id:ent,position:Math.round(p*100)});
       else if(dom==='fan')h.callService('fan','set_percentage',{entity_id:ent,percentage:Math.round(p*100)});
@@ -1704,15 +1793,16 @@ class RoomOverlayCard extends HTMLElement{
       fill.style.opacity='1';
       if(horiz)fill.style.width=(pct*100).toFixed(1)+'%';
       else fill.style.height=(pct*100).toFixed(1)+'%';
+      bub.textContent=_fmtVal(pct);bub.style.opacity='1';
       if(sl.live){const now=Date.now();if(now-lastSent>250){lastSent=now;apply(pct);}}
     });
     el.addEventListener('pointerup',function(e){
       if(!active)return;
       active=false;
       if(moved){el._rocSlid=true;e.stopPropagation();apply(pct);setTimeout(function(){el._rocSlid=false;},400);}
-      setTimeout(function(){fill.style.opacity='0';},250);
+      setTimeout(function(){fill.style.opacity='0';bub.style.opacity='0';},250);
     });
-    el.addEventListener('pointercancel',function(){active=false;fill.style.opacity='0';});
+    el.addEventListener('pointercancel',function(){active=false;fill.style.opacity='0';bub.style.opacity='0';});
   }
 
   getGridOptions(){
@@ -1739,7 +1829,10 @@ class RoomOverlayCard extends HTMLElement{
       h.className='roc-rh';
       h.style.cssText='position:absolute;'+hd.p+';width:10px;height:10px;background:var(--primary-color,#03a9f4);border:2px solid #fff;border-radius:2px;z-index:1000;cursor:'+hd.c+';box-sizing:border-box;pointer-events:auto;display:none;';
       el.appendChild(h);
-      h.addEventListener('mousedown',function(e){
+      h.style.touchAction='none'; // Pointer Events also cover touch (tablet resize)
+      h.addEventListener('mousedown',function(e){e.stopPropagation();e.preventDefault();}); // keep the host's drag handlers quiet
+      h.addEventListener('touchstart',function(e){e.stopPropagation();},{passive:true});
+      h.addEventListener('pointerdown',function(e){
         e.stopPropagation();e.preventDefault();
         const cont=self.shadowRoot.querySelector('.content');if(!cont)return;
         const rect=cont.getBoundingClientRect();
@@ -1752,8 +1845,8 @@ class RoomOverlayCard extends HTMLElement{
           if(hd.w!==0){const nw=Math.max(2,snap(sw+hd.w*dx));el.style.width=nw.toFixed(1)+'%';if(hd.ml)el.style.left=snap(sl+dx).toFixed(1)+'%';}
           if(hd.h!==0){const nh=Math.max(2,snap(sh+hd.h*dy));el.style.height=nh.toFixed(1)+'%';if(hd.mt)el.style.top=snap(st+dy).toFixed(1)+'%';}
         }
-        function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);onResize(el.style.top,el.style.left,el.style.width,el.style.height);}
-        document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
+        function onUp(){document.removeEventListener('pointermove',onMove);document.removeEventListener('pointerup',onUp);document.removeEventListener('pointercancel',onUp);onResize(el.style.top,el.style.left,el.style.width,el.style.height);}
+        document.addEventListener('pointermove',onMove);document.addEventListener('pointerup',onUp);document.addEventListener('pointercancel',onUp);
       });
     });
   }
@@ -1861,7 +1954,7 @@ class RoomOverlayCard extends HTMLElement{
           if(bc.condition===undefined){_bimg=bc.image;continue;}
           if(evalCond(bc.condition,s)){_bimg=bc.image;break;}
         }
-        if(_bimg){const _bbg='url(\''+_bimg+'\')';if(this._baseEl.style.backgroundImage!==_bbg)this._baseEl.style.backgroundImage=_bbg;}
+        if(_bimg){const _bbg='url(\''+escUrl(_bimg)+'\')';if(this._baseEl.style.backgroundImage!==_bbg)this._baseEl.style.backgroundImage=_bbg;}
       }
     }
     for(const ov of(c.overlays||[])){
@@ -1871,7 +1964,7 @@ class RoomOverlayCard extends HTMLElement{
       if(!gShow)continue;
       if(ov.visible_template!==undefined)setSt(el,'display',(this._tmplVis['o:'+ov.id]??true)?'':'none');
       const img=this._ovImg(ov);
-      if(img){const bg='url(\''+img+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
+      if(img){const bg='url(\''+escUrl(img)+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
       const rawOp=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
       const showOp=flipped?String(rawOp>0.5?0:1):String(rawOp);if(parseFloat(showOp)>0&&ov.animation){el.style.animation='roc-'+ov.animation+' '+(ov.animation==='blink'?'1s step-end':'2s ease-in-out')+' infinite';el.style.opacity='';}else{el.style.animation='none';el.style.opacity=showOp;}
       let _ovF=ov.conditions?.filter?resolveVal(ov.conditions.filter,s,'none'):'none';
@@ -2007,7 +2100,18 @@ class RoomOverlayCard extends HTMLElement{
       }
       else{const _go=g.orientation||'vertical';const _pv=(Math.round(pct*1000)/10)+'%';if(_go==='horizontal'||_go==='right')setSt(fill,'width',_pv);else setSt(fill,'height',_pv);if(g.color_gradient)setSt(fill,'background',lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val,!!this._sortedGrads[g.id]));else if(g.color)setSt(fill,'background',Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color);}}
     }
-    // Nav thumbnails — live filters + sensor chips
+    this._updateNav();
+    if(this._relevantEntities){
+      for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
+      if(this._relevantAttrSources)for(const a of this._relevantAttrSources)this._prevStates[a.entity+'.'+a.attr]=s[a.entity]?.attributes[a.attr];
+    }
+  }
+
+  // Nav thumbnails — live filters + sensor chips. Callable standalone (via
+  // _schedule(true)) for state changes that only affect other rooms' thumbs.
+  _updateNav(){
+    if(!this._hass||!this._rendered)return;
+    const s=this._hass.states,cAll=this._config;
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length){
       for(let ri=0;ri<cAll.rooms.length;ri++){
         const tEl=this._navThumbEls[ri];if(!tEl)continue;
@@ -2025,10 +2129,7 @@ class RoomOverlayCard extends HTMLElement{
         else if(ch.cfg.color)setSt(ch.el,'color',ch.cfg.color);
       }
     }
-    if(this._relevantEntities){
-      for(const id of this._relevantEntities)this._prevStates[id]=s[id]?.state;
-      if(this._relevantAttrSources)for(const a of this._relevantAttrSources)this._prevStates[a.entity+'.'+a.attr]=s[a.entity]?.attributes[a.attr];
-    }
+    if(this._navEntities)for(const id of this._navEntities)this._prevStates[id]=s[id]?.state;
   }
 
   _ovImg(ov){
@@ -2059,7 +2160,7 @@ class RoomOverlayCard extends HTMLElement{
     }
     if(this._config.haptic!==false)try{window.dispatchEvent(new CustomEvent('haptic',{detail:'light'}));}catch(_){}
     switch(a.action){
-      case'navigate':{const p=a.navigation_path||a.path;if(p){history.pushState(null,'',p);window.dispatchEvent(new PopStateEvent('popstate'));}}break;
+      case'navigate':{const p=a.navigation_path||a.path;if(p){history.pushState(null,'',p);const _lc=new Event('location-changed',{bubbles:true,composed:true});_lc.detail={replace:false};window.dispatchEvent(_lc);window.dispatchEvent(new PopStateEvent('popstate'));}}break;
       case'url':{const u=a.url_path||a.url;if(u)window.open(u,a.new_tab===false?'_self':'_blank');}break;
       case'more-info':if(a.entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:a.entity}}));break;
       case'perform-action':
@@ -2172,6 +2273,7 @@ function _yParseScalar(s){
     const q=s[0];s=s.slice(1,-1);
     return q==="'"?s.replace(/''/g,"'"):s.replace(/\\"/g,'"');
   }
+  if(/^\{[{%]/.test(s))return s; // unquoted Jinja template — keep as a plain string
   if(s==='null'||s==='~')return null;
   if(s==='true')return true;
   if(s==='false')return false;
@@ -2287,7 +2389,18 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
+
+  // Entity datalist options — cached; rebuilding ~2k <option> strings on every
+  // editor re-render is measurable with large state machines
+  _dlOptions(){
+    const h=this._hass;if(!h)return'';
+    const ids=Object.keys(h.states);
+    if(this._dlCache&&this._dlCache.n===ids.length)return this._dlCache.s;
+    const s=ids.sort().map(function(id){return'<option value="'+id+'">';}).join('');
+    this._dlCache={n:ids.length,s:s};
+    return s;
+  }
 
   // Active room view for editing (the room whose sections are shown)
   _roomView(){
@@ -2367,7 +2480,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(this._prevCard)try{this._prevCard.hass=h;}catch(_){}
     const dl=this.querySelector('#roc-entities');
     if(dl&&!dl.hasChildNodes())
-      dl.innerHTML=Object.keys(h.states).sort().map(function(id){return'<option value="'+id+'">';}).join('');
+      dl.innerHTML=this._dlOptions();
   }
 
   // Interactive preview inside the editor — a real card instance with
@@ -2378,7 +2491,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(!host||!this._prevOn)return;
     try{
       const el=document.createElement('room-overlay-card');
-      const cfg=JSON.parse(JSON.stringify(this._config));
+      const cfg=rocClone(this._config);
       cfg.test_mode=true;cfg._roc_preview=true;
       delete cfg.url_sync; // editor preview must not hijack the dashboard URL
       const _multi=Array.isArray(cfg.rooms)&&cfg.rooms.length>0;
@@ -2476,8 +2589,9 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(_lav==='true'||_lav==='on'||_lav==='yes'||_lav==='auto')c.lock_aspect=true;
     else if(_lav)c.lock_aspect=v('lock_aspect','').trim();
     else delete c.lock_aspect;
-    c.filter_transition=v('filter_transition','2s ease');
-    const tm=q('#test_mode');c.test_mode=tm?tm.checked:false;
+    const _ftV=v('filter_transition','2s ease');
+    if(_ftV&&_ftV!=='2s ease')c.filter_transition=_ftV;else delete c.filter_transition;
+    const tm=q('#test_mode');if(tm&&tm.checked)c.test_mode=true;else delete c.test_mode;
     const _taR=this._pYaml(q('#tap_action_yaml'));
     if(_taR.ok){if(_taR.val)tgt.tap_action=_taR.val;else delete tgt.tap_action;}
     const _caR=this._pYaml(q('#cards_above_yaml'));
@@ -2646,7 +2760,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const o=Object.assign({},ico);
       const idEl=q('[data-ico-id="'+i+'"]');if(idEl)o.id=idEl.value;
       const iconEl=q('[data-ico-icon="'+i+'"]');if(iconEl)o.icon=iconEl.value;
-      const sizeEl=q('[data-ico-size="'+i+'"]');if(sizeEl)o.size=sizeEl.value||'20px';
+      const sizeEl=q('[data-ico-size="'+i+'"]');if(sizeEl){const _sz=sizeEl.value.trim();if(_sz&&_sz!=='20px')o.size=_sz;else delete o.size;}
       const zEl=q('[data-ico-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value);
       const topEl=q('[data-ico-top="'+i+'"]');if(topEl)o.top=topEl.value;
       const lefEl=q('[data-ico-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
@@ -2705,8 +2819,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const hEl=q('[data-g-h="'+i+'"]');if(hEl)o.height=hEl.value;
       const entEl=q('[data-g-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
       const atEl=q('[data-g-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
-      const minEl=q('[data-g-min="'+i+'"]');if(minEl){const _gmn=parseFloat(minEl.value);o.min=isNaN(_gmn)?0:_gmn;}
-      const maxEl=q('[data-g-max="'+i+'"]');if(maxEl){const _gmx=parseFloat(maxEl.value);o.max=isNaN(_gmx)?100:_gmx;}const orientEl=q('[data-g-orient="'+i+'"]');if(orientEl&&orientEl.value&&orientEl.value!=='vertical')o.orientation=orientEl.value;else if(orientEl&&orientEl.value==='vertical')delete o.orientation;else delete o.orientation;
+      const minEl=q('[data-g-min="'+i+'"]');if(minEl){const _gmn=parseFloat(minEl.value);if(isNaN(_gmn)||_gmn===0)delete o.min;else o.min=_gmn;}
+      const maxEl=q('[data-g-max="'+i+'"]');if(maxEl){const _gmx=parseFloat(maxEl.value);if(isNaN(_gmx)||_gmx===100)delete o.max;else o.max=_gmx;}const orientEl=q('[data-g-orient="'+i+'"]');if(orientEl&&orientEl.value&&orientEl.value!=='vertical')o.orientation=orientEl.value;else if(orientEl&&orientEl.value==='vertical')delete o.orientation;else delete o.orientation;
       const yaR=self._pYaml(q('[data-g-yaml="'+i+'"]'));
       if(yaR.ok){
         const KEEP=['id','top','left','width','height','entity','attribute','min','max','color_gradient','animation','animation_color','alert_conditions','orientation','group'];
@@ -2739,8 +2853,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const zEl=q('[data-bl-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value)||6;else delete o.z_index;
       const entEl=q('[data-bl-entity="'+i+'"]');if(entEl)o.entity=entEl.value;
       const atEl=q('[data-bl-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
-      const minEl=q('[data-bl-min="'+i+'"]');if(minEl){const _bmn=parseFloat(minEl.value);o.min=isNaN(_bmn)?0:_bmn;}
-      const maxEl=q('[data-bl-max="'+i+'"]');if(maxEl){const _bmx=parseFloat(maxEl.value);o.max=isNaN(_bmx)?100:_bmx;}
+      const minEl=q('[data-bl-min="'+i+'"]');if(minEl){const _bmn=parseFloat(minEl.value);if(isNaN(_bmn)||_bmn===0)delete o.min;else o.min=_bmn;}
+      const maxEl=q('[data-bl-max="'+i+'"]');if(maxEl){const _bmx=parseFloat(maxEl.value);if(isNaN(_bmx)||_bmx===100)delete o.max;else o.max=_bmx;}
       const typeEl=q('[data-bl-type="'+i+'"]');if(typeEl)o.blind_type=typeEl.value;else o.blind_type='roller';
       const scEl=q('[data-bl-slat-color="'+i+'"]');if(scEl&&scEl.value.trim())o.slat_color=scEl.value.trim();else delete o.slat_color;
       const scntEl=q('[data-bl-slat-count="'+i+'"]');if(scntEl&&scntEl.value)o.slat_count=parseInt(scntEl.value,10)||6;else delete o.slat_count;
@@ -2809,6 +2923,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _usEl=q('#url-sync');
       if(_usEl){if(_usEl.checked){const _usk=v('url-sync-key','').trim();c.url_sync=_usk||true;}else delete c.url_sync;}
     }
+
+    // Prune empty per-room arrays — keeps saved YAML minimal
+    ['overlays','zones','badges','elements','icons','labels','gauges','blinds','groups','filter_conditions'].forEach(function(k){
+      if(Array.isArray(tgt[k])&&!tgt[k].length)delete tgt[k];
+    });
 
     return c;
   }
@@ -3472,7 +3591,7 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner))
       +_panel('responsive',respInner)
       +_panel('rooms',roomsInner);
-    const _dlOpts=this._hass?Object.keys(this._hass.states).sort().map(id=>'<option value="'+id+'">').join(''):'';
+    const _dlOpts=this._dlOptions();
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
       +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}.roc-ed.roc-hideadv .roc-adv{display:none;}</style>'
       +'<div class="roc-ed'+(this._showAdv?'':' roc-hideadv')+'" style="padding:8px;">'
@@ -4036,12 +4155,12 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     // Duplicate (clone) handlers
     function _cp(v,dflt){if(!v)return dflt||'3%';const n=parseFloat(v);return(!isNaN(n)&&String(v).trim().endsWith('%'))?Math.min(n+3,95).toFixed(1)+'%':v;}
-    this.querySelectorAll('[data-dup-ico]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupIco),c=self._collectConfig();const dA=A(c,'icons');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-lbl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupLbl),c=self._collectConfig();const dA=A(c,'labels');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-g]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupG),c=self._collectConfig();const dA=A(c,'gauges');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-bl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupBl),c=self._collectConfig();const dA=A(c,'blinds');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-el]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupEl),c=self._collectConfig();const dA=A(c,'elements');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
-    this.querySelectorAll('[data-dup-z]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupZ),c=self._collectConfig();const dA=A(c,'zones');if(!dA[i])return;const cl=JSON.parse(JSON.stringify(dA[i]));cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-ico]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupIco),c=self._collectConfig();const dA=A(c,'icons');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-lbl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupLbl),c=self._collectConfig();const dA=A(c,'labels');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-g]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupG),c=self._collectConfig();const dA=A(c,'gauges');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-bl]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupBl),c=self._collectConfig();const dA=A(c,'blinds');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-el]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupEl),c=self._collectConfig();const dA=A(c,'elements');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
+    this.querySelectorAll('[data-dup-z]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupZ),c=self._collectConfig();const dA=A(c,'zones');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
 
     // Group fields on elements
     this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp]').forEach(function(el){el.addEventListener('change',fire);});

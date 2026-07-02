@@ -156,7 +156,11 @@ recursion (guarded twice: `nav.style none` + `_roc_preview` never spawns minis).
 
 ## Future backlog (candidates, not committed)
 
-- Findings from **ANALYSIS_v3.0.6.md** (code/GUI/UX review) — fix batches 1–4 pending sign-off.
+- **ANALYSIS_v3.0.6.md** review: fix batches 1–4 ✅ shipped in **v3.0.7** (A3 declined).
+  Remaining open ideas from the report: E3 draw-to-create palette, E4 edge/center
+  snap guides, E5 editor list filter, E6 inline save-failure hint, E7 haptic on
+  hold-registered, E8 → superseded by the v3.1 mini-room vision, D7 editor
+  round-trip test harness.
 
 ## Maintenance (ongoing)
 

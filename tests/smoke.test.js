@@ -98,11 +98,25 @@ t('relTime hours',/2/.test(g.relTime(twoHrs,'en')));
 t('relTime invalid input',g.relTime('not-a-date','en')==='not-a-date');
 
 // ---- v1.5: mobile profiles, tint, kelvin ------------------------------------
+// (mApply removed in v3.0.7 — the legacy mobile block goes through tApply now)
 const mi={top:'10%',left:'20%',size:'20px',mobile:{top:'50%',size:'30px'}};
-const ma=g.mApply(mi,true);
-t('mApply active',ma.top==='50%'&&ma.size==='30px'&&ma.left==='20%');
-t('mApply inactive',g.mApply(mi,false).top==='10%');
-t('mApply no mobile key',g.mApply({top:'1%'},true).top==='1%');
+const ma=g.tApply(mi,'mobile');
+t('tApply legacy mobile active',ma.top==='50%'&&ma.size==='30px'&&ma.left==='20%');
+t('tApply null tier inactive',g.tApply(mi,null).top==='10%');
+t('tApply no mobile key',g.tApply({top:'1%'},'mobile').top==='1%');
+
+// ---- v3.0.7: rocRatio, escSel, Jinja YAML guard ------------------------------
+t('rocRatio W/H string',Math.abs(g.rocRatio('16/9')-16/9)<1e-9);
+t('rocRatio number',g.rocRatio(1.78)===1.78);
+t('rocRatio numeric string',g.rocRatio('1.5')===1.5);
+t('rocRatio invalid',g.rocRatio('abc')===null&&g.rocRatio('0/9')===null&&g.rocRatio(null)===null&&g.rocRatio('')===null);
+t('rocRatio negative',g.rocRatio(-2)===null);
+t('escSel plain id untouched',g.escSel('plain_id-1')==='plain_id-1');
+t('escSel escapes double quote',/\\/.test(g.escSel('a"b')));
+t('yaml Jinja scalar kept as string',g._yParseScalar("{{ states('sensor.x') == 'on' }}")==="{{ states('sensor.x') == 'on' }}");
+t('yaml Jinja statement kept as string',g._yParseScalar('{% if x %}1{% endif %}')==='{% if x %}1{% endif %}');
+t('yaml inline map still parses',JSON.stringify(g._yParseScalar('{a: 1}'))==='{"a":1}');
+t('yaml Jinja roundtrip via parse',(function(){const o=g._yParse('visible_template: {{ is_state(\'light.a\',\'on\') }}');return o&&o.visible_template==="{{ is_state('light.a','on') }}";})());
 
 // ---- v1.13: responsive tiers ------------------------------------------------
 t('rocTier mobile',g.rocTier(500,{})==='mobile');
