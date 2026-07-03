@@ -118,6 +118,15 @@ t('yaml Jinja statement kept as string',g._yParseScalar('{% if x %}1{% endif %}'
 t('yaml inline map still parses',JSON.stringify(g._yParseScalar('{a: 1}'))==='{"a":1}');
 t('yaml Jinja roundtrip via parse',(function(){const o=g._yParse('visible_template: {{ is_state(\'light.a\',\'on\') }}');return o&&o.visible_template==="{{ is_state('light.a','on') }}";})());
 
+// ---- v3.1.0: bmFilter (brightness model → CSS filter) ------------------------
+const bmStates={'sensor.lux':{state:'50',attributes:{}},'sun.sun':{state:'below_horizon',attributes:{}}};
+const bm={source:[{entity:'sensor.lux',min_input:0,max_input:100}],filter_gradient:[{value:0,filter:'brightness(0.4)'},{value:100,filter:'brightness(1)'}]};
+t('bmFilter null when model absent',g.bmFilter(null,bmStates)===null&&g.bmFilter({source:[]},bmStates)===null);
+t('bmFilter interpolates midpoint',g.bmFilter(bm,bmStates)==='brightness(0.7)');
+t('bmFilter none when no source matches',g.bmFilter({source:[{entity:'sensor.missing'}],filter_gradient:bm.filter_gradient},bmStates)==='none');
+t('bmFilter respects source condition',g.bmFilter({source:[{entity:'sensor.lux',condition:{entity:'sun.sun',state:'above_horizon'}}],filter_gradient:bm.filter_gradient},bmStates)==='none');
+t('bmFilter clamps below min',g.bmFilter({source:[{entity:'sensor.lux',min_input:60,max_input:160}],filter_gradient:bm.filter_gradient},bmStates)==='brightness(0.4)');
+
 // ---- v1.13: responsive tiers ------------------------------------------------
 t('rocTier mobile',g.rocTier(500,{})==='mobile');
 t('rocTier tablet',g.rocTier(800,{})==='tablet');

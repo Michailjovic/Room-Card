@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.1.0] – 2026-07-03
+
+### Added
+- **`nav.live: composite` — live mini-room thumbnails** (Phase 1 of the v3.1
+  mini-room vision). Nav thumbnails become true miniatures of each room: the
+  room's currently **active overlay images** are stacked over its base image
+  (top-most z on top), the **conditional base image** is resolved the same way
+  as on the main card, and the thumb filter now supports **`brightness_model`**
+  (smooth day/night) in addition to `filter_conditions`. Pure CSS background
+  compositing — no extra card instances, timers or template subscriptions.
+  - Binary approximation: an overlay shows when its opacity resolves > 0.
+  - Grouped (pop-up panel) and `visible_template`-driven overlays are skipped.
+  - Change detection extended: other rooms' overlay/base/brightness entities
+    (incl. attribute sources) feed the cheap nav-only refresh path from v3.0.7.
+  - Editor: new **Live thumbnails** select in *Rooms & menu → Navigation menu*.
+- Smoke tests for the extracted `bmFilter()` helper (brightness model → filter).
+
+### Changed
+- The main card's brightness-model filter computation was extracted into the
+  shared `bmFilter()` helper (behaviour unchanged).
+
+Phase 2 (`nav.live: full` — scaled real card instances with gauges/labels/blinds)
+stays on the roadmap.
+
+---
+
 ## [3.0.7] – 2026-07-02
 
 Full-code-review release — every change traces to a finding in `ANALYSIS_v3.0.6.md`.

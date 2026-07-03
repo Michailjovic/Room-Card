@@ -107,20 +107,21 @@ The card already contains both required building blocks: `_renderNeighbourPrevie
 and the editor's `_mountPreview` both create a full, non-interactive `room-overlay-card` instance
 pinned to a specific room. The feature generalizes that pattern into the nav strip.
 
-### Phase 1 — composite thumbnails (`nav.live: composite`) — cheap, ships first
+### Phase 1 — composite thumbnails (`nav.live: composite`) — ✅ SHIPPED in v3.1.0 (2026-07-03)
 
-Paint the room's *currently active* overlay images as stacked `background-image` layers inside
-the existing thumbnail div, and keep applying the room filter (already done today). Reuses
-`_ovImg()` + `resolveVal()`/`resolveFilter()` per thumbnail inside `_update()` — no extra card
-instances, no template subscriptions, no timers.
+Paints the room's *currently active* overlay images as stacked `background-image` layers inside
+the existing thumbnail div (top-most z first), resolves the conditional base image, and the thumb
+filter supports `brightness_model` (via the extracted `bmFilter()` helper) in addition to
+`filter_conditions`. Runs inside `_updateNav()` on the cheap nav-only update path — no extra card
+instances, no template subscriptions, no timers. Editor: *Rooms & menu → Live thumbnails*.
 
 | Aspect | Behaviour |
 |---|---|
-| Overlays | shown when opacity resolves > 0 (binary approximation of conditional opacity) |
-| Base filter | as today (`filter_conditions`; add `brightness_model` support via `lerpFilterGradient`) |
-| Blinds / gauges / labels / weather | **not** rendered in this phase |
-| Perf cost | ~zero — a few extra background layers per thumb, updated in the existing `_update()` pass |
-| Limits | `color_from` tint and per-overlay filters approximated or skipped |
+| Overlays | shown when opacity resolves > 0 (binary approximation) ✅ |
+| Base image | `base_image_conditions` resolved like the main card ✅ |
+| Base filter | `filter_conditions` + `brightness_model` ✅ |
+| Blinds / gauges / labels / weather | **not** rendered in this phase (→ Phase 2) |
+| Skipped | grouped (pop-up) overlays, `visible_template` overlays, `color_from` tint |
 
 ### Phase 2 — full live minis (`nav.live: full`)
 
