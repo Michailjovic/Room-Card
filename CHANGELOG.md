@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.2.2] – 2026-07-08
+
+### Fixed
+- **HACS validation failed — repository had no `LICENSE` file.** Added the MIT
+  `LICENSE` file in the repo root (the licence was already declared in
+  `package.json` and the source header, but HACS validates the actual file).
+
+### Changed
+- **Editor *Elements* tab — readability pass.** Section headers are now sorted
+  alphabetically, each carries a Material icon, and the title/description are
+  split into a bold name + muted subtitle with the item count shown as a pill
+  badge (greyed out when the section is empty). The *Image* tab sections got the
+  same treatment.
+
+---
+
 ## [3.2.1] – 2026-07-08
 
 Follow-ups to the `light_controls` feature shipped in 3.2.0.

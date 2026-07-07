@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.2.1 — MIT License
+ * room-overlay-card v3.2.2 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.2.1';
+const ROC_VERSION='3.2.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -3452,12 +3452,19 @@ class RoomOverlayCardEditor extends HTMLElement{
     const firstRender=open.size===0;
 
     const tapYaml=cR.tap_action?_yaml.s(cR.tap_action):'';
-    const sec=function(id,label,count,inner){
+    const sec=function(id,label,count,inner,icon){
       const isOpen=open.has(id)||(firstRender&&id==='basic');
+      const _d=label.indexOf(' — ');
+      const _nm=_d>=0?label.slice(0,_d):label;
+      const _ds=_d>=0?label.slice(_d+3):'';
+      const _badge=count!==undefined?'<span style="min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:'+(count?'var(--primary-color)':'var(--divider-color)')+';color:'+(count?'#fff':'var(--secondary-text-color)')+';font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;">'+count+'</span>':'';
       return '<details data-panel="'+id+'"'+(isOpen?' open':'')+' style="margin-bottom:8px;">'
-        +'<summary style="cursor:pointer;padding:10px 12px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;justify-content:space-between;">'
-        +'<span>'+label+(count!==undefined?' ('+count+')':'')+'</span>'
-        +'<ha-icon icon="mdi:chevron-down" style="--mdc-icon-size:18px;"></ha-icon>'
+        +'<summary style="cursor:pointer;padding:10px 12px;background:var(--secondary-background-color);border-radius:6px;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;">'
+        +'<span style="display:flex;align-items:center;gap:10px;min-width:0;">'
+        +'<ha-icon icon="'+(icon||'mdi:shape-outline')+'" style="--mdc-icon-size:20px;color:var(--primary-color);flex:none;"></ha-icon>'
+        +'<span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span style="font-size:13px;font-weight:600;color:var(--primary-text-color);">'+_nm+'</span>'+(_ds?'<span style="font-size:12px;color:var(--secondary-text-color);margin-left:6px;">'+_ds+'</span>':'')+'</span>'
+        +'</span>'
+        +'<span style="display:flex;align-items:center;gap:8px;flex:none;">'+_badge+'<ha-icon icon="mdi:chevron-down" style="--mdc-icon-size:20px;color:var(--secondary-text-color);"></ha-icon></span>'
         +'</summary>'
         +'<div style="padding:12px;border:1px solid var(--divider-color);border-top:none;border-radius:0 0 6px 6px;margin-top:-1px;">'+inner+'</div>'
         +'</details>';
@@ -3769,19 +3776,19 @@ class RoomOverlayCardEditor extends HTMLElement{
       +_tabBtn('rooms','mdi:floor-plan','Rooms &amp; menu')
       +'</div>'
       +_panel('image',
-          sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner)
-         +sec('filters','Image filters'+(_fMode==='smooth'?' — smooth':''),_fCount,filtCombined))
+          sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner,'mdi:image-outline')
+         +sec('filters','Image filters'+(_fMode==='smooth'?' — smooth':''),_fCount,filtCombined,'mdi:brightness-6'))
       +_panel('elements',
-          sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner)
-         +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner)
-         +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner)
-         +sec('badges','Badges — pill chips',(cR.badges||[]).length,bInner)
-         +sec('gauges','Gauges — bar / radial meters',(cR.gauges||[]).length,gInner)
-         +sec('blinds','Blinds — window covers',(cR.blinds||[]).length,blInner)
-         +sec('lights','Light controls — sliders with lux ring',_lcEnts.length,lcInner)
-         +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
-         +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner)
-         +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner))
+          sec('badges','Badges — pill chips',(cR.badges||[]).length,bInner,'mdi:label-outline')
+         +sec('blinds','Blinds — window covers',(cR.blinds||[]).length,blInner,'mdi:blinds-horizontal')
+         +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner,'mdi:card-bulleted-outline')
+         +sec('gauges','Gauges — bar / radial meters',(cR.gauges||[]).length,gInner,'mdi:gauge')
+         +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner,'mdi:dock-window')
+         +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner,'mdi:star-four-points-outline')
+         +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner,'mdi:format-text')
+         +sec('lights','Light controls — sliders with lux ring',_lcEnts.length,lcInner,'mdi:tune-vertical')
+         +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner,'mdi:layers-outline')
+         +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner,'mdi:gesture-tap'))
       +_panel('responsive',respInner)
       +_panel('rooms',roomsInner);
     const _dlOpts=this._dlOptions();
