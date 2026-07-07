@@ -187,5 +187,21 @@ const cs3=g.coverStage(1600,900,1600/900);
 t('coverStage exact: no offset',Math.abs(cs3.left)<1e-6&&Math.abs(cs3.top)<1e-6&&Math.round(cs3.w)===1600&&Math.round(cs3.h)===900);
 t('coverStage guards bad input',g.coverStage(0,100,1)===null&&g.coverStage(100,100,0)===null&&g.coverStage(100,100,-1)===null);
 
+// ---- v3.2.0: light_controls lux ring ----------------------------------------
+t('rgbToHsl blue',(function(){const h=g.rgbToHsl(38,26,102);return Math.round(h[0])===249&&Math.round(h[1])===59&&Math.round(h[2])===25;})());
+t('toHslParts hex',(function(){const h=g.toHslParts('#f4c025');return Math.round(h[0])===45&&Math.round(h[1])===90&&Math.round(h[2])===55;})());
+t('toHslParts passes hsl through',(function(){const h=g.toHslParts('hsl(200,50%,20%)');return h[0]===200&&h[1]===50&&h[2]===20;})());
+t('toHslParts null on garbage',g.toHslParts('not-a-color')===null&&g.toHslParts(null)===null);
+t('lcBorderColor low anchor (lux 0)',g.lcBorderColor(0,{lux_max:50})==='hsl(249.5,59.4%,25.1%)');
+t('lcBorderColor midpoint (lux 25)',g.lcBorderColor(25,{lux_max:50})==='hsl(147.2,74.9%,40.1%)');
+t('lcBorderColor high anchor (lux 50)',g.lcBorderColor(50,{lux_max:50})==='hsl(44.9,90.4%,55.1%)');
+t('lcBorderColor clamps above max',g.lcBorderColor(999,{lux_max:50})===g.lcBorderColor(50,{lux_max:50}));
+t('lcBorderColor clamps below 0',g.lcBorderColor(-10,{lux_max:50})===g.lcBorderColor(0,{lux_max:50}));
+t('lcBorderColor custom anchors',g.lcBorderColor(50,{lux_max:100,color_low:'hsl(200,50%,20%)',color_high:'#ff0000'})==='hsl(100,75%,35%)');
+t('lcBorderColor bad/missing lux is low anchor',g.lcBorderColor(undefined,{lux_max:50})===g.lcBorderColor(0,{lux_max:50}));
+t('lcNormEnts strings + objects',JSON.stringify(g.lcNormEnts({entities:['light.a',{entity:'light.b',name:'B'}]}))==='[{"entity":"light.a"},{"entity":"light.b","name":"B"}]');
+t('lcNormEnts drops entryless items',g.lcNormEnts({entities:[{name:'x'},null,'light.c']}).length===1);
+t('lcNormEnts empty/absent',g.lcNormEnts({}).length===0&&g.lcNormEnts(null).length===0);
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);

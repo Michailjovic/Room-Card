@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.2.0] – 2026-07-07
+
+### Added
+- **`light_controls` — GUI light sliders with a lux-driven border ring.** A new
+  room-scoped key renders a strip of `material-slider-card` sliders above the
+  image, one per light, whose border colour tracks a lux sensor: a smooth HSL
+  gradient between two configurable anchor colours (dark = low lux, bright =
+  high lux). This replaces the hand-written `card_mod` + Jinja template — the
+  ring colour is computed in JS and applied through the card's own CSS variables,
+  so it needs no `card_mod` and recomputes cheaply (one HSL calc, applied only
+  when the colour actually changes; the lux sensor rides the standard
+  change-detection path). Fully configurable from the editor: add/remove lights
+  (each with an optional name), columns, slider height, lux sensor, `lux_max`,
+  the two anchor colours and the off-state background.
+  - New editor section under the **Elements** tab: *Light controls*.
+  - Helpers `rgbToHsl`, `toHslParts`, `lcBorderColor`, `lcNormEnts`; the default
+    anchors reproduce the previous card_mod gradient (hsl 250→45) almost exactly.
+- Smoke tests for the light-controls colour maths and entity normalisation.
+
+---
+
 ## [3.1.0] – 2026-07-03
 
 ### Added

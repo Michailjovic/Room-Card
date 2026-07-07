@@ -569,6 +569,32 @@ In the GUI these live in the **Image** tab as *Cards above image* / *Cards below
 
 ---
 
+### Light controls (sliders with lux ring)
+
+A GUI-configurable strip of [`material-slider-card`](https://github.com/PRProd/lovelace-slider-button-card) sliders rendered above the image, one per light. Each slider's **border colour tracks a lux sensor**: a smooth gradient interpolated in HSL between two colours you pick — dark for low lux, bright for high lux. This replaces hand-written `card_mod` + Jinja templates; the ring colour is computed in JS and pushed through the card's own CSS variables (no `card_mod` dependency for the ring). Per room.
+
+```yaml
+light_controls:
+  entities:
+    - light.panel_bedroom_1
+    - entity: light.panel_bedroom_2
+      name: Middle            # optional per-slider name
+    - light.panel_bedroom_3
+  columns: 3                  # grid columns (default: number of lights)
+  height: 20                  # slider height in px (default 20)
+  lux_sensor: sensor.kitchen_illuminance
+  lux_max: 50                 # lux value that maps to the "bright" colour
+  color_low: "#261a66"        # border colour at 0 lux (dark)
+  color_high: "#f4c025"       # border colour at/above lux_max (bright)
+  bg_off: "#000000"           # slider background while the light is off
+```
+
+`color_low` / `color_high` accept any CSS colour (`#hex`, `rgb(...)`, `hsl(...)`); the gradient is interpolated in HSL so a blue→amber ramp travels through vivid hues rather than a muddy RGB midpoint. When a light is **on**, `material-slider-card`'s `colorize` takes over the fill with the light's real colour and brightness, so `bg_off` is only visible when the light is off.
+
+Requires the `material-slider-card` resource to be installed. In the GUI these live in the **Elements** tab under *Light controls*.
+
+---
+
 ### Camera background & weather effects
 
 ```yaml

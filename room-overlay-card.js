@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.1.0 — MIT License
+ * room-overlay-card v3.2.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.1.0';
+const ROC_VERSION='3.2.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -120,7 +120,7 @@ function tintFilter(rgb){
 }
 // ----- Multi-room helpers -----------------------------------------------------
 // Keys that live per-room; top-level values act as shared defaults for all rooms
-const ROOM_KEYS=['base_image','base_camera','camera_refresh','base_image_conditions','weather_overlay','filter_conditions','brightness_model','overlays','zones','badges','elements','icons','labels','gauges','blinds','groups','tap_action','cards_above','cards_below'];
+const ROOM_KEYS=['base_image','base_camera','camera_refresh','base_image_conditions','weather_overlay','filter_conditions','brightness_model','overlays','zones','badges','elements','icons','labels','gauges','blinds','groups','tap_action','cards_above','cards_below','light_controls'];
 function roomMerge(c,idx){
   if(!Array.isArray(c.rooms)||!c.rooms.length)return c;
   const i=Math.max(0,Math.min(idx||0,c.rooms.length-1));
@@ -183,6 +183,25 @@ function resolveFilterInverted(conds,states){
 }
 
 function parseCssColor(c){let m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);if(m)return[parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];m=c.match(/^#([0-9a-f]{6})$/i);if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];m=c.match(/^#([0-9a-f]{3})$/i);if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];return null;}
+
+// ----- Light-controls lux ring ------------------------------------------------
+// A material-slider-card strip whose border colour tracks a lux sensor: a smooth
+// gradient interpolated in HSL between two anchor colours (dark = low lux,
+// bright = high lux). HSL interpolation makes a blue->amber ramp travel through
+// vivid hues (like the hand-written card_mod template it replaces), not a muddy
+// RGB midpoint.
+function rgbToHsl(r,g,b){r/=255;g/=255;b/=255;const mx=Math.max(r,g,b),mn=Math.min(r,g,b);let h=0,s=0;const l=(mx+mn)/2;if(mx!==mn){const d=mx-mn;s=l>0.5?d/(2-mx-mn):d/(mx+mn);switch(mx){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;}h*=60;}return[h,s*100,l*100];}
+function toHslParts(c){if(c==null)return null;const m=String(c).match(/hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);if(m)return[parseFloat(m[1]),parseFloat(m[2]),parseFloat(m[3])];const rgb=parseCssColor(String(c));return rgb?rgbToHsl(rgb[0],rgb[1],rgb[2]):null;}
+const LC_DEF_LOW='#261a66',LC_DEF_HIGH='#f4c025',LC_DEF_BG='#000000';
+function lcBorderColor(lux,lc){
+  const max=Number(lc&&lc.lux_max)||50;
+  const t=Math.max(0,Math.min(1,(Number(lux)||0)/(max||1)));
+  const lo=toHslParts((lc&&lc.color_low)||LC_DEF_LOW)||[250,60,25];
+  const hi=toHslParts((lc&&lc.color_high)||LC_DEF_HIGH)||[45,90,55];
+  const h=lo[0]+(hi[0]-lo[0])*t,s=lo[1]+(hi[1]-lo[1])*t,l=lo[2]+(hi[2]-lo[2])*t;
+  return'hsl('+(Math.round(h*10)/10)+','+(Math.round(s*10)/10)+'%,'+(Math.round(l*10)/10)+'%)';
+}
+function lcNormEnts(lc){return(lc&&Array.isArray(lc.entities)?lc.entities:[]).map(function(e){return typeof e==='string'?{entity:e}:(e||{});}).filter(function(e){return e&&e.entity;});}
 
 function lerpFilterGradient(stops,pct,presorted){
   if(!stops||!stops.length)return 'none';
@@ -296,6 +315,7 @@ class RoomOverlayCard extends HTMLElement{
     this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
     this._selectedTM=null;this._tmKeyHandler=null;
+    this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;
@@ -344,6 +364,7 @@ class RoomOverlayCard extends HTMLElement{
     for(const k in this._cardEls){try{this._cardEls[k].hass=h;}catch(_){}}
     for(const el of(this._navCardEls||[]))try{el.hass=h;}catch(_){}
     for(const el of(this._stripCardEls||[]))try{el.hass=h;}catch(_){}
+    for(const o of(this._lcEls||[]))try{o.el.hass=h;}catch(_){}
     if(!this._visible)return;
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
@@ -701,6 +722,13 @@ class RoomOverlayCard extends HTMLElement{
     const _belowInner=_stripOne(c.cards_below,'data-below-card');
     const _aboveHtml=_aboveInner?'<div style="display:flex;flex-direction:column;gap:6px;padding:6px 6px 0;">'+_aboveInner+'</div>':'';
     const _belowHtml=_belowInner?'<div style="display:flex;flex-direction:column;gap:6px;padding:0 6px 6px;">'+_belowInner+'</div>':'';
+    // Light controls — material-slider-card strip with a lux-driven border ring.
+    // Sliders mount via card helpers (below); the border colour is set from JS
+    // through the card's own CSS variables — no card_mod / Jinja needed.
+    this._lcCfg=c.light_controls||null;
+    const _lcEnts=lcNormEnts(c.light_controls);
+    const _lcCols=(c.light_controls&&c.light_controls.columns)||_lcEnts.length||1;
+    const _lcHtml=_lcEnts.length?'<div class="roc-lc" style="display:grid;grid-template-columns:repeat('+_lcCols+',minmax(0,1fr));gap:6px;padding:6px 6px 0;">'+_lcEnts.map(function(e,i){return'<div data-lc-card="'+i+'" style="min-width:0;"></div>';}).join('')+'</div>':'';
 
     this._radialMeta={};
     const _allGaugesRC=[...(c.gauges||[]).map(g=>tApply(g,_tier)),...(c.blinds||[]).map(b=>tApply(b,_tier)).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';
@@ -723,7 +751,7 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+escA(g.id)+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="roc-main"'+_wrapStyle+'>'+_aboveHtml+'<div class="wrap"'+_wrapMax+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+_belowHtml+'</div>'+_flexPost+_navBot+'</ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}</style><ha-card>'+_navTop+_flexPre+'<div class="roc-main"'+_wrapStyle+'>'+_aboveHtml+_lcHtml+'<div class="wrap"'+_wrapMax+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+_belowHtml+'</div>'+_flexPost+_navBot+'</ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -804,6 +832,31 @@ class RoomOverlayCard extends HTMLElement{
     };
     _mountStrip(c.cards_above,'data-above-card');
     _mountStrip(c.cards_below,'data-below-card');
+    // Mount light-controls sliders (material-slider-card) + wire the lux ring
+    this._lcEls=[];this._lcPrevCol=null;
+    if(_lcEnts.length){
+      const lcSelf=this;
+      const _bgOff=(c.light_controls&&c.light_controls.bg_off)||LC_DEF_BG;
+      const _lcHgt=(c.light_controls&&c.light_controls.height!=null)?c.light_controls.height:20;
+      _lcEnts.forEach(function(e,i){
+        const host=lcSelf.shadowRoot.querySelector('[data-lc-card="'+i+'"]');
+        if(!host)return;
+        const cardCfg={type:'custom:material-slider-card',entity:e.entity,control_type:'light',colorize:true,height:_lcHgt,border_width:'2px',border_style:'solid'};
+        if(e.name)cardCfg.name=e.name;
+        const w=makeHACard(cardCfg,function(el){
+          if(lcSelf._renderGen!==_gen)return;
+          lcSelf._lcEls.push({el:el,entity:e.entity});
+          try{el.style.width='100%';el.style.setProperty('--bsc-background',_bgOff);}catch(_){}
+          lcSelf._injectLcStyle(el);
+          if(lcSelf._hass){try{el.hass=lcSelf._hass;}catch(_){}}
+          if(lcSelf._hass&&lcSelf._lcCfg){
+            const _lux=lcSelf._hass.states[lcSelf._lcCfg.lux_sensor]?.state;
+            try{el.style.setProperty('--bsc-border-color',lcBorderColor(_lux,lcSelf._lcCfg));}catch(_){}
+          }
+        });
+        if(w)host.appendChild(w);
+      });
+    }
     // ---- Finger-attached room drag (filmstrip feel) -------------------------
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&!tm){
       const wrapSw=this.shadowRoot.querySelector('.wrap');
@@ -1196,6 +1249,7 @@ class RoomOverlayCard extends HTMLElement{
     // nav-only set (see _schedule) so busy sensors in other rooms don't
     // re-run the whole update pass.
     const _ex=this._extractEntities(c);
+    if(c.light_controls&&c.light_controls.lux_sensor)_ex.ids.add(c.light_controls.lux_sensor);
     const _reCfg=cAll.room_entity;
     if(typeof _reCfg==='string')_ex.ids.add(_reCfg);
     else if(_reCfg&&typeof _reCfg==='object'){
@@ -1924,6 +1978,25 @@ class RoomOverlayCard extends HTMLElement{
     el.addEventListener('click',function(e){if(dragOccurred){e.stopImmediatePropagation();e.preventDefault();dragOccurred=false;}},true);
   }
 
+  // Inject the pill shape + border transition into the slider's own shadow root.
+  // Colours (--bsc-background / --bsc-border-color) are set inline on the host so
+  // they stay authoritative over this stylesheet and can update live.
+  _injectLcStyle(el){
+    if(!el)return;
+    const css=':host{--bsc-border-radius:999px;width:100%;}#container{border-radius:999px;width:100%;transition:border-color 0.6s ease-in-out;}';
+    const tryInject=function(n){
+      const sr=el.shadowRoot;
+      if(sr){
+        if(!sr.querySelector('style[data-roc-lc]')){
+          const st=document.createElement('style');st.setAttribute('data-roc-lc','');st.textContent=css;sr.appendChild(st);
+        }
+        return;
+      }
+      if(n<20)setTimeout(function(){tryInject(n+1);},50);
+    };
+    tryInject(0);
+  }
+
   _update(){
     if(!this._hass||!this._config||!this._rendered)return;
     const s=this._hass.states;
@@ -2116,6 +2189,14 @@ class RoomOverlayCard extends HTMLElement{
         }
       }
       else{const _go=g.orientation||'vertical';const _pv=(Math.round(pct*1000)/10)+'%';if(_go==='horizontal'||_go==='right')setSt(fill,'width',_pv);else setSt(fill,'height',_pv);if(g.color_gradient)setSt(fill,'background',lerpColorGradient(this._sortedGrads[g.id]||g.color_gradient,val,!!this._sortedGrads[g.id]));else if(g.color)setSt(fill,'background',Array.isArray(g.color)?resolveVal(g.color,s,'white'):g.color);}}
+    }
+    // Light-controls lux ring — cheap: one HSL computation, applied only on change
+    if(this._lcEls&&this._lcEls.length&&this._lcCfg){
+      const _col=lcBorderColor(s[this._lcCfg.lux_sensor]?.state,this._lcCfg);
+      if(_col!==this._lcPrevCol){
+        this._lcPrevCol=_col;
+        for(const o of this._lcEls){try{o.el.style.setProperty('--bsc-border-color',_col);}catch(_){}}
+      }
     }
     this._updateNav();
     if(this._relevantEntities){
@@ -2645,6 +2726,27 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(_caR.ok){if(_caR.val)tgt.cards_above=_caR.val;else delete tgt.cards_above;}
     const _cbR=this._pYaml(q('#cards_below_yaml'));
     if(_cbR.ok){if(_cbR.val)tgt.cards_below=_cbR.val;else delete tgt.cards_below;}
+    // Light controls
+    (function(){
+      const ents=[];
+      self.querySelectorAll('[data-lc-ent]').forEach(function(el,i){
+        const ent=el.value.trim();
+        const nmEl=self.querySelector('[data-lc-name="'+i+'"]');
+        const nm=nmEl?nmEl.value.trim():'';
+        ents.push(nm?{entity:ent,name:nm}:{entity:ent});
+      });
+      if(ents.length){
+        const lc={entities:ents};
+        const _lx=v('lc-lux','').trim();if(_lx)lc.lux_sensor=_lx;
+        const _lxm=parseFloat(v('lc-luxmax',''));if(!isNaN(_lxm)&&_lxm>0)lc.lux_max=_lxm;
+        const _cols=parseInt(v('lc-cols',''),10);if(!isNaN(_cols)&&_cols>0)lc.columns=_cols;
+        const _hgt=parseFloat(v('lc-height',''));if(!isNaN(_hgt)&&_hgt>0)lc.height=_hgt;
+        const _cl=q('#lc-color-low');if(_cl)lc.color_low=_cl.value;
+        const _ch=q('#lc-color-high');if(_ch)lc.color_high=_ch.value;
+        const _cbg=q('#lc-bg-off');if(_cbg)lc.bg_off=_cbg.value;
+        tgt.light_controls=lc;
+      }else delete tgt.light_controls;
+    })();
 
     const _bmSrcs=[];
     self.querySelectorAll('[data-bm-src-ent]').forEach(function(el,i){
@@ -3611,6 +3713,32 @@ class RoomOverlayCardEditor extends HTMLElement{
     respInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;"><label class="roc-l">Lock layout to image</label>';
     respInner+='<input id="lock_aspect" type="text" placeholder="off — or: true (auto from image) / 16/9" value="'+this._e(c.lock_aspect===true?'true':(c.lock_aspect||''))+'"'+this._inp('')+'>';
     respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;line-height:1.5;">When set, zones / icons / blinds etc. stay glued to the image across every tier — per-tier <code>aspect_ratio</code> then only changes how much of the image is cropped, not where elements sit. Use <b>true</b> to take the design shape from the image automatically, or pin an explicit aspect like <b>1720/968</b> (your source image’s real W/H).</p></div>';
+    // Light controls section (Elements tab)
+    const _lc=cR.light_controls||{};
+    const _lcEnts=(Array.isArray(_lc.entities)?_lc.entities:[]).map(function(e){return typeof e==='string'?{entity:e}:(e||{});});
+    let lcInner='';
+    lcInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">A <code>material-slider-card</code> strip rendered above the image. Each slider&#39;s border colour tracks a lux sensor — a smooth gradient between two colours (dark = low lux, bright = high lux). Requires the <code>material-slider-card</code> resource.</p>';
+    lcInner+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="font-size:12px;font-weight:500;">Lights</label><button id="add-lc-ent" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Light</button></div>';
+    for(let i=0;i<_lcEnts.length;i++){
+      lcInner+='<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:6px;align-items:center;margin-bottom:4px;">';
+      lcInner+='<input type="text" list="roc-entities" data-lc-ent="'+i+'" placeholder="light.bedroom_1" value="'+this._e(_lcEnts[i].entity||'')+'"'+this._inp('font-size:12px;')+'>';
+      lcInner+='<input type="text" data-lc-name="'+i+'" placeholder="Name (optional)" value="'+this._e(_lcEnts[i].name||'')+'"'+this._inp('font-size:12px;')+'>';
+      lcInner+='<button data-rm-lc-ent="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
+      lcInner+='</div>';
+    }
+    if(!_lcEnts.length)lcInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No lights yet — add at least one.</p>';
+    lcInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
+    lcInner+='<div><label class="roc-l">Lux sensor</label><input id="lc-lux" type="text" list="roc-entities" placeholder="sensor.kitchen_illuminance" value="'+this._e(_lc.lux_sensor||'')+'"'+this._inp('')+'></div>';
+    lcInner+='<div><label class="roc-l">Lux max (full brightness)</label><input id="lc-luxmax" type="number" min="1" placeholder="50" value="'+this._e(_lc.lux_max!=null?String(_lc.lux_max):'')+'"'+this._inp('')+'></div>';
+    lcInner+='<div><label class="roc-l">Columns</label><input id="lc-cols" type="number" min="1" placeholder="'+(_lcEnts.length||3)+'" value="'+this._e(_lc.columns!=null?String(_lc.columns):'')+'"'+this._inp('')+'></div>';
+    lcInner+='<div><label class="roc-l">Slider height (px)</label><input id="lc-height" type="number" min="4" placeholder="20" value="'+this._e(_lc.height!=null?String(_lc.height):'')+'"'+this._inp('')+'></div>';
+    lcInner+='</div>';
+    lcInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;">';
+    lcInner+='<div><label class="roc-l">Colour — dark (low lux)</label><input id="lc-color-low" type="color" value="'+this._toHex(_lc.color_low||LC_DEF_LOW)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';
+    lcInner+='<div><label class="roc-l">Colour — bright (high lux)</label><input id="lc-color-high" type="color" value="'+this._toHex(_lc.color_high||LC_DEF_HIGH)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';
+    lcInner+='<div><label class="roc-l">Background (light off)</label><input id="lc-bg-off" type="color" value="'+this._toHex(_lc.bg_off||LC_DEF_BG)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';
+    lcInner+='</div>';
+    
     // Tabbed shell — all panels render; the active one is shown, others hidden via CSS
     const _tab=this._tab||'image';
     const _tabBtn=function(id,icon,label){
@@ -3637,6 +3765,7 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('badges','Badges — pill chips',(cR.badges||[]).length,bInner)
          +sec('gauges','Gauges — bar / radial meters',(cR.gauges||[]).length,gInner)
          +sec('blinds','Blinds — window covers',(cR.blinds||[]).length,blInner)
+         +sec('lights','Light controls — sliders with lux ring',_lcEnts.length,lcInner)
          +sec('elements','Embedded HA cards',(cR.elements||[]).length,elInner)
          +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner)
          +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner))
@@ -3917,6 +4046,28 @@ class RoomOverlayCardEditor extends HTMLElement{
     const ta=this.querySelector('#tap_action_yaml');if(ta)ta.addEventListener('change',fire);
     const caTa=this.querySelector('#cards_above_yaml');if(caTa)caTa.addEventListener('change',fire);
     const cbTa=this.querySelector('#cards_below_yaml');if(cbTa)cbTa.addEventListener('change',fire);
+    // Light controls
+    const addLc=this.querySelector('#add-lc-ent');
+    if(addLc)addLc.addEventListener('click',function(){
+      const c=self._collectConfig();
+      const t=T(c);
+      if(!t.light_controls)t.light_controls={entities:[]};
+      if(!Array.isArray(t.light_controls.entities))t.light_controls.entities=[];
+      t.light_controls.entities.push({entity:''});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-lc-ent]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmLcEnt);
+        const c=self._collectConfig();const t=T(c);
+        if(t.light_controls&&Array.isArray(t.light_controls.entities))t.light_controls.entities.splice(i,1);
+        if(t.light_controls&&(!t.light_controls.entities||!t.light_controls.entities.length))delete t.light_controls;
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-lc-ent],[data-lc-name],#lc-lux,#lc-luxmax,#lc-cols,#lc-height,#lc-color-low,#lc-color-high,#lc-bg-off').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
 
     // Filter mode toggle — swap panes (no re-render) + persist choice
     const fmodeEl=this.querySelector('#filter-mode');
