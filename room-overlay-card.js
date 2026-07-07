@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.2.0 — MIT License
+ * room-overlay-card v3.2.1 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.2.0';
+const ROC_VERSION='3.2.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -200,6 +200,23 @@ function lcBorderColor(lux,lc){
   const hi=toHslParts((lc&&lc.color_high)||LC_DEF_HIGH)||[45,90,55];
   const h=lo[0]+(hi[0]-lo[0])*t,s=lo[1]+(hi[1]-lo[1])*t,l=lo[2]+(hi[2]-lo[2])*t;
   return'hsl('+(Math.round(h*10)/10)+','+(Math.round(s*10)/10)+'%,'+(Math.round(l*10)/10)+'%)';
+}
+function lcSliderCss(bgOff,col){
+  return ':host{'+(bgOff?'--bsc-background:'+bgOff+' !important;':'')+'--bsc-border-radius:999px !important;'+(col?'--bsc-border-color:'+col+' !important;':'')+'width:100% !important;}'
+    +'#container{border-radius:999px !important;width:100% !important;transition:border-color 0.6s ease-in-out !important;}';
+}
+function lcResolveHeight(h,tier){
+  if(h&&typeof h==='object'&&!Array.isArray(h))h=tVal(h,tier);
+  if(h==null||h==='')return 20;
+  if(typeof h==='number')return h;
+  const m=String(h).trim().match(/^([\d.]+)\s*(px|vh|vw|%)?$/i);
+  if(!m)return 20;
+  const n=parseFloat(m[1]),u=(m[2]||'px').toLowerCase();
+  if(u==='px')return n;
+  const w=(typeof window!=='undefined'&&window)||{};
+  if(u==='vh'||u==='%')return Math.round((w.innerHeight||800)*n/100);
+  if(u==='vw')return Math.round((w.innerWidth||1280)*n/100);
+  return n;
 }
 function lcNormEnts(lc){return(lc&&Array.isArray(lc.entities)?lc.entities:[]).map(function(e){return typeof e==='string'?{entity:e}:(e||{});}).filter(function(e){return e&&e.entity;});}
 
@@ -837,7 +854,7 @@ class RoomOverlayCard extends HTMLElement{
     if(_lcEnts.length){
       const lcSelf=this;
       const _bgOff=(c.light_controls&&c.light_controls.bg_off)||LC_DEF_BG;
-      const _lcHgt=(c.light_controls&&c.light_controls.height!=null)?c.light_controls.height:20;
+      const _lcHgt=lcResolveHeight(c.light_controls&&c.light_controls.height,_vt);
       _lcEnts.forEach(function(e,i){
         const host=lcSelf.shadowRoot.querySelector('[data-lc-card="'+i+'"]');
         if(!host)return;
@@ -845,14 +862,11 @@ class RoomOverlayCard extends HTMLElement{
         if(e.name)cardCfg.name=e.name;
         const w=makeHACard(cardCfg,function(el){
           if(lcSelf._renderGen!==_gen)return;
-          lcSelf._lcEls.push({el:el,entity:e.entity});
-          try{el.style.width='100%';el.style.setProperty('--bsc-background',_bgOff);}catch(_){}
-          lcSelf._injectLcStyle(el);
+          const _icol=(lcSelf._hass&&lcSelf._lcCfg)?lcBorderColor(lcSelf._hass.states[lcSelf._lcCfg.lux_sensor]?.state,lcSelf._lcCfg):'';
+          const _stEl=lcSelf._injectLcStyle(el,_bgOff,_icol);
+          lcSelf._lcEls.push({el:el,entity:e.entity,styleEl:_stEl,bgOff:_bgOff});
+          try{el.style.width='100%';}catch(_){}
           if(lcSelf._hass){try{el.hass=lcSelf._hass;}catch(_){}}
-          if(lcSelf._hass&&lcSelf._lcCfg){
-            const _lux=lcSelf._hass.states[lcSelf._lcCfg.lux_sensor]?.state;
-            try{el.style.setProperty('--bsc-border-color',lcBorderColor(_lux,lcSelf._lcCfg));}catch(_){}
-          }
         });
         if(w)host.appendChild(w);
       });
@@ -1981,20 +1995,18 @@ class RoomOverlayCard extends HTMLElement{
   // Inject the pill shape + border transition into the slider's own shadow root.
   // Colours (--bsc-background / --bsc-border-color) are set inline on the host so
   // they stay authoritative over this stylesheet and can update live.
-  _injectLcStyle(el){
-    if(!el)return;
-    const css=':host{--bsc-border-radius:999px;width:100%;}#container{border-radius:999px;width:100%;transition:border-color 0.6s ease-in-out;}';
-    const tryInject=function(n){
+  _injectLcStyle(el,bgOff,col){
+    if(!el)return null;
+    const st=document.createElement('style');
+    st.setAttribute('data-roc-lc','');
+    st.textContent=lcSliderCss(bgOff,col);
+    const attach=function(n){
       const sr=el.shadowRoot;
-      if(sr){
-        if(!sr.querySelector('style[data-roc-lc]')){
-          const st=document.createElement('style');st.setAttribute('data-roc-lc','');st.textContent=css;sr.appendChild(st);
-        }
-        return;
-      }
-      if(n<20)setTimeout(function(){tryInject(n+1);},50);
+      if(sr){if(!sr.querySelector('style[data-roc-lc]'))sr.appendChild(st);return;}
+      if(n<20)setTimeout(function(){attach(n+1);},50);
     };
-    tryInject(0);
+    attach(0);
+    return st;
   }
 
   _update(){
@@ -2195,7 +2207,7 @@ class RoomOverlayCard extends HTMLElement{
       const _col=lcBorderColor(s[this._lcCfg.lux_sensor]?.state,this._lcCfg);
       if(_col!==this._lcPrevCol){
         this._lcPrevCol=_col;
-        for(const o of this._lcEls){try{o.el.style.setProperty('--bsc-border-color',_col);}catch(_){}}
+        for(const o of this._lcEls){if(o.styleEl)try{o.styleEl.textContent=lcSliderCss(o.bgOff,_col);}catch(_){}}
       }
     }
     this._updateNav();
@@ -2740,7 +2752,8 @@ class RoomOverlayCardEditor extends HTMLElement{
         const _lx=v('lc-lux','').trim();if(_lx)lc.lux_sensor=_lx;
         const _lxm=parseFloat(v('lc-luxmax',''));if(!isNaN(_lxm)&&_lxm>0)lc.lux_max=_lxm;
         const _cols=parseInt(v('lc-cols',''),10);if(!isNaN(_cols)&&_cols>0)lc.columns=_cols;
-        const _hgt=parseFloat(v('lc-height',''));if(!isNaN(_hgt)&&_hgt>0)lc.height=_hgt;
+        const _hgtRaw=v('lc-height','').trim();
+        if(_hgtRaw){if(/^[0-9.]+$/.test(_hgtRaw))lc.height=parseFloat(_hgtRaw);else if(_hgtRaw.charAt(0)==='{'){const _hp=_yaml.p(_hgtRaw);lc.height=(_hp&&typeof _hp==='object')?_hp:_hgtRaw;}else lc.height=_hgtRaw;}
         const _cl=q('#lc-color-low');if(_cl)lc.color_low=_cl.value;
         const _ch=q('#lc-color-high');if(_ch)lc.color_high=_ch.value;
         const _cbg=q('#lc-bg-off');if(_cbg)lc.bg_off=_cbg.value;
@@ -3731,7 +3744,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     lcInner+='<div><label class="roc-l">Lux sensor</label><input id="lc-lux" type="text" list="roc-entities" placeholder="sensor.kitchen_illuminance" value="'+this._e(_lc.lux_sensor||'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Lux max (full brightness)</label><input id="lc-luxmax" type="number" min="1" placeholder="50" value="'+this._e(_lc.lux_max!=null?String(_lc.lux_max):'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Columns</label><input id="lc-cols" type="number" min="1" placeholder="'+(_lcEnts.length||3)+'" value="'+this._e(_lc.columns!=null?String(_lc.columns):'')+'"'+this._inp('')+'></div>';
-    lcInner+='<div><label class="roc-l">Slider height (px)</label><input id="lc-height" type="number" min="4" placeholder="20" value="'+this._e(_lc.height!=null?String(_lc.height):'')+'"'+this._inp('')+'></div>';
+    lcInner+='<div><label class="roc-l">Slider height (px, vh, %, per-tier)</label><input id="lc-height" type="text" placeholder="20 · 4vh · {mobile: 20, desktop: 60}" value="'+this._e(_lc.height!=null?(typeof _lc.height==='object'?('{'+Object.keys(_lc.height).map(function(k){return k+': '+_lc.height[k];}).join(', ')+'}'):String(_lc.height)):'')+'"'+this._inp('')+'></div>';
     lcInner+='</div>';
     lcInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;">';
     lcInner+='<div><label class="roc-l">Colour — dark (low lux)</label><input id="lc-color-low" type="color" value="'+this._toHex(_lc.color_low||LC_DEF_LOW)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';

@@ -581,7 +581,7 @@ light_controls:
       name: Middle            # optional per-slider name
     - light.panel_bedroom_3
   columns: 3                  # grid columns (default: number of lights)
-  height: 20                  # slider height in px (default 20)
+  height: 20                  # px number, or "4vh" / "5%" of screen height, or per-tier
   lux_sensor: sensor.kitchen_illuminance
   lux_max: 50                 # lux value that maps to the "bright" colour
   color_low: "#261a66"        # border colour at 0 lux (dark)
@@ -589,7 +589,9 @@ light_controls:
   bg_off: "#000000"           # slider background while the light is off
 ```
 
-`color_low` / `color_high` accept any CSS colour (`#hex`, `rgb(...)`, `hsl(...)`); the gradient is interpolated in HSL so a blue→amber ramp travels through vivid hues rather than a muddy RGB midpoint. When a light is **on**, `material-slider-card`'s `colorize` takes over the fill with the light's real colour and brightness, so `bg_off` is only visible when the light is off.
+`color_low` / `color_high` accept any CSS colour (`#hex`, `rgb(...)`, `hsl(...)`); the gradient is interpolated in HSL so a blue→amber ramp travels through vivid hues rather than a muddy RGB midpoint.
+
+`height` accepts a plain number (px), a **viewport unit** (`4vh`, or `5%` of the screen height) or a **per-tier** object (e.g. `{mobile: 20, desktop: 60}`) — a fixed px looks tiny on desktop, so a `vh` value scales across screens (resolved to px at render). When a light is **on**, `material-slider-card`'s `colorize` takes over the fill with the light's real colour and brightness, so `bg_off` is only visible when the light is off.
 
 Requires the `material-slider-card` resource to be installed. In the GUI these live in the **Elements** tab under *Light controls*.
 

@@ -1,5 +1,30 @@
 # Changelog
 
+## [3.2.1] – 2026-07-08
+
+Follow-ups to the `light_controls` feature shipped in 3.2.0.
+
+### Fixed
+- **`bg_off` (off-state slider background) never applied.** It was set as an
+  inline CSS variable, which `material-slider-card`'s `colorize` overrode — the
+  slider background stayed the card's default instead of the configured colour.
+  The pill shape, background and lux-ring border colour are now injected into the
+  slider's shadow root as an `!important` stylesheet (the same technique as the
+  `card_mod` this feature replaced), so `bg_off` takes effect and the ring colour
+  stays authoritative over the card's own inline styles.
+
+### Added
+- **`light_controls.height` accepts screen-relative and per-tier values.** Besides
+  a plain px number it now takes a viewport unit (`4vh`, or `5%` of the screen
+  height) or a per-tier object (`{mobile, tablet, desktop, ultrawide}`,
+  nearest-smaller fallback), resolved to px at render via the card's responsive
+  tier system — a fixed px looked tiny on desktop, `4vh` scales across screens.
+  The editor's *Slider height* field is now a text input that also accepts a
+  per-tier flow map, e.g. `{ mobile: 20, desktop: 60 }`.
+- Smoke tests for `lcResolveHeight` (units + per-tier) and `lcSliderCss`.
+
+---
+
 ## [3.2.0] – 2026-07-07
 
 ### Added

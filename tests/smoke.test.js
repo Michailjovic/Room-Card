@@ -203,5 +203,16 @@ t('lcNormEnts strings + objects',JSON.stringify(g.lcNormEnts({entities:['light.a
 t('lcNormEnts drops entryless items',g.lcNormEnts({entities:[{name:'x'},null,'light.c']}).length===1);
 t('lcNormEnts empty/absent',g.lcNormEnts({}).length===0&&g.lcNormEnts(null).length===0);
 
+t('lcResolveHeight px number',g.lcResolveHeight(20,'desktop')===20);
+t('lcResolveHeight px string',g.lcResolveHeight('40px','desktop')===40);
+t('lcResolveHeight vh (800 vp fallback)',g.lcResolveHeight('5vh','desktop')===40);
+t('lcResolveHeight % of screen height',g.lcResolveHeight('10%','desktop')===80);
+t('lcResolveHeight per-tier object',g.lcResolveHeight({mobile:20,desktop:60},'desktop')===60);
+t('lcResolveHeight default when empty',g.lcResolveHeight(null,'desktop')===20&&g.lcResolveHeight('','desktop')===20);
+t('lcResolveHeight garbage falls back',g.lcResolveHeight('abc','desktop')===20);
+
+t('lcSliderCss bg + border !important',(function(){const c=g.lcSliderCss('#000000','hsl(45,90%,55%)');return c.indexOf('--bsc-background:#000000 !important')>=0&&c.indexOf('--bsc-border-color:hsl(45,90%,55%) !important')>=0&&c.indexOf('#container')>=0;})());
+t('lcSliderCss omits empty border',g.lcSliderCss('#111','').indexOf('--bsc-border-color')<0);
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);
