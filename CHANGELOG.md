@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.2.3] – 2026-07-08
+
+### Fixed
+- **`light_controls` sliders were dragged with the image during room swipes.**
+  The light-controls strip is room-scoped (in `ROOM_KEYS`), so the neighbour-
+  preview ghost pulled its own `light_controls` from `rooms[idx]` and rendered
+  them over the sliding image — the sliders slid in with the swipe instead of
+  staying put (the same class of bug previously fixed for `cards_above` /
+  `cards_below`). `_renderNeighbourPreview` now strips `light_controls` from the
+  ghost config (top-level and per-room), so during a swipe only the room image
+  and its in-image elements move; the sliders are recomputed after the swipe
+  commits.
+
+---
+
 ## [3.2.2] – 2026-07-08
 
 ### Fixed
