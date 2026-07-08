@@ -214,5 +214,21 @@ t('lcResolveHeight garbage falls back',g.lcResolveHeight('abc','desktop')===20);
 t('lcSliderCss bg + border !important',(function(){const c=g.lcSliderCss('#000000','hsl(45,90%,55%)');return c.indexOf('--bsc-background:#000000 !important')>=0&&c.indexOf('--bsc-border-color:hsl(45,90%,55%) !important')>=0&&c.indexOf('#container')>=0;})());
 t('lcSliderCss omits empty border',g.lcSliderCss('#111','').indexOf('--bsc-border-color')<0);
 
+// ---- v3.3.0: cover control (roleta) ----------------------------------------
+t('ccColor HA name',g.ccColor('indigo')==='#4e5cb5'&&g.ccColor('blue-grey')==='#607d8b');
+t('ccColor passthrough css',g.ccColor('#abcdef')==='#abcdef'&&g.ccColor('rgba(1,2,3,0.5)')==='rgba(1,2,3,0.5)');
+t('ccColor empty',g.ccColor('')===''&&g.ccColor(null)==='');
+t('coverControlNorm none',g.coverControlNorm({id:'b',entity:'cover.x'})===null);
+t('coverControlNorm off',g.coverControlNorm({id:'b',entity:'cover.x',control:{display:'off'}})===null);
+t('coverControlNorm no entity',g.coverControlNorm({id:'b',control:{display:'dock'}})===null);
+const _ccn=g.coverControlNorm({id:'b1',entity:'cover.x',control:{display:'dock',dock_side:'left',slider:false,presets:[{position:150,icon:'mdi:sun',color:'amber',name:'Open'},{position:-5}]}});
+t('coverControlNorm normalizes',_ccn&&_ccn.display==='dock'&&_ccn.side==='left'&&_ccn.slider===false);
+t('coverControlNorm clamps presets',_ccn.presets[0].position===100&&_ccn.presets[1].position===0);
+t('coverControlNorm defaults',(function(){const n=g.coverControlNorm({id:'b',entity:'cover.x',control:true});return n.display==='popover'&&n.side==='right'&&n.slider===true&&n.buttons.join(',')==='up,stop,down';})());
+const _cch=g.coverCtlHtml(g.coverControlNorm({id:'roll',entity:'cover.x',name:'Bedroom',control:{display:'popover',presets:[{position:65,icon:'mdi:sun',color:'orange',name:'Day'}]}}));
+t('coverCtlHtml structure',/data-cc="roll"/.test(_cch)&&_cch.indexOf('data-cc-rail')>=0&&_cch.indexOf('data-cc-up')>=0&&_cch.indexOf('data-cc-down')>=0&&_cch.indexOf('data-cc-stop')>=0);
+t('coverCtlHtml preset',/data-pos="65"/.test(_cch)&&_cch.indexOf('mdi:sun')>=0&&_cch.indexOf('#ff9800')>=0);
+t('coverCtlHtml no rail when slider off',g.coverCtlHtml(g.coverControlNorm({id:'r',entity:'cover.x',control:{display:'dock',slider:false}})).indexOf('data-cc-rail')<0);
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);

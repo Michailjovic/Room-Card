@@ -398,6 +398,36 @@ blinds:
 
 > **Inverted motor direction** — if your cover reports `0` = closed and `100` = open, swap: `min: 100`, `max: 0`.
 
+#### Cover control (roleta)
+
+Add a `control:` block to a blind to turn its visualization into an interactive controller — a glass module with a draggable position rail, up / stop / down buttons, and quick-jump **presets**.
+
+```yaml
+blinds:
+  - id: bedroom_roller
+    entity: cover.roller_motor_bedroom
+    top: "6%"
+    left: "8%"
+    width: "22%"
+    height: "30%"
+    blind_type: roller
+    control:
+      display: popover       # popover (tap the blind to reveal it) | dock (always-on side rail)
+      dock_side: right       # left | right   (dock only)
+      slider: true           # draggable position rail (auto-hidden for assumed-state covers)
+      presets:
+        - {position: 100, icon: mdi:brightness-up,        color: amber,     name: Open}
+        - {position: 65,  icon: mdi:sun,                  color: orange,    name: Day}
+        - {position: 2,   icon: mdi:arrow-collapse-down,  color: blue-grey, name: Peek}
+        - {position: 0,   icon: mdi:moon-waning-crescent, color: indigo,    name: Closed}
+```
+
+- **`display`** — `popover` (tap the blind graphic; the module anchors at the window) or `dock` (permanently visible on a side rail *outside* the image).
+- **`dock_side`** — `left` or `right` (dock only).
+- **`slider`** — show the draggable position rail (`cover.set_cover_position`). Auto-hidden when the cover reports no `current_position`.
+- **Up / Stop / Down** are always shown — a tap does a full `open_cover` / `close_cover`; `Stop` (`stop_cover`) highlights while the cover is moving.
+- **`presets`** — one-tap jumps to a position. Each takes `position` (0–100) and optional `icon`, `color` (HA name like `indigo` / `amber` / `blue-grey`, or any CSS colour) and `name`.
+
 ---
 
 ### Clickable zones

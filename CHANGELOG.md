@@ -1,5 +1,49 @@
 # Changelog
 
+## [3.3.0] – 2026-07-08
+
+### Added
+- **Cover control (roleta) — interactive GUI for `cover` entities, built on the
+  existing `blinds` element.** A `blind` can now carry a `control:` block that
+  upgrades its visual overlay into a full controller: a vertical glass module
+  with a draggable position rail (`cover.set_cover_position`, throttled + live),
+  up / stop / down buttons, and configurable **presets** (position + icon +
+  colour + name — e.g. `0 / 2 / 65 / 100`) that jump straight to a position.
+  Up/Down do a full travel (`open_cover` / `close_cover`); `Stop`
+  (`stop_cover`) is always visible and highlights while the cover is moving,
+  alongside an “Opening… / Closing…” state line. Two placements, per blind:
+  `display: popover` (tap the blind graphic to reveal the module, anchored at
+  the window) or `display: dock` (permanently visible on a side rail outside the
+  image, `dock_side: left | right`). Covers with no `current_position`
+  (assumed-state) hide the rail and `%` readout and keep the buttons + presets.
+  Preset colours accept HA names (`indigo`, `amber`, `blue-grey`, …) or any CSS
+  colour. The editor’s *Elements → Blinds* section gained a **Control** sub-panel
+  (display / dock side / slider toggle + a preset row editor). Fully backward
+  compatible — a blind with no `control:` renders exactly as before — and the
+  control is stripped from room-swipe neighbour previews (like `light_controls`).
+
+```yaml
+blinds:
+  - id: bedroom_roller
+    entity: cover.roller_motor_bedroom
+    top: 6%
+    left: 8%
+    width: 22%
+    height: 30%
+    blind_type: roller
+    control:
+      display: popover       # popover (tap window) | dock (side rail)
+      dock_side: right       # left | right   (dock only)
+      slider: true           # draggable position rail
+      presets:
+        - {position: 100, icon: mdi:brightness-up,        color: amber,     name: Open}
+        - {position: 65,  icon: mdi:sun,                  color: orange,    name: Day}
+        - {position: 2,   icon: mdi:arrow-collapse-down,  color: blue-grey, name: Peek}
+        - {position: 0,   icon: mdi:moon-waning-crescent, color: indigo,    name: Closed}
+```
+
+---
+
 ## [3.2.3] – 2026-07-08
 
 ### Fixed
