@@ -2,16 +2,20 @@
 
 Blinds are no longer just a visualization — they can now **control** the cover.
 
-Add a `control:` block to any `blind` and its overlay becomes a full controller: a vertical glass module with a draggable **position rail** (`cover.set_cover_position`, live + throttled), **up / stop / down** buttons, and configurable **presets** that jump straight to a position (e.g. `0 / 2 / 65 / 100`), each with its own icon, colour and name. `Stop` stays visible at all times and lights up while the cover is moving, next to an “Opening… / Closing…” state line.
+Add a `control:` block to any `blind` and its overlay becomes a slim, **icon-only** controller: a draggable **position rail** (`cover.set_cover_position`, live + throttled), **up / stop / down** buttons, and quick-jump **presets** (position + icon + colour), each shown as a single icon (the `name` is a tooltip). Up/Down do a full travel (`open_cover` / `close_cover`); `Stop` (`stop_cover`) highlights while the cover is moving.
+
+The controller is **hidden until you tap the window** (the blind graphic), and only one shows at a time — so it never permanently takes up space.
 
 Two placements, chosen per blind:
 
-- **`display: popover`** — tap the blind graphic on the floor-plan and the module pops out anchored at the window; the plan stays clean.
-- **`display: dock`** — the module is permanently visible on a side rail *outside* the image (`dock_side: left | right`).
+- **`placement: float`** — place it freely with `top` / `left`; it's sized to the window's height.
+- **`placement: dock`** — a slim rail pinned to the image edge (`dock_side: left | right`), filling the full height with minimal width.
 
-Covers that report no `current_position` (assumed-state) automatically hide the rail and `%` readout and keep the buttons + presets. Preset colours accept Home Assistant names (`indigo`, `amber`, `blue-grey`, …) or any CSS colour.
+On the `mobile` tier the controller flips to a **horizontal bar at the bottom**, and `touch-action: none` keeps drags from leaking to the room swipe or page scroll.
 
-The editor’s **Elements → Blinds** section gained a **Control** sub-panel (display mode, dock side, slider toggle, and a preset row editor).
+Covers that report no `current_position` (assumed-state) hide the rail and keep the buttons + presets. Preset colours accept Home Assistant names (`indigo`, `amber`, `blue-grey`, …) or any CSS colour.
+
+The editor’s **Elements → Blinds** section gained a **Control** sub-panel (placement, float top / left / width, dock side, slider, and a preset row editor).
 
 Backward compatible: a blind with no `control:` renders exactly as before.
 
@@ -19,20 +23,22 @@ Backward compatible: a blind with no `control:` renders exactly as before.
 blinds:
   - id: bedroom_roller
     entity: cover.roller_motor_bedroom
-    top: 6%
-    left: 8%
-    width: 22%
-    height: 30%
+    top: "6%"
+    left: "8%"
+    width: "22%"
+    height: "30%"
     blind_type: roller
     control:
-      display: popover       # popover (tap window) | dock (side rail)
-      dock_side: right       # left | right   (dock only)
-      slider: true           # draggable position rail
+      placement: float        # float (place via top/left) | dock (edge rail)
+      top: "12%"              # float position — sized to the window height
+      left: "34%"
+      dock_side: right        # left | right   (dock only)
+      slider: true
       presets:
-        - {position: 100, icon: mdi:brightness-up,        color: amber,     name: Open}
-        - {position: 65,  icon: mdi:sun,                  color: orange,    name: Day}
-        - {position: 2,   icon: mdi:arrow-collapse-down,  color: blue-grey, name: Peek}
-        - {position: 0,   icon: mdi:moon-waning-crescent, color: indigo,    name: Closed}
+        - {position: 100, icon: mdi:blinds-open,         color: amber,     name: Open}
+        - {position: 65,  icon: mdi:blinds,              color: orange,    name: Day}
+        - {position: 2,   icon: mdi:roller-shade,        color: blue-grey, name: Peek}
+        - {position: 0,   icon: mdi:roller-shade-closed, color: indigo,    name: Closed}
 ```
 
 **Full Changelog**: https://github.com/Michailjovic/Room-Card/blob/main/CHANGELOG.md

@@ -400,7 +400,7 @@ blinds:
 
 #### Cover control (roleta)
 
-Add a `control:` block to a blind to turn its visualization into an interactive controller — a glass module with a draggable position rail, up / stop / down buttons, and quick-jump **presets**.
+Add a `control:` block to a blind to turn its visualization into a slim, **icon-only** controller — a draggable position rail, up / stop / down buttons, and quick-jump **presets**. The controller is **hidden until you tap the window** (the blind graphic); only one shows at a time.
 
 ```yaml
 blinds:
@@ -412,21 +412,23 @@ blinds:
     height: "30%"
     blind_type: roller
     control:
-      display: popover       # popover (tap the blind to reveal it) | dock (always-on side rail)
-      dock_side: right       # left | right   (dock only)
-      slider: true           # draggable position rail (auto-hidden for assumed-state covers)
+      placement: float        # float (place freely via top/left) | dock (edge rail)
+      top: "12%"              # float position — sized to the window height
+      left: "34%"
+      dock_side: right        # left | right   (dock only)
+      slider: true            # draggable position rail (auto-hidden for assumed-state covers)
       presets:
-        - {position: 100, icon: mdi:brightness-up,        color: amber,     name: Open}
-        - {position: 65,  icon: mdi:sun,                  color: orange,    name: Day}
-        - {position: 2,   icon: mdi:arrow-collapse-down,  color: blue-grey, name: Peek}
-        - {position: 0,   icon: mdi:moon-waning-crescent, color: indigo,    name: Closed}
+        - {position: 100, icon: mdi:blinds-open,         color: amber,     name: Open}
+        - {position: 65,  icon: mdi:blinds,              color: orange,    name: Day}
+        - {position: 2,   icon: mdi:roller-shade,        color: blue-grey, name: Peek}
+        - {position: 0,   icon: mdi:roller-shade-closed, color: indigo,    name: Closed}
 ```
 
-- **`display`** — `popover` (tap the blind graphic; the module anchors at the window) or `dock` (permanently visible on a side rail *outside* the image).
-- **`dock_side`** — `left` or `right` (dock only).
-- **`slider`** — show the draggable position rail (`cover.set_cover_position`). Auto-hidden when the cover reports no `current_position`.
+- **`placement`** — `float` (place freely with `top` / `left`; the controller is sized to the window height) or `dock` (a slim rail pinned to the image edge, `dock_side: left | right`, filling the full height).
+- **Tap the blind to reveal / hide** the controller. On the `mobile` tier it appears as a **horizontal bar at the bottom**.
+- **`slider`** — show the draggable position rail (`cover.set_cover_position`). Auto-hidden when the cover reports no `current_position` (assumed-state).
 - **Up / Stop / Down** are always shown — a tap does a full `open_cover` / `close_cover`; `Stop` (`stop_cover`) highlights while the cover is moving.
-- **`presets`** — one-tap jumps to a position. Each takes `position` (0–100) and optional `icon`, `color` (HA name like `indigo` / `amber` / `blue-grey`, or any CSS colour) and `name`.
+- **`presets`** — one-tap jumps to a position. Each takes `position` (0–100) and optional `icon` (use real MDI names, e.g. `mdi:roller-shade`, `mdi:blinds` — see [materialdesignicons.com](https://pictogrammers.com/library/mdi/)), `color` (HA name like `indigo` / `amber` / `blue-grey`, or any CSS colour) and `name` (shown as a tooltip). Presets render as **icons only**.
 
 ---
 
