@@ -255,6 +255,13 @@ t('coverCtlHtml icon-only (no label span)',g.coverCtlHtml(g.coverControlNorm({id
 const _cch=g.coverCtlHtml(g.coverControlNorm({id:'roll',entity:'cover.x',name:'Bedroom',control:{display:'popover',presets:[{position:65,icon:'mdi:sun',color:'orange',name:'Day'}]}}));
 t('coverCtlHtml structure',/data-cc="roll"/.test(_cch)&&_cch.indexOf('data-cc-rail')>=0&&_cch.indexOf('data-cc-up')>=0&&_cch.indexOf('data-cc-down')>=0&&_cch.indexOf('data-cc-stop')>=0);
 t('coverCtlHtml preset',/data-pos="65"/.test(_cch)&&_cch.indexOf('mdi:sun')>=0&&_cch.indexOf('#ff9800')>=0);
+// v4: dock orientation from the grid definition
+t('coverHoriz bottom row full width',g.rocCoverHoriz({columns:[100],rows:[10,80,10],place:{cover:{row:3}}})===true);
+t('coverHoriz side column',g.rocCoverHoriz({columns:['1fr','auto'],rows:[10,90],place:{cover:{row:'1/3',col:2}}})===false);
+t('coverHoriz single row in side col',g.rocCoverHoriz({columns:[85,15],rows:[100],place:{cover:{row:1,col:2}}})===false);
+t('coverHoriz col span all = bar',g.rocCoverHoriz({columns:[50,50],rows:[10,90],place:{cover:{row:1,col:'1/3'}}})===true);
+t('coverHoriz direction override',g.rocCoverHoriz({columns:[100],rows:[100],place:{cover:{row:1,direction:'vertical'}}})===false&&g.rocCoverHoriz({columns:['1fr','auto'],rows:[100],place:{cover:{row:1,col:2,direction:'horizontal'}}})===true);
+t('coverHoriz no cover',g.rocCoverHoriz({columns:[100],rows:[100],place:{image:{row:1}}})===false);
 // v4: per-profile cover placement + dock mode
 const _ccP=g.coverControlNorm({id:'b',entity:'cover.x',control:{placement:{portrait:'dock',landscape:'float'}}},'portrait');
 t('ccNorm per-profile dock',!!_ccP&&_ccP.placement==='dock');
