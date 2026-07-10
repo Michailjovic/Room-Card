@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.2.0';
+const ROC_VERSION='4.3.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -310,6 +310,10 @@ function cfgKey(c){
   const r=Array.isArray(c.rooms)&&c.rooms.length?c.rooms[0]:c;
   return'img:'+(r.base_image||'')+'|'+(r.base_camera||'');
 }
+// Last room the card was showing, keyed by cfgKey — the editor reads this to
+// open on the viewed room. In-memory (survives HA's edit toggle, which is an SPA
+// nav that DROPS the URL hash); more reliable than url_sync for this purpose.
+const ROC_ROOM_MEM=new Map();
 
 function evalCond(c,s){
   const e=s[c.entity];if(!e)return false;
@@ -861,6 +865,7 @@ class RoomOverlayCard extends HTMLElement{
     }
     const c=roomMerge(cAll,this._roomIdx); // active room view (or plain config)
     this._roomCfg=c;
+    if(!c._roc_ghost&&!c._roc_preview)this._rememberRoom(); // record for the editor
     this._zoomScale=1;this._wrapTA='';
     const tm=c.test_mode??false;
     // Active layout profile — by the AVAILABLE VIEWPORT shape (w/h ratio), not
@@ -1192,6 +1197,16 @@ class RoomOverlayCard extends HTMLElement{
         });
         lcSelf._lcToggles.push({el:btn,entity:e.entity,icon:btn.querySelector('[data-lc-ticon]'),bgOff:_bgOff});
       });
+      // Match toggle-pill height to the ACTUAL rendered slider height — material-
+      // slider-card renders its own box, so a shared px value can still differ
+      // visually. Measuring the mounted slider guarantees parity. Retried because
+      // the slider mounts async via card helpers.
+      if(this._lcToggles.length){
+        const _syncSelf=this,_sg=_gen;
+        const _sy=function(){if(_syncSelf._renderGen===_sg)_syncSelf._syncLcToggleHeights();};
+        if(typeof requestAnimationFrame!=='undefined')requestAnimationFrame(_sy);
+        setTimeout(_sy,140);setTimeout(_sy,450);
+      }
     }
     // ---- Cover controls (roleta) — mount interactions -----------------------
     this._ccEls={};
@@ -1841,6 +1856,16 @@ class RoomOverlayCard extends HTMLElement{
     if(ri!==this._roomIdx)this._switchRoom(ri,ri>this._roomIdx?1:-1,false);
   }
 
+  // Remember the room currently shown, so the editor can open on it (see ROC_ROOM_MEM).
+  _rememberRoom(){
+    try{
+      const cAll=this._config;
+      if(!cAll||!Array.isArray(cAll.rooms)||!cAll.rooms.length)return;
+      const r=cAll.rooms[Math.max(0,Math.min(this._roomIdx,cAll.rooms.length-1))];
+      if(r)ROC_ROOM_MEM.set(cfgKey(cAll),String(r.id||r.name||this._roomIdx));
+    }catch(_){}
+  }
+
   _switchRoom(idx,dir,manual,noGhost){
     const cAll=this._config;
     if(!Array.isArray(cAll.rooms)||idx<0||idx>=cAll.rooms.length||idx===this._roomIdx)return;
@@ -2395,6 +2420,13 @@ class RoomOverlayCard extends HTMLElement{
   // Inject the pill shape + border transition into the slider's own shadow root.
   // Colours (--bsc-background / --bsc-border-color) are set inline on the host so
   // they stay authoritative over this stylesheet and can update live.
+  _syncLcToggleHeights(){
+    if(!this._lcToggles||!this._lcToggles.length||!this.shadowRoot)return;
+    const host=this.shadowRoot.querySelector('.roc-lc [data-lc-card]');
+    if(!host)return; // no sliders present → toggles keep their configured height
+    const h=host.offsetHeight;
+    if(h>0)for(const t of this._lcToggles){try{t.el.style.height=h+'px';}catch(_){}}
+  }
   _injectLcStyle(el,bgOff,col){
     if(!el)return null;
     const st=document.createElement('style');
@@ -3019,13 +3051,19 @@ class RoomOverlayCardEditor extends HTMLElement{
     return el.value;
   }
 
-  // Preset _editRoomIdx from the url_sync hash (mirrors the card's
-  // _urlSyncKey/_roomIdxFromHash) so "edit" opens on the viewed room.
-  _initRoomFromHash(cfg){
+  // Open the editor on the room the card was showing. Primary source is the
+  // in-memory ROC_ROOM_MEM the card writes (survives HA's edit toggle, which
+  // navigates to ?edit=1 and DROPS the URL hash). url_sync hash is a fallback.
+  _initEditRoom(cfg){
     try{
-      const u=cfg&&cfg.url_sync;
-      if(!u||!Array.isArray(cfg.rooms)||!cfg.rooms.length)return;
-      if(typeof location==='undefined')return;
+      if(!cfg||!Array.isArray(cfg.rooms)||!cfg.rooms.length)return;
+      const clamp=(ri)=>Math.max(0,Math.min(ri,cfg.rooms.length-1));
+      // 1) room the card last rendered
+      const mem=ROC_ROOM_MEM.get(cfgKey(cfg));
+      if(mem!=null){const ri=roomMatch(cfg,mem);if(ri>=0){this._editRoomIdx=clamp(ri);return;}}
+      // 2) fallback: url_sync hash (if HA hasn't stripped it)
+      const u=cfg.url_sync;
+      if(!u||typeof location==='undefined')return;
       const key=(typeof u==='string'&&u.trim())?u.trim():'room';
       const h=String(location.hash||'').replace(/^#/,'');
       if(!h)return;
@@ -3033,7 +3071,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       h.split('&').forEach(function(p){const eq=p.indexOf('=');if(eq>0&&decodeURIComponent(p.slice(0,eq))===key)val=decodeURIComponent(p.slice(eq+1));});
       if(val===null)return;
       const ri=roomMatch(cfg,val);
-      if(ri>=0)this._editRoomIdx=Math.max(0,Math.min(ri,cfg.rooms.length-1));
+      if(ri>=0)this._editRoomIdx=clamp(ri);
     }catch(_){}
   }
 
@@ -3043,9 +3081,9 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(!_hadLayout)this._wasMigrated=true;
     const prev=this._config;
     this._config=cfg;
-    // Open the editor on the room the card was showing (url_sync only) — read
-    // the same URL hash the card writes. One-time, so the room picker still wins.
-    if(!this._roomIdxInit){this._roomIdxInit=true;this._initRoomFromHash(cfg);}
+    // Open the editor on the room the card was showing (ROC_ROOM_MEM, hash
+    // fallback). One-time, so the room picker still wins afterwards.
+    if(!this._roomIdxInit){this._roomIdxInit=true;this._initEditRoom(cfg);}
     if(!this._hist.length){try{this._hist=[JSON.stringify(cfg)];this._histIdx=0;}catch(_){}}
     if(prev&&this.innerHTML.trim()){
       const _ri=this._editRoomIdx;
@@ -4341,7 +4379,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     lcInner+='<div><label class="roc-l">Lux sensor</label><input id="lc-lux" type="text" list="roc-entities" placeholder="sensor.kitchen_illuminance" value="'+this._e(_lc.lux_sensor||'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Lux max (full brightness)</label><input id="lc-luxmax" type="number" min="1" placeholder="50" value="'+this._e(_lc.lux_max!=null?String(_lc.lux_max):'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Columns</label><input id="lc-cols" type="number" min="1" placeholder="'+(_lcEnts.length||3)+'" value="'+this._e(_lc.columns!=null?String(_lc.columns):'')+'"'+this._inp('')+'></div>';
-    lcInner+='<div><label class="roc-l">Slider height (px, vh, %, per-tier)</label><input id="lc-height" type="text" placeholder="20 · 4vh · {mobile: 20, desktop: 60}" value="'+this._e(_lc.height!=null?(typeof _lc.height==='object'?('{'+Object.keys(_lc.height).map(function(k){return k+': '+_lc.height[k];}).join(', ')+'}'):String(_lc.height)):'')+'"'+this._inp('')+'></div>';
+    lcInner+='<div><label class="roc-l">Control height — sliders &amp; switches (px, vh, %, per-tier)</label><input id="lc-height" type="text" placeholder="20 · 4vh · {mobile: 20, desktop: 60}" value="'+this._e(_lc.height!=null?(typeof _lc.height==='object'?('{'+Object.keys(_lc.height).map(function(k){return k+': '+_lc.height[k];}).join(', ')+'}'):String(_lc.height)):'')+'"'+this._inp('')+'></div>';
     lcInner+='</div>';
     lcInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;">';
     lcInner+='<div><label class="roc-l">Colour — dark (low lux)</label><input id="lc-color-low" type="color" value="'+this._toHex(_lc.color_low||LC_DEF_LOW)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';

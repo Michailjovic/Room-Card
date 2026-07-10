@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.3.0] - 2026-07-11
+
+### Light-controls height parity + reliable editor-opens-on-room
+
+- **Toggle pills now match the slider height.** A `switch` pill and a `light` slider given the same height rendered at slightly different heights, because `material-slider-card` renders its own box around the configured pixel value. The toggle pill now measures the actually-rendered slider and matches it, so a mixed row (e.g. `Světlo` slider + `Zrcadlo` switch) lines up. When a row has no sliders, the toggles use the configured height directly.
+- **Height field is now clearly general.** The Light-controls editor field is relabeled **"Control height — sliders & switches (px, vh, %, per-tier)"** — one setting drives the height of every control element in the strip (it always did for switches; the label now says so).
+- **"Editor opens on the viewed room" no longer depends on the URL hash.** Home Assistant strips the `#room=…` hash when it enters edit mode (it navigates to `?edit=1`) and again on save, which made the v4.2.0 hash-based approach unreliable (you had to scroll to restore the hash). The card now records the room it's showing in an in-memory store (keyed by `card_id` / image), and the editor reads that on open. This survives the edit toggle and save, and works **without** `url_sync`. The URL hash remains a fallback.
+
 ## [4.2.0] - 2026-07-11
 
 ### Editor opens on the room you were viewing
