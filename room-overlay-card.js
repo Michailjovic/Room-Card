@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.1.0';
+const ROC_VERSION='4.2.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2960,7 +2960,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
@@ -3019,12 +3019,33 @@ class RoomOverlayCardEditor extends HTMLElement{
     return el.value;
   }
 
+  // Preset _editRoomIdx from the url_sync hash (mirrors the card's
+  // _urlSyncKey/_roomIdxFromHash) so "edit" opens on the viewed room.
+  _initRoomFromHash(cfg){
+    try{
+      const u=cfg&&cfg.url_sync;
+      if(!u||!Array.isArray(cfg.rooms)||!cfg.rooms.length)return;
+      if(typeof location==='undefined')return;
+      const key=(typeof u==='string'&&u.trim())?u.trim():'room';
+      const h=String(location.hash||'').replace(/^#/,'');
+      if(!h)return;
+      let val=null;
+      h.split('&').forEach(function(p){const eq=p.indexOf('=');if(eq>0&&decodeURIComponent(p.slice(0,eq))===key)val=decodeURIComponent(p.slice(eq+1));});
+      if(val===null)return;
+      const ri=roomMatch(cfg,val);
+      if(ri>=0)this._editRoomIdx=Math.max(0,Math.min(ri,cfg.rooms.length-1));
+    }catch(_){}
+  }
+
   setConfig(cfg){
     const _hadLayout=!!(cfg&&cfg.layout);
     cfg=rocMigrateLayout(cfg);
     if(!_hadLayout)this._wasMigrated=true;
     const prev=this._config;
     this._config=cfg;
+    // Open the editor on the room the card was showing (url_sync only) — read
+    // the same URL hash the card writes. One-time, so the room picker still wins.
+    if(!this._roomIdxInit){this._roomIdxInit=true;this._initRoomFromHash(cfg);}
     if(!this._hist.length){try{this._hist=[JSON.stringify(cfg)];this._histIdx=0;}catch(_){}}
     if(prev&&this.innerHTML.trim()){
       const _ri=this._editRoomIdx;

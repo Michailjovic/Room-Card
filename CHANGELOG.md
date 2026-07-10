@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.2.0] - 2026-07-11
+
+### Editor opens on the room you were viewing
+
+- **The config editor now opens scoped to the room the card was showing** (requires `url_sync`). The card already writes the active room to the URL hash when you switch rooms; the editor now reads that same hash on open, so clicking *Edit* while looking at e.g. `Hall` opens the editor with Hall selected — the room picker and the drag-edit preview (with Hall's background image) follow. It's a one-time read on open, so manually changing the room picker afterwards still takes over, and a `hashchange` while editing won't move you. Without `url_sync` the editor opens on the first room as before. Card and editor are separate elements, so the URL hash is the shared channel; HA's own right-side preview pane still follows live presence and is not affected.
+
 ## [4.1.0] - 2026-07-11
 
 ### Light controls — switch support + editor gradient preview

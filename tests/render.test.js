@@ -110,5 +110,18 @@ t('collect wrote image row',out&&out.layout.landscape.place.image.row===3);
 t('collect kept aspect per-profile',out&&out.aspect_ratio&&out.aspect_ratio.portrait==='4/3');
 t('collect dropped legacy keys',out&&out.max_height===undefined&&out.breakpoints===undefined);
 
+// --- editor opens on the url_sync-hashed room ---
+try{w.location.hash='#room=hall';}catch(_){}
+const edH=w.document.createElement('room-overlay-card-editor');
+w.document.body.appendChild(edH);
+edH.setConfig({type:'custom:room-overlay-card',url_sync:true,layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]});
+t('editor opens on hashed room (url_sync)',edH._editRoomIdx===1);
+edH._editRoomIdx=0;edH.setConfig({type:'custom:room-overlay-card',url_sync:true,layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]});
+t('room picker choice survives later setConfig',edH._editRoomIdx===0);
+const edN=w.document.createElement('room-overlay-card-editor');
+w.document.body.appendChild(edN);
+edN.setConfig({type:'custom:room-overlay-card',layout:{},rooms:[{id:'living'},{id:'hall'}]});
+t('no url_sync -> editor stays on first room',edN._editRoomIdx===0);
+
 console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
 process.exit(fails?1:0);
