@@ -150,6 +150,8 @@ Rules and notes:
 
 - A region **not listed** in a profile's `place:` is **hidden** in that profile.
 - `row`/`col` take a grid line number (`3`) or a span (`"1/6"` = rows 1–5). Per-region options: `overflow: hidden|auto` (default hidden), `align`.
+- Tracks accept `%`, `auto` (size to content), `1fr` (take the remainder) and any CSS length — mix freely, e.g. `rows: [75px, auto, 1fr, auto]`. Rows always **pack from the top**; leftover height stays at the bottom.
+- Put the **image on an `auto` row** and its box sizes itself from the image's aspect — exact fit with no crop and no letterbox (ideal when you have controls at the image edges). Use a fixed `%` row + `image_fit` when you want to dictate the height instead.
 - The card is designed for **panel-view / full-screen** dashboards. `height: viewport` measures the real available height (HA header, view padding and safe-areas accounted for). Use `container` or a fixed value when embedding.
 - The **image region** gets a fixed box from the grid; the image renders inside it at its design aspect with `image_fit: cover` (crop, default) or `contain` (letterbox). **Element `%` positions stay glued to the image** — the lock_aspect stage from v3 does this everywhere now.
 - **Test mode** shows region outlines with names, a live viewport + profile badge, and a **profile switch button** to preview the other profile.

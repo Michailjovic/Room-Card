@@ -255,6 +255,12 @@ t('coverCtlHtml icon-only (no label span)',g.coverCtlHtml(g.coverControlNorm({id
 const _cch=g.coverCtlHtml(g.coverControlNorm({id:'roll',entity:'cover.x',name:'Bedroom',control:{display:'popover',presets:[{position:65,icon:'mdi:sun',color:'orange',name:'Day'}]}}));
 t('coverCtlHtml structure',/data-cc="roll"/.test(_cch)&&_cch.indexOf('data-cc-rail')>=0&&_cch.indexOf('data-cc-up')>=0&&_cch.indexOf('data-cc-down')>=0&&_cch.indexOf('data-cc-stop')>=0);
 t('coverCtlHtml preset',/data-pos="65"/.test(_cch)&&_cch.indexOf('mdi:sun')>=0&&_cch.indexOf('#ff9800')>=0);
+// v4: packed tracks + intrinsic image row
+t('grid packs from top',/align-content:start;/.test(g.rocGridCss({rows:['auto','auto']},'')));
+t('imgAutoRow true',g.rocImgAutoRow({rows:['auto','auto','auto'],place:{image:{row:2}}})===true);
+t('imgAutoRow false for %',g.rocImgAutoRow({rows:[10,70,20],place:{image:{row:2}}})===false);
+t('imgAutoRow false for 1fr',g.rocImgAutoRow({rows:['auto','1fr'],place:{image:{row:2}}})===false);
+t('imgAutoRow span uses start line',g.rocImgAutoRow({rows:['auto',10],place:{image:{row:'1/3'}}})===true);
 // v4: dock orientation from the grid definition
 t('coverHoriz bottom row full width',g.rocCoverHoriz({columns:[100],rows:[10,80,10],place:{cover:{row:3}}})===true);
 t('coverHoriz side column',g.rocCoverHoriz({columns:['1fr','auto'],rows:[10,90],place:{cover:{row:'1/3',col:2}}})===false);

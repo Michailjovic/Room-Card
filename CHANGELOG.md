@@ -15,6 +15,8 @@
 - **Test mode**: region outlines + name tags, live viewport×profile badge, and a **profile switch button** (⇅) to preview the other profile; FLIP (day/night filters) unchanged.
 - Swipe ghosts render the image region only and fill the image box (no layout recursion inside the drag preview).
 - **Empty placed regions render nothing** — rooms can share a grid cell (e.g. `cards_above` + `lights` on one row when no room has both) and `auto` rows/columns collapse to 0 in rooms without that content. Test mode still outlines the empty cell (non-interactive).
+- **Rows pack from the top** (`align-content: start`) — leftover height stays at the bottom instead of being distributed into `auto` rows as ugly gaps (rows summing to <100 % are fine).
+- **Intrinsic image row**: when the image region sits on an `auto` row, the image box sizes itself from the design aspect (CSS `aspect-ratio` on `.wrap`, refined to the image's natural ratio under `lock_aspect`) — exact fit, no crop, no letterbox; strips above/below hug the image.
 - **Dock orientation is derived from the grid definition** (`rocCoverHoriz`), not from measuring the box — `auto` tracks size to content, so measuring was circular (a vertical rail kept its row tall → stayed vertical at the bottom). One full-width row → horizontal bar; side column / row span → vertical rail; `place.cover.direction: horizontal|vertical` overrides. Multiple docked bars stack (`.roc-ccdock.ccd-h`).
 
 ## [3.3.0] – 2026-07-08
