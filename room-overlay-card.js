@@ -1,8 +1,8 @@
 /**
- * room-overlay-card v3.2.3 — MIT License
+ * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='3.3.0';
+const ROC_VERSION='4.0.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -58,43 +58,76 @@ function relTime(ts,lang){
   try{return new Intl.RelativeTimeFormat(lang||'en',{numeric:'auto'}).format(v,u);}
   catch(_){return(s<0?'-':'+')+Math.abs(v)+' '+u;}
 }
-// ---- Responsive tiers (container-width based) -------------------------------
-// Order matters: smallest → largest. The active tier is chosen by the card's own
-// width (offsetWidth), NOT the viewport — correct for HA dashboard columns.
-const ROC_TIERS=['mobile','tablet','desktop','ultrawide'];
-const ROC_TIER_BOUNDS={mobile:600,tablet:1024,desktop:1600}; // exclusive upper bound of each; ultrawide = the rest
-// Active tier from a width + optional config overrides
-// (cfg.breakpoints:{mobile,tablet,desktop}; legacy cfg.mobile_breakpoint wins for the mobile bound).
-function rocTier(w,cfg){
-  if(!(w>0))return'desktop';
-  const bp=(cfg&&cfg.breakpoints)||{};
-  const mB=(cfg&&cfg.mobile_breakpoint!=null)?cfg.mobile_breakpoint:(bp.mobile!=null?bp.mobile:ROC_TIER_BOUNDS.mobile);
-  const tB=bp.tablet!=null?bp.tablet:ROC_TIER_BOUNDS.tablet;
-  const dB=bp.desktop!=null?bp.desktop:ROC_TIER_BOUNDS.desktop;
-  if(w<mB)return'mobile';
-  if(w<tB)return'tablet';
-  if(w<dB)return'desktop';
-  return'ultrawide';
+// ---- Layout profiles (v4) ----------------------------------------------------
+// Two profiles chosen by the SHAPE of the available viewport (w/h ratio), not by
+// device type: ratio < threshold → portrait, else landscape. See LAYOUT.md.
+const ROC_PROFILES=['portrait','landscape'];
+const ROC_LEGACY_TIERS=['mobile','tablet','desktop','ultrawide'];
+// Regions a layout profile can place on its % grid
+const ROC_REGIONS=['nav','cards_above','image','lights','cards_below','cover'];
+function rocBrowserId(){try{return window.browser_mod?.browserID||window.browser_mod?.browser_id||'';}catch(_){return'';}}
+// Active profile: layout.orientation force ('portrait'|'landscape'), per-device
+// map {by_browser:{<browser_mod id>:profile},default:...}, or 'auto' by ratio.
+function rocProfile(cfg,w,h){
+  const l=(cfg&&cfg.layout)||{};
+  let o=l.orientation||'auto';
+  if(o&&typeof o==='object'){
+    const bb=o.by_browser||{};
+    o=bb[rocBrowserId()]||o.default||'auto';
+  }
+  if(o==='portrait'||o==='landscape')return o;
+  const th=(typeof l.threshold==='number'&&l.threshold>0)?l.threshold:1.0;
+  if(!(w>0)||!(h>0))return'landscape';
+  return(w/h<th)?'portrait':'landscape';
 }
-// Merge a per-item tier override block over the base item.
-// Backward compatible: the 'mobile' tier also reads the legacy `it.mobile` block.
-function tApply(it,tier){
-  if(!it||!tier)return it;
-  const o=it[tier]||(tier==='mobile'?it.mobile:null);
+// Merge a per-item profile override block over the base item.
+// Legacy v3 blocks still merge: mobile→portrait, desktop/ultrawide/tablet→landscape.
+function tApply(it,profile){
+  if(!it||!profile)return it;
+  const o=it[profile]||(profile==='portrait'?it.mobile:(it.desktop||it.ultrawide||it.tablet))||null;
   return o?Object.assign({},it,o):it;
 }
-// Resolve a scalar that may instead be a per-tier object {mobile,tablet,desktop,ultrawide}.
-// A missing tier falls back to the nearest defined tier (smaller first, then larger).
-function tVal(val,tier){
+// Resolve a scalar that may be a per-profile object {portrait,landscape}.
+// Legacy v3 per-tier objects resolve too (mobile→portrait, desktop→landscape).
+function tVal(val,profile){
   if(val==null||typeof val!=='object'||Array.isArray(val))return val;
-  const want=tier||'desktop';
+  const want=profile||'landscape';
   if(val[want]!=null)return val[want];
-  const i=ROC_TIERS.indexOf(want);
-  for(let d=1;d<ROC_TIERS.length;d++){
-    const lo=ROC_TIERS[i-d];if(lo&&val[lo]!=null)return val[lo];
-    const hi=ROC_TIERS[i+d];if(hi&&val[hi]!=null)return val[hi];
-  }
+  const legacy=want==='portrait'?['mobile','tablet']:['desktop','ultrawide','tablet'];
+  for(const k of legacy)if(val[k]!=null)return val[k];
+  const other=want==='portrait'?'landscape':'portrait';
+  if(val[other]!=null)return val[other];
+  for(const k of ROC_LEGACY_TIERS)if(val[k]!=null)return val[k];
   return undefined;
+}
+// A grid track: number → '%', string passes through ('12%', '1fr', 'auto').
+function rocTrack(v){return typeof v==='number'?v+'%':String(v);}
+// grid-row / grid-column value: 3 → '3', '1/6' passes through.
+function rocLine(v){return v==null?'auto':String(v);}
+// Layout definition for the given profile (null when not configured).
+function rocProfileDef(cfg,profile){
+  const l=(cfg&&cfg.layout)||{};
+  return l[profile]||null;
+}
+// Grid container CSS for one profile definition.
+function rocGridCss(lp,gap){
+  const cols=(Array.isArray(lp.columns)&&lp.columns.length?lp.columns:['100%']).map(rocTrack).join(' ');
+  const rows=(Array.isArray(lp.rows)&&lp.rows.length?lp.rows:['100%']).map(rocTrack).join(' ');
+  return'display:grid;width:100%;height:100%;grid-template-columns:'+cols+';grid-template-rows:'+rows+';'+(gap?'gap:'+gap+';':'')+'box-sizing:border-box;';
+}
+// Region wrapper style from its placement entry {row,col,overflow,align}.
+function rocRegionCss(pl){
+  const ov=(pl&&pl.overflow==='auto')?'auto':'hidden';
+  let st='grid-row:'+rocLine(pl&&pl.row)+';grid-column:'+rocLine(pl&&(pl.col!=null?pl.col:1))+';overflow:'+ov+';position:relative;min-width:0;min-height:0;';
+  if(pl&&pl.align&&pl.align!=='stretch')st+='align-self:'+pl.align+';';
+  return st;
+}
+// contain counterpart of coverStage — image letterboxed inside the box.
+function containStage(boxW,boxH,da){
+  if(!(da>0)||!(boxW>0)||!(boxH>0))return null;
+  let w,h;
+  if(boxW/boxH>=da){h=boxH;w=boxH*da;}else{w=boxW;h=boxW/da;}
+  return{w:w,h:h,left:(boxW-w)/2,top:(boxH-h)/2};
 }
 // Approximate colour temperature (Kelvin) → RGB (Tanner Helland, compact)
 function kelvinToRgb(k){
@@ -117,6 +150,106 @@ function tintFilter(rgb){
     h*=60;
   }
   return'sepia(1) saturate('+Math.max(0.2,sat*3).toFixed(2)+') hue-rotate('+Math.round(h-38)+'deg) brightness('+(0.6+l*0.9).toFixed(2)+')';
+}
+// ---- v3 → v4 auto-migration ---------------------------------------------------
+// Configs without a layout: block are converted in memory on load (clean cut —
+// the 4-tier engine is gone). The editor offers saving the migrated config.
+const ROC_ELEMENT_KEYS=['overlays','zones','badges','elements','icons','labels','gauges','blinds','groups'];
+function rocMigScalar(v){
+  if(v==null||typeof v!=='object'||Array.isArray(v))return v;
+  if(v.portrait!=null||v.landscape!=null)return v;
+  const p=v.mobile!=null?v.mobile:(v.tablet!=null?v.tablet:(v.desktop!=null?v.desktop:v.ultrawide));
+  const l=v.desktop!=null?v.desktop:(v.ultrawide!=null?v.ultrawide:(v.tablet!=null?v.tablet:v.mobile));
+  if(p!=null&&l!=null&&p===l)return p;
+  const o={};if(p!=null)o.portrait=p;if(l!=null)o.landscape=l;
+  return Object.keys(o).length?o:undefined;
+}
+function rocMigItem(it){
+  if(!it||typeof it!=='object')return;
+  if(it.mobile&&!it.portrait)it.portrait=it.mobile;
+  if(!it.landscape){const d=it.desktop||it.ultrawide||it.tablet;if(d)it.landscape=d;}
+  delete it.mobile;delete it.tablet;delete it.desktop;delete it.ultrawide;
+}
+function rocMigMedia(list){
+  (list||[]).forEach(function(cc){
+    if(!cc||!cc.media||cc.media==='all')return;
+    const set={};
+    String(cc.media).split(',').map(function(s){return s.trim();}).forEach(function(t){
+      if(t==='portrait'||t==='mobile')set.portrait=1;
+      else if(t==='landscape'||t==='desktop'||t==='tablet'||t==='ultrawide')set.landscape=1;
+    });
+    const out=Object.keys(set);
+    cc.media=out.length>=2?'all':(out[0]||'all');
+  });
+}
+function rocMigRoom(r){
+  if(!r)return;
+  ROC_ELEMENT_KEYS.forEach(function(k){(r[k]||[]).forEach(rocMigItem);});
+  rocMigMedia(r.cards_above);rocMigMedia(r.cards_below);
+  if(r.light_controls&&r.light_controls.height!=null){
+    const hv=rocMigScalar(r.light_controls.height);
+    if(hv===undefined)delete r.light_controls.height;else r.light_controls.height=hv;
+  }
+}
+// Generate a layout block approximating the old stacked v3 look.
+function rocGenLayout(cfg){
+  const rooms=Array.isArray(cfg.rooms)&&cfg.rooms.length?cfg.rooms:[cfg];
+  const has=function(k){
+    const hv=function(x){return!!(x&&x[k]&&(!Array.isArray(x[k])||x[k].length));};
+    return hv(cfg)||rooms.some(hv);
+  };
+  const wantNav=Array.isArray(cfg.rooms)&&cfg.rooms.length>1&&((cfg.nav&&cfg.nav.style)!=='none');
+  const navSide=wantNav&&cfg.nav&&(cfg.nav.position==='left'||cfg.nav.position==='right');
+  const wantAbove=has('cards_above'),wantBelow=has('cards_below'),wantLights=has('light_controls');
+  // Any blind docking its control in the given profile → the layout needs a cover region
+  const dockIn=function(profile){
+    const blinds=(cfg.blinds||[]).concat.apply([],rooms.map(function(r){return(r&&r.blinds)||[];}));
+    return blinds.some(function(b){
+      if(!b||!b.control)return false;
+      const ctl=b.control===true?{}:b.control;
+      const pv=(ctl.placement&&typeof ctl.placement==='object')?ctl.placement[profile]:ctl.placement;
+      const dv=(ctl.display&&typeof ctl.display==='object')?ctl.display[profile]:ctl.display;
+      return pv==='dock'||dv==='dock';
+    });
+  };
+  const mk=function(side,dock){
+    const rows=[],place={};let r=1;
+    const dockCol=dock&&!side; // landscape without a side nav → dock as a right column
+    if(wantNav&&!side){rows.push(8);place.nav={row:r++};}
+    if(wantAbove){rows.push(12);place.cards_above={row:r++};}
+    if(wantLights){rows.push(7);place.lights={row:r++};}
+    const imgRow=r++;rows.push(0);place.image={row:imgRow};
+    if(wantBelow){rows.push(12);place.cards_below={row:r++};}
+    if(dock&&!dockCol){rows.push(14);place.cover={row:r++};} // stacked (bottom) cover strip
+    rows[imgRow-1]=Math.max(20,100-rows.reduce(function(a,b){return a+b;},0));
+    if(side){
+      place.nav={row:'1/'+(rows.length+1),col:cfg.nav.position==='left'?1:2};
+      const oc=cfg.nav.position==='left'?2:1;
+      ['cards_above','lights','image','cards_below','cover'].forEach(function(k){if(place[k])place[k].col=oc;});
+      return{columns:cfg.nav.position==='left'?[15,85]:[85,15],rows:rows,place:place};
+    }
+    if(dockCol){
+      place.cover={row:'1/'+(rows.length+1),col:2};
+      return{columns:[88,12],rows:rows,place:place};
+    }
+    return{columns:[100],rows:rows,place:place};
+  };
+  return{height:'viewport',portrait:mk(false,dockIn('portrait')),landscape:mk(navSide,dockIn('landscape'))};
+}
+function rocMigrateLayout(cfg){
+  if(!cfg||typeof cfg!=='object'||cfg.layout)return cfg;
+  const c=rocClone(cfg);
+  ['aspect_ratio','border_radius'].forEach(function(k){
+    const v=rocMigScalar(c[k]);
+    if(v===undefined)delete c[k];else if(v!=null)c[k]=v;
+  });
+  c.layout=rocGenLayout(c); // generate BEFORE nav.position is normalised
+  delete c.max_height;delete c.breakpoints;delete c.mobile_breakpoint;
+  if(c.nav){delete c.nav.auto_breakpoint;if(c.nav.position==='auto')c.nav.position='top';}
+  rocMigRoom(c);
+  (c.rooms||[]).forEach(rocMigRoom);
+  try{console.info('[room-overlay-card] v3 config auto-migrated to the v4 layout engine (in memory only). Open the card editor to review & save — see LAYOUT.md.');}catch(_){}
+  return c;
 }
 // ----- Multi-room helpers -----------------------------------------------------
 // Keys that live per-room; top-level values act as shared defaults for all rooms
@@ -281,11 +414,14 @@ function blindToGaugeConfig(b){
 // ---- Cover control (roleta) ------------------------------------------------
 const CC_COLORS={red:'#f44336',pink:'#e91e63',purple:'#926bc7','deep-purple':'#674fa1',indigo:'#4e5cb5',blue:'#2196f3','light-blue':'#03a9f4',cyan:'#00bcd4',teal:'#009688',green:'#4caf50','light-green':'#8bc34a',lime:'#cddc39',yellow:'#ffeb3b',amber:'#ffc107',orange:'#ff9800','deep-orange':'#ff5722',brown:'#795548',grey:'#9e9e9e',gray:'#9e9e9e','blue-grey':'#607d8b','blue-gray':'#607d8b',black:'#000000',white:'#ffffff'};
 function ccColor(x){if(!x)return'';const k=String(x).trim().toLowerCase();return CC_COLORS[k]||x;}
-function coverControlNorm(b){
+function coverControlNorm(b,profile){
   if(!b||!b.control||!b.entity)return null;
   const ctl=(b.control===true)?{}:b.control;
-  if(ctl.display==='off'||ctl.display===false||ctl.placement==='off')return null;
-  let placement=ctl.placement||({popover:'float',float:'float',dock:'dock'})[ctl.display]||'float';
+  // placement accepts a per-profile object {portrait,landscape} → off|float|dock
+  const _plRaw=tVal(ctl.placement,profile);
+  const _dispRaw=tVal(ctl.display,profile); // legacy v3.3.0 key
+  if(_plRaw==='off'||_plRaw===false||_dispRaw==='off'||_dispRaw===false)return null;
+  let placement=_plRaw||({popover:'float',float:'float',dock:'dock'})[_dispRaw]||'float';
   if(placement!=='dock')placement='float';
   const presets=(Array.isArray(ctl.presets)?ctl.presets:[]).map(function(pp){
     return{position:Math.max(0,Math.min(100,Math.round(Number(pp.position)||0))),icon:pp.icon||'',color:pp.color||'',name:pp.name||''};
@@ -302,13 +438,14 @@ function coverControlNorm(b){
     presets:presets,
     name:ctl.name||b.name||''};
 }
-function coverCtlHtml(cc,mob){
-  const horiz=!!mob;
-  const base='background:rgba(0,0,0,0.68);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-sizing:border-box;display:none;z-index:120;position:absolute;border-radius:14px;';
+function coverCtlHtml(cc,mob,mode){
+  const dock=mode==='dock';
+  const horiz=!dock&&!!mob;
+  const base='background:rgba(0,0,0,0.68);color:#fff;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);box-sizing:border-box;border-radius:14px;';
   let pos;
-  if(horiz)pos='left:6px;right:6px;bottom:6px;height:54px;padding:0 12px;';
-  else if(cc.placement==='dock')pos='top:6px;bottom:6px;'+(cc.side==='left'?'left:6px;':'right:6px;')+'width:'+cc.width+';padding:8px 5px;';
-  else pos='top:'+cc.top+';left:'+cc.left+';height:'+cc.height+';width:'+cc.width+';padding:8px 5px;';
+  if(dock)pos='position:relative;flex:1 1 0;min-width:0;min-height:0;padding:8px 5px;'; // permanently visible member of the cover grid region
+  else if(horiz)pos='display:none;position:absolute;z-index:120;left:6px;right:6px;bottom:6px;height:54px;padding:0 12px;';
+  else pos='display:none;position:absolute;z-index:120;top:'+cc.top+';left:'+cc.left+';height:'+cc.height+';width:'+cc.width+';padding:8px 5px;';
   const hasUp=cc.buttons.indexOf('up')>=0,hasDown=cc.buttons.indexOf('down')>=0,hasStop=cc.buttons.indexOf('stop')>=0;
   const rail=cc.slider?'<div class="cc-rail" data-cc-rail><div class="cc-fill" data-cc-fill></div><div class="cc-thumb" data-cc-thumb></div></div>':'';
   let presets='';
@@ -318,7 +455,7 @@ function coverCtlHtml(cc,mob){
       +(pp.icon?'<ha-icon icon="'+escA(pp.icon)+'"></ha-icon>':'<span class="cc-preset-num">'+pp.position+'</span>')
       +'</button>';
   }
-  return '<div class="roc-cc'+(horiz?' cc-h':'')+'" data-cc="'+escA(cc.id)+'" title="'+escA(cc.name||'')+'" style="'+base+pos+'">'
+  return '<div class="roc-cc'+(horiz?' cc-h':'')+'" data-cc="'+escA(cc.id)+'" data-cc-mode="'+(dock?'dock':'float')+'" title="'+escA(cc.name||'')+'" style="'+base+pos+'">'
     +'<span class="cc-pct" data-cc-pct></span>'
     +(hasUp?'<button class="cc-cap" data-cc-up aria-label="Open"><ha-icon icon="mdi:chevron-up"></ha-icon></button>':'')
     +rail
@@ -385,7 +522,7 @@ class RoomOverlayCard extends HTMLElement{
     this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
-    this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;
+    this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -400,6 +537,7 @@ class RoomOverlayCard extends HTMLElement{
   static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[]};}
 
   setConfig(cfg){
+    cfg=rocMigrateLayout(cfg);
     const hasRooms=Array.isArray(cfg.rooms)&&cfg.rooms.length;
     if(!cfg.base_image&&!cfg.base_camera&&!(hasRooms&&cfg.rooms.some(function(r){return r.base_image||r.base_camera;})))
       throw new Error('[room-overlay-card] base_image (or base_camera) is required — directly or in rooms[]');
@@ -617,16 +755,49 @@ class RoomOverlayCard extends HTMLElement{
     const content=this.shadowRoot.querySelector('.content');
     const wrap=this.shadowRoot.querySelector('.wrap');
     if(!content||!wrap)return;
-    const da=this._designAspect();
-    if(!da)return; // off → leave .content to its class CSS (inset:0) / swipe transforms; config changes rebuild it fresh
-    if(content.dataset.rocStageW===String(this.offsetWidth)&&content.dataset.rocStageDa===String(da))return; // unchanged
+    const c=this._roomCfg||this._config;if(!c)return;
+    const prof=this._vt||'landscape';
+    // Design aspect: lock_aspect wins (explicit / auto from image), else aspect_ratio.
+    const da=this._designAspect()||rocRatio(tVal(c.aspect_ratio,prof))||16/9;
+    const fit=(tVal(c.image_fit,prof)==='contain')?'contain':'cover';
     const r=wrap.getBoundingClientRect();
-    const st=coverStage(r.width,r.height,da);
+    if(!(r.width>0)||!(r.height>0))return;
+    const key=Math.round(r.width)+'x'+Math.round(r.height)+':'+da.toFixed(4)+':'+fit;
+    if(content.dataset.rocStage===key)return; // unchanged
+    const st=(fit==='contain'?containStage:coverStage)(r.width,r.height,da);
     if(!st)return;
     content.style.position='absolute';content.style.inset='auto';
     content.style.width=st.w+'px';content.style.height=st.h+'px';
     content.style.left=st.left+'px';content.style.top=st.top+'px';
-    content.dataset.rocStageW=String(this.offsetWidth);content.dataset.rocStageDa=String(da);
+    content.dataset.rocStage=key;
+  }
+
+  // Viewport-mode root height: measure the card's real top offset (header +
+  // view padding + safe-area) and pin the height in px; the CSS calc() set at
+  // render is only the first-paint fallback. Re-run on window resize.
+  _layoutRootHeight(){
+    if(!this.shadowRoot||!this._config)return;
+    const c=this._roomCfg||this._config;
+    if(c._roc_ghost||c._roc_preview)return;
+    if(((this._config.layout&&this._config.layout.height)||'viewport')!=='viewport')return;
+    const card=this.shadowRoot.querySelector('ha-card');
+    if(!card)return;
+    const r=this.getBoundingClientRect();
+    if(!(window.innerHeight>0)||r.top<0||r.top>window.innerHeight*0.6)return; // scrolled/odd → keep CSS calc
+    const h=Math.max(200,Math.round(window.innerHeight-r.top));
+    if(Math.abs(h-parseInt(card.dataset.rocH||'0',10))<=1)return;
+    card.dataset.rocH=String(h);
+    card.style.height=h+'px';
+    this._layoutStage();
+  }
+
+  _onWinResize(){
+    if(!this._config||!this._rendered)return;
+    let p=rocProfile(this._config,window.innerWidth||0,window.innerHeight||0);
+    const c=this._roomCfg||this._config;
+    if((c.test_mode??false)&&this._profFlipped)p=(p==='portrait')?'landscape':'portrait';
+    if(p!==this._profile){this._rendered=false;this._render();return;}
+    this._layoutRootHeight();this._layoutStage();
   }
 
   _render(){
@@ -645,34 +816,37 @@ class RoomOverlayCard extends HTMLElement{
     this._roomCfg=c;
     this._zoomScale=1;this._wrapTA='';
     const tm=c.test_mode??false;
-    // Active responsive tier (by the card's own width). Null in test mode so that
-    // dragging always edits the base profile (tier deltas merge over the base).
-    const _rt=rocTier(this.offsetWidth,c); // real tier by the card's own width
-    const _tier=tm?null:_rt; // element tier-overrides are off in test mode (so dragging edits the base profile)
+    // Active layout profile — by the AVAILABLE VIEWPORT shape (w/h ratio), not
+    // by device type. Test mode can force the other profile via the ⇅ button.
+    let _rt=rocProfile(cAll,window.innerWidth||0,window.innerHeight||0);
+    if(tm&&this._profFlipped)_rt=(_rt==='portrait')?'landscape':'portrait';
+    const _tier=tm?null:_rt; // element profile-overrides are off in test mode (so dragging edits the base profile)
     this._tier=_tier;
-    const _vt=_rt; // per-tier SCALARS (aspect_ratio/border_radius/max_height) follow the real tier even in test mode
-    this._vt=_vt;
+    const _vt=_rt; // per-profile SCALARS follow the real profile even in test mode
+    this._vt=_vt;this._profile=_rt;
+    const _isGhost=!!c._roc_ghost;
+    // Grid definition for the active profile (swipe ghosts render the image region only)
+    const _lp=_isGhost?{columns:[100],rows:[100],place:{image:{row:1,col:1}}}
+      :(rocProfileDef(cAll,_rt)||{columns:[100],rows:[100],place:{image:{row:1,col:1}}});
+    this._lp=_lp;
     const _arResolved=tVal(c.aspect_ratio,_vt)||'16/9';
-    const pad=this._pad(_arResolved),br=(tVal(c.border_radius,_vt)??'12px');
-    // Optional per-tier height cap. The image box keeps its aspect ratio (so % positions
-    // stay valid) but stops growing once it would exceed max_height — converted to a
-    // max-width via the ratio — then centered, letterboxing the sides on wide screens.
-    let _wrapMax='';
-    {
-      let _mh=tVal(c.max_height,_vt);
-      if(typeof _mh==='number')_mh=_mh+'px';
-      if(_mh){
-        const _mhr=rocRatio(_arResolved);
-        if(_mhr)_wrapMax=' style="max-width:calc('+_mh+' * '+_mhr.toFixed(4)+');margin-left:auto;margin-right:auto;"';
-      }
-    }
+    const br=(tVal(c.border_radius,_vt)??'12px');
+    // Root height: viewport (default) | container | fixed CSS length. Ghosts and
+    // editor previews fill/fix their host instead of the viewport.
+    const _lhRaw=(cAll.layout&&cAll.layout.height)||'viewport';
+    let _rootH;
+    if(_isGhost)_rootH='100%';
+    else if(c._roc_preview)_rootH='420px';
+    else if(_lhRaw==='viewport')_rootH='calc(100svh - var(--header-height,56px))'; // refined by _layoutRootHeight()
+    else if(_lhRaw==='container')_rootH='100%';
+    else _rootH=(typeof _lhRaw==='number')?_lhRaw+'px':String(_lhRaw);
     // ---- Multi-room navigation strip -------------------------------------
     let navHtml='';
     const navCfg=cAll.nav||{};
     const navStyle=Array.isArray(cAll.rooms)&&cAll.rooms.length>1?(navCfg.style||'thumbnails'):'none';
     // position: top | bottom | left | right | auto (auto = side rail on wide cards)
     let navPos=navCfg.position||'top';
-    if(navPos==='auto')navPos=(this.offsetWidth||0)>=(navCfg.auto_breakpoint??1100)?'left':'top';
+    if(navPos==='auto')navPos='top'; // v4: position only orients the strip; placement comes from the layout grid
     if(navStyle==='none')navPos='top';
     this._navPos=navPos;
     const _navSide=navPos==='left'||navPos==='right';
@@ -690,7 +864,7 @@ class RoomOverlayCard extends HTMLElement{
       else _thFlex='flex:none;width:'+(nwRaw||_thDerived)+';';
       // Mobile: wrap the strip — all thumbnails shrink onto row 1 (keeping
       // aspect via aspect-ratio), custom cards + follow button wrap to row 2
-      const _navMob=!_navSide&&(this.offsetWidth||0)>0&&(this.offsetWidth||0)<(cAll.mobile_breakpoint??600);
+      const _navMob=!_navSide&&_rt==='portrait';
       if(_navMob)_thFlex='flex:1 1 0;min-width:0;';
       // Mobile thumbs: fixed (shorter) height so both chips fit; image crops to cover
       const _thSize='height:'+(_navMob?(navCfg.mobile_height||'48px'):nh)+';';
@@ -713,7 +887,7 @@ class RoomOverlayCard extends HTMLElement{
       const _fbHtml=(navCfg.follow_button!==false&&_fbEnt&&this._hass&&this._hass.states[_fbEnt])
         ?'<button data-nav-follow title="Jump to my room (presence)" style="flex:none;display:flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:50%;border:1px solid var(--divider-color,#555);background:none;color:var(--primary-text-color,#fff);cursor:pointer;"><ha-icon icon="mdi:crosshairs-gps" style="--mdc-icon-size:18px;"></ha-icon></button>'
         :'';
-      navHtml='<div class="roc-nav" style="display:flex;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;flex:none;':(_navMob?'flex-wrap:wrap;':'overflow-x:auto;'))+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
+      navHtml='<div class="roc-nav" style="display:flex;box-sizing:border-box;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;height:100%;':(_navMob?'flex-wrap:wrap;':'overflow-x:auto;'))+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
         +_navCardsStart
         +cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
@@ -726,11 +900,6 @@ class RoomOverlayCard extends HTMLElement{
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
         }).join('')+_navBreak+_navCardsEnd+_fbHtml+'</div>';
     }
-    const _navTop=!_navSide&&navPos!=='bottom'?navHtml:'';
-    const _navBot=!_navSide&&navPos==='bottom'?navHtml:'';
-    const _flexPre=_navSide?'<div style="display:flex;align-items:stretch;">'+(navPos==='left'?navHtml:''):'';
-    const _flexPost=_navSide?(navPos==='right'?navHtml:'')+'</div>':'';
-    const _wrapStyle=_navSide?' style="flex:1 1 auto;min-width:0;"':'';
 
     // Inicializace group state — zachovat existující stav, přidat nové skupiny
     const _prevGS=this._groupState||{};
@@ -758,8 +927,6 @@ class RoomOverlayCard extends HTMLElement{
       window.addEventListener('hashchange',this._hashHandler);
     }
 
-    // Legacy boolean derived from the tier — used by strip media filtering below.
-    const _mob=(_tier==='mobile');
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${escA(ov.id)}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};"></div>`).join('');
     const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+escA(b.id)+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
@@ -775,9 +942,9 @@ class RoomOverlayCard extends HTMLElement{
     // media: all | mobile | desktop (legacy = any non-mobile) | tier list (e.g. "tablet,ultrawide")
     const _stripShow=function(media){
       if(!media||media==='all')return true;
-      if(media==='mobile')return _mob;
-      if(media==='desktop')return !_mob;
-      return String(media).split(',').map(function(s){return s.trim();}).indexOf(_vt)>=0;
+      if(media==='mobile'||media==='portrait')return _rt==='portrait';
+      if(media==='desktop'||media==='landscape')return _rt==='landscape';
+      return String(media).split(',').map(function(s){return s.trim();}).indexOf(_rt)>=0;
     };
     const _stripOne=function(list,attr){
       return(list||[]).map(function(cc,ci){
@@ -798,11 +965,21 @@ class RoomOverlayCard extends HTMLElement{
     const _lcHtml=_lcEnts.length?'<div class="roc-lc" style="display:grid;grid-template-columns:repeat('+_lcCols+',minmax(0,1fr));gap:6px;padding:6px 6px 0;">'+_lcEnts.map(function(e,i){return'<div data-lc-card="'+i+'" style="min-width:0;"></div>';}).join('')+'</div>':'';
 
     // ---- Cover controls (roleta) — build tap-reveal overlays -------------
-    const _ccGhost=!!c._roc_ghost;
-    const _ccMob=(_vt==='mobile');
-    const _ccList=_ccGhost?[]:(c.blinds||[]).map(function(b){return coverControlNorm(tApply(b,_tier));}).filter(Boolean);
+    const _ccGhost=_isGhost;
+    const _ccList=_ccGhost?[]:(c.blinds||[]).map(function(b){return coverControlNorm(tApply(b,_tier),_rt);}).filter(Boolean);
+    // A dock needs a placed cover region — otherwise fall back to float so the
+    // controller never silently disappears.
+    if(!_isGhost&&!(_lp.place&&_lp.place.cover)){
+      let _ccWarned=false;
+      _ccList.forEach(function(cc){
+        if(cc.placement!=='dock')return;
+        cc.placement='float';
+        if(!_ccWarned){_ccWarned=true;try{console.warn('[room-overlay-card] cover control placement "dock" but no cover region is placed in the '+_rt+' layout profile — falling back to float (tap-reveal)');}catch(_){}}
+      });
+    }
     this._ccCfgs=_ccList;
-    const _ccPop=_ccList.map(function(cc){return coverCtlHtml(cc,_ccMob);}).join('');
+    const _ccPop=_ccList.filter(function(cc){return cc.placement==='float';}).map(function(cc){return coverCtlHtml(cc,_rt==='portrait','float');}).join('');
+    const _ccDockHtml=_ccList.filter(function(cc){return cc.placement==='dock';}).map(function(cc){return coverCtlHtml(cc,false,'dock');}).join('');
     this._radialMeta={};
     const _allGaugesRC=[...(c.gauges||[]).map(g=>tApply(g,_tier)),...(c.blinds||[]).map(b=>tApply(b,_tier)).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';
     if(_gor==='radial'){
@@ -824,7 +1001,18 @@ class RoomOverlayCard extends HTMLElement{
         +'<circle class="gfill" cx="50" cy="50" r="'+r+'" fill="none" stroke="white" stroke-width="'+th+'" stroke-linecap="round" stroke-dasharray="0 '+circ.toFixed(2)+'" transform="rotate('+rot+' 50 50)" style="transition:stroke-dasharray '+(g.transition||'0.5s ease')+';"/>'
         +tgt+'</svg></div>';
     }const _ghoriz=_gor==='horizontal'||_gor==='right';const defTr=_ghoriz?'width 0.5s ease':'height 0.5s ease';const tr=g.transition||defTr;let fillSt;if(g._dayNight){const _dtr=g.transition||'height 0.5s ease';const _bgTr=_dtr.replace(/^\S+\s+/,'');fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:transparent;background-repeat:repeat;background-size:100% auto;transition:'+_dtr+',background-position-y '+_bgTr+';';}else if(_gor==='top')fillSt='position:absolute;top:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';else if(_gor==='right')fillSt='position:absolute;top:0;right:0;bottom:0;width:0%;background:white;transition:'+tr+';';else if(_gor==='horizontal')fillSt='position:absolute;top:0;left:0;bottom:0;width:0%;background:white;transition:'+tr+';';else fillSt='position:absolute;bottom:0;left:0;right:0;height:0%;background:white;transition:'+tr+';';return'<div class="gauge" data-gauge="'+escA(g.id)+'" style="position:absolute;top:'+g.top+';left:'+g.left+';width:'+g.width+';height:'+g.height+';z-index:'+(g.z_index??6)+';pointer-events:none;background:'+bg+';border:1px solid rgba(255,255,255,0.12);border-radius:'+br+';overflow:hidden;"><div class="gfill" style="'+fillSt+'"></div></div>';}).join('');
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+'}.wrap{position:relative;width:100%;padding-bottom:'+pad+';overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}'+CC_CSS+'</style><ha-card>'+_navTop+_flexPre+'<div class="roc-main"'+_wrapStyle+'>'+_aboveHtml+_lcHtml+'<div class="wrap"'+_wrapMax+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+_belowHtml+'</div>'+_flexPost+_navBot+'</ha-card>';
+    // ---- Layout grid: wrap every placed region ---------------------------
+    const _regDiv=function(rg,inner){
+      const pl=_lp.place&&_lp.place[rg];
+      if(!pl)return''; // region not placed in this profile → hidden
+      return'<div class="roc-reg" data-reg="'+rg+'" style="'+rocRegionCss(pl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">'+inner+(tm?'<div class="roc-regtag">'+rg+'</div>':'')+'</div>';
+    };
+    const _regInner={nav:navHtml,cards_above:_aboveHtml,lights:_lcHtml,cards_below:_belowHtml,cover:_ccDockHtml?'<div class="roc-ccdock">'+_ccDockHtml+'</div>':''};
+    let _regPost='';
+    ['nav','cards_above','lights','cards_below','cover'].forEach(function(rg){_regPost+=_regDiv(rg,_regInner[rg]);});
+    const _imgPl=(_lp.place&&_lp.place.image)||{row:1,col:1};
+    const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     const content=this.shadowRoot.querySelector('.content');
     this._baseEl=this.shadowRoot.querySelector('.base');
@@ -834,7 +1022,7 @@ class RoomOverlayCard extends HTMLElement{
     // not to .content — under lock_aspect .content is a larger cover-stage that
     // overflows the box, so bottom/top-anchored chips would fall off-screen.
     const _wrapBox=this.shadowRoot.querySelector('.wrap');
-    if(_wrapBox)this.shadowRoot.querySelectorAll('.content > .badge, .content > .tm-info, .content > .tm-flip, .content > .tm-save').forEach(function(el){_wrapBox.appendChild(el);});
+    if(_wrapBox)this.shadowRoot.querySelectorAll('.content > .badge, .content > .tm-info, .content > .tm-flip, .content > .tm-prof, .content > .tm-save').forEach(function(el){_wrapBox.appendChild(el);});
     // ---- Nav wiring -------------------------------------------------------
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._navFollowEl=null;
     if(navStyle!=='none'){
@@ -930,13 +1118,20 @@ class RoomOverlayCard extends HTMLElement{
     // ---- Cover controls (roleta) — mount interactions -----------------------
     this._ccEls={};
     if(this._ccCfgs&&this._ccCfgs.length&&!c._roc_ghost){
-      const ccSelf=this;const _ccMobM=(_vt==='mobile');
+      const ccSelf=this;const _ccMobM=(_vt==='portrait');
       this._ccCfgs.forEach(function(cc){
         const root=ccSelf.shadowRoot.querySelector('.roc-cc[data-cc="'+escSel(cc.id)+'"]');
         if(!root)return;
+        const _mode=root.dataset.ccMode||'float';
+        let _horiz=_ccMobM&&_mode!=='dock';
+        if(_mode==='dock'){ // orientation follows the region's own shape
+          const _rr=root.getBoundingClientRect();
+          _horiz=(_rr.width>0&&_rr.height>0)?_rr.width>_rr.height:false;
+          root.classList.toggle('cc-h',_horiz);
+        }
         root.style.touchAction='none';
         root.addEventListener('pointerdown',function(e){e.stopPropagation();});
-        const rec={cfg:cc,root:root,horiz:_ccMobM,
+        const rec={cfg:cc,root:root,horiz:_horiz,mode:_mode,
           pct:root.querySelector('[data-cc-pct]'),fill:root.querySelector('[data-cc-fill]'),
           thumb:root.querySelector('[data-cc-thumb]'),rail:root.querySelector('[data-cc-rail]'),
           stop:root.querySelector('[data-cc-stop]'),up:root.querySelector('[data-cc-up]'),
@@ -951,7 +1146,7 @@ class RoomOverlayCard extends HTMLElement{
         rec.presets.forEach(function(pb){pb.addEventListener('click',guard(function(){call('set_cover_position',{position:parseInt(pb.dataset.pos,10)||0});}));});
         if(rec.rail)ccSelf._attachCoverRail(rec);
         const anchor=ccSelf.shadowRoot.querySelector('[data-gauge="__bl_'+escSel(cc.id)+'"]');
-        if(anchor){anchor.style.pointerEvents='auto';anchor.style.cursor='pointer';
+        if(anchor&&_mode==='float'){anchor.style.pointerEvents='auto';anchor.style.cursor='pointer';
           anchor.addEventListener('click',function(e){e.stopPropagation();ccSelf._toggleCoverPop(cc.id);});}
       });
       if(!this._ccOutsideBound){
@@ -959,7 +1154,7 @@ class RoomOverlayCard extends HTMLElement{
         this.shadowRoot.addEventListener('pointerdown',function(e){
           const path=e.composedPath?e.composedPath():[];
           for(const n of path){if(n&&n.classList&&(n.classList.contains('roc-cc')||(n.dataset&&typeof n.dataset.gauge==='string'&&n.dataset.gauge.indexOf('__bl_')===0)))return;}
-          for(const k in(obSelf._ccEls||{}))obSelf._ccEls[k].root.style.display='none';
+          for(const k in(obSelf._ccEls||{})){if(obSelf._ccEls[k].mode!=='dock')obSelf._ccEls[k].root.style.display='none';}
         },true);
       }
     }
@@ -1080,6 +1275,15 @@ class RoomOverlayCard extends HTMLElement{
           flipBtn.style.background=self._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)';
           flipBtn.innerHTML=self._testFlipped?'&#8644; FLIPPED':'&#8644; FLIP';
           self._update();
+        });
+      }
+      const profBtn=this.shadowRoot.querySelector('.tm-prof');
+      if(profBtn){
+        const pfSelf=this;
+        profBtn.addEventListener('click',function(e){
+          e.stopPropagation();e.preventDefault();
+          pfSelf._profFlipped=!pfSelf._profFlipped;
+          pfSelf._rendered=false;pfSelf._render();
         });
       }
       const saveBtn=this.shadowRoot.querySelector('.tm-save');
@@ -1349,7 +1553,15 @@ class RoomOverlayCard extends HTMLElement{
       const self=this;
       this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutStage();if(self._hass&&self._visible)self._update();}});
       this._ro.observe(this);
+      // The image region's height changes independently of the card (grid %),
+      // so the cover-stage watches its own box too.
+      if(this._wrapRo)this._wrapRo.disconnect();
+      const _wEl=this.shadowRoot.querySelector('.wrap');
+      if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._layoutStage();});this._wrapRo.observe(_wEl);}
     }
+    if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
+    this._layoutRootHeight();
+    this._layoutStage();
     // Change detection: the ACTIVE room (merged view) drives full updates;
     // entities that only affect nav thumbnails/chips go into a cheaper
     // nav-only set (see _schedule) so busy sensors in other rooms don't
@@ -1860,7 +2072,7 @@ class RoomOverlayCard extends HTMLElement{
       // without this they render above/below the ghost image and slide in with it.
       if(Array.isArray(gcfg.rooms))gcfg.rooms.forEach(function(_r){if(_r){delete _r.cards_above;delete _r.cards_below;delete _r.light_controls;}});
       delete gcfg.url_sync;                                   // the ghost must never touch the URL hash
-      gc.style.cssText='display:block;position:absolute;top:0;left:0;width:100%;';
+      gc.style.cssText='display:block;position:absolute;top:0;left:0;width:100%;height:100%;';
       gc.setConfig(gcfg);
       gc._roomIdx=Math.max(0,Math.min(idx,(cAll.rooms||[]).length-1));
       if(this._hass)gc.hass=this._hass;
@@ -2014,9 +2226,9 @@ class RoomOverlayCard extends HTMLElement{
 
   // Cover control -> toggle visibility (reveal on blind tap; only one shown at a time).
   _toggleCoverPop(id){
-    const rec=this._ccEls&&this._ccEls[id];if(!rec)return;
+    const rec=this._ccEls&&this._ccEls[id];if(!rec||rec.mode==='dock')return;
     const showing=rec.root.style.display!=='none';
-    for(const k in this._ccEls)this._ccEls[k].root.style.display='none';
+    for(const k in this._ccEls){if(this._ccEls[k].mode!=='dock')this._ccEls[k].root.style.display='none';}
     if(!showing)rec.root.style.display='';
   }
 
@@ -2148,17 +2360,13 @@ class RoomOverlayCard extends HTMLElement{
       const _fri=roomMatch(cAll,s[_reId]?.state);
       setSt(this._navFollowEl,'color',(_fri>=0&&_fri!==this._roomIdx)?'var(--primary-color,#03a9f4)':'');
     }
-    // Re-render when the active responsive tier changes (resize/rotation/column change)
-    const _rtNow=rocTier(this.offsetWidth,c);
+    // Re-render when the active layout profile changes (resize / rotation)
+    let _rtNow=rocProfile(cAll,window.innerWidth||0,window.innerHeight||0);
+    if((c.test_mode??false)&&this._profFlipped)_rtNow=(_rtNow==='portrait')?'landscape':'portrait';
     const _tierNow=(c.test_mode??false)?null:_rtNow;
     if(_tierNow!==this._tier||_rtNow!==this._vt){this._rendered=false;this._render();return;}
-    // Live width/tier readout in test mode (updates on resize without re-render)
-    if(this._tmInfoEl)this._tmInfoEl.innerHTML='&#128208; '+Math.round(this.offsetWidth)+' px<br><span style="font-weight:normal;opacity:0.85;">tier: '+rocTier(this.offsetWidth,c)+'</span>';
-    // Re-render when nav position: auto flips between top and side rail
-    if(Array.isArray(cAll.rooms)&&cAll.rooms.length>1&&(cAll.nav&&cAll.nav.position)==='auto'&&this.offsetWidth>0){
-      const _wantPos=this.offsetWidth>=((cAll.nav&&cAll.nav.auto_breakpoint)??1100)?'left':'top';
-      if(_wantPos!==this._navPos){this._rendered=false;this._render();return;}
-    }
+    // Live viewport/profile readout in test mode (updates on resize without re-render)
+    if(this._tmInfoEl)this._tmInfoEl.innerHTML='&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rtNow+'</span>';
     const flipped=(c.test_mode??false)&&this._testFlipped;
     if(this._baseEl){
       let _bf=flipped?null:bmFilter(c.brightness_model,s,this._sortedBmFg);
@@ -2482,7 +2690,9 @@ class RoomOverlayCard extends HTMLElement{
     if(this._hashHandler)window.removeEventListener('hashchange',this._hashHandler);
     this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
+    if(this._wrapRo){this._wrapRo.disconnect();this._wrapRo=null;}
     if(this._io){this._io.disconnect();this._io=null;}
+    if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
   }
 
   connectedCallback(){
@@ -2494,6 +2704,7 @@ class RoomOverlayCard extends HTMLElement{
       if(!this._tmplUnsubs.length)this._setupTemplates();
       if(this._hlHandler)window.addEventListener('roc-highlight',this._hlHandler);
       if(this._hashHandler)window.addEventListener('hashchange',this._hashHandler);
+      if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
     }
   }
 }
@@ -2724,6 +2935,9 @@ class RoomOverlayCardEditor extends HTMLElement{
   }
 
   setConfig(cfg){
+    const _hadLayout=!!(cfg&&cfg.layout);
+    cfg=rocMigrateLayout(cfg);
+    if(!_hadLayout)this._wasMigrated=true;
     const prev=this._config;
     this._config=cfg;
     if(!this._hist.length){try{this._hist=[JSON.stringify(cfg)];this._histIdx=0;}catch(_){}}
@@ -2841,25 +3055,67 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(_oldWo.angle!==undefined)_wo.angle=_oldWo.angle;
       tgt.weather_overlay=_wo;
     }else delete tgt.weather_overlay;
-    const _mbp=parseFloat(v('mobile_breakpoint',''));
-    if(!isNaN(_mbp)&&_mbp>0&&_mbp!==600)c.mobile_breakpoint=_mbp;else delete c.mobile_breakpoint;
-    const _bpO={};['mobile','tablet','desktop'].forEach(function(k){const _bv=parseFloat(v('bp_'+k,''));if(!isNaN(_bv)&&_bv>0)_bpO[k]=_bv;});
-    if(Object.keys(_bpO).length)c.breakpoints=_bpO;else delete c.breakpoints;
+    // Layout block (v4) — height/orientation/threshold/gap + per-profile grids
+    (function(){
+      if(!q('#ly-hmode'))return; // Layout tab not rendered (onboarding)
+      const ly=Object.assign({},c.layout||{});
+      const hm=q('#ly-hmode');
+      if(hm.value==='custom'){const hv=v('ly-hcustom','').trim();ly.height=hv||'viewport';}
+      else ly.height=hm.value;
+      if(ly.height==='viewport')delete ly.height; // default
+      const orS=q('#ly-orient');
+      const pinS=q('#ly-pin');
+      const bid=window.browser_mod?.browserID||window.browser_mod?.browser_id||'';
+      let orient=(ly.orientation&&typeof ly.orientation==='object')?Object.assign({},ly.orientation):null;
+      if(orient&&orient.by_browser)orient.by_browser=Object.assign({},orient.by_browser);
+      if(pinS&&bid){
+        if(pinS.value){orient=orient||{};orient.by_browser=orient.by_browser||{};orient.by_browser[bid]=pinS.value;}
+        else if(orient&&orient.by_browser){delete orient.by_browser[bid];if(!Object.keys(orient.by_browser).length)delete orient.by_browser;}
+      }
+      const orV=orS?orS.value:'auto';
+      if(orient){
+        if(orV==='portrait'||orV==='landscape')orient.default=orV;else delete orient.default;
+        if(!Object.keys(orient).length)orient=null;
+      }else if(orV==='portrait'||orV==='landscape')orient=orV;
+      if(orient)ly.orientation=orient;else delete ly.orientation;
+      const th=parseFloat(v('ly-threshold',''));
+      if(!isNaN(th)&&th>0&&th!==1)ly.threshold=th;else delete ly.threshold;
+      const gp=v('ly-gap','').trim();if(gp)ly.gap=gp;else delete ly.gap;
+      const _numOr=function(s){const t=String(s).trim();if(!t)return null;return/^[\d.]+$/.test(t)?parseFloat(t):t;};
+      ['portrait','landscape'].forEach(function(pk){
+        const lp={};
+        const rw=v('ly-rows__'+pk,'').trim(),cl=v('ly-cols__'+pk,'').trim();
+        if(rw)lp.rows=rw.split(',').map(_numOr).filter(function(x){return x!==null;});
+        if(cl)lp.columns=cl.split(',').map(_numOr).filter(function(x){return x!==null;});
+        const place={};
+        ['nav','cards_above','image','lights','cards_below','cover'].forEach(function(rg){
+          const rr=v('ly-r__'+pk+'__'+rg,'').trim();
+          if(!rr)return;
+          const pl={row:_numOr(rr)};
+          const cc2=v('ly-c__'+pk+'__'+rg,'').trim();if(cc2)pl.col=_numOr(cc2);
+          const ov2=q('#ly-o__'+pk+'__'+rg);if(ov2&&ov2.checked)pl.overflow='auto';
+          place[rg]=pl;
+        });
+        if(Object.keys(place).length)lp.place=place;
+        if(Object.keys(lp).length)ly[pk]=lp;else delete ly[pk];
+      });
+      c.layout=ly;
+    })();
     const _zm=q('#zoom');
     if(_zm&&_zm.checked)c.zoom=true;else delete c.zoom;
     const _bicR=this._pYaml(this.querySelector('#base_image_conditions'));
     if(_bicR.ok){if(Array.isArray(_bicR.val))tgt.base_image_conditions=_bicR.val;else delete tgt.base_image_conditions;}
-    // Per-tier inputs → scalar (one cell filled) or {tier:value} object (≥2 filled)
-    const _collTier=function(idb){
-      const o={};let n=0,last='';
-      ROC_TIERS.forEach(function(tk){const el=q('#'+idb+'__'+tk);if(!el)return;const vv=el.value.trim();if(vv){o[tk]=vv;n++;last=vv;}});
+    // Per-profile inputs → scalar (only Landscape filled) or {portrait,landscape}
+    const _collProf=function(idb){
+      const o={};let n=0;
+      ROC_PROFILES.forEach(function(pk){const el=q('#'+idb+'__'+pk);if(!el)return;const vv=el.value.trim();if(vv){o[pk]=vv;n++;}});
       if(n===0)return undefined;
-      if(n===1)return last;
+      if(n===1&&o.landscape!==undefined)return o.landscape;
       return o;
     };
-    const _arV=_collTier('aspect_ratio');c.aspect_ratio=_arV!==undefined?_arV:'16/9';
-    const _brV=_collTier('border_radius');if(_brV!==undefined)c.border_radius=_brV;else delete c.border_radius;
-    const _mhV=_collTier('max_height');if(_mhV!==undefined)c.max_height=_mhV;else delete c.max_height;
+    const _arV=_collProf('aspect_ratio');c.aspect_ratio=_arV!==undefined?_arV:'16/9';
+    const _brV=_collProf('border_radius');if(_brV!==undefined)c.border_radius=_brV;else delete c.border_radius;
+    const _ifV=_collProf('image_fit');if(_ifV!==undefined)c.image_fit=_ifV;else delete c.image_fit;
     const _lav=v('lock_aspect','').trim().toLowerCase();
     if(_lav==='true'||_lav==='on'||_lav==='yes'||_lav==='auto')c.lock_aspect=true;
     else if(_lav)c.lock_aspect=v('lock_aspect','').trim();
@@ -3895,33 +4151,69 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<div style="font-size:11px;color:var(--secondary-text-color);margin:10px 0 4px;">… or use a live camera snapshot instead:</div>'
       +'<input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'>'
       +'</div></div>';
-    // Responsive tab — breakpoint thresholds (per-tier aspect/max_height stay in Image for now)
-    const _bp=c.breakpoints||{};
-    let respInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">Tiers follow the card’s own width (its dashboard column), not the screen resolution. Each breakpoint is the upper bound in px; <b>ultrawide</b> is everything above the last. Turn on <b>Test mode</b> (header) to see a live width + tier badge on the card.</p>';
+    // Layout tab (v4) — two profiles (portrait/landscape) on a % grid of the viewport
+    const _ly=c.layout||{};
+    const _lyH=_ly.height||'viewport';
+    const _lyHMode=(_lyH==='viewport'||_lyH==='container')?_lyH:'custom';
+    const _lyOr=(typeof _ly.orientation==='string')?_ly.orientation:'auto';
+    const _lyPin=(_ly.orientation&&typeof _ly.orientation==='object')?_ly.orientation:null;
+    const _bidNowL=window.browser_mod?.browserID||window.browser_mod?.browser_id||'';
+    const _pinVal=(_lyPin&&_bidNowL&&_lyPin.by_browser)?(_lyPin.by_browser[_bidNowL]||''):'';
+    let respInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">Two layout profiles — <b>portrait</b> / <b>landscape</b> — picked by the viewport&#39;s width/height ratio (not by device type). Each profile is a % grid of the available screen and every block (region) gets a cell. <b>You own the percentages</b> (rows should sum to &le;100). Turn on <b>Test mode</b> to see region outlines and a profile switch button on the card.</p>';
     respInner+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
-    respInner+='<div><label class="roc-l">Mobile below (px)</label><input id="bp_mobile" type="number" min="0" step="10" placeholder="600" value="'+this._e(_bp.mobile!=null?String(_bp.mobile):'')+'"'+this._inp('')+'></div>';
-    respInner+='<div><label class="roc-l">Tablet below</label><input id="bp_tablet" type="number" min="0" step="10" placeholder="1024" value="'+this._e(_bp.tablet!=null?String(_bp.tablet):'')+'"'+this._inp('')+'></div>';
-    respInner+='<div><label class="roc-l">Desktop below</label><input id="bp_desktop" type="number" min="0" step="10" placeholder="1600" value="'+this._e(_bp.desktop!=null?String(_bp.desktop):'')+'"'+this._inp('')+'></div>';
-    respInner+='<div><label class="roc-l">Legacy mobile_bp</label><input id="mobile_breakpoint" type="number" min="0" step="10" placeholder="600" value="'+(c.mobile_breakpoint!=null?c.mobile_breakpoint:'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Height</label><select id="ly-hmode"'+this._inp('')+'><option value="viewport"'+(_lyHMode==='viewport'?' selected':'')+'>viewport (full view)</option><option value="container"'+(_lyHMode==='container'?' selected':'')+'>container (parent)</option><option value="custom"'+(_lyHMode==='custom'?' selected':'')+'>custom&#8230;</option></select></div>';
+    respInner+='<div><label class="roc-l">Custom height</label><input id="ly-hcustom" type="text" placeholder="e.g. 90vh / 800px" value="'+this._e(_lyHMode==='custom'?String(_lyH):'')+'"'+this._inp('')+'></div>';
+    respInner+='<div><label class="roc-l">Orientation</label><select id="ly-orient"'+this._inp('')+'><option value="auto"'+(_lyOr==='auto'?' selected':'')+'>auto (by ratio)</option><option value="portrait"'+(_lyOr==='portrait'?' selected':'')+'>always portrait</option><option value="landscape"'+(_lyOr==='landscape'?' selected':'')+'>always landscape</option></select></div>';
+    respInner+='<div><label class="roc-l">Threshold (w/h)</label><input id="ly-threshold" type="number" step="0.05" min="0.1" placeholder="1.0" value="'+(_ly.threshold!=null?_ly.threshold:'')+'"'+this._inp('')+'></div>';
     respInner+='</div>';
-    // Per-tier inputs — one cell per tier; blank inherits from the nearest set
-    // tier; fill only Desktop to use one value everywhere.
-    const _tierRow=function(idb,label,val,ph){
+    respInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;align-items:end;">';
+    respInner+='<div><label class="roc-l">Pin THIS device (browser_mod: '+this._e(_bidNowL||'not detected')+')</label><select id="ly-pin"'+this._inp('')+(_bidNowL?'':' disabled')+'><option value=""'+(!_pinVal?' selected':'')+'>&#8212; follow auto &#8212;</option><option value="portrait"'+(_pinVal==='portrait'?' selected':'')+'>portrait</option><option value="landscape"'+(_pinVal==='landscape'?' selected':'')+'>landscape</option></select></div>';
+    respInner+='<div><label class="roc-l">Grid gap</label><input id="ly-gap" type="text" placeholder="0px" value="'+this._e(_ly.gap||'')+'"'+this._inp('')+'></div>';
+    respInner+='<div style="font-size:11px;color:var(--secondary-text-color);line-height:1.4;">Pinning forces this device&#39;s profile even when rotated (<code>layout.orientation.by_browser</code>).</div>';
+    respInner+='</div>';
+    // Per-profile grid editors
+    const _regListEd=['nav','cards_above','image','lights','cards_below','cover'];
+    const _profBox=function(pk){
+      const lp=_ly[pk]||{};
+      const _csv=function(a){return Array.isArray(a)?a.map(function(x){return String(x);}).join(', '):'';};
+      let h='<div style="border:1px solid var(--divider-color);border-radius:8px;padding:10px;margin-bottom:12px;">';
+      h+='<label class="roc-l" style="font-weight:700;font-size:13px;letter-spacing:0.03em;">'+pk.toUpperCase()+'</label>';
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 8px;">';
+      h+='<div><label class="roc-l">Rows % (comma separated)</label><input id="ly-rows__'+pk+'" type="text" placeholder="e.g. 10, 10, 70, 5, 5" value="'+self._e(_csv(lp.rows))+'"'+self._inp('font-size:12px;')+'></div>';
+      h+='<div><label class="roc-l">Columns % (comma separated)</label><input id="ly-cols__'+pk+'" type="text" placeholder="100" value="'+self._e(_csv(lp.columns))+'"'+self._inp('font-size:12px;')+'></div>';
+      h+='</div>';
+      h+='<div style="display:grid;grid-template-columns:110px 1fr 1fr 60px;gap:6px;align-items:center;font-size:11px;color:var(--secondary-text-color);"><span></span><span>Row (3 or 1/6)</span><span>Column</span><span>Scroll</span></div>';
+      _regListEd.forEach(function(rg){
+        const pl=(lp.place&&lp.place[rg])||null;
+        h+='<div style="display:grid;grid-template-columns:110px 1fr 1fr 60px;gap:6px;align-items:center;margin-top:4px;">';
+        h+='<label class="roc-l" style="margin:0;">'+rg+'</label>';
+        h+='<input id="ly-r__'+pk+'__'+rg+'" type="text" placeholder="hidden" value="'+self._e(pl&&pl.row!=null?String(pl.row):'')+'"'+self._inp('font-size:12px;')+'>';
+        h+='<input id="ly-c__'+pk+'__'+rg+'" type="text" placeholder="1" value="'+self._e(pl&&pl.col!=null?String(pl.col):'')+'"'+self._inp('font-size:12px;')+'>';
+        h+='<input id="ly-o__'+pk+'__'+rg+'" type="checkbox"'+(pl&&pl.overflow==='auto'?' checked':'')+' style="width:16px;height:16px;cursor:pointer;justify-self:center;">';
+        h+='</div>';
+      });
+      h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:8px 0 0;line-height:1.5;">Empty <b>Row</b> = region hidden in this profile. Spans use CSS grid lines: <code>1/6</code> = rows 1&#8211;5. The <b>cover</b> region shows blinds whose control placement is <code>dock</code>; <code>float</code> controls stay as tap-reveal overlays on the image.</p>';
+      h+='</div>';
+      return h;
+    };
+    respInner+=_profBox('portrait')+_profBox('landscape');
+    // Per-profile scalar inputs — fill only Landscape to use one value everywhere.
+    const _profRow=function(idb,label,val,ph){
       const isObj=val&&typeof val==='object';
       const sc=(val!=null&&!isObj)?String(val):'';
       let h='<div style="margin-bottom:8px;"><label class="roc-l">'+label+'</label>';
-      h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">';
-      ROC_TIERS.forEach(function(tk){
-        const v0=isObj?(val[tk]!=null?String(val[tk]):''):(tk==='desktop'?sc:'');
-        h+='<input id="'+idb+'__'+tk+'" type="text" placeholder="'+tk+(ph?' '+ph:'')+'" value="'+self._e(v0)+'"'+self._inp('font-size:12px;')+'>';
+      h+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">';
+      ROC_PROFILES.forEach(function(pk){
+        const v0=isObj?(val[pk]!=null?String(val[pk]):''):(pk==='landscape'?sc:'');
+        h+='<input id="'+idb+'__'+pk+'" type="text" placeholder="'+pk+(ph?' '+ph:'')+'" value="'+self._e(v0)+'"'+self._inp('font-size:12px;')+'>';
       });
       h+='</div></div>';
       return h;
     };
-    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;line-height:1.5;">Per tier: Mobile / Tablet / Desktop / Ultrawide. Leave a cell blank to inherit from the nearest set tier; fill only <b>Desktop</b> to use one value everywhere.</p>';
-    respInner+=_tierRow('aspect_ratio','Aspect ratio',c.aspect_ratio,'e.g. 16/9');
-    respInner+=_tierRow('border_radius','Border radius',c.border_radius,'e.g. 12px');
-    respInner+=_tierRow('max_height','Max height (caps &amp; centers the image on wide screens)',c.max_height,'e.g. 70vh');
+    respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;line-height:1.5;">Per profile: Portrait / Landscape. Fill only <b>Landscape</b> to use one value everywhere.</p>';
+    respInner+=_profRow('aspect_ratio','Aspect ratio (design shape of the image)',c.aspect_ratio,'e.g. 16/9');
+    respInner+=_profRow('border_radius','Border radius',c.border_radius,'e.g. 12px');
+    respInner+=_profRow('image_fit','Image fit (cover = crop, contain = letterbox)',c.image_fit,'cover|contain');
     respInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;"><label class="roc-l">Lock layout to image</label>';
     respInner+='<input id="lock_aspect" type="text" placeholder="off — or: true (auto from image) / 16/9" value="'+this._e(c.lock_aspect===true?'true':(c.lock_aspect||''))+'"'+this._inp('')+'>';
     respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;line-height:1.5;">When set, zones / icons / blinds etc. stay glued to the image across every tier — per-tier <code>aspect_ratio</code> then only changes how much of the image is cropped, not where elements sit. Use <b>true</b> to take the design shape from the image automatically, or pin an explicit aspect like <b>1720/968</b> (your source image’s real W/H).</p></div>';
@@ -3964,7 +4256,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       '<div style="display:flex;gap:2px;border-bottom:1px solid var(--divider-color);overflow-x:auto;margin-bottom:12px;">'
       +_tabBtn('image','mdi:image','Image')
       +_tabBtn('elements','mdi:shape','Elements')
-      +_tabBtn('responsive','mdi:monitor-cellphone','Responsive')
+      +_tabBtn('responsive','mdi:monitor-cellphone','Layout')
       +_tabBtn('rooms','mdi:floor-plan','Rooms &amp; menu')
       +'</div>'
       +_panel('image',
@@ -3999,6 +4291,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<label title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="roc-adv-toggle" type="checkbox"'+(this._showAdv?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Advanced (YAML)</label>'
       +'</div>'
       +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
+      +((this._wasMigrated&&!_isEmpty)?'<div style="margin:0 4px 10px;padding:8px 12px;border:1px solid rgba(230,160,40,0.7);background:rgba(230,160,40,0.12);border-radius:8px;font-size:12px;line-height:1.5;">Config was <b>auto-migrated</b> from the v3 tier system to the v4 layout engine (in memory only). Review the <b>Layout</b> tab, then <button id="roc-mig-save" style="padding:3px 12px;border-radius:5px;background:var(--primary-color);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;">Save migrated config</button></div>':'')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
       +'</div>';
 
@@ -4029,7 +4322,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     }
     // Responsive tab — breakpoint fields save on change
-    this.querySelectorAll('#bp_mobile,#bp_tablet,#bp_desktop,#lock_aspect').forEach(function(el){
+    this.querySelectorAll('#lock_aspect,#ly-hmode,#ly-hcustom,#ly-orient,#ly-threshold,#ly-pin,#ly-gap,[id^="ly-rows__"],[id^="ly-cols__"],[id^="ly-r__"],[id^="ly-c__"],[id^="ly-o__"]').forEach(function(el){
       el.addEventListener('change',function(){self._fire(self._collectConfig());});
     });
 
@@ -4051,6 +4344,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       const st=ta.getAttribute('style')||'';
       if(st.indexOf('monospace')>=0){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
     });
+    const migBtn=this.querySelector('#roc-mig-save');
+    if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;fire();});
     const advT=this.querySelector('#roc-adv-toggle');
     if(advT)advT.addEventListener('change',function(){
       self._showAdv=advT.checked;
@@ -4189,12 +4484,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       self._config=c;self._render();self._fire(c);
     });
 
-    ['base_image','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','mobile_breakpoint','zoom'].forEach(function(id){
+    ['base_image','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
-    // Per-tier inputs (aspect_ratio / border_radius / max_height — 4 cells each)
-    ROC_TIERS.forEach(function(tk){['aspect_ratio','border_radius','max_height'].forEach(function(idb){
-      const el=self.querySelector('#'+idb+'__'+tk);if(el)el.addEventListener('change',fire);
+    // Per-profile inputs (aspect_ratio / border_radius / image_fit — 2 cells each)
+    ROC_PROFILES.forEach(function(pk){['aspect_ratio','border_radius','image_fit'].forEach(function(idb){
+      const el=self.querySelector('#'+idb+'__'+pk);if(el)el.addEventListener('change',fire);
     });});
     const prevOnEl=this.querySelector('#prev-on');
     if(prevOnEl)prevOnEl.addEventListener('change',function(){self._prevOn=prevOnEl.checked;self._render();});

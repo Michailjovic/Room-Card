@@ -97,13 +97,12 @@ const twoHrs=new Date(Date.now()-2*3600*1000).toISOString();
 t('relTime hours',/2/.test(g.relTime(twoHrs,'en')));
 t('relTime invalid input',g.relTime('not-a-date','en')==='not-a-date');
 
-// ---- v1.5: mobile profiles, tint, kelvin ------------------------------------
-// (mApply removed in v3.0.7 — the legacy mobile block goes through tApply now)
+// ---- v1.5: legacy mobile block (v4: read via the portrait profile) -----------
 const mi={top:'10%',left:'20%',size:'20px',mobile:{top:'50%',size:'30px'}};
-const ma=g.tApply(mi,'mobile');
-t('tApply legacy mobile active',ma.top==='50%'&&ma.size==='30px'&&ma.left==='20%');
-t('tApply null tier inactive',g.tApply(mi,null).top==='10%');
-t('tApply no mobile key',g.tApply({top:'1%'},'mobile').top==='1%');
+const ma=g.tApply(mi,'portrait');
+t('tApply legacy mobile via portrait',ma.top==='50%'&&ma.size==='30px'&&ma.left==='20%');
+t('tApply null profile inactive',g.tApply(mi,null).top==='10%');
+t('tApply no override key',g.tApply({top:'1%'},'portrait').top==='1%');
 
 // ---- v3.0.7: rocRatio, escSel, Jinja YAML guard ------------------------------
 t('rocRatio W/H string',Math.abs(g.rocRatio('16/9')-16/9)<1e-9);
@@ -127,27 +126,51 @@ t('bmFilter none when no source matches',g.bmFilter({source:[{entity:'sensor.mis
 t('bmFilter respects source condition',g.bmFilter({source:[{entity:'sensor.lux',condition:{entity:'sun.sun',state:'above_horizon'}}],filter_gradient:bm.filter_gradient},bmStates)==='none');
 t('bmFilter clamps below min',g.bmFilter({source:[{entity:'sensor.lux',min_input:60,max_input:160}],filter_gradient:bm.filter_gradient},bmStates)==='brightness(0.4)');
 
-// ---- v1.13: responsive tiers ------------------------------------------------
-t('rocTier mobile',g.rocTier(500,{})==='mobile');
-t('rocTier tablet',g.rocTier(800,{})==='tablet');
-t('rocTier desktop',g.rocTier(1200,{})==='desktop');
-t('rocTier ultrawide',g.rocTier(1800,{})==='ultrawide');
-t('rocTier boundary 600=tablet',g.rocTier(600,{})==='tablet');
-t('rocTier zero width → desktop',g.rocTier(0,{})==='desktop');
-t('rocTier legacy mobile_breakpoint',g.rocTier(550,{mobile_breakpoint:600})==='mobile'&&g.rocTier(650,{mobile_breakpoint:600})==='tablet');
-t('rocTier custom breakpoints',g.rocTier(900,{breakpoints:{mobile:500,tablet:800,desktop:1200}})==='desktop');
-const _ti={top:'10%',size:'20px',tablet:{top:'8%'},ultrawide:{top:'12%',size:'30px'}};
-t('tApply tablet merges over base',g.tApply(_ti,'tablet').top==='8%'&&g.tApply(_ti,'tablet').size==='20px');
-t('tApply ultrawide merges',g.tApply(_ti,'ultrawide').top==='12%'&&g.tApply(_ti,'ultrawide').size==='30px');
-t('tApply desktop (no block) = base',g.tApply(_ti,'desktop').top==='10%');
+// ---- v4.0: layout profiles ---------------------------------------------------
+t('rocProfile portrait by ratio',g.rocProfile({},390,750)==='portrait');
+t('rocProfile landscape by ratio',g.rocProfile({},1920,1000)==='landscape');
+t('rocProfile threshold',g.rocProfile({layout:{threshold:1.4}},1300,1000)==='portrait');
+t('rocProfile force portrait',g.rocProfile({layout:{orientation:'portrait'}},1920,1000)==='portrait');
+t('rocProfile force landscape',g.rocProfile({layout:{orientation:'landscape'}},390,750)==='landscape');
+t('rocProfile zero dims → landscape',g.rocProfile({},0,0)==='landscape');
+t('rocProfile by_browser default auto',g.rocProfile({layout:{orientation:{by_browser:{tabX:'landscape'},default:'auto'}}},390,750)==='portrait');
+g.browser_mod={browserID:'tab1'};
+t('rocProfile by_browser pin wins',g.rocProfile({layout:{orientation:{by_browser:{tab1:'landscape'}}}},390,750)==='landscape');
+delete g.browser_mod;
+const _ti={top:'10%',size:'20px',portrait:{top:'8%'},desktop:{top:'12%',size:'30px'}};
+t('tApply portrait merges over base',g.tApply(_ti,'portrait').top==='8%'&&g.tApply(_ti,'portrait').size==='20px');
+t('tApply landscape reads legacy desktop',g.tApply(_ti,'landscape').top==='12%'&&g.tApply(_ti,'landscape').size==='30px');
 t('tApply null = base',g.tApply(_ti,null).top==='10%');
-t('tApply legacy mobile block',g.tApply({top:'1%',mobile:{top:'9%'}},'mobile').top==='9%');
-t('tVal scalar passthrough',g.tVal('16/9','mobile')==='16/9');
-t('tVal per-tier exact',g.tVal({mobile:'4/3',desktop:'16/9'},'mobile')==='4/3');
-t('tVal fallback smaller-first',g.tVal({mobile:'4/3',ultrawide:'21/9'},'tablet')==='4/3');
-t('tVal fallback larger when no smaller',g.tVal({ultrawide:'21/9'},'tablet')==='21/9');
-t('tVal empty → undefined',g.tVal({},'mobile')===undefined);
-t('tVal null tier → desktop',g.tVal({desktop:'16/9',mobile:'4/3'},null)==='16/9');
+t('tVal scalar passthrough',g.tVal('16/9','portrait')==='16/9');
+t('tVal per-profile exact',g.tVal({portrait:'4/3',landscape:'16/9'},'portrait')==='4/3');
+t('tVal legacy mobile→portrait',g.tVal({mobile:'4/3',desktop:'16/9'},'portrait')==='4/3');
+t('tVal legacy desktop→landscape',g.tVal({mobile:'4/3',desktop:'16/9'},'landscape')==='16/9');
+t('tVal cross-profile fallback',g.tVal({landscape:'21/9'},'portrait')==='21/9');
+t('tVal empty → undefined',g.tVal({},'portrait')===undefined);
+t('tVal null profile → landscape',g.tVal({desktop:'16/9',mobile:'4/3'},null)==='16/9');
+// grid + stage helpers
+t('rocGridCss tracks',(function(){const s=g.rocGridCss({columns:[85,15],rows:[10,90]},'');return s.indexOf('grid-template-columns:85% 15%;')>=0&&s.indexOf('grid-template-rows:10% 90%;')>=0;})());
+t('rocGridCss gap',/gap:8px;/.test(g.rocGridCss({rows:[100]},'8px')));
+t('rocGridCss default 100%',/grid-template-columns:100%;/.test(g.rocGridCss({},'')));
+t('rocRegionCss row/col',g.rocRegionCss({row:'1/6',col:2}).indexOf('grid-row:1/6;grid-column:2;')===0);
+t('rocRegionCss default col 1',/grid-column:1;/.test(g.rocRegionCss({row:3})));
+t('rocRegionCss overflow auto',/overflow:auto/.test(g.rocRegionCss({row:1,overflow:'auto'})));
+t('rocRegionCss default hidden',/overflow:hidden/.test(g.rocRegionCss({row:1})));
+t('containStage letterboxes',(function(){const s=g.containStage(1000,1000,2);return s.w===1000&&s.h===500&&s.top===250&&s.left===0;})());
+t('coverStage covers',(function(){const s=g.coverStage(1000,1000,2);return s.h===1000&&s.w===2000&&s.left===-500;})());
+// v3 → v4 auto-migration
+const _m=g.rocMigrateLayout({base_image:'/local/x.webp',aspect_ratio:{mobile:'4/3',desktop:'16/9'},max_height:'70vh',breakpoints:{mobile:500},mobile_breakpoint:600,cards_above:[{type:'x',media:'mobile'}],zones:[{id:'z',mobile:{top:'5%'},ultrawide:{top:'7%'}}],light_controls:{entities:['light.a'],height:{mobile:20,desktop:60}}});
+t('mig adds layout',!!_m.layout&&!!_m.layout.portrait&&!!_m.layout.landscape);
+t('mig height viewport',_m.layout.height==='viewport');
+t('mig scalar → per-profile',_m.aspect_ratio.portrait==='4/3'&&_m.aspect_ratio.landscape==='16/9');
+t('mig drops max_height/breakpoints',_m.max_height===undefined&&_m.breakpoints===undefined&&_m.mobile_breakpoint===undefined);
+t('mig strip media',_m.cards_above[0].media==='portrait');
+t('mig element blocks',_m.zones[0].portrait.top==='5%'&&_m.zones[0].landscape.top==='7%'&&_m.zones[0].mobile===undefined&&_m.zones[0].ultrawide===undefined);
+t('mig lc height',_m.light_controls.height.portrait===20&&_m.light_controls.height.landscape===60);
+t('mig image placed',_m.layout.landscape.place.image.row>=1);
+t('mig rows sum ≤100',_m.layout.landscape.rows.reduce(function(a,b){return a+b;},0)<=100);
+t('mig respects existing layout',(function(){const c={base_image:'x',layout:{portrait:{rows:[100]}}};return g.rocMigrateLayout(c)===c;})());
+t('mig nav side rail',(function(){const c=g.rocMigrateLayout({rooms:[{id:'a',base_image:'x'},{id:'b',base_image:'y'}],nav:{position:'left'}});return c.layout.landscape.columns.length===2&&c.layout.landscape.place.nav.col===1&&c.layout.portrait.columns.length===1;})());
 const warm=g.kelvinToRgb(2700),cold=g.kelvinToRgb(6500);
 t('kelvin warm is reddish',warm[0]===255&&warm[2]<warm[0]);
 t('kelvin cold has blue',cold[2]>200);
@@ -207,7 +230,7 @@ t('lcResolveHeight px number',g.lcResolveHeight(20,'desktop')===20);
 t('lcResolveHeight px string',g.lcResolveHeight('40px','desktop')===40);
 t('lcResolveHeight vh (800 vp fallback)',g.lcResolveHeight('5vh','desktop')===40);
 t('lcResolveHeight % of screen height',g.lcResolveHeight('10%','desktop')===80);
-t('lcResolveHeight per-tier object',g.lcResolveHeight({mobile:20,desktop:60},'desktop')===60);
+t('lcResolveHeight per-profile object',g.lcResolveHeight({portrait:20,landscape:60},'landscape')===60&&g.lcResolveHeight({mobile:20,desktop:60},'landscape')===60);
 t('lcResolveHeight default when empty',g.lcResolveHeight(null,'desktop')===20&&g.lcResolveHeight('','desktop')===20);
 t('lcResolveHeight garbage falls back',g.lcResolveHeight('abc','desktop')===20);
 
@@ -232,6 +255,14 @@ t('coverCtlHtml icon-only (no label span)',g.coverCtlHtml(g.coverControlNorm({id
 const _cch=g.coverCtlHtml(g.coverControlNorm({id:'roll',entity:'cover.x',name:'Bedroom',control:{display:'popover',presets:[{position:65,icon:'mdi:sun',color:'orange',name:'Day'}]}}));
 t('coverCtlHtml structure',/data-cc="roll"/.test(_cch)&&_cch.indexOf('data-cc-rail')>=0&&_cch.indexOf('data-cc-up')>=0&&_cch.indexOf('data-cc-down')>=0&&_cch.indexOf('data-cc-stop')>=0);
 t('coverCtlHtml preset',/data-pos="65"/.test(_cch)&&_cch.indexOf('mdi:sun')>=0&&_cch.indexOf('#ff9800')>=0);
+// v4: per-profile cover placement + dock mode
+const _ccP=g.coverControlNorm({id:'b',entity:'cover.x',control:{placement:{portrait:'dock',landscape:'float'}}},'portrait');
+t('ccNorm per-profile dock',!!_ccP&&_ccP.placement==='dock');
+const _ccL=g.coverControlNorm({id:'b',entity:'cover.x',control:{placement:{portrait:'dock',landscape:'float'}}},'landscape');
+t('ccNorm per-profile float',!!_ccL&&_ccL.placement==='float');
+t('ccNorm per-profile off',g.coverControlNorm({id:'b',entity:'cover.x',control:{placement:{portrait:'off',landscape:'dock'}}},'portrait')===null);
+t('ccHtml dock always visible',(function(){const h=g.coverCtlHtml(_ccP,false,'dock');return h.indexOf('display:none')<0&&h.indexOf('data-cc-mode="dock"')>=0;})());
+t('ccHtml float tap-reveal hidden',(function(){const h=g.coverCtlHtml(_ccL,false,'float');return h.indexOf('display:none')>=0&&h.indexOf('data-cc-mode="float"')>=0;})());
 t('coverCtlHtml no rail when slider off',g.coverCtlHtml(g.coverControlNorm({id:'r',entity:'cover.x',control:{display:'dock',slider:false}})).indexOf('data-cc-rail')<0);
 
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');

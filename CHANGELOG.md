@@ -1,5 +1,20 @@
 # Changelog
 
+## [4.0.0] - 2026-07-10
+
+### BREAKING — layout engine rebuild (see LAYOUT.md)
+
+- **Two layout profiles — `portrait` / `landscape` — replace the 4-tier width system** (mobile/tablet/desktop/ultrawide). The profile is chosen by the **shape of the available viewport** (w/h ratio vs `layout.threshold`, default 1.0), not by device type; rotating a tablet switches profile automatically. Force with `layout.orientation`, or pin per device via `layout.orientation.by_browser` (browser_mod ID, GUI: "Pin THIS device").
+- **% grid layout**: each profile defines `columns` / `rows` in % of the available screen and places regions (`nav`, `cards_above`, `image`, `lights`, `cards_below`, `cover`) into cells (`row`/`col`, spans like `1/6`, `overflow`, `align`). A region not placed in a profile is hidden. The user owns the percentages (Σ ≤ 100).
+- **Root height**: `layout.height: viewport` (default — full view minus HA header, real top offset measured), `container`, or a fixed CSS length. Designed for panel-view dashboards.
+- **Image region inverted**: the grid gives the image a fixed box; the image renders at its design aspect with `image_fit: cover|contain` (per-profile capable). Element % positions stay glued to the image — the v3 lock_aspect cover-stage now runs always, with its own ResizeObserver on the region.
+- **Cover control placement per profile**: `control.placement` accepts `{portrait, landscape}` with `off | float | dock`. `float` = v3.3.0 tap-reveal overlay; `dock` = permanently visible in the `cover` grid region — orientation (vertical rail vs horizontal bar) follows the region's own shape.
+- **Removed**: tiers `tablet`/`ultrawide`, `breakpoints`, `mobile_breakpoint`, `nav.auto_breakpoint` (`position: auto` → `top`), `max_height` (use the image region's %), tier lists in strip `media:` (now `all | portrait | landscape`).
+- **Auto-migration**: configs without `layout:` are converted in memory on load — `mobile`→`portrait`, `desktop`→`landscape`, `tablet`/`ultrawide` dropped (per-element blocks cleaned), scalars (`aspect_ratio`, `border_radius`, `light_controls.height`) remapped, a starter `layout:` generated mirroring the old stacked look (side nav becomes a landscape column). The editor shows a banner with **Save migrated config**.
+- **Editor**: Responsive tab → **Layout tab** (height source, orientation, threshold, per-device pin, gap, both profile grids with per-region row/col/scroll), per-profile inputs for `aspect_ratio` / `border_radius` / `image_fit`.
+- **Test mode**: region outlines + name tags, live viewport×profile badge, and a **profile switch button** (⇅) to preview the other profile; FLIP (day/night filters) unchanged.
+- Swipe ghosts render the image region only and fill the image box (no layout recursion inside the drag preview).
+
 ## [3.3.0] – 2026-07-08
 
 ### Added

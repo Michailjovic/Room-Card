@@ -6,7 +6,7 @@
 
 A Home Assistant Lovelace card for **room visualization**. Take a photo of your room and bring it to life: dim it with the lights, place clickable controls on the furniture, show live sensor values, animate the blinds, and embed any other HA card on top of it.
 
-**One card adapts to every screen** — phone, tablet, desktop and ultrawide — so you don't have to build and maintain a separate card per device. Everything is configurable from a full tabbed GUI editor; you can build a whole card by dragging elements onto the image, no YAML required.
+**One card adapts to every screen** — you design two layout profiles (portrait / landscape) on a % grid of the viewport and every device picks the right one by its shape. Everything is configurable from a full tabbed GUI editor; you can build a whole card by dragging elements onto the image, no YAML required.
 
 ![Room Overlay Card – hero screenshot](screenshots/hero.png)
 
@@ -16,8 +16,8 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 
 | Feature | What it does |
 |---|---|
-| **Responsive tiers** | One card adapts across mobile / tablet / desktop / ultrawide, driven by the card's own width |
-| **Base image** | Any room photo, per-tier aspect ratio, configurable corner radius and max height |
+| **Layout profiles** | Two GUI-built % grid layouts (portrait / landscape) picked by the viewport's shape; per-device pinning via browser_mod |
+| **Base image** | Any room photo, per-profile design aspect, cover/contain fit, configurable corner radius |
 | **CSS filter engine** | Brightness, saturation, sepia, blur… driven by entity states with smooth transitions |
 | **Brightness model** | Multi-stop filter interpolation: define stops (day / night / cinema…) and blend automatically |
 | **Overlay layers** | Transparent PNG layers with conditional opacity/filter; state-driven image switching |
@@ -99,42 +99,65 @@ The GUI editor is organized into four tabs, with a persistent header on top.
 
 - **Image** — the background (image or camera), image-swap conditions, weather overlay, CSS filters, the brightness model, filter transition and zoom. Also the **companion cards** (above/below the image).
 - **Elements** — everything you place on the image: zones, icons, labels, badges, gauges, blinds, embedded cards, overlays, and groups. Each type is a collapsible section with a count.
-- **Responsive** — the breakpoints and the per-tier image shape (see the next section).
+- **Layout** — height source, orientation, threshold and both profile grids (see the next section).
 - **Rooms & menu** — the room list (add / remove / reorder), presence-follow, and the navigation strip.
 
 **Drag-edit preview** is a live, editable copy of the card shown inside the editor. You can drag and resize elements right there, and it shows the room picked in the header. (The preview panel Home Assistant shows on the right is its own — it follows live presence and won't track the room picker.)
 
-**Test mode** (`test_mode: true`, or the header toggle) overlays editing affordances on the card: red outlines on zones, blue dashed outlines on embedded cards, and a live **width + active-tier badge** in the corner. **Click an element to select it** — only the selected element shows resize handles, so the card stays readable even with many overlapping elements. Drag to move (snaps to a 0.5 % grid, magnetic alignment guides, hold **Alt** for free movement), drag a handle to resize, or nudge the selection with the **arrow keys** (Shift = 0.1 %). Drag on an empty area to **draw a new zone**. The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y).
+**Test mode** (`test_mode: true`, or the header toggle) overlays editing affordances on the card: red outlines on zones, blue dashed outlines on embedded cards, a live **viewport + active-profile badge**, region outlines with names, and a **profile switch button**. **Click an element to select it** — only the selected element shows resize handles, so the card stays readable even with many overlapping elements. Drag to move (snaps to a 0.5 % grid, magnetic alignment guides, hold **Alt** for free movement), drag a handle to resize, or nudge the selection with the **arrow keys** (Shift = 0.1 %). Drag on an empty area to **draw a new zone**. The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y).
 
 ---
 
-## Responsive — one card, every screen
+## Layout — two profiles on a % grid (v4)
 
-Instead of building a separate card for each device, this card resolves a **tier** from its own rendered width and applies per-tier settings on top of a shared base.
+v4 replaces the old 4-tier width system with **two layout profiles** — **`portrait`** and **`landscape`** — chosen by the **shape of the available viewport** (width/height ratio), not by device type. Rotate a tablet and the card switches profile automatically; pin a specific device if you never want it to switch.
 
-The four tiers and their default thresholds (each value is the exclusive upper bound; `ultrawide` is everything above the last):
-
-| Tier | Default width |
-|---|---|
-| `mobile` | `< 600px` |
-| `tablet` | `600 – 1024px` |
-| `desktop` | `1024 – 1600px` |
-| `ultrawide` | `≥ 1600px` |
-
-> **Tiers follow the card's own width — its dashboard column — not the device's screen resolution.** A full-width card on a landscape tablet may be 1200px wide and therefore in the `desktop` tier. Turn on **Test mode** to read the live width and active tier on the card, then tune the thresholds.
-
-Override the thresholds top-level (only the ones you set; the rest keep their defaults):
+Each profile is a **CSS grid in % of the available screen**. Every block of the card is a **region** you place on that grid: `nav`, `cards_above`, `image`, `lights`, `cards_below`, `cover` (the blind controller in dock mode). You own the percentages — rows should sum to ≤ 100.
 
 ```yaml
-breakpoints:
-  mobile: 600
-  tablet: 1024
-  desktop: 1600
+layout:
+  height: viewport      # viewport (default, full view minus HA header) | container | 90vh / 800px
+  threshold: 1.0        # w/h ratio below which the card is portrait
+  # orientation: landscape          # optional: force one profile
+  # orientation:                    # …or pin per device (browser_mod ID)
+  #   by_browser: { kitchen_tablet: landscape }
+  #   default: auto
+
+  landscape:
+    columns: [88, 12]
+    rows: [10, 10, 70, 5, 5]
+    place:
+      nav:         { row: 1 }
+      cards_above: { row: 2 }
+      image:       { row: 3 }
+      lights:      { row: 4 }
+      cards_below: { row: 5 }
+      cover:       { row: 1/6, col: 2 }   # blind controller docked in the right column
+
+  portrait:
+    columns: [100]
+    rows: [8, 8, 55, 6, 6, 17]
+    place:
+      nav:         { row: 1 }
+      cards_above: { row: 2 }
+      image:       { row: 3 }
+      lights:      { row: 4 }
+      cards_below: { row: 5 }
+      cover:       { row: 6 }             # …and at the bottom on portrait
 ```
 
-### Per-element tier overrides
+Rules and notes:
 
-Every element accepts `mobile:` / `tablet:` / `desktop:` / `ultrawide:` blocks. Each merges over the base element, so you only specify what differs on that tier:
+- A region **not listed** in a profile's `place:` is **hidden** in that profile.
+- `row`/`col` take a grid line number (`3`) or a span (`"1/6"` = rows 1–5). Per-region options: `overflow: hidden|auto` (default hidden), `align`.
+- The card is designed for **panel-view / full-screen** dashboards. `height: viewport` measures the real available height (HA header, view padding and safe-areas accounted for). Use `container` or a fixed value when embedding.
+- The **image region** gets a fixed box from the grid; the image renders inside it at its design aspect with `image_fit: cover` (crop, default) or `contain` (letterbox). **Element `%` positions stay glued to the image** — the lock_aspect stage from v3 does this everywhere now.
+- **Test mode** shows region outlines with names, a live viewport + profile badge, and a **profile switch button** to preview the other profile.
+- Everything is editable in the GUI **Layout tab**: height source, orientation/threshold, per-device pin, both profile grids and all region placements.
+
+### Per-element profile overrides
+
+Every element accepts `portrait:` / `landscape:` blocks merging over the base:
 
 ```yaml
 labels:
@@ -142,27 +165,14 @@ labels:
     top: 10%
     left: 80%
     font_size: 2%
-    mobile:    { top: 6%,  left: 70%, font_size: 4% }
-    ultrawide: { top: 12%, left: 85%, font_size: 1.5% }
+    portrait: { top: 6%, left: 70%, font_size: 4% }
 ```
 
-### Per-tier image shape
+`aspect_ratio`, `border_radius` and `image_fit` accept a single value or `{portrait, landscape}`.
 
-`aspect_ratio`, `border_radius` and `max_height` accept either a single value or a per-tier object. A missing tier falls back to the nearest defined one (smaller first).
+### Migrating from v3
 
-```yaml
-# Crop the image differently per device (full width, centered vertical crop):
-aspect_ratio: { mobile: 4/3, tablet: 16/10, desktop: 16/9, ultrawide: 21/9 }
-```
-
-- **`aspect_ratio` per tier** is the cleanest way to **crop** the image to a different shape per device — full width, image trimmed top/bottom, element positions stay aligned within each tier.
-- **`max_height`** caps the image height on wide screens and centers it (letterboxing the sides) so the image doesn't grow huge as the card gets wider. It keeps the aspect ratio, so `%` positions stay valid.
-
-```yaml
-max_height: { desktop: 70vh, ultrawide: 80vh }   # or a single value: max_height: 70vh
-```
-
-> **Backwards compatible.** Existing `mobile:` blocks and `mobile_breakpoint` keep working — `mobile_breakpoint` simply overrides the mobile threshold.
+Old configs (tiers, `breakpoints`, `max_height`, `media: mobile|desktop`, per-element `mobile:`/`tablet:`/`desktop:`/`ultrawide:` blocks) are **auto-migrated in memory** when loaded: `mobile` → `portrait`, `desktop` → `landscape`, `tablet`/`ultrawide` dropped, and a starter `layout:` block is generated mirroring the old stacked look. Open the editor and press **Save migrated config** to persist it, then tune the percentages. Details in [LAYOUT.md](LAYOUT.md).
 
 ---
 
@@ -177,11 +187,10 @@ max_height: { desktop: 70vh, ultrawide: 80vh }   # or a single value: max_height
 | `camera_refresh` | number | `10` | Camera snapshot refresh interval in seconds |
 | `base_image_conditions` | list | — | Swap the base image by entity state |
 | `weather_overlay` | object/string | — | Animated rain/snow layer (`entity`, `effect`, `opacity`, `z_index`) |
-| `aspect_ratio` | string / object | `16/9` | Card aspect ratio — single `width/height` or per-tier object |
-| `border_radius` | string / object | `12px` | Card corner radius — single value or per-tier object |
-| `max_height` | string / object | — | Cap & center the image height on wide screens (e.g. `70vh`); per-tier object supported |
-| `breakpoints` | object | `{mobile:600, tablet:1024, desktop:1600}` | Tier thresholds (px, exclusive upper bound) |
-| `mobile_breakpoint` | number | `600` | Legacy — overrides the mobile threshold |
+| `aspect_ratio` | string / object | `16/9` | Design aspect of the image — single `width/height` or `{portrait, landscape}` |
+| `border_radius` | string / object | `12px` | Card corner radius — single value or `{portrait, landscape}` |
+| `layout` | object | generated | v4 layout engine — height source, orientation, threshold and the two profile grids (see the Layout section) |
+| `image_fit` | string / object | `cover` | `cover` (crop) or `contain` (letterbox) — single value or `{portrait, landscape}` |
 | `filter_transition` | string | `2s ease` | CSS transition for the base image filter |
 | `filter_conditions` | list | `[]` | Discrete CSS filter states |
 | `brightness_model` | object | — | Multi-stop filter interpolation |
@@ -425,7 +434,7 @@ blinds:
 ```
 
 - **`placement`** — `float` (place freely with `top` / `left`; the controller is sized to the window height) or `dock` (a slim rail pinned to the image edge, `dock_side: left | right`, filling the full height).
-- **Tap the blind to reveal / hide** the controller. On the `mobile` tier it appears as a **horizontal bar at the bottom**.
+- **`float`** (default): tap the blind to reveal / hide the controller next to it (horizontal bottom bar on portrait). **`dock`**: the controller is permanently visible in the `cover` layout region — its side and size come from where you place that region in each profile. `placement` accepts `{portrait, landscape}` (e.g. dock on landscape, float on portrait).
 - **`slider`** — show the draggable position rail (`cover.set_cover_position`). Auto-hidden when the cover reports no `current_position` (assumed-state).
 - **Up / Stop / Down** are always shown — a tap does a full `open_cover` / `close_cover`; `Stop` (`stop_cover`) highlights while the cover is moving.
 - **`presets`** — one-tap jumps to a position. Each takes `position` (0–100) and optional `icon` (use real MDI names, e.g. `mdi:roller-shade`, `mdi:blinds` — see [materialdesignicons.com](https://pictogrammers.com/library/mdi/)), `color` (HA name like `indigo` / `amber` / `blue-grey`, or any CSS colour) and `name` (shown as a tooltip). Presets render as **icons only**.
@@ -594,7 +603,7 @@ cards_below:
     entities: [light.bedroom_ceiling, fan.bedroom]
   - card: { type: thermostat, entity: climate.bedroom }
     height: 180px
-    media: mobile          # all | mobile | tablet | desktop | ultrawide
+    media: portrait        # all | portrait | landscape (legacy mobile/desktop still map)
 ```
 
 In the GUI these live in the **Image** tab as *Cards above image* / *Cards below image* — paste a card config you built elsewhere.
@@ -613,7 +622,7 @@ light_controls:
       name: Middle            # optional per-slider name
     - light.panel_bedroom_3
   columns: 3                  # grid columns (default: number of lights)
-  height: 20                  # px number, or "4vh" / "5%" of screen height, or per-tier
+  height: 20                  # px number, or "4vh" / "5%" of screen height, or {portrait, landscape}
   lux_sensor: sensor.kitchen_illuminance
   lux_max: 50                 # lux value that maps to the "bright" colour
   color_low: "#261a66"        # border colour at 0 lux (dark)
@@ -623,7 +632,7 @@ light_controls:
 
 `color_low` / `color_high` accept any CSS colour (`#hex`, `rgb(...)`, `hsl(...)`); the gradient is interpolated in HSL so a blue→amber ramp travels through vivid hues rather than a muddy RGB midpoint.
 
-`height` accepts a plain number (px), a **viewport unit** (`4vh`, or `5%` of the screen height) or a **per-tier** object (e.g. `{mobile: 20, desktop: 60}`) — a fixed px looks tiny on desktop, so a `vh` value scales across screens (resolved to px at render). When a light is **on**, `material-slider-card`'s `colorize` takes over the fill with the light's real colour and brightness, so `bg_off` is only visible when the light is off.
+`height` accepts a plain number (px), a **viewport unit** (`4vh`, or `5%` of the screen height) or a **per-profile** object (e.g. `{portrait: 20, landscape: 60}`) — a fixed px looks tiny on desktop, so a `vh` value scales across screens (resolved to px at render). When a light is **on**, `material-slider-card`'s `colorize` takes over the fill with the light's real colour and brightness, so `bg_off` is only visible when the light is off.
 
 Requires the `material-slider-card` resource to be installed. In the GUI these live in the **Elements** tab under *Light controls*.
 
@@ -804,7 +813,7 @@ See **[PRESETS.md](PRESETS.md)** for a gallery of copy-paste recipes (day/night 
 
 ## Positioning tips
 
-All `top`, `left`, `width`, `height` values are percentage strings relative to the card. Enable **Test mode** to position by eye: click an element to select it, drag to move (snaps to 0.5 %, Alt = free), drag handles to resize, arrow keys to nudge, or draw a new zone on an empty area. The live width/tier badge helps you tune `breakpoints` per device.
+All `top`, `left`, `width`, `height` values are percentage strings relative to the card. Enable **Test mode** to position by eye: click an element to select it, drag to move (snaps to 0.5 %, Alt = free), drag handles to resize, arrow keys to nudge, or draw a new zone on an empty area. The live viewport/profile badge shows which layout profile is active.
 
 ---
 
