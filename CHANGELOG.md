@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.0] - 2026-07-11
+
+### Light controls — switch support + editor gradient preview
+
+- **On/off entities are now supported in `light_controls`.** Previously every entity was mounted as a `material-slider-card` with `control_type: light`, which only works for `light.*` (brightness). Now the domain is detected per entity: `light.*` still renders the brightness slider, while on/off entities (`switch.*`, `input_boolean.*`, `fan.*`, `script.*`, …) render as an **on/off toggle pill** that shares the same rounded shape, height, `bg_off` background and the lux-driven border ring. Tapping a pill calls `homeassistant.toggle`; when the entity is on it fills with the current lux-ring colour and switches the icon (`mdi:power` / `mdi:power-off`). No config change is needed — just add a `switch.*` (or any on/off entity) to `light_controls.entities`.
+- **Editor: live gradient preview under the lux settings.** The Light controls editor section now shows a preview bar of the configured border-colour gradient, sampled from the *same* HSL ramp the sliders use (`lcBorderColor`), with tick marks at **¼, ½, ¾** and end labels `0 lx … <lux_max> lx`. It repaints live as you drag the low/high colour pickers or change `lux max` — no save/re-render round-trip.
+- **Editor copy** for the Light controls section updated to reflect that both lights and switches are accepted (`+ Entity` button, `light.bedroom_1 · switch.lamp` placeholder, section title "Light & switch controls — sliders / toggles").
+
 ## [4.0.0] - 2026-07-10
 
 ### BREAKING — layout engine rebuild (see LAYOUT.md)

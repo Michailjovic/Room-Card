@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.0.0';
+const ROC_VERSION='4.1.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -369,6 +369,18 @@ function lcSliderCss(bgOff,col){
   return ':host{'+(bgOff?'--bsc-background:'+bgOff+' !important;':'')+'--bsc-border-radius:999px !important;'+(col?'--bsc-border-color:'+col+' !important;':'')+'width:100% !important;}'
     +'#container{border-radius:999px !important;width:100% !important;transition:border-color 0.6s ease-in-out !important;}';
 }
+// material-slider-card only controls `light` (brightness) and `cover`. On/off
+// domains (switch, input_boolean, fan, script…) can't drive a brightness slider,
+// so those entities render as an on/off toggle pill that shares the lux ring.
+function lcUsesSlider(ent){return String(ent||'').split('.')[0]==='light';}
+// Build a CSS linear-gradient that samples the SAME HSL ramp as the border ring,
+// so the editor preview matches what the sliders actually show.
+function lcGradientCss(low,high){
+  const lc={color_low:low||LC_DEF_LOW,color_high:high||LC_DEF_HIGH,lux_max:100};
+  const stops=[];
+  for(let i=0;i<=10;i++){const t=i/10;stops.push(lcBorderColor(t*100,lc)+' '+Math.round(t*100)+'%');}
+  return 'linear-gradient(90deg,'+stops.join(',')+')';
+}
 function lcResolveHeight(h,tier){
   if(h&&typeof h==='object'&&!Array.isArray(h))h=tVal(h,tier);
   if(h==null||h==='')return 20;
@@ -550,7 +562,7 @@ class RoomOverlayCard extends HTMLElement{
     this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
     this._selectedTM=null;this._tmKeyHandler=null;
-    this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;
+    this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;this._lcToggles=[];
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;
@@ -997,7 +1009,16 @@ class RoomOverlayCard extends HTMLElement{
     this._lcCfg=c.light_controls||null;
     const _lcEnts=lcNormEnts(c.light_controls);
     const _lcCols=(c.light_controls&&c.light_controls.columns)||_lcEnts.length||1;
-    const _lcHtml=_lcEnts.length?'<div class="roc-lc" style="display:grid;grid-template-columns:repeat('+_lcCols+',minmax(0,1fr));gap:6px;padding:6px 6px 0;">'+_lcEnts.map(function(e,i){return'<div data-lc-card="'+i+'" style="min-width:0;"></div>';}).join('')+'</div>':'';
+    const _lcHgt=lcResolveHeight(c.light_controls&&c.light_controls.height,_vt);
+    const _lcBgOff=(c.light_controls&&c.light_controls.bg_off)||LC_DEF_BG;
+    const _lcHtml=_lcEnts.length?'<div class="roc-lc" style="display:grid;grid-template-columns:repeat('+_lcCols+',minmax(0,1fr));gap:6px;padding:6px 6px 0;">'+_lcEnts.map(function(e,i){
+      if(lcUsesSlider(e.entity))return'<div data-lc-card="'+i+'" style="min-width:0;"></div>';
+      // on/off toggle pill for switch-like entities — same pill shape + lux ring
+      return'<button type="button" class="roc-lctgl" data-lc-toggle="'+i+'" style="min-width:0;width:100%;height:'+_lcHgt+'px;border-radius:999px;border:2px solid transparent;background:'+escA(_lcBgOff)+';color:var(--secondary-text-color);display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;padding:0 8px;font-size:12px;line-height:1;box-sizing:border-box;transition:border-color 0.6s ease-in-out,background 0.3s ease,color 0.3s ease;overflow:hidden;">'
+        +'<ha-icon data-lc-ticon icon="mdi:power" style="--mdc-icon-size:16px;flex:0 0 auto;"></ha-icon>'
+        +(e.name?'<span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+escA(e.name)+'</span>':'')
+        +'</button>';
+    }).join('')+'</div>':'';
 
     // ---- Cover controls (roleta) — build tap-reveal overlays -------------
     const _ccGhost=_isGhost;
@@ -1137,12 +1158,13 @@ class RoomOverlayCard extends HTMLElement{
     };
     _mountStrip(c.cards_above,'data-above-card');
     _mountStrip(c.cards_below,'data-below-card');
-    // Mount light-controls sliders (material-slider-card) + wire the lux ring
-    this._lcEls=[];this._lcPrevCol=null;
+    // Mount light-controls sliders (material-slider-card) + wire the lux ring.
+    // Switch-like entities have no [data-lc-card] host (they render a toggle
+    // pill instead), so the querySelector below simply skips them.
+    this._lcEls=[];this._lcPrevCol=null;this._lcToggles=[];
     if(_lcEnts.length){
       const lcSelf=this;
-      const _bgOff=(c.light_controls&&c.light_controls.bg_off)||LC_DEF_BG;
-      const _lcHgt=lcResolveHeight(c.light_controls&&c.light_controls.height,_vt);
+      const _bgOff=_lcBgOff;
       _lcEnts.forEach(function(e,i){
         const host=lcSelf.shadowRoot.querySelector('[data-lc-card="'+i+'"]');
         if(!host)return;
@@ -1157,6 +1179,18 @@ class RoomOverlayCard extends HTMLElement{
           if(lcSelf._hass){try{el.hass=lcSelf._hass;}catch(_){}}
         });
         if(w)host.appendChild(w);
+      });
+      // Wire on/off toggle pills (switch, input_boolean, fan…) — they share the
+      // lux ring + bg_off look; state + ring colour are reflected in _update().
+      _lcEnts.forEach(function(e,i){
+        if(lcUsesSlider(e.entity))return;
+        const btn=lcSelf.shadowRoot.querySelector('[data-lc-toggle="'+i+'"]');
+        if(!btn)return;
+        btn.addEventListener('click',function(ev){
+          ev.stopPropagation();
+          if(lcSelf._hass)try{lcSelf._hass.callService('homeassistant','toggle',{entity_id:e.entity});}catch(_){}
+        });
+        lcSelf._lcToggles.push({el:btn,entity:e.entity,icon:btn.querySelector('[data-lc-ticon]'),bgOff:_bgOff});
       });
     }
     // ---- Cover controls (roleta) — mount interactions -----------------------
@@ -2570,6 +2604,18 @@ class RoomOverlayCard extends HTMLElement{
       if(_col!==this._lcPrevCol){
         this._lcPrevCol=_col;
         for(const o of this._lcEls){if(o.styleEl)try{o.styleEl.textContent=lcSliderCss(o.bgOff,_col);}catch(_){}}
+      }
+    }
+    // Light-controls on/off toggle pills — reflect entity state + share lux ring
+    if(this._lcToggles&&this._lcToggles.length){
+      const _tcol=this._lcCfg?lcBorderColor(s[this._lcCfg.lux_sensor]?.state,this._lcCfg):'var(--primary-color)';
+      for(const t of this._lcToggles){
+        const stt=s[t.entity];
+        const on=!!stt&&stt.state!=='off'&&stt.state!=='unavailable'&&stt.state!=='unknown';
+        const bg=on?_tcol:t.bgOff;
+        if(t._bg!==bg){t._bg=bg;try{t.el.style.background=bg;}catch(_){}}
+        if(t._brc!==_tcol){t._brc=_tcol;try{t.el.style.borderColor=_tcol;}catch(_){}}
+        if(t._on!==on){t._on=on;try{t.el.style.color=on?'#fff':'var(--secondary-text-color)';}catch(_){}if(t.icon)try{t.icon.setAttribute('icon',on?'mdi:power':'mdi:power-off');}catch(_){}}
       }
     }
     // Cover controls (roleta) — reflect live position + motion state
@@ -4260,16 +4306,16 @@ class RoomOverlayCardEditor extends HTMLElement{
     const _lc=cR.light_controls||{};
     const _lcEnts=(Array.isArray(_lc.entities)?_lc.entities:[]).map(function(e){return typeof e==='string'?{entity:e}:(e||{});});
     let lcInner='';
-    lcInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">A <code>material-slider-card</code> strip rendered above the image. Each slider&#39;s border colour tracks a lux sensor — a smooth gradient between two colours (dark = low lux, bright = high lux). Requires the <code>material-slider-card</code> resource.</p>';
-    lcInner+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="font-size:12px;font-weight:500;">Lights</label><button id="add-lc-ent" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Light</button></div>';
+    lcInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">A strip rendered above the image. <code>light.*</code> entities render as a <code>material-slider-card</code> brightness slider (requires that resource); on/off entities (<code>switch.*</code>, <code>input_boolean.*</code>, <code>fan.*</code>…) render as an on/off toggle pill. Both share a lux-driven border colour — a smooth gradient between two colours (dark = low lux, bright = high lux).</p>';
+    lcInner+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="font-size:12px;font-weight:500;">Lights &amp; switches</label><button id="add-lc-ent" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Entity</button></div>';
     for(let i=0;i<_lcEnts.length;i++){
       lcInner+='<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:6px;align-items:center;margin-bottom:4px;">';
-      lcInner+='<input type="text" list="roc-entities" data-lc-ent="'+i+'" placeholder="light.bedroom_1" value="'+this._e(_lcEnts[i].entity||'')+'"'+this._inp('font-size:12px;')+'>';
+      lcInner+='<input type="text" list="roc-entities" data-lc-ent="'+i+'" placeholder="light.bedroom_1 · switch.lamp" value="'+this._e(_lcEnts[i].entity||'')+'"'+this._inp('font-size:12px;')+'>';
       lcInner+='<input type="text" data-lc-name="'+i+'" placeholder="Name (optional)" value="'+this._e(_lcEnts[i].name||'')+'"'+this._inp('font-size:12px;')+'>';
       lcInner+='<button data-rm-lc-ent="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
       lcInner+='</div>';
     }
-    if(!_lcEnts.length)lcInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No lights yet — add at least one.</p>';
+    if(!_lcEnts.length)lcInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No entities yet — add a light or switch.</p>';
     lcInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
     lcInner+='<div><label class="roc-l">Lux sensor</label><input id="lc-lux" type="text" list="roc-entities" placeholder="sensor.kitchen_illuminance" value="'+this._e(_lc.lux_sensor||'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Lux max (full brightness)</label><input id="lc-luxmax" type="number" min="1" placeholder="50" value="'+this._e(_lc.lux_max!=null?String(_lc.lux_max):'')+'"'+this._inp('')+'></div>';
@@ -4281,7 +4327,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     lcInner+='<div><label class="roc-l">Colour — bright (high lux)</label><input id="lc-color-high" type="color" value="'+this._toHex(_lc.color_high||LC_DEF_HIGH)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';
     lcInner+='<div><label class="roc-l">Background (light off)</label><input id="lc-bg-off" type="color" value="'+this._toHex(_lc.bg_off||LC_DEF_BG)+'" style="width:100%;height:34px;cursor:pointer;border-radius:4px;border:1px solid var(--divider-color);padding:2px;"></div>';
     lcInner+='</div>';
-    
+    // Gradient preview — samples the SAME HSL ramp as the border ring, with tick
+    // marks at ¼ ½ ¾ so you can see where a given lux level lands on the colour.
+    const _lcLuxMax=(_lc.lux_max!=null&&_lc.lux_max>0)?_lc.lux_max:50;
+    lcInner+='<div style="margin-top:10px;">';
+    lcInner+='<label class="roc-l">Gradient preview (border colour vs. lux)</label>';
+    lcInner+='<div id="lc-grad-preview" style="position:relative;height:22px;border-radius:999px;border:1px solid var(--divider-color);background:'+lcGradientCss(_lc.color_low||LC_DEF_LOW,_lc.color_high||LC_DEF_HIGH)+';overflow:hidden;">';
+    ['25','50','75'].forEach(function(p){lcInner+='<span style="position:absolute;top:0;bottom:0;left:'+p+'%;width:2px;transform:translateX(-1px);background:rgba(255,255,255,0.9);box-shadow:0 0 1.5px rgba(0,0,0,0.7);"></span>';});
+    lcInner+='</div>';
+    lcInner+='<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--secondary-text-color);margin-top:3px;"><span>0 lx</span><span>¼</span><span>½</span><span>¾</span><span id="lc-grad-max">'+this._e(String(_lcLuxMax))+' lx</span></div>';
+    lcInner+='</div>';
+
     // Tabbed shell — all panels render; the active one is shown, others hidden via CSS
     const _tab=this._tab||'image';
     const _tabBtn=function(id,icon,label){
@@ -4309,7 +4365,7 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('groups','Groups — pop-up control panels',(cR.groups||[]).length,grpInner,'mdi:dock-window')
          +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner,'mdi:star-four-points-outline')
          +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner,'mdi:format-text')
-         +sec('lights','Light controls — sliders with lux ring',_lcEnts.length,lcInner,'mdi:tune-vertical')
+         +sec('lights','Light &amp; switch controls — sliders / toggles',_lcEnts.length,lcInner,'mdi:tune-vertical')
          +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner,'mdi:layers-outline')
          +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner,'mdi:gesture-tap'))
       +_panel('responsive',respInner)
@@ -4614,6 +4670,21 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.querySelectorAll('[data-lc-ent],[data-lc-name],#lc-lux,#lc-luxmax,#lc-cols,#lc-height,#lc-color-low,#lc-color-high,#lc-bg-off').forEach(function(el){
       el.addEventListener('change',fire);
     });
+    // Live gradient preview — repaint the bar + max label without a full re-render
+    const _gradPrev=this.querySelector('#lc-grad-preview');
+    if(_gradPrev){
+      const _updGrad=function(){
+        const _lo=(self.querySelector('#lc-color-low')||{}).value||LC_DEF_LOW;
+        const _hi=(self.querySelector('#lc-color-high')||{}).value||LC_DEF_HIGH;
+        _gradPrev.style.background=lcGradientCss(_lo,_hi);
+        const _lx=parseFloat((self.querySelector('#lc-luxmax')||{}).value);
+        const _lbl=self.querySelector('#lc-grad-max');
+        if(_lbl)_lbl.textContent=((!isNaN(_lx)&&_lx>0)?_lx:50)+' lx';
+      };
+      ['#lc-color-low','#lc-color-high','#lc-luxmax'].forEach(function(sel){
+        const el=self.querySelector(sel);if(el)el.addEventListener('input',_updGrad);
+      });
+    }
 
     // Filter mode toggle — swap panes (no re-render) + persist choice
     const fmodeEl=this.querySelector('#filter-mode');
