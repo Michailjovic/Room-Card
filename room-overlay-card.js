@@ -1005,7 +1005,12 @@ class RoomOverlayCard extends HTMLElement{
     const _regDiv=function(rg,inner){
       const pl=_lp.place&&_lp.place[rg];
       if(!pl)return''; // region not placed in this profile → hidden
-      return'<div class="roc-reg" data-reg="'+rg+'" style="'+rocRegionCss(pl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">'+inner+(tm?'<div class="roc-regtag">'+rg+'</div>':'')+'</div>';
+      // Empty region (this room has no content for it) → render nothing. Rooms
+      // can therefore SHARE a cell (e.g. cards_above + lights on the same row)
+      // and 'auto' rows collapse to 0 where a room has no strip. Test mode still
+      // shows the cell outline (non-interactive) so the grid stays visible.
+      if(!inner&&!tm)return'';
+      return'<div class="roc-reg" data-reg="'+rg+'" style="'+rocRegionCss(pl)+(inner?'':'pointer-events:none;')+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">'+inner+(tm?'<div class="roc-regtag">'+rg+'</div>':'')+'</div>';
     };
     const _regInner={nav:navHtml,cards_above:_aboveHtml,lights:_lcHtml,cards_below:_belowHtml,cover:_ccDockHtml?'<div class="roc-ccdock">'+_ccDockHtml+'</div>':''};
     let _regPost='';

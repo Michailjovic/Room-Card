@@ -52,6 +52,11 @@ const regs2=[...el2.shadowRoot.querySelectorAll('.roc-reg')].map(r=>r.dataset.re
 t('unplaced cards_above hidden',!regs2.includes('cards_above'));
 t('image placed row2',/grid-row:2/.test(el2.shadowRoot.querySelector('[data-reg="image"]').getAttribute('style')));
 
+// --- empty placed regions are skipped (rooms share cells / auto rows collapse) ---
+const el2b=mkCard({base_image:'/local/x.webp',layout:{landscape:{rows:['auto','1fr'],place:{lights:{row:1},cards_above:{row:1},image:{row:2}}},portrait:{rows:[100],place:{image:{row:1}}}}});
+t('empty lights+cards_above regions skipped',[...el2b.shadowRoot.querySelectorAll('.roc-reg')].map(r=>r.dataset.reg).join(',')==='image');
+t('auto/1fr tracks pass through',/grid-template-rows:auto 1fr;/.test(el2b.shadowRoot.querySelector('.roc-grid').getAttribute('style')));
+
 // --- test mode: region tags + profile button ---
 const el3=mkCard({base_image:'/local/x.webp',test_mode:true,layout:{landscape:{rows:[10,90],place:{image:{row:2},lights:{row:1}}},portrait:{rows:[100],place:{image:{row:1}}}}});
 t('region tag rendered',!!el3.shadowRoot.querySelector('.roc-regtag'));

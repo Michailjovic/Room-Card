@@ -1,0 +1,1249 @@
+type: custom:room-overlay-card
+# ---- v4 layout: both profiles share the same stack; the image absorbs the
+# ---- remaining height (1fr) and 'auto' rows collapse in rooms without content.
+# ---- cards_above & lights share row 2 — no room has both, so they never clash.
+# ---- Replace any 'auto'/'1fr' with a % once you want fixed shares (e.g. 8, 6, 70, 16).
+layout:
+  portrait:
+    rows: [auto, auto, 1fr, auto]
+    place:
+      nav: { row: 1 }
+      cards_above: { row: 2 }
+      lights: { row: 2 }
+      image: { row: 3 }
+      cards_below: { row: 4 }
+  landscape:
+    rows: [auto, auto, 1fr, auto]
+    place:
+      nav: { row: 1 }
+      cards_above: { row: 2 }
+      lights: { row: 2 }
+      image: { row: 3 }
+      cards_below: { row: 4 }
+aspect_ratio: 1720/914
+lock_aspect: true
+border_radius: 0px
+filter_transition: 2.0s ease
+card_id: flat_main
+grid_options:
+  columns: full
+room_entity:
+  default: sensor.1_r12_area
+  by_browser:
+    browser_mod_87c7874a_92838ff1: sensor.1_r12_area
+    browser_mod_75650bfc_ca3bad3b: sensor.tablet_living_room_area
+    browser_mod_74c189b9_fa97c2d5: sensor.tablet_bedroom_area
+nav:
+  live: composite
+  height: 75px
+  wheel: horizontal
+  chips:
+    - entity: sensor.{room}_shelly_h_t_gen_3_{room}_temperature
+      decimals: 1
+      suffix: °
+      background: rgba(0,0,0,0.55)
+      border_radius: 2px
+      padding: 1px 2px
+      color_gradient:
+        - value: 17.5
+          color: "#40a9ff"
+        - value: 18.5
+          color: "#52c41a"
+        - value: 24.5
+          color: "#52c41a"
+        - value: 25.5
+          color: "#ff4d4f"
+    - entity: sensor.{room}_shelly_h_t_gen_3_{room}_humidity
+      suffix: "%"
+      background: rgba(0,0,0,0.55)
+      border_radius: 2px
+      padding: 1px 2px
+      color_gradient:
+        - value: 54
+          color: "#52c41a"
+        - value: 56
+          color: "#faad14"
+        - value: 59
+          color: "#faad14"
+        - value: 61
+          color: "#ff4d4f"
+  cards:
+    - card:
+        type: custom:alert-ticker-card
+        cycle_interval: 20
+        show_when_clear: true
+        clear_message: Vše v pořádku
+        clear_theme: success
+        swipe_to_snooze: true
+        card_height: 75
+        alerts:
+          - entity: sensor.bathroom_shelly_h_t_gen_3_bathroom_humidity
+            operator: ">="
+            state: "55"
+            message: >-
+              Zvýšená vlhkost v koupelně – {{
+              states('sensor.bathroom_shelly_h_t_gen_3_bathroom_humidity') }}%
+            priority: 1
+            theme: leak
+            icon: 💧
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: humidifier.nwt_dehumidifier
+            hold_action:
+              action: navigate
+              navigation_path: /dashboard-various/Dehum
+          - entity: sensor.living_room_shelly_h_t_gen_3_living_room_humidity
+            operator: ">="
+            state: "55"
+            message: >-
+              Zvýšená vlhkost v obýváku – {{
+              states('sensor.living_room_shelly_h_t_gen_3_living_room_humidity')
+              }}%
+            priority: 1
+            theme: leak
+            icon: 💧
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: humidifier.dehumidifier_pasapair
+            hold_action:
+              action: navigate
+              navigation_path: /dashboard-various/Dehum
+          - entity: sensor.bedroom_shelly_h_t_gen_3_bedroom_humidity
+            operator: ">="
+            state: "55"
+            message: >-
+              Zvýšená vlhkost v ložnici – {{
+              states('sensor.bedroom_shelly_h_t_gen_3_bedroom_humidity') }}%
+            priority: 1
+            theme: leak
+            icon: 💧
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: humidifier.wdh_214us
+            hold_action:
+              action: navigate
+              navigation_path: /dashboard-various/Dehum
+          - entity: humidifier.nwt_dehumidifier
+            operator: "="
+            state: "on"
+            message: >-
+              Vysoušeč Koupelna – {{
+              states('sensor.bathroom_esp_humidity_s3_lite_vlhkost') }}%
+            priority: 1
+            theme: update
+            icon: mdi:fan
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: humidifier.nwt_dehumidifier
+            secondary_text: >-
+              WDH {{ state_attr('humidifier.nwt_dehumidifier',
+              'current_humidity') }}% - {{
+              states('sensor.plug_shelly_dehumidifier_bathroom_power') }} W
+            hold_action:
+              action: navigate
+              navigation_path: /dashboard-various/Dehum
+            use_ha_icon: true
+            icon_color: cyan
+          - entity: humidifier.dehumidifier_pasapair
+            operator: "="
+            state: "on"
+            message: >-
+              Vysoušeč Obývák – {{
+              states('sensor.living_room_shelly_h_t_gen_3_living_room_humidity')
+              }}%
+            priority: 1
+            theme: update
+            icon: mdi:fan
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: humidifier.dehumidifier_pasapair
+            secondary_text: >-
+              WDH {{ state_attr('humidifier.dehumidifier_pasapair',
+              'current_humidity') }}% - {{
+              states('sensor.power_strip_pc_power_4') }} W
+            hold_action:
+              action: navigate
+              navigation_path: /dashboard-various/Dehum
+            use_ha_icon: true
+            icon_color: cyan
+          - entity: humidifier.wdh_214us
+            operator: "="
+            state: "on"
+            message: >-
+              Vysoušeč Ložnice – {{
+              states('sensor.bedroom_shelly_h_t_gen_3_bedroom_humidity') }}%
+            priority: 1
+            theme: update
+            icon: mdi:fan
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: humidifier.wdh_214us
+            secondary_text: >-
+              WDH {{ state_attr('humidifier.wdh_214us', 'current_humidity') }}%
+              - {{ states('sensor.plug_shelly_dehumidifier_bedroom_power') }} W
+            hold_action:
+              action: navigate
+              navigation_path: /dashboard-various/Dehum
+            use_ha_icon: true
+            icon_color: cyan
+          - entity: sensor.bosch_washerdryer_operation_state
+            operator: "="
+            state: run
+            message: >-
+              Pračka běží – Zbývá {% set h =
+              states('sensor.bosch_washerdryer_estimated_total_program_time') |
+              float(0) %} {% set m = (h * 60) | round(0) | int %} {% if m > 60
+              %}{{ (m // 60) }}h {{ m % 60 }}min{% else %}{{ m }} min{% endif %}
+            priority: 3
+            theme: info
+            icon: 🫧
+            show_badge: false
+            tap_action:
+              action: navigate
+              navigation_path: /dashboard-various/washerdryer
+          - entity: sensor.bosch_mycka_operation_state
+            operator: "="
+            state: BSH.Common.EnumType.OperationState.Run
+            message: >-
+              Myčka běží – {% set end =
+              states('sensor.bosch_mycka_remaining_program_time') %} {% if end
+              and end != 'unknown' %} {% set m = [((
+              as_datetime(end).timestamp() - now().timestamp()) / 60) | round(0)
+              | int, 0] | max %} {% if m > 60 %}{{ (m // 60) }}h {{ m % 60
+              }}min{% else %}{{ m }} min{% endif %}{% else %}--{% endif %}
+            priority: 3
+            theme: info
+            icon: 🍽️
+            show_badge: false
+            tap_action:
+              action: navigate
+              navigation_path: /dashboard-various/dishwasher
+          - entity: sensor.bosch_oven_operation_state
+            operator: "="
+            state: BSH.Common.EnumType.OperationState.Run
+            message: >-
+              Trouba běží – {% set end =
+              states('sensor.bosch_oven_remaining_program_time') %} {% if end
+              and end != 'unknown' %} {% set m = [((
+              as_datetime(end).timestamp() - now().timestamp()) / 60) | round(0)
+              | int, 0] | max %} {% if m > 60 %}{{ (m // 60) }}h {{ m % 60
+              }}min{% else %}{{ m }} min{% endif %}{% else %}--{% endif %}
+            priority: 2
+            theme: warning
+            icon: 🔥
+            show_badge: false
+            tap_action:
+              action: navigate
+              navigation_path: /dashboard-various/Oven
+          - entity: binary_sensor.ariston_is_heating
+            operator: "="
+            state: "on"
+            message: >-
+              Bojler nahřívá – {{ state_attr('water_heater.bojler',
+              'current_temperature') }}°C → {{ state_attr('water_heater.bojler',
+              'temperature') }}°C
+            secondary_text: >-
+              {% set ready = states('sensor.bojler_ready_time') %} {% if ready
+              not in ('unavailable', 'unknown', '') %} Hotovo v {{ (ready |
+              as_datetime | as_local).strftime('%H:%M') }} {% endif %}
+            priority: 1
+            theme: warning
+            icon: 🌡️
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: water_heater.bojler
+          - entity: switch.hdo
+            operator: "="
+            state: "on"
+            message: >-
+              Nízký tarif (NT) – změna v {{ (states('sensor.hdo_next_change_dt')
+              | as_datetime | as_local).strftime('%H:%M') }}
+            priority: 4
+            theme: success
+            icon: 🌿
+            show_badge: false
+            tap_action:
+              action: navigate
+              navigation_path: /dashboard-various/HDO
+          - entity: switch.hdo
+            operator: "="
+            state: "off"
+            message: >-
+              Vysoký tarif (VT) – změna v {{
+              (states('sensor.hdo_next_change_dt') | as_datetime |
+              as_local).strftime('%H:%M') }}
+            priority: 1
+            theme: emergency
+            icon: ⚡
+            show_badge: false
+            tap_action:
+              action: navigate
+              navigation_path: /dashboard-various/HDO
+          - entity: sensor.odpad_nejblizsi_dnu
+            operator: "="
+            state: "0"
+            message: Dnes svoz odpadu!
+            secondary_text: "{{ states('sensor.papir').split(' - ')[0] }}"
+            priority: 1
+            theme: caution
+            icon: 🗑️
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: sensor.papir
+          - entity: sensor.odpad_nejblizsi_dnu
+            operator: "="
+            state: "1"
+            message: Zítra svoz odpadu
+            secondary_text: "{{ states('sensor.papir').split(' - ')[0] }}"
+            priority: 3
+            theme: info
+            icon: 🗑️
+            show_badge: false
+            tap_action:
+              action: more-info
+              entity_id: sensor.papir
+rooms:
+  - id: bedroom
+    name: Bedroom
+    area_match:
+      - Bedroom
+    base_image: /local/Dashboards/Rooms/Bedroom-svetlo-off.webp
+    cards_below:
+      - card:
+          type: custom:bubble-card
+          card_type: button
+          entity: cover.roller_motor_bedroom
+          show_name: false
+          show_state: false
+          show_icon: true
+          button_type: slider
+          sub_button:
+            main:
+              - icon: mdi:roller-shade-closed
+                color: indigo
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_bedroom
+                  data:
+                    position: 0
+              - icon: mdi:roller-shade
+                color: blue-grey
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_bedroom
+                  data:
+                    position: 2
+              - icon: mdi:blinds
+                color: orange
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_bedroom
+                  data:
+                    position: 65
+              - icon: mdi:blinds-open
+                color: amber
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_bedroom
+                  data:
+                    position: 100
+            bottom: []
+          styles: |-
+            ha-card {
+              --bubble-button-main-background-color: rgba(0, 0, 0, 0.6) !important;
+            }
+            .bubble-range-fill {
+              background: rgba(130, 115, 105, 0.4) !important;
+              opacity: 1 !important;
+            }
+            .bubble-sub-button:nth-child(2) ha-icon {
+              color: var(--indigo-color) !important;
+            }
+            .bubble-sub-button:nth-child(3) ha-icon {
+              color: var(--blue-grey-color) !important;
+            }
+            .bubble-sub-button:nth-child(4) ha-icon {
+              color: var(--orange-color) !important;
+            }
+            .bubble-sub-button:nth-child(5) ha-icon {
+              color: var(--amber-color) !important;
+            }
+          force_icon: false
+          show_last_changed: false
+          show_attribute: false
+          card_layout: normal
+    filter_conditions:
+      - condition:
+          entity: light.light_group_bedroom
+          state: "on"
+        filter: brightness(2.6) sepia(0.35) saturate(0.9)
+      - condition:
+          entity: sun.sun
+          state: above_horizon
+        filter: brightness(1.7) sepia(0.12) saturate(1.05)
+      - filter: brightness(0.6) sepia(0.3)
+    overlays:
+      - id: overlay_svetlo
+        transition: 2.0s ease
+        image: /local/Dashboards/Rooms/Bedroom-overlay-SVETlo.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: light.light_group_bedroom
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_tv
+        transition: 2.0s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: media_player.lg_webos_tv_oled83g58lw_beuyljp
+                state_not:
+                  - "off"
+                  - unavailable
+              value: 1
+            - value: 0
+        state_images:
+          - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+            state: Stremio
+            image: /local/Dashboards/Rooms/tv-Stremio-Test2.webp
+          - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+            state: Nuvio TV
+            image: /local/Dashboards/Rooms/tv-Stremio-Test2.webp
+          - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+            state: YouTube AdFree
+            image: /local/Dashboards/Rooms/tv-YouTube-Test2.webp
+          - image: /local/Dashboards/Rooms/tv-LG-Test2.webp
+      - id: overlay_dehumidifier
+        transition: 2.0s ease
+        image: /local/Dashboards/Rooms/overlay-Bedroom-dehumidifier.webp
+        animation: pulse
+        conditions:
+          opacity:
+            - condition:
+                entity: humidifier.wdh_214us
+                state: "on"
+                or:
+                  entity: binary_sensor.wdh_214us_tank_full
+                  state: "on"
+              value: 1
+            - value: 0
+          filter:
+            - condition:
+                entity: binary_sensor.wdh_214us_tank_full
+                state: "on"
+              value: hue-rotate(120deg) saturate(3) brightness(1.3)
+            - value: none
+    zones:
+      - id: zone_okno
+        top: 1.5%
+        left: 41%
+        width: 17.1%
+        height: 33.5%
+        tap_action:
+          action: navigate
+          path: /dashboard-various/weather
+        hold_action:
+          action: toggle
+          entity: input_boolean.zobrazeni_pocasi
+      - id: zone_tv
+        top: 30%
+        left: 70%
+        width: 20%
+        height: 50%
+        tap_action:
+          condition:
+            entity: switch.01_tv
+            state: "on"
+          then:
+            action: navigate
+            path: /dashboard-various/LG_remote
+          else:
+            action: more-info
+            entity: switch.01_tv
+      - id: zone_vysousec
+        top: 61.5%
+        left: 50.5%
+        width: 6%
+        height: 15%
+        tap_action:
+          action: more-info
+          entity: humidifier.wdh_214us
+        hold_action:
+          action: navigate
+          path: /dashboard-various/Dehum
+      - id: bed_charger
+        top: 54%
+        left: 2%
+        width: 8%
+        height: 35%
+        tap_action:
+          action: browser-mod-popup
+          title: Nabíječka
+          size: normal
+          content:
+            type: vertical-stack
+            cards:
+              - type: tile
+                entity: switch.shelly_plug_s_gen3_bedroom_charger
+                name: Nabíječka
+                tap_action:
+                  action: toggle
+              - type: tile
+                entity: sensor.plug_shelly_bedroom_charger_power
+                name: Aktuální spotřeba
+      - id: electricity
+        top: 64%
+        left: 62.5%
+        width: 2%
+        height: 4%
+        tap_action:
+          action: navigate
+          path: /dashboard-various/HDO
+    elements:
+      - id: weather_window
+        top: 21.1%
+        left: 40.6%
+        width: 17.3%
+        height: 35.6%
+        card:
+          type: custom:atmospheric-weather-card
+          weather_entity: weather.weather_google
+          sun_entity: sun.sun
+          theme_entity: sun.sun
+          card_height: auto
+        visible:
+          entity: cover.roller_motor_bedroom
+          state_not: closed
+        z_index: 4
+        border_radius: "0"
+        overflow: hidden
+    blinds:
+      - id: blind_bedroom
+        top: 21.1%
+        left: 40.6%
+        width: 17.3%
+        height: 35.6%
+        entity: cover.roller_motor_bedroom
+        min: 100
+        max: 0
+        blind_type: day_night
+        z_index: 6
+        slat_color: rgba(0,0,0,0.9)
+        slat_count: 17
+        attribute: current_position
+        invert: true
+        control:
+          placement: float
+          top: 21%
+          left: 58.5%
+          height: 36%
+          slider: true
+          presets:
+            - position: 100
+              icon: mdi:blinds-open
+              color: amber
+              name: Otevřeno
+            - position: 65
+              icon: mdi:blinds
+              color: orange
+              name: Den
+            - position: 2
+              icon: mdi:roller-shade
+              color: blue-grey
+              name: Skulina
+            - position: 0
+              icon: mdi:roller-shade-closed
+              color: indigo
+              name: Zavřeno
+    badges:
+      - id: vacuum_chip
+        position: bottom-left
+        icon: cil:roborock-vacuum
+        label:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "Uklízí: S6"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "Uklízí: S7"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "Uklízí: S8"
+          - value: Připraveni
+        icon_color:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "#e74c3c"
+          - value: "#2ecc71"
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+    light_controls:
+      entities:
+        - entity: light.panel_bedroom_1
+          name: Levá
+        - entity: light.panel_bedroom_2
+          name: Střed
+        - entity: light.panel_bedroom_3
+          name: Pravá
+      lux_sensor: sensor.presence_sensor_living_room_illuminance_3
+      lux_max: 50
+      columns: 3
+      height: 2.5%
+      color_low: "#00254d"
+      color_high: "#f4c025"
+      bg_off: "#000000"
+  - id: kitchen
+    name: Kitchen
+    area_match:
+      - Kitchen
+    base_image: /local/Dashboards/Rooms/Kitchen-new.webp
+    filter_conditions:
+      - condition:
+          entity: light.panel_kitchen
+          state: "on"
+        filter: brightness(2) sepia(0.35) saturate(0.9)
+      - filter: brightness(0.75) saturate(0.9)
+    overlays:
+      - id: overlay_led
+        image: /local/Dashboards/Rooms/Overlay-Kitchen-led.webp
+        transition: 2s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: light.sensor_light_5ch
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_oven
+        image: /local/Dashboards/Rooms/Overlay-Kitchen-oven.webp
+        transition: 3s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: sensor.bosch_oven_operation_state
+                state: run
+              value: 1
+            - value: 0
+      - id: overlay_dishwasher
+        image: /local/Dashboards/Rooms/Overlay-Kitchen-dishwasher.webp
+        transition: 2s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: switch.bosch_mycka_power
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_kitchen_light
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/overlay-kitchen-light.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: light.panel_kitchen
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_led_glow
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/Overlay-Kitchen-led-glow.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: light.sensor_light_5ch
+                state: "on"
+              value: 1
+            - value: 0
+    zones:
+      - id: oven_zone
+        top: 35%
+        left: 63%
+        width: 14%
+        height: 30%
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/Oven
+      - id: dishwasher_zone
+        top: 54.5%
+        left: 40%
+        width: 13%
+        height: 30%
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/dishwasher
+    badges:
+      - id: vacuum_badge
+        position: bottom-left
+        icon: cil:roborock-vacuum
+        icon_color:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "#e74c3c"
+          - value: "#2ecc71"
+        label:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "Uklízí: S6"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "Uklízí: S7"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "Uklízí: S8"
+          - value: Připraveni
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+    elements:
+      - id: clock
+        top: 38%
+        left: 55.2%
+        width: 5%
+        height: 3%
+        card:
+          type: custom:button-card
+          entity: sensor.time
+          show_name: false
+          show_icon: false
+          show_state: true
+          styles:
+            card:
+              - background: transparent
+              - border: none
+              - box-shadow: none
+              - padding: 0
+            state:
+              - font-family: "'Courier New', monospace"
+              - font-size: clamp(5px, 0.7vw, 11px)
+              - font-weight: bold
+              - color: "#00e5ff"
+              - text-shadow: "0 0 4px #00e5ff, 0 0 8px #00bcd4"
+              - letter-spacing: 0.05em
+    light_controls:
+      entities:
+        - entity: light.led_linka_leva
+          name: Levá
+        - entity: light.panel_kitchen
+          name: Střed
+        - entity: light.switch_kuchyn_hl_loznice_gang_3
+          name: Pravá
+      lux_sensor: sensor.presence_sensor_kitchen_illuminance_2
+      lux_max: 30
+      columns: 3
+      height: 2.5%
+      color_low: "#261a66"
+      color_high: "#f4c025"
+      bg_off: "#000000"
+  - id: hall
+    name: Hall
+    area_match:
+      - Hall
+    base_image: /local/Dashboards/Rooms/Hall-New.webp
+    filter_conditions:
+      - condition:
+          entity: light.panel_hall
+          state: "on"
+        filter: brightness(2.6) sepia(0.35) saturate(0.9)
+      - filter: brightness(0.75) saturate(0.9)
+    overlays:
+      - id: overlay_svetlo
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/Hall-overlay-SVETlo.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: light.panel_hall
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_buben
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/overlay_drum_spin.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: sensor.bosch_washerdryer_operation_state
+                state: run
+              value: 1
+            - value: 0
+    zones:
+      - id: washer_zone
+        top: 50%
+        left: 19%
+        width: 17%
+        height: 42%
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/washerdryer
+      - id: electricity_zone
+        top: 33%
+        left: 57%
+        width: 6.5%
+        height: 20%
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/HDO
+    badges:
+      - id: vacuum_badge
+        position: bottom-left
+        icon: cil:roborock-vacuum
+        icon_color:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "#e74c3c"
+          - value: "#2ecc71"
+        label:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "Uklízí: S6"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "Uklízí: S7"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "Uklízí: S8"
+          - value: Připraveni
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+    light_controls:
+      entities:
+        - entity: light.panel_hall
+          name: Světlo
+      lux_sensor: sensor.presence_sensor_hall_illuminance_2
+      lux_max: 50
+      height: 2.5%
+      color_low: "#261a66"
+      color_high: "#f4c025"
+      bg_off: "#000000"
+  - id: bathroom
+    name: Bathroom
+    area_match:
+      - Bathroom
+    base_image: /local/Dashboards/Rooms/Bathroom-new-test.webp
+    cards_above:
+      - card:
+          square: false
+          type: grid
+          columns: 2
+          cards:
+            - type: custom:bubble-card
+              card_type: button
+              entity: light.panel_bathroom
+              button_type: switch
+              show_state: false
+              show_last_changed: false
+              show_last_updated: false
+              show_attribute: false
+              force_icon: false
+              use_accent_color: false
+              slider_live_update: true
+              light_transition: true
+              sub_button:
+                main: []
+                bottom: []
+              name: Světlo
+              light_transition_time: "200"
+              styles: |
+                .bubble-button-card-container {
+                  background: black !important;
+                }
+              modules:
+                - dynamic_lighting
+              dynamic_lighting:
+                light_entity: light.panel_bathroom
+                illuminance_sensor: sensor.presence_sensor_bathroom_illuminance_2
+                socket_entity: switch.switch_bathroom_switch_1
+              card_layout: normal
+              icon: ""
+            - type: custom:bubble-card
+              card_type: button
+              entity: switch.switch_bathroom_switch_2
+              button_type: slider
+              show_state: false
+              show_last_changed: false
+              show_last_updated: false
+              show_attribute: false
+              force_icon: false
+              use_accent_color: false
+              slider_live_update: true
+              light_transition: true
+              sub_button:
+                main: []
+                bottom: []
+              name: Zrcadlo
+              light_transition_time: "200"
+              styles: |
+                .bubble-button-card-container {
+                  background: black !important;
+                }
+              modules:
+                - dynamic_lighting
+              dynamic_lighting:
+                light_entity: switch.switch_bathroom_switch_2
+                illuminance_sensor: sensor.presence_sensor_bathroom_illuminance_2
+                socket_entity: switch.switch_bathroom_switch_2
+              card_layout: normal
+              icon: mdi:mirror
+    filter_conditions:
+      - condition:
+          entity: light.panel_bathroom
+          state: "on"
+        filter: brightness(1.5) sepia(0.35) saturate(1.5)
+      - filter: brightness(0.75) sepia(0.1) saturate(0.9)
+    overlays:
+      - id: overlay_kotel
+        image: /local/Dashboards/Rooms/Bathroom-Overlay-kotel.webp
+        transition: 3s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: sensor.meter_kotel_total_power
+                operator: ">"
+                value: 0.5
+              value: 1
+            - value: 0
+      - id: overlay_bojler
+        image: /local/Dashboards/Rooms/Bathroom-Overlay-bojler.webp
+        transition: 3s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: binary_sensor.ariston_is_heating
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_okno
+        image: /local/Dashboards/Rooms/Bathroom-overlay-window.webp
+        transition: 3s ease
+        conditions:
+          opacity:
+            - condition:
+                entity: humidifier.nwt_dehumidifier
+                state: "on"
+              value: 1
+            - value: 0
+          filter:
+            - condition:
+                entity: light.panel_bathroom
+                state: "on"
+              value: brightness(2.00) sepia(0.35) saturate(1.5) hue-rotate(185deg)
+            - value: brightness(0.75) sepia(0.10) saturate(0.9) hue-rotate(0deg)
+      - id: overlay_mirror
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/Bathroom-overlay-mirror-OFF.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: switch.switch_bathroom_switch_2
+                state: "off"
+              value: 1
+            - value: 0
+      - id: overlay_light_on
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/Bathroom-door-light-on.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: switch.switch_bathroom_switch_1
+                state: "on"
+              value: 1
+            - value: 0
+      - id: overlay_light_off
+        transition: 2s ease
+        image: /local/Dashboards/Rooms/Bathroom-door-light-Off.webp
+        conditions:
+          opacity:
+            - condition:
+                entity: switch.switch_bathroom_switch_1
+                state: "off"
+              value: 1
+            - value: 0
+    zones:
+      - id: bojler_zone
+        top: 1.5%
+        left: 6%
+        width: 12%
+        height: 40%
+        tap_action:
+          action: more-info
+          entity: water_heater.bojler
+      - id: kotel_zone
+        top: 46.5%
+        left: 6%
+        width: 12%
+        height: 40.5%
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/thermostat
+      - id: okno_zone
+        top: 1%
+        left: 25.5%
+        width: 11.5%
+        height: 31.5%
+        tap_action:
+          action: more-info
+          entity: humidifier.nwt_dehumidifier
+    badges:
+      - id: vacuum_badge
+        position: bottom-left
+        icon: cil:roborock-vacuum
+        icon_color:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "#e74c3c"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "#e74c3c"
+          - value: "#2ecc71"
+        label:
+          - condition:
+              entity: vacuum.s6_kitchen
+              state: cleaning
+            value: "Uklízí: S6"
+          - condition:
+              entity: vacuum.s7_kitchen
+              state: cleaning
+            value: "Uklízí: S7"
+          - condition:
+              entity: vacuum.s8_maxv_ultra
+              state: cleaning
+            value: "Uklízí: S8"
+          - value: Připraveni
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+    labels:
+      - id: bojler_temp
+        entity: water_heater.bojler
+        attribute: current_temperature
+        suffix: °C
+        top: 16%
+        left: 13%
+        color_gradient:
+          - value: 40
+            color: "#0400ff"
+          - value: 50
+            color: "#44ff00"
+          - value: 55
+            color: "#ff8800"
+          - value: 58
+            color: "#ff0000"
+        background: rgba(0,0,0,0.7)
+        padding: 1px 4px
+        border_radius: 6px
+        text_shadow: ""
+        font_size: clamp(11px, 0.9vw, 17px)
+        font_weight: bold
+    gauges:
+      - id: bojler_gauge
+        top: 4%
+        left: 11%
+        width: 1%
+        height: 34%
+        entity: water_heater.bojler
+        attribute: current_temperature
+        min: 35
+        max: 53
+        color_gradient:
+          - value: 40
+            color: "#0400ff"
+          - value: 51
+            color: "#00ff44"
+          - value: 58
+            color: "#ff8800"
+          - value: 62
+            color: "#ff0000"
+        animation: pulse
+        animation_color: "#0008ff"
+        alert_conditions:
+          entity: water_heater.bojler
+          operator: <=
+          value: 42
+          attribute: current_temperature
+        transition: height 2s ease, background 2s ease
+  - id: living_room
+    name: Living room
+    area_match:
+      - Living room
+    base_image: /local/Dashboards/Rooms/Living-room-new.webp
+    cards_below:
+      - card:
+          type: custom:bubble-card
+          card_type: button
+          entity: cover.roller_motor_living_room
+          show_name: false
+          show_state: false
+          show_icon: true
+          button_type: slider
+          sub_button:
+            main:
+              - icon: mdi:roller-shade-closed
+                color: indigo
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_living_room
+                  data:
+                    position: 0
+              - icon: mdi:roller-shade
+                color: blue-grey
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_living_room
+                  data:
+                    position: 2
+              - icon: mdi:blinds
+                color: orange
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_living_room
+                  data:
+                    position: 59
+              - icon: mdi:blinds-open
+                color: amber
+                show_background: false
+                tap_action:
+                  action: perform-action
+                  perform_action: cover.set_cover_position
+                  target:
+                    entity_id: cover.roller_motor_living_room
+                  data:
+                    position: 100
+            bottom: []
+          styles: |-
+            ha-card {
+              --bubble-button-main-background-color: rgba(0, 0, 0, 0.6) !important;
+            }
+            .bubble-range-fill {
+              background: rgba(130, 115, 105, 0.4) !important;
+              opacity: 1 !important;
+            }
+            .bubble-sub-button:nth-child(2) ha-icon {
+              color: var(--indigo-color) !important;
+            }
+            .bubble-sub-button:nth-child(3) ha-icon {
+              color: var(--blue-grey-color) !important;
+            }
+            .bubble-sub-button:nth-child(4) ha-icon {
+              color: var(--orange-color) !important;
+            }
+            .bubble-sub-button:nth-child(5) ha-icon {
+              color: var(--amber-color) !important;
+            }
+          force_icon: false
+          show_last_changed: false
+          show_attribute: false
+          card_layout: normal
+    filter_conditions:
+      - condition:
+          entity: light.light_group_living_room
+          state: "on"
+        filter: brightness(1.65) sepia(0.35) saturate(0.9)
+      - filter: brightness(0.55) sepia(0.3)
+    zones:
+      - id: Zone_PC
+        top: 32%
+        left: 71%
+        width: 16.5%
+        height: 42.2%
+        tap_action:
+          action: navigate
+          path: /dashboard-various/PC
+      - id: Zone_kreslo
+        top: 49.3%
+        left: 35.9%
+        width: 26.7%
+        height: 26.6%
+        tap_action:
+          action: more-info
+          entity: switch.03_kreslo
+    light_controls:
+      entities:
+        - entity: light.panel_living_room_1
+          name: Levá
+        - entity: light.panel_living_room_2
+          name: Střed
+        - entity: light.panel_living_room_3
+          name: Pravá
+      lux_sensor: sensor.presence_sensor_living_room_illuminance_3
+      lux_max: 17
+      height: 2.5%
+      color_low: "#422300"
+      color_high: "#f4c025"
+      bg_off: "#000000"
+follow_mode: manual
+url_sync: true
