@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.3.0';
+const ROC_VERSION='4.4.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -865,7 +865,6 @@ class RoomOverlayCard extends HTMLElement{
     }
     const c=roomMerge(cAll,this._roomIdx); // active room view (or plain config)
     this._roomCfg=c;
-    if(!c._roc_ghost&&!c._roc_preview)this._rememberRoom(); // record for the editor
     this._zoomScale=1;this._wrapTA='';
     const tm=c.test_mode??false;
     // Active layout profile — by the AVAILABLE VIEWPORT shape (w/h ratio), not
@@ -1882,6 +1881,7 @@ class RoomOverlayCard extends HTMLElement{
       ghost.style.transition='transform .3s ease,opacity .3s ease';
     }
     this._roomIdx=idx;
+    this._rememberRoom(); // record the room the user switched to (for the editor)
     this._rendered=false;
     this._render();
     const wrap=this.shadowRoot.querySelector('.wrap');
@@ -3058,7 +3058,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     try{
       if(!cfg||!Array.isArray(cfg.rooms)||!cfg.rooms.length)return;
       const clamp=(ri)=>Math.max(0,Math.min(ri,cfg.rooms.length-1));
-      // 1) room the card last rendered
+      // 1) room the card last switched to (exact identity)
       const mem=ROC_ROOM_MEM.get(cfgKey(cfg));
       if(mem!=null){const ri=roomMatch(cfg,mem);if(ri>=0){this._editRoomIdx=clamp(ri);return;}}
       // 2) fallback: url_sync hash (if HA hasn't stripped it)

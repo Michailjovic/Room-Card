@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.4.0] - 2026-07-11
+
+### Fix: editor now reliably opens on the room you were viewing
+
+- **The editor-opens-on-viewed-room feature actually works now.** In 4.3.0 the card recorded its current room on *every* render. When Home Assistant enters edit mode it recreates the dashboard card (resetting it to the first room), and that fresh render overwrote the remembered room with room 0 *before* the editor read it — so the editor kept opening on the first room. The card now records the room **only when you actively switch rooms** (nav thumbnails, swipe, wheel, presence-follow), so the value survives HA's edit-mode recreation and save. Still works without `url_sync`, with the URL hash as a fallback.
+- The **Drag-edit preview** (header checkbox) already follows the room picker — selecting a different room to edit re-renders the preview for that room, so you can see what you're editing. (Home Assistant's own right-side preview pane follows live presence and can't be steered.)
+
 ## [4.3.0] - 2026-07-11
 
 ### Light-controls height parity + reliable editor-opens-on-room

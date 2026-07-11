@@ -111,13 +111,22 @@ t('collect kept aspect per-profile',out&&out.aspect_ratio&&out.aspect_ratio.port
 t('collect dropped legacy keys',out&&out.max_height===undefined&&out.breakpoints===undefined);
 
 // --- editor opens on the room the card was showing (in-memory store) ---
-const _memCfg={type:'custom:room-overlay-card',card_id:'memcard',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]};
+const _memCfg={type:'custom:room-overlay-card',card_id:'memcard',base_image:'/local/m.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]};
 const cardM=w.document.createElement('room-overlay-card');
 cardM._config=_memCfg;cardM._roomIdx=1;cardM._rememberRoom();
 const edM=w.document.createElement('room-overlay-card-editor');
 w.document.body.appendChild(edM);
 edM.setConfig(_memCfg);
 t('editor opens on the card-viewed room (in-memory, no url_sync)',edM._editRoomIdx===1);
+// a fresh card rendering at room 0 (HA recreates cards entering edit) must NOT clobber
+const cardC=w.document.createElement('room-overlay-card');
+cardC.setConfig(_memCfg);
+w.document.body.appendChild(cardC);
+cardC.hass={states:{},user:{name:'x'}};
+const edC=w.document.createElement('room-overlay-card-editor');
+w.document.body.appendChild(edC);
+edC.setConfig(_memCfg);
+t('passive card render does not clobber remembered room',edC._editRoomIdx===1);
 // --- url_sync hash fallback when the store has no entry ---
 try{w.location.hash='#room=hall';}catch(_){}
 const edH=w.document.createElement('room-overlay-card-editor');
