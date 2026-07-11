@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.4.0';
+const ROC_VERSION='4.5.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -3075,6 +3075,29 @@ class RoomOverlayCardEditor extends HTMLElement{
     }catch(_){}
   }
 
+  // Point the url_sync hash at the room being edited + fire hashchange, so HA's
+  // OWN preview card (which reads url_sync) follows the editor. Automates the
+  // "scroll to restore #room=… then it loads" workaround. url_sync only.
+  _writeEditHash(cfg){
+    try{
+      const u=cfg&&cfg.url_sync;
+      if(!u||typeof location==='undefined'||!Array.isArray(cfg.rooms)||!cfg.rooms.length)return;
+      const key=(typeof u==='string'&&u.trim())?u.trim():'room';
+      const r=cfg.rooms[Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1))];
+      const val=encodeURIComponent(String(r.id||r.name||this._editRoomIdx));
+      const parts=String(location.hash||'').replace(/^#/,'').split('&').filter(Boolean)
+        .filter(function(p){const eq=p.indexOf('=');return!(eq>0&&decodeURIComponent(p.slice(0,eq))===key);});
+      parts.push(encodeURIComponent(key)+'='+val);
+      const newHash='#'+parts.join('&');
+      if((location.hash||'')===newHash)return; // already pointed there
+      try{history.replaceState(history.state,'',location.pathname+location.search+newHash);}
+      catch(_){location.hash=newHash;}
+      // replaceState doesn't emit hashchange — nudge the preview card's listener
+      try{window.dispatchEvent(new HashChangeEvent('hashchange'));}
+      catch(_){try{window.dispatchEvent(new Event('hashchange'));}catch(__){}}
+    }catch(_){}
+  }
+
   setConfig(cfg){
     const _hadLayout=!!(cfg&&cfg.layout);
     cfg=rocMigrateLayout(cfg);
@@ -3084,6 +3107,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     // Open the editor on the room the card was showing (ROC_ROOM_MEM, hash
     // fallback). One-time, so the room picker still wins afterwards.
     if(!this._roomIdxInit){this._roomIdxInit=true;this._initEditRoom(cfg);}
+    this._writeEditHash(cfg); // keep the url_sync hash on the edited room (drives HA's native preview; survives its save-strip)
     if(!this._hist.length){try{this._hist=[JSON.stringify(cfg)];this._histIdx=0;}catch(_){}}
     if(prev&&this.innerHTML.trim()){
       const _ri=this._editRoomIdx;
@@ -4586,7 +4610,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const A=function(c,key){const t=T(c);if(!t[key])t[key]=[];return t[key];};
     // Rooms section
     const roomSel=this.querySelector('#room-select');
-    if(roomSel)roomSel.addEventListener('change',function(){self._editRoomIdx=parseInt(roomSel.value)||0;self._render();});
+    if(roomSel)roomSel.addEventListener('change',function(){self._editRoomIdx=parseInt(roomSel.value)||0;self._render();self._writeEditHash(self._config);});
     const addRoom=this.querySelector('#add-room');
     if(addRoom)addRoom.addEventListener('click',function(){
       const c=self._collectConfig();

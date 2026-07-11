@@ -141,6 +141,13 @@ const edN=w.document.createElement('room-overlay-card-editor');
 w.document.body.appendChild(edN);
 edN.setConfig({type:'custom:room-overlay-card',card_id:'nocard',layout:{},rooms:[{id:'living'},{id:'hall'}]});
 t('no store + no url_sync -> editor stays on first room',edN._editRoomIdx===0);
+// --- editor writes url_sync hash to drive HA's native preview ---
+const _hwCfg={type:'custom:room-overlay-card',card_id:'hwcard',url_sync:'room',base_image:'/local/x.webp',layout:{},rooms:[{id:'living'},{id:'hall'}]};
+const cardHW=w.document.createElement('room-overlay-card');cardHW._config=_hwCfg;cardHW._roomIdx=1;cardHW._rememberRoom();
+try{w.location.hash='';}catch(_){}
+const edHW=w.document.createElement('room-overlay-card-editor');w.document.body.appendChild(edHW);
+edHW.setConfig(_hwCfg);
+t('editor opens on remembered room and writes url_sync hash',edHW._editRoomIdx===1&&/(^|[#&])room=hall(&|$)/.test(String(w.location.hash)));
 
 console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
 process.exit(fails?1:0);

@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.5.0] - 2026-07-11
+
+### Home Assistant's own preview now follows the edited room (`url_sync`)
+
+- **HA's native right-side preview tracks the room you're editing.** When `url_sync` is enabled, the editor now writes the `#room=…` hash (and fires `hashchange`) for the room being edited — on open and whenever you change the room picker. HA's own preview card reads `url_sync`, so it switches to that room instead of showing the first room / live-presence room. This automates the manual "scroll back and forth to restore `#room=…`" workaround, and also restores the hash after HA strips it on save. Requires `url_sync` (there's no other channel into HA's preview); the Drag-edit preview and the editor's room scoping work regardless.
+
 ## [4.4.0] - 2026-07-11
 
 ### Fix: editor now reliably opens on the room you were viewing
