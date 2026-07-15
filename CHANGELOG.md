@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.5.2] - 2026-07-15
+
+### Portrait: natural content height + landscape edit-mode/rounding fixes
+
+Diagnosed live against a real dashboard (Panel view) before writing any code — see the investigation notes below.
+
+- **Portrait no longer force-fills the screen.** `layout: height: viewport` (default) forced portrait to stretch every region to match the full available screen height, even though width is the real constraint there — any extra vertical space just got proportionally distributed across rows instead of being left alone. Portrait now sizes itself from its own content (width-driven, image at its design aspect, everything else its natural size); if that's shorter than the screen, the rest is simply left blank instead of stretched. Landscape (the wall-tablet kiosk use case) is unchanged — it still fills the screen. An explicit `layout: height: container` or a fixed length is still honoured in either profile.
+- **Fix: HA's edit-mode "card actions" bar (Edit / Move to view / …) no longer lands below the fold.** In landscape/viewport mode, Home Assistant wraps the edited card in its own `hui-card-options` element and appends a real, in-flow actions bar after it — not an overlay. Since the card was (correctly) sized to the exact screen edge, that bar always ended up needing a scroll to reach. The card now detects HA's own `edit-mode` marker and reserves the actions bar's live-measured height (never a hardcoded number), so it's visible without scrolling. Best-effort: this reaches into HA's internal, non-public DOM structure — if a future HA version changes it, this silently falls back to today's behaviour rather than breaking.
+- **Fix: a persistent sub-pixel scrollbar in landscape.** Measured live: the view container can sit a fraction of a pixel taller than the actual viewport even outside edit mode, and rounding the pinned height with `Math.round()` could round the wrong way and trigger a scrollbar. Switched to `Math.floor()` — the card now only ever errs a fraction of a pixel short, never long.
+
 ## [4.5.1] - 2026-07-15
 
 ### Fix: empty scroll strip under the card in viewport-height layout
