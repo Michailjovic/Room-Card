@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.5.0';
+const ROC_VERSION='4.5.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -569,7 +569,7 @@ class RoomOverlayCard extends HTMLElement{
     this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;this._lcToggles=[];
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
-    this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;
+    this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;this._bodyRo=null;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -1645,6 +1645,19 @@ class RoomOverlayCard extends HTMLElement{
       if(this._wrapRo)this._wrapRo.disconnect();
       const _wEl=this.shadowRoot.querySelector('.wrap');
       if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._layoutStage();});this._wrapRo.observe(_wEl);}
+      // Root-height pin (viewport mode) only reacts to WINDOW resize by
+      // default, so a header that renders/settles after us (or an edit-mode
+      // bar appearing below), which shifts our top offset WITHOUT resizing
+      // the card itself, leaves the pinned px height stale → page-level
+      // scroll gap. ResizeObserver only fires on size change, not position —
+      // but when the page can actually scroll, document.body's own content
+      // box (height:auto, sized by its stacked children) DOES grow/shrink
+      // by exactly that amount, so watching body's box catches header growth
+      // and edit-bar insertion alike, from the real cause, no polling.
+      if(!this._bodyRo&&document.body){
+        this._bodyRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
+        this._bodyRo.observe(document.body);
+      }
     }
     if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
     this._layoutRootHeight();
@@ -2808,6 +2821,7 @@ class RoomOverlayCard extends HTMLElement{
     this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
     if(this._wrapRo){this._wrapRo.disconnect();this._wrapRo=null;}
+    if(this._bodyRo){this._bodyRo.disconnect();this._bodyRo=null;}
     if(this._io){this._io.disconnect();this._io=null;}
     if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
   }
@@ -2817,6 +2831,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._rendered&&this._config){
       if(this._io)this._io.observe(this);
       if(this._ro)this._ro.observe(this);
+      if(this._bodyRo&&document.body)this._bodyRo.observe(document.body);
       this._startCamera();
       if(!this._tmplUnsubs.length)this._setupTemplates();
       if(this._hlHandler)window.addEventListener('roc-highlight',this._hlHandler);

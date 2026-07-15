@@ -1,5 +1,12 @@
 # Changelog
 
+## [4.5.1] - 2026-07-15
+
+### Fix: empty scroll strip under the card in viewport-height layout
+
+- **Portrait `layout: height: viewport` no longer leaves a stray scrollable gap the size of the HA header (or the edit-mode bottom bar).** The card pins its height in JS from `innerHeight − <card top offset>`, but that pin was only ever refreshed on an actual `window` resize event. If the HA header rendered/settled *after* the card's first paint, or the dashboard's edit-mode bar appeared/disappeared, the card's top offset (or the space below it) shifted without the card itself changing size — so the pinned height went stale and the page picked up real, unwanted scroll.
+- The card now also watches `document.body` with a `ResizeObserver`. When the page can actually scroll, `body`'s own content box grows or shrinks by that same amount (that's *why* the scrollbar shows up), so this reacts to the real cause — header settling, tabs appearing, the edit-mode bar — the moment it happens, with no polling and no risk of jank during the room-swipe gesture.
+
 ## [4.5.0] - 2026-07-11
 
 ### Home Assistant's own preview now follows the edited room (`url_sync`)
