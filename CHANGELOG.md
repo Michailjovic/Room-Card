@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.6.2] - 2026-07-16
+
+### Edit mode: actions bar visible without scrolling; "breathing" size loop after a swipe fixed
+
+Diagnosed live in the running dashboard (edit mode entered, oscillation reproduced and logged at ~1 Hz). Two interlocking causes:
+
+- **Fix: the card "breathed" — rhythmically zoomed in and out and never settled.** `ha-card` carries a `transition: 0.3s ease-out` from Home Assistant's own styles, so every height pin animated for 300 ms — and every measurement taken inside that window (the budget-fit, the overflow absorption) read a mid-flight rect and computed the *next* wrong value; the appearing/disappearing page scrollbar then acted as a metronome re-triggering the cycle. The card's `ha-card` now gets `transition: none` (we own its height entirely), and the budget-fit computes from the card's *intended* inline height instead of the animated rect as a second line of defence.
+- **Fix: edit-mode actions bar (Edit / Move / …) landed below the fold.** `_editBarHeight` looked for HA's `.card-actions` inside an `HA-CARD` ancestor's shadowRoot — in current HA the bar lives in `hui-card-options`' shadowRoot, so the probe returned 0 and no room was reserved. The reserve now finds the bar there (legacy path kept) and measures the bar block's **own** height + vertical margins — never a position difference against our card, which is circular (it measures a layout our own height just changed and over-reserves).
+- **Fix: leaving edit mode left the card at the shorter edit-mode height.** Exiting edit removes the actions bar without resizing the scroller or recreating the card — no observer fires. A throttled (1 s) root-height re-check now piggybacks on regular state updates; it early-outs when nothing changed, so it's effectively free.
+
 ## [4.6.1] - 2026-07-16
 
 ### Intrinsic image box now respects the height budget (letterbox instead of clipping)
