@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.5.2';
+const ROC_VERSION='4.5.3';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -495,8 +495,12 @@ function coverCtlHtml(cc,mob,mode){
   else pos='display:none;position:absolute;z-index:120;top:'+cc.top+';left:'+cc.left+';height:'+cc.height+';width:'+cc.width+';padding:8px 5px;';
   const hasUp=cc.buttons.indexOf('up')>=0,hasDown=cc.buttons.indexOf('down')>=0,hasStop=cc.buttons.indexOf('stop')>=0;
   const rail=cc.slider?'<div class="cc-rail" data-cc-rail><div class="cc-fill" data-cc-fill></div><div class="cc-thumb" data-cc-thumb></div></div>':'';
+  // Vertical rail: config order (top→bottom), typically authored open→closed.
+  // Horizontal bar: always closed→open left→right, regardless of config order,
+  // so a single presets list works for both profiles without contradicting itself.
+  const _ccPresets=horiz?cc.presets.slice().sort(function(a,b){return a.position-b.position;}):cc.presets;
   let presets='';
-  for(const pp of cc.presets){
+  for(const pp of _ccPresets){
     const col=ccColor(pp.color)||'#fff';
     presets+='<button class="cc-preset" data-cc-preset data-pos="'+pp.position+'" title="'+escA(pp.name||(pp.position+' %'))+'" style="--cc-col:'+escA(col)+';">'
       +(pp.icon?'<ha-icon icon="'+escA(pp.icon)+'"></ha-icon>':'<span class="cc-preset-num">'+pp.position+'</span>')

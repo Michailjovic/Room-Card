@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.5.3] - 2026-07-16
+
+### Fix: cover-control presets read in the wrong direction on the horizontal (portrait) bar
+
+- **The blind-control preset buttons (Open / Day / Gap / Closed, etc.) now always read closed → open in a horizontal bar, regardless of how they're ordered in `control.presets`.** The vertical rail (landscape dock, side column) reads its presets top → bottom exactly as authored in the config — typically open at the top, closed at the bottom, matching the up/close direction of the slider. The same `presets` list, unmodified, previously rendered in that *same* array order on the horizontal bar (portrait dock, or the portrait float bottom bar), which put "closed" on the wrong end and read open → closed left-to-right. One `presets` list can't have two different orders depending on the axis it's authored for, so reordering it in YAML to fix one profile silently broke the other. The horizontal bar now sorts a copy of the list by `position` ascending purely for its own left-to-right rendering; the vertical rail is untouched and still uses the config order as-is. No config change needed — existing `control.presets` lists now render correctly in both profiles at once.
+
 ## [4.5.2] - 2026-07-15
 
 ### Portrait: natural content height + landscape edit-mode/rounding fixes
