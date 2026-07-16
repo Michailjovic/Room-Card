@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.6.1] - 2026-07-16
+
+### Intrinsic image box now respects the height budget (letterbox instead of clipping)
+
+Diagnosed live against the real dashboard: v4.6.0's height pin was already correct (card ended exactly at the viewport), yet a bottom-left badge still vanished — the overflow was **inside** the card. With the image region on an `auto` grid row, CSS `aspect-ratio` sizes the image box from its WIDTH alone (height = width/aspect), blind to the card's pinned height; on short viewports the grid total exceeded the card, `ha-card` clipped the excess, and everything anchored to the image's bottom edge disappeared below the fold. In edit mode the same mismatch showed up inverted, as a black band where the (mis-fitted) image should have been.
+
+- **Budget-fit for the intrinsic image box.** Whenever the width-derived height doesn't fit the remaining budget (card height minus the rows above/below the image, from the layout definition — not from the geometry of an already-overflowing grid), the box now shrinks to fit the HEIGHT, keeps the exact design aspect, and centres itself — the image letterboxes (side bars) instead of being cropped or clipped. Every stage-glued element (zones, icons, labels, gauges) shrinks with it; corner badges stay pinned to the visible box. Fits back up automatically when space returns (window resize, leaving edit mode). Runs on every layout trigger (pin, resize, ResizeObserver, render).
+- **Fix: an absorbed height could get stuck short.** 4.6.0's residual-overflow absorption kept the shrunken height as long as the raw measurement was unchanged — even after the overflow it reacted to was gone (e.g. it was a transient of the internal grid overflow above). The change-detection now re-expands whenever the pinned height stopped matching the raw one and nothing overflows anymore.
+- **Self-heal for transient rects.** Heights measured while HA shuffles its DOM (edit-mode reparenting into `hui-card-options`, header mount) can be transiently wrong, and an RO event could pin a bogus value with no follow-up trigger. Every pin that CHANGES the value now schedules one delayed re-check (300 ms) from settled rects; a stable pin doesn't reschedule, so there's no steady-state polling.
+
 ## [4.6.0] - 2026-07-16
 
 ### Viewport height engine rebuilt: scroll-container measurement (header, edit mode, room-switch fixes)

@@ -177,6 +177,15 @@ t('corner badge pinned to .wrap after switch',!!_b2&&_b2.parentElement.classList
 // _layoutRootHeight must not throw without layout boxes (jsdom rects are 0)
 let _rhThrew=false;try{cardRH._layoutRootHeight();}catch(_){_rhThrew=true;}
 t('layoutRootHeight safe without layout boxes',!_rhThrew);
+// v4.6.1 budget-fit: present, safe without boxes, and skipped in natural portrait
+t('layoutFitWrap exists',typeof cardRH._layoutFitWrap==='function');
+let _fwThrew=false;try{cardRH._layoutFitWrap();}catch(_){_fwThrew=true;}
+t('layoutFitWrap safe without layout boxes',!_fwThrew);
+const _fwWrap=cardRH.shadowRoot.querySelector('.wrap');
+const _fwProf=cardRH._profile;cardRH._profile='portrait';
+const _fwH=_fwWrap.style.height;cardRH._layoutFitWrap();
+t('layoutFitWrap no-op in natural portrait',_fwWrap.style.height===_fwH);
+cardRH._profile=_fwProf;
 
 console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
 process.exit(fails?1:0);

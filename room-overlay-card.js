@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.6.0';
+const ROC_VERSION='4.6.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -574,7 +574,7 @@ class RoomOverlayCard extends HTMLElement{
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;this._bodyRo=null;
-    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._rootHT2=null;
+    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._rootHT2=null;this._rootHT3=null;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -802,6 +802,60 @@ class RoomOverlayCard extends HTMLElement{
     return rocRatio(la);
   }
 
+  // Budget-fit for the intrinsic (auto-row) image box: CSS aspect-ratio sizes
+  // the wrap from WIDTH alone (height = width/aspect), blind to the card's
+  // height budget — on short viewports the grid total exceeds the pinned card,
+  // ha-card clips the overflow and bottom-anchored chips vanish below the
+  // edge. When the width-derived height doesn't fit the remaining budget
+  // (card height minus the other rows), shrink the box to fit the HEIGHT and
+  // keep the design aspect — the image letterboxes (side bars) instead of
+  // being cropped, and every stage-glued element stays on it. Fits back up
+  // automatically when space returns.
+  _layoutFitWrap(){
+    if(!this.shadowRoot||!this._config)return;
+    const c=this._roomCfg||this._config;
+    if(c._roc_ghost)return;
+    if(this._profile==='portrait'&&((this._config.layout&&this._config.layout.height)||'viewport')==='viewport')return; // natural portrait sizes itself
+    const wrap=this.shadowRoot.querySelector('.wrap');
+    if(!wrap||!wrap.style.aspectRatio)return; // only the intrinsic image box
+    const region=wrap.parentElement;
+    const card=this.shadowRoot.querySelector('ha-card');
+    if(!region||!card)return;
+    const da=parseFloat(wrap.style.aspectRatio)||16/9;
+    const cardR=card.getBoundingClientRect();
+    const regR=region.getBoundingClientRect();
+    if(!(cardR.height>0)||!(regR.width>0))return;
+    // Height budget: from the region's top edge to the card's bottom, minus
+    // rows placed BELOW the image (from the layout definition — geometry of
+    // an already-overflowing grid is unreliable). Regions sharing a below-row
+    // count once (max per row).
+    const lp=this._lp||{place:{}};
+    const _rs=v=>parseInt(String(v==null?1:v).split('/')[0],10)||1;
+    const _re=v=>{const p=String(v==null?1:v).split('/');return p.length>1?(parseInt(p[1],10)||1):_rs(v)+1;};
+    const imgEnd=_re(lp.place&&lp.place.image&&lp.place.image.row);
+    const belowRows={};
+    this.shadowRoot.querySelectorAll('.roc-reg').forEach(el=>{
+      const rg=el.dataset.reg;if(rg==='image')return;
+      const pl=lp.place&&lp.place[rg];if(!pl)return;
+      const st=_rs(pl.row);
+      if(st>=imgEnd){const h=el.getBoundingClientRect().height;if(!(belowRows[st]>=h))belowRows[st]=h;}
+    });
+    let belowH=0;for(const k in belowRows)belowH+=belowRows[k];
+    const budget=Math.floor(cardR.bottom-regR.top-belowH);
+    const naturalH=regR.width/da;
+    const target=Math.floor(Math.min(naturalH,Math.max(120,budget)));
+    if(target>=Math.floor(naturalH)-1){ // fits — restore pure intrinsic sizing
+      if(wrap.style.height!=='auto'){wrap.style.height='auto';wrap.style.width='';wrap.style.marginLeft='';wrap.style.marginRight='';this._layoutStage();}
+      return;
+    }
+    const w=Math.min(Math.floor(regR.width),Math.floor(target*da));
+    if(wrap.style.height===target+'px'&&wrap.style.width===w+'px')return; // settled
+    wrap.style.height=target+'px';
+    wrap.style.width=w+'px';
+    wrap.style.marginLeft='auto';wrap.style.marginRight='auto'; // centre — side bars show the card background
+    this._layoutStage();
+  }
+
   _layoutStage(){
     if(!this.shadowRoot)return;
     const content=this.shadowRoot.querySelector('.content');
@@ -909,20 +963,40 @@ class RoomOverlayCard extends HTMLElement{
     // over always does (sub-pixel rounding measured live).
     let h=Math.floor(avail-top)-this._editBarHeight();
     h=Math.max(200,h);
-    if(Math.abs(h-(this._rootHRaw||0))<=1&&this._rootHPx)return; // unchanged
+    // Steady-state early out: raw height unchanged, nothing was absorbed last
+    // time AND nothing overflows now. An ABSORBED height must NOT early-out on
+    // "raw unchanged" alone — the overflow it reacted to may be gone (e.g. it
+    // was a transient), and the card would stay stuck short forever.
+    const ovPre=_winSc?(document.documentElement.scrollHeight-(window.innerHeight||0)):(sc.scrollHeight-sc.clientHeight);
+    if(Math.abs(h-(this._rootHRaw||0))<=1&&this._rootHPx===this._rootHRaw&&ovPre<=1)return;
     this._rootHRaw=h;
-    card.style.height=h+'px';
+    card.style.height=h+'px'; // full (raw) height first, then measure what overflows
     // Residual-overflow absorption: view wrappers add bottom padding (and HA
-    // may stack small siblings) BELOW the card inside the scroller — invisible
-    // to any top-offset math. Measure what actually overflows after pinning
-    // and absorb it, capped at 160px so a genuinely tall page (user content
-    // below the card) keeps its scrollbar instead of crushing the card.
+    // may stack small siblings — e.g. the edit-mode card-actions bar) BELOW
+    // the card inside the scroller — invisible to any top-offset math.
+    // Measure what actually overflows after pinning and absorb it, capped at
+    // 160px so a genuinely tall page (user content below the card) keeps its
+    // scrollbar instead of crushing the card. Both writes happen in the same
+    // task, so no intermediate paint.
     const ov=_winSc?(document.documentElement.scrollHeight-(window.innerHeight||0)):(sc.scrollHeight-sc.clientHeight);
     if(ov>1&&ov<=160)h=Math.max(200,h-Math.ceil(ov));
+    const _prevPin=this._rootHPx;
     this._rootHPx=h;
     card.dataset.rocH=String(h);
     if(card.style.height!==h+'px')card.style.height=h+'px';
+    this._layoutFitWrap();
     this._layoutStage();
+    // Self-heal: rects measured while HA shuffles its DOM (edit-mode
+    // reparenting into hui-card-options, header mount) can be transiently
+    // wrong (e.g. top=0) and an RO event may pin a bogus height with no
+    // follow-up trigger. One delayed re-check whenever the pinned value
+    // CHANGES recomputes from settled rects; a correct/stable pin doesn't
+    // reschedule, so there is no steady-state polling.
+    if(h!==_prevPin){
+      const _shSelf=this;
+      clearTimeout(this._rootHT3);
+      this._rootHT3=setTimeout(function(){if(_shSelf._rendered)_shSelf._layoutRootHeight();},300);
+    }
   }
 
   _onWinResize(){
@@ -931,7 +1005,7 @@ class RoomOverlayCard extends HTMLElement{
     const c=this._roomCfg||this._config;
     if((c.test_mode??false)&&this._profFlipped)p=(p==='portrait')?'landscape':'portrait';
     if(p!==this._profile){this._rendered=false;this._render();return;}
-    this._layoutRootHeight();this._layoutStage();
+    this._layoutRootHeight();this._layoutFitWrap();this._layoutStage();
   }
 
   _render(){
@@ -1729,7 +1803,7 @@ class RoomOverlayCard extends HTMLElement{
     if(window.ResizeObserver){
       if(this._ro)this._ro.disconnect();
       const self=this;
-      this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutStage();if(self._hass&&self._visible)self._update();}});
+      this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutFitWrap();self._layoutStage();if(self._hass&&self._visible)self._update();}});
       this._ro.observe(this);
       // The image region's height changes independently of the card (grid %),
       // so the cover-stage watches its own box too.
@@ -1756,6 +1830,7 @@ class RoomOverlayCard extends HTMLElement{
     }
     if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
     this._layoutRootHeight();
+    this._layoutFitWrap();
     this._layoutStage();
     // Late-settling re-pins: fonts, HA header and the per-card edit bar can
     // land after our first measurement without resizing anything we observe.
@@ -2925,7 +3000,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._bodyRo){this._bodyRo.disconnect();this._bodyRo=null;}
     if(this._scRo){this._scRo.disconnect();this._scRo=null;}
     this._scrollEl=null;
-    clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);
+    clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);clearTimeout(this._rootHT3);
     if(this._io){this._io.disconnect();this._io=null;}
     if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
   }
