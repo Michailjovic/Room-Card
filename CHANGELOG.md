@@ -1,5 +1,15 @@
 # Changelog
 
+## [4.6.3] - 2026-07-17
+
+### Release pipeline hardened — HACS "unknown error" on v4.6.2 (missing release asset)
+
+No card-code changes — this release exists because **v4.6.2 could not be installed through HACS**. HACS downloads `room-overlay-card.js` from the release assets (per `hacs.json` `filename`), and the v4.6.2 release had none: the upload workflow's single-shot `softprops/action-gh-release` step hit a transient GitHub 503 ("Unicorn" error page, run #150), the run failed quietly, and the release stayed published without its asset.
+
+- **The release workflow now retries the upload** (5 attempts with increasing backoff, via the `gh` CLI — the deprecated-Node third-party action is gone) **and verifies at the end that `room-overlay-card.js` is really attached**, failing the run loudly if not. A published release that HACS can't install is no longer a silent possibility.
+- **Backfill trigger:** the workflow can be run manually (Actions → Release → Run workflow → tag) to attach the asset to any existing release.
+- Card is identical to 4.6.2 apart from the version number.
+
 ## [4.6.2] - 2026-07-16
 
 ### Edit mode: actions bar visible without scrolling; "breathing" size loop after a swipe fixed

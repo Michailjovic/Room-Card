@@ -1,21 +1,62 @@
+# Attaches room-overlay-card.js to every published GitHub release (incl. pre-releases).
+# HACS downloads the file named in hacs.json's "filename" from the RELEASE ASSETS of the
+# selected version — a release without the asset fails in HACS with "unknown error".
+# That happened with v4.6.2: the previous single-shot upload (softprops action) hit a
+# transient GitHub 503 and the release stayed asset-less with nothing re-trying or
+# verifying. This version uses the gh CLI with retries and FAILS THE RUN if the asset
+# is not verifiably attached at the end, so a broken release is impossible to miss.
+#
+# Backfill: Actions → "Release" → Run workflow → enter an existing tag (e.g. v4.6.2).
 name: Release
 
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)attach room-overlay-card.js to (e.g. v4.6.2)"
+        required: true
+
+permissions:
+  contents: write
 
 jobs:
   upload-release-asset:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v5
+      - name: Resolve tag
+        id: tag
+        run: echo "tag=${{ github.event.release.tag_name || inputs.tag }}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload room-overlay-card.js to release
-        uses: softprops/action-gh-release@v2
+      - name: Checkout tagged source
+        uses: actions/checkout@v5
         with:
-          tag_name: ${{ github.event.release.tag_name }}
-          files: room-overlay-card.js
+          ref: ${{ steps.tag.outputs.tag }}
+
+      - name: Upload room-overlay-card.js (retry on transient GitHub errors)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          for i in 1 2 3 4 5; do
+            if gh release upload "$TAG" room-overlay-card.js --clobber; then
+              exit 0
+            fi
+            echo "Upload attempt $i failed — retrying in $((i*10)) s…"
+            sleep $((i*10))
+          done
+          echo "::error::All upload attempts failed"
+          exit 1
+
+      - name: Verify the asset is attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx 'room-overlay-card.js'; then
+            echo "room-overlay-card.js is attached to $TAG"
+          else
+            echo "::error::room-overlay-card.js is NOT attached to $TAG — HACS installs of this version will fail"
+            exit 1
+          fi
