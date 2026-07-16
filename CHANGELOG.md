@@ -1,5 +1,17 @@
 # Changelog
 
+## [4.6.0] - 2026-07-16
+
+### Viewport height engine rebuilt: scroll-container measurement (header, edit mode, room-switch fixes)
+
+One root cause explained three separate symptoms — a too-tall card after HA's header settled, no recalculation when entering edit mode, and corner badges (e.g. a bottom-left vacuum chip) sliding below the fold on *some* rooms after a swipe. The `viewport` height pin measured the card's top offset **relative to the viewport** and refused to run when the page was scrolled (`r.top < 0`) or the offset looked odd. But a card pinned too tall is exactly what *causes* that scroll — so one bad measurement locked itself in and could never self-heal. Every room switch re-rendered the card, reset its height to the CSS first-paint fallback (`calc(100svh - var(--header-height, 56px))`, which never matches HA's real header + view padding exactly), and rolled the dice again — hence "broken on some rooms".
+
+- **Scroll-independent measurement.** The card now resolves Home Assistant's actual scroll container (nearest scrollable ancestor across shadow boundaries, `documentElement` fallback) and measures its top offset against the scroller's *content* (rect diff + `scrollTop`) instead of the viewport. The math stays valid while scrolled, in edit mode, and while the header settles — all the old bail-out conditions are gone.
+- **The right ResizeObserver.** HA keeps `document.body` at a fixed height (the app scrolls *inside* it), so 4.5.1's body observer never fired for header/toolbar changes. The card now observes the scroll container itself — header settling and edit-mode toolbars change its box, triggering an immediate re-pin. The body observer stays as a fallback for embeds where the page itself scrolls. Two delayed re-pins (250 ms / 1.2 s) after each render catch late-settling fonts and HA's per-card edit bar.
+- **Pinned height survives re-renders.** A room switch (swipe, nav, presence-follow) now re-renders the card at the previously pinned pixel height instead of falling back to the CSS calc — no flash, no per-room lottery.
+- **Residual overflow absorbed.** View wrappers add bottom padding *below* the card inside the scroller — invisible to any top-offset math. After pinning, the card measures what actually overflows and absorbs it into its height (capped at 160 px, so a genuinely tall page keeps its scrollbar instead of crushing the card). This ends the family of 1 px-to-header-sized scroll gaps chased in 4.5.1/4.5.2.
+- Portrait natural-height mode (4.5.2) is untouched. New render tests cover scroller resolution, badge pinning to the visible box across room switches, and height persistence.
+
 ## [4.5.3] - 2026-07-16
 
 ### Fix: cover-control presets read in the wrong direction on the horizontal (portrait) bar

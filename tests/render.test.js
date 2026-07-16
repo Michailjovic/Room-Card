@@ -157,5 +157,26 @@ const edHW=w.document.createElement('room-overlay-card-editor');w.document.body.
 edHW.setConfig(_hwCfg);
 t('editor opens on remembered room and writes url_sync hash',edHW._editRoomIdx===1&&/(^|[#&])room=hall(&|$)/.test(String(w.location.hash)));
 
+// --- v4.6.0 root-height engine: scroll-container pin ---
+const _rhCfg={type:'custom:room-overlay-card',aspect_ratio:'1720/914',lock_aspect:true,
+  layout:{portrait:{rows:['auto','1fr'],place:{nav:{row:1},image:{row:2}}},landscape:{rows:['auto','1fr'],place:{nav:{row:1},image:{row:2}}}},
+  rooms:[{id:'r1',base_image:'/a.png',badges:[{id:'vac',position:'bottom-left',icon:'mdi:x',label:[{value:'A'}]}]},
+         {id:'r2',base_image:'/b.png',badges:[{id:'vac2',position:'bottom-left',icon:'mdi:x',label:[{value:'B'}]}]}]};
+const cardRH=mkCard(_rhCfg);
+t('scrollParent falls back to documentElement',cardRH._scrollParent()===w.document.documentElement);
+// corner badges stay pinned to the visible .wrap (not the cover stage)
+const _b1=cardRH.shadowRoot.querySelector('[data-b="vac"]');
+t('corner badge pinned to .wrap',!!_b1&&_b1.parentElement.classList.contains('wrap'));
+// a previously pinned px height survives the re-render a room switch causes
+cardRH._rootHPx=777;
+cardRH._switchRoom(1,1,true);
+const _rhCard=cardRH.shadowRoot.querySelector('ha-card');
+t('pinned root height survives room switch',_rhCard.getAttribute('style').indexOf('height:777px')>=0);
+const _b2=cardRH.shadowRoot.querySelector('[data-b="vac2"]');
+t('corner badge pinned to .wrap after switch',!!_b2&&_b2.parentElement.classList.contains('wrap'));
+// _layoutRootHeight must not throw without layout boxes (jsdom rects are 0)
+let _rhThrew=false;try{cardRH._layoutRootHeight();}catch(_){_rhThrew=true;}
+t('layoutRootHeight safe without layout boxes',!_rhThrew);
+
 console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
 process.exit(fails?1:0);

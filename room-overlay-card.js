@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.5.3';
+const ROC_VERSION='4.6.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -574,6 +574,7 @@ class RoomOverlayCard extends HTMLElement{
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;this._bodyRo=null;
+    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._rootHT2=null;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -861,6 +862,26 @@ class RoomOverlayCard extends HTMLElement{
     return 0;
   }
 
+  // Nearest scrollable ancestor across shadow boundaries — HA's view scroller
+  // (falls back to documentElement). Cached per instance; HA recreates the
+  // card whenever it rebuilds the surrounding DOM (view switch, edit toggle),
+  // so a fresh card always re-resolves. _render() also clears the cache.
+  _scrollParent(){
+    if(this._scrollEl&&this._scrollEl.isConnected)return this._scrollEl;
+    let node=this,guard=0;
+    while(node&&guard++<40){
+      if(node.nodeType===1&&node!==this){
+        try{
+          const cs=(node.ownerDocument.defaultView||window).getComputedStyle(node);
+          const oy=cs.overflowY;
+          if((oy==='auto'||oy==='scroll'||oy==='overlay')&&node.clientHeight>0)return(this._scrollEl=node);
+        }catch(_){}
+      }
+      node=node.parentElement||(node.getRootNode&&node.getRootNode()&&node.getRootNode().host)||null;
+    }
+    return(this._scrollEl=document.documentElement);
+  }
+
   _layoutRootHeight(){
     if(!this.shadowRoot||!this._config)return;
     const c=this._roomCfg||this._config;
@@ -870,15 +891,37 @@ class RoomOverlayCard extends HTMLElement{
     const card=this.shadowRoot.querySelector('ha-card');
     if(!card)return;
     const r=this.getBoundingClientRect();
-    if(!(window.innerHeight>0)||r.top<0||r.top>window.innerHeight*0.6)return; // scrolled/odd → keep CSS calc
+    if(!(r.width>0))return; // display:none / not laid out yet
+    // Scroll-INDEPENDENT top offset: distance from the scroller's content top
+    // (rect diff + current scrollTop), not from the viewport. The old
+    // viewport-relative math bailed whenever the page was scrolled (r.top<0)
+    // — and a card pinned too tall causes exactly that scroll, so one bad pin
+    // could never self-heal. Container math stays valid scrolled, in edit
+    // mode, and while HA's header settles.
+    const sc=this._scrollParent();
+    const _winSc=sc===document.documentElement||sc===document.body;
+    let avail,top;
+    if(_winSc){avail=window.innerHeight||0;top=r.top+(window.scrollY||0);}
+    else{const cr=sc.getBoundingClientRect();avail=sc.clientHeight;top=r.top-cr.top+sc.scrollTop-(sc.clientTop||0);}
+    if(!(avail>0))return;
+    top=Math.max(0,top);
     // floor (not round): a fraction of a px short never scrolls, a fraction
-    // over always does — measured live: the view container can sit ~0.2-0.8px
-    // taller than the viewport even outside edit mode (sub-pixel rounding).
-    let h=Math.floor(window.innerHeight-r.top)-this._editBarHeight();
+    // over always does (sub-pixel rounding measured live).
+    let h=Math.floor(avail-top)-this._editBarHeight();
     h=Math.max(200,h);
-    if(Math.abs(h-parseInt(card.dataset.rocH||'0',10))<=1)return;
-    card.dataset.rocH=String(h);
+    if(Math.abs(h-(this._rootHRaw||0))<=1&&this._rootHPx)return; // unchanged
+    this._rootHRaw=h;
     card.style.height=h+'px';
+    // Residual-overflow absorption: view wrappers add bottom padding (and HA
+    // may stack small siblings) BELOW the card inside the scroller — invisible
+    // to any top-offset math. Measure what actually overflows after pinning
+    // and absorb it, capped at 160px so a genuinely tall page (user content
+    // below the card) keeps its scrollbar instead of crushing the card.
+    const ov=_winSc?(document.documentElement.scrollHeight-(window.innerHeight||0)):(sc.scrollHeight-sc.clientHeight);
+    if(ov>1&&ov<=160)h=Math.max(200,h-Math.ceil(ov));
+    this._rootHPx=h;
+    card.dataset.rocH=String(h);
+    if(card.style.height!==h+'px')card.style.height=h+'px';
     this._layoutStage();
   }
 
@@ -936,7 +979,7 @@ class RoomOverlayCard extends HTMLElement{
     if(_isGhost)_rootH='100%';
     else if(c._roc_preview)_rootH='420px';
     else if(_naturalRoot)_rootH='auto';
-    else if(_lhRaw==='viewport')_rootH='calc(100svh - var(--header-height,56px))'; // refined by _layoutRootHeight()
+    else if(_lhRaw==='viewport')_rootH=this._rootHPx?this._rootHPx+'px':'calc(100svh - var(--header-height,56px))'; // pinned px survives re-renders (room switch); CSS calc is first-paint only, refined by _layoutRootHeight()
     else if(_lhRaw==='container')_rootH='100%';
     else _rootH=(typeof _lhRaw==='number')?_lhRaw+'px':String(_lhRaw);
     // ---- Multi-room navigation strip -------------------------------------
@@ -1693,15 +1736,19 @@ class RoomOverlayCard extends HTMLElement{
       if(this._wrapRo)this._wrapRo.disconnect();
       const _wEl=this.shadowRoot.querySelector('.wrap');
       if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._layoutStage();});this._wrapRo.observe(_wEl);}
-      // Root-height pin (viewport mode) only reacts to WINDOW resize by
-      // default, so a header that renders/settles after us (or an edit-mode
-      // bar appearing below), which shifts our top offset WITHOUT resizing
-      // the card itself, leaves the pinned px height stale → page-level
-      // scroll gap. ResizeObserver only fires on size change, not position —
-      // but when the page can actually scroll, document.body's own content
-      // box (height:auto, sized by its stacked children) DOES grow/shrink
-      // by exactly that amount, so watching body's box catches header growth
-      // and edit-bar insertion alike, from the real cause, no polling.
+      // Root-height pin (viewport mode): watch the SCROLLER's own box. HA
+      // keeps document.body at a fixed height (the app scrolls inside), so a
+      // body observer misses header settling and edit-mode toolbars entirely
+      // — but both change the scroll container's box, which this catches.
+      // body stays observed too as a fallback for exotic embeds where the
+      // page itself scrolls.
+      this._scrollEl=null; // re-resolve after every render (edit toggle rebuilds HA's DOM)
+      if(this._scRo)this._scRo.disconnect();
+      const _scEl=this._scrollParent();
+      if(_scEl&&_scEl.nodeType===1){
+        this._scRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
+        this._scRo.observe(_scEl);
+      }
       if(!this._bodyRo&&document.body){
         this._bodyRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
         this._bodyRo.observe(document.body);
@@ -1710,6 +1757,12 @@ class RoomOverlayCard extends HTMLElement{
     if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
     this._layoutRootHeight();
     this._layoutStage();
+    // Late-settling re-pins: fonts, HA header and the per-card edit bar can
+    // land after our first measurement without resizing anything we observe.
+    const _lrSelf=this;
+    clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);
+    this._rootHT1=setTimeout(function(){if(_lrSelf._rendered)_lrSelf._layoutRootHeight();},250);
+    this._rootHT2=setTimeout(function(){if(_lrSelf._rendered)_lrSelf._layoutRootHeight();},1200);
     // Change detection: the ACTIVE room (merged view) drives full updates;
     // entities that only affect nav thumbnails/chips go into a cheaper
     // nav-only set (see _schedule) so busy sensors in other rooms don't
@@ -2870,6 +2923,9 @@ class RoomOverlayCard extends HTMLElement{
     if(this._ro){this._ro.disconnect();this._ro=null;}
     if(this._wrapRo){this._wrapRo.disconnect();this._wrapRo=null;}
     if(this._bodyRo){this._bodyRo.disconnect();this._bodyRo=null;}
+    if(this._scRo){this._scRo.disconnect();this._scRo=null;}
+    this._scrollEl=null;
+    clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);
     if(this._io){this._io.disconnect();this._io=null;}
     if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
   }
