@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.0.0] - 2026-07-17
+
+### Layout engine cleanup + real-renderer regression harness
+
+Internal restructuring release — **no config changes, no intended behaviour changes**. The 4.6.x series fixed the viewport/edit-mode behaviour through five generations of overlapping trigger mechanisms; 5.0.0 consolidates them and locks the verified behaviour in with a new test tier. Full plan: `V5_PLAN.md`.
+
+- **One pin entry point.** Every trigger (scroller/body ResizeObservers, window resize, edit-transition MutationObservers, `location-changed`, the state-update piggyback, reconnect) now routes through `_requestPin(reason)`, which coalesces any number of requests inside one task into a single recalculation on the next microtask — never rAF. A hook-inventory comment in the code documents why each trigger exists. Two now-redundant timers are gone: the 1.2 s post-render re-pin and the 300 ms "self-heal" (both superseded by the deterministic edit-transition MutationObserver from 4.6.4).
+- **rAF audit.** `_schedule` (state-update batching) now falls back to `setTimeout(0)` when the document is hidden — rAF never fires in background tabs, so updates in hidden dashboards (browser_mod popups, secondary windows) queued forever and the card woke up stale. The remaining rAF uses are visual-only (swipe ghosts, parallax) and annotated as background-safe.
+- **Diagnostics.** `window.ROC_DEBUG = 1` logs every pin request (reason) and every applied pin (resolved scroller, avail/top/edit-bar reserve, raw vs absorbed height). If the scroll container or panel-view ancestor stops resolving on a dashboard where it previously did — the signature of an HA internal-DOM change — the card says so once in the console instead of degrading silently.
+- **Small debts.** Shared grid-row span helpers (`rocRowStart`/`rocRowEnd`) replace three inline parsers; the window-scroller branch measures `visualViewport.height` (mobile dynamic toolbars); a smoke test pins `ROC_VERSION` to `package.json` so the two can never drift.
+- **Geometry regression harness (new test tier).** `tests/harness/ha-shell.html` is a static mock of the HA DOM skeleton the card depends on — including a faithful replay of the edit-mode toggle (wrapper + actions bar, atomic move) as observed live. `tests/e2e.spec.js` (Playwright, headless Chromium — a real layout engine, unlike jsdom) asserts pixels: card bottom == viewport bottom with zero page overflow, corner badge fully visible, letterboxing on short windows (aspect kept, centred), actions bar reachable without scrolling in edit mode, full re-expansion on exit, height stability over idle time (anti-breathing), and resize re-pinning. Runs via `npm run test:e2e` and in CI. All 6 pass against this release; the jsdom tiers (159 smoke + 52 render checks) stay as the fast tier.
+
 ## [4.6.4] - 2026-07-17
 
 ### Edit-mode transitions are now event-driven — enter and exit recalculate instantly

@@ -1,5 +1,7 @@
 node_modules/
 dist/
 *.map
+test-results/
+playwright-report/
 bedroom-card.yaml
 flat-multiroom.yaml

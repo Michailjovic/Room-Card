@@ -197,6 +197,12 @@ try{
 }catch(_){_rcThrew=true;}
 t('disconnect/reconnect cycle safe',!_rcThrew&&cardRH._rendered===true);
 t('listener survives reconnect',typeof cardRH._locHandler==='function');
+// v5.0: coalesced pin entry + shared row-span helpers
+t('requestPin exists',typeof cardRH._requestPin==='function');
+let _rpThrew=false;try{cardRH._requestPin('test');cardRH._requestPin('test2');}catch(_){_rpThrew=true;}
+t('requestPin coalesces without throwing',!_rpThrew&&cardRH._pinQueued===true);
+t('rocRowStart parses spans',w.eval('rocRowStart("3/6")')===3&&w.eval('rocRowStart(2)')===2);
+t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)')===3);
 
 console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
 process.exit(fails?1:0);

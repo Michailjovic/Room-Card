@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.6.4';
+const ROC_VERSION='5.0.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -104,6 +104,10 @@ function tVal(val,profile){
 function rocTrack(v){return typeof v==='number'?v+'%':String(v);}
 // grid-row / grid-column value: 3 → '3', '1/6' passes through.
 function rocLine(v){return v==null?'auto':String(v);}
+// Grid-row span helpers — shared by the layout fit, intrinsic-row detection
+// and anything else that reasons about row placement ('3' → 3..4, '3/6' → 3..6).
+function rocRowStart(v){return parseInt(String(v==null?1:v).split('/')[0],10)||1;}
+function rocRowEnd(v){const p=String(v==null?1:v).split('/');return p.length>1?(parseInt(p[1],10)||1):rocRowStart(v)+1;}
 // Layout definition for the given profile (null when not configured).
 function rocProfileDef(cfg,profile){
   const l=(cfg&&cfg.layout)||{};
@@ -128,9 +132,8 @@ function rocRegionCss(pl){
 function rocImgAutoRow(lp){
   const pl=lp&&lp.place&&lp.place.image;
   if(!pl)return false;
-  const r=parseInt(String(pl.row==null?1:pl.row).split('/')[0],10)||1;
   const rows=Array.isArray(lp.rows)&&lp.rows.length?lp.rows:['100%'];
-  return rows[r-1]==='auto';
+  return rows[rocRowStart(pl.row)-1]==='auto';
 }
 // Dock orientation for the cover region — derived from the grid DEFINITION,
 // not from measuring the box ('auto' tracks size to content, so measuring is
@@ -574,7 +577,7 @@ class RoomOverlayCard extends HTMLElement{
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;this._bodyRo=null;
-    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._rootHT2=null;this._rootHT3=null;this._locHandler=null;this._barMo=null;this._pvMo=null;this._lastPinCheck=0;
+    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._locHandler=null;this._barMo=null;this._pvMo=null;this._lastPinCheck=0;this._pinQueued=false;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -638,18 +641,23 @@ class RoomOverlayCard extends HTMLElement{
     this._schedule(false);
   }
 
-  // rAF-batched update; navOnly refreshes just the nav thumbnails/chips.
+  // Batched update; navOnly refreshes just the nav thumbnails/chips.
   // A pending nav-only frame upgrades to a full one if a full request lands first.
+  // rAF while visible (paint-aligned), setTimeout(0) while hidden — rAF NEVER
+  // fires in background tabs (browser_mod popups, secondary windows), which
+  // would queue state updates forever and leave a stale card on re-focus.
   _schedule(navOnly){
     if(navOnly)this._navDirty=true;else this._fullDirty=true;
     if(this._rafPending)return;
     this._rafPending=true;
-    requestAnimationFrame(()=>{
+    const run=()=>{
       this._rafPending=false;
       const full=this._fullDirty;this._fullDirty=false;this._navDirty=false;
       if(!this._hass||!this._rendered)return;
       if(full)this._update();else this._updateNav();
-    });
+    };
+    if(typeof document!=='undefined'&&document.hidden)setTimeout(run,0);
+    else requestAnimationFrame(run);
   }
 
   _extractEntities(obj,ids=new Set(),attrs=new Set()){
@@ -836,14 +844,12 @@ class RoomOverlayCard extends HTMLElement{
     // an already-overflowing grid is unreliable). Regions sharing a below-row
     // count once (max per row).
     const lp=this._lp||{place:{}};
-    const _rs=v=>parseInt(String(v==null?1:v).split('/')[0],10)||1;
-    const _re=v=>{const p=String(v==null?1:v).split('/');return p.length>1?(parseInt(p[1],10)||1):_rs(v)+1;};
-    const imgEnd=_re(lp.place&&lp.place.image&&lp.place.image.row);
+    const imgEnd=rocRowEnd(lp.place&&lp.place.image&&lp.place.image.row);
     const belowRows={};
     this.shadowRoot.querySelectorAll('.roc-reg').forEach(el=>{
       const rg=el.dataset.reg;if(rg==='image')return;
       const pl=lp.place&&lp.place[rg];if(!pl)return;
-      const st=_rs(pl.row);
+      const st=rocRowStart(pl.row);
       if(st>=imgEnd){const h=el.getBoundingClientRect().height;if(!(belowRows[st]>=h))belowRows[st]=h;}
     });
     let belowH=0;for(const k in belowRows)belowH+=belowRows[k];
@@ -937,6 +943,37 @@ class RoomOverlayCard extends HTMLElement{
     return 0;
   }
 
+  // ---- Root-height pin: trigger inventory --------------------------------
+  // Every hook that can ask for a re-pin goes through _requestPin(reason).
+  // Direct _layoutRootHeight() calls are reserved for first paint (sync, no
+  // flash). The inventory — WHY each hook exists (v5.0 consolidation):
+  //   render tail          first paint (direct, sync)
+  //   +250ms after render  fonts/images settle — NOT a DOM mutation
+  //   _scRo (scroller RO)  header settling, edit toolbars resize the scroller
+  //   _bodyRo (body RO)    exotic embeds where the page itself scrolls
+  //   window resize        window/profile changes
+  //   _pvMo (MO)           edit ENTER/EXIT — hui-panel-view/-card-options
+  //                        shadow trees are the ONLY observable truth (no
+  //                        event, no resize, no dis/connect — verified live)
+  //   _watchEditBar (MO)   actions bar mounting later than the transition
+  //   location-changed     HA client-side navigation (view switch, back/fwd)
+  //   1s piggyback         last-resort safety on state updates (early-outs)
+  //   connectedCallback    HA moved the card (view switch) — full rewire
+  // Coalescing: any number of requests inside one task collapse into ONE
+  // recalc on the next microtask (background-tab safe — NEVER rAF here).
+  _requestPin(reason){
+    if(window.ROC_DEBUG)try{console.debug('[roc] pin request:',reason);}catch(_){}
+    if(this._pinQueued)return;
+    this._pinQueued=true;
+    const self=this;
+    const mt=typeof queueMicrotask==='function'?queueMicrotask:function(f){Promise.resolve().then(f);};
+    mt(function(){
+      self._pinQueued=false;
+      if(!self._rendered)return;
+      try{self._layoutRootHeight();}catch(_){}
+    });
+  }
+
   // Nearest scrollable ancestor across shadow boundaries — HA's view scroller
   // (falls back to documentElement). Cached per instance; HA recreates the
   // card whenever it rebuilds the surrounding DOM (view switch, edit toggle),
@@ -949,11 +986,15 @@ class RoomOverlayCard extends HTMLElement{
         try{
           const cs=(node.ownerDocument.defaultView||window).getComputedStyle(node);
           const oy=cs.overflowY;
-          if((oy==='auto'||oy==='scroll'||oy==='overlay')&&node.clientHeight>0)return(this._scrollEl=node);
+          if((oy==='auto'||oy==='scroll'||oy==='overlay')&&node.clientHeight>0){this._scWasEl=true;return(this._scrollEl=node);}
         }catch(_){}
       }
       node=node.parentElement||(node.getRootNode&&node.getRootNode()&&node.getRootNode().host)||null;
     }
+    // Degradation notice: a dashboard that once resolved a real scroller and
+    // suddenly doesn't points at an HA internal-DOM change — say so ONCE
+    // instead of silently falling back (behaviour still degrades gracefully).
+    if(this._scWasEl&&!this._scDegraded){this._scDegraded=true;try{console.debug('[room-overlay-card] scroll container no longer resolves — falling back to documentElement (HA DOM change?)');}catch(_){}}
     return(this._scrollEl=document.documentElement);
   }
 
@@ -976,7 +1017,9 @@ class RoomOverlayCard extends HTMLElement{
     const sc=this._scrollParent();
     const _winSc=sc===document.documentElement||sc===document.body;
     let avail,top;
-    if(_winSc){avail=window.innerHeight||0;top=r.top+(window.scrollY||0);}
+    // visualViewport (when available) tracks mobile dynamic toolbars that
+    // window.innerHeight misses; identical on desktop.
+    if(_winSc){avail=(window.visualViewport&&window.visualViewport.height)||window.innerHeight||0;top=r.top+(window.scrollY||0);}
     else{const cr=sc.getBoundingClientRect();avail=sc.clientHeight;top=r.top-cr.top+sc.scrollTop-(sc.clientTop||0);}
     if(!(avail>0))return;
     top=Math.max(0,top);
@@ -1001,23 +1044,15 @@ class RoomOverlayCard extends HTMLElement{
     // task, so no intermediate paint.
     const ov=_winSc?(document.documentElement.scrollHeight-(window.innerHeight||0)):(sc.scrollHeight-sc.clientHeight);
     if(ov>1&&ov<=160)h=Math.max(200,h-Math.ceil(ov));
-    const _prevPin=this._rootHPx;
     this._rootHPx=h;
     card.dataset.rocH=String(h);
     if(card.style.height!==h+'px')card.style.height=h+'px';
+    if(window.ROC_DEBUG)try{console.debug('[roc] pin:',{scroller:sc.tagName+(sc.id?'#'+sc.id:''),winSc:_winSc,avail:avail,top:top,editBar:this._editBarHeight(),raw:this._rootHRaw,pinned:h,absorbed:this._rootHRaw-h});}catch(_){}
     this._layoutFitWrap();
     this._layoutStage();
-    // Self-heal: rects measured while HA shuffles its DOM (edit-mode
-    // reparenting into hui-card-options, header mount) can be transiently
-    // wrong (e.g. top=0) and an RO event may pin a bogus height with no
-    // follow-up trigger. One delayed re-check whenever the pinned value
-    // CHANGES recomputes from settled rects; a correct/stable pin doesn't
-    // reschedule, so there is no steady-state polling.
-    if(h!==_prevPin){
-      const _shSelf=this;
-      clearTimeout(this._rootHT3);
-      this._rootHT3=setTimeout(function(){if(_shSelf._rendered)_shSelf._layoutRootHeight();},300);
-    }
+    // (v5.0) The 300ms "self-heal" re-check that used to live here is gone:
+    // it existed for transient rects during HA's edit-mode DOM shuffles,
+    // which the _pvMo MutationObserver now catches deterministically.
   }
 
   // All layout observers & listeners in one place — called from _render AND
@@ -1050,12 +1085,12 @@ class RoomOverlayCard extends HTMLElement{
       if(this._scRo)this._scRo.disconnect();
       const _scEl=this._scrollParent();
       if(_scEl&&_scEl.nodeType===1){
-        this._scRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
+        this._scRo=new ResizeObserver(function(){self._requestPin('scroller-resize');});
         this._scRo.observe(_scEl);
       }
       if(this._bodyRo)this._bodyRo.disconnect();
       if(document.body){
-        this._bodyRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
+        this._bodyRo=new ResizeObserver(function(){self._requestPin('body-resize');});
         this._bodyRo.observe(document.body);
       }
     }
@@ -1073,7 +1108,7 @@ class RoomOverlayCard extends HTMLElement{
       // moment the current work (HA's navigation handling) is done.
       this._locHandler=function(){setTimeout(function(){
         if(!self._rendered)return;
-        self._layoutRootHeight();
+        self._requestPin('location-changed');
         self._watchEditBar();
       },0);};
       window.addEventListener('location-changed',this._locHandler);
@@ -1098,7 +1133,9 @@ class RoomOverlayCard extends HTMLElement{
         if(_tg==='HUI-PANEL-VIEW'||_tg==='HUI-VIEW'){_pv=_n;break;}
         _n=_n.parentElement||(_n.getRootNode&&_n.getRootNode()&&_n.getRootNode().host)||null;
       }
+      if(!_pv&&this._pvWasFound&&!this._pvDegraded){this._pvDegraded=true;try{console.debug('[room-overlay-card] hui-panel-view/hui-view ancestor no longer resolves — edit-mode transition observer inactive (HA DOM change?)');}catch(_){}}
       if(_pv){
+        this._pvWasFound=true;
         // SYNCHRONOUS handler — deliberately no requestAnimationFrame:
         // MutationObserver callbacks already run AFTER the mutating task
         // finished (the DOM is settled), and rAF never fires in background
@@ -1106,7 +1143,7 @@ class RoomOverlayCard extends HTMLElement{
         // pin silently never ran). The pin early-outs when nothing changed.
         const mo=this._pvMo=new MutationObserver(function(){
           if(!self._rendered)return;
-          try{self._layoutRootHeight();}catch(_){}
+          self._requestPin('edit-transition');
           // the structure may have brought a NEW hui-card-options — adopt
           // its shadowRoot too (the actions bar mounts there, a separate
           // tree; re-observing an observed target is a cheap no-op)
@@ -1138,7 +1175,7 @@ class RoomOverlayCard extends HTMLElement{
     this._barMo=new MutationObserver(function(){
       if(opts.shadowRoot.querySelector('.card-actions')){
         self._barMo.disconnect();self._barMo=null;
-        if(self._rendered)self._layoutRootHeight();
+        self._requestPin('edit-bar-mounted');
       }
     });
     this._barMo.observe(opts.shadowRoot,{childList:true,subtree:true});
@@ -1150,7 +1187,7 @@ class RoomOverlayCard extends HTMLElement{
     const c=this._roomCfg||this._config;
     if((c.test_mode??false)&&this._profFlipped)p=(p==='portrait')?'landscape':'portrait';
     if(p!==this._profile){this._rendered=false;this._render();return;}
-    this._layoutRootHeight();this._layoutFitWrap();this._layoutStage();
+    this._requestPin('window-resize');this._layoutFitWrap();this._layoutStage();
   }
 
   _render(){
@@ -1513,6 +1550,8 @@ class RoomOverlayCard extends HTMLElement{
       if(this._lcToggles.length){
         const _syncSelf=this,_sg=_gen;
         const _sy=function(){if(_syncSelf._renderGen===_sg)_syncSelf._syncLcToggleHeights();};
+        // rAF = fast path only; the setTimeout retries below are the
+        // background-tab-safe guarantee (rAF never fires in hidden tabs)
         if(typeof requestAnimationFrame!=='undefined')requestAnimationFrame(_sy);
         setTimeout(_sy,140);setTimeout(_sy,450);
       }
@@ -1946,15 +1985,16 @@ class RoomOverlayCard extends HTMLElement{
       this._io.observe(this);
     }
     this._wireLayoutObservers();
-    this._layoutRootHeight();
+    this._layoutRootHeight(); // first paint: direct & synchronous (no flash)
     this._layoutFitWrap();
     this._layoutStage();
-    // Late-settling re-pins: fonts, HA header and the per-card edit bar can
-    // land after our first measurement without resizing anything we observe.
+    // One late-settling re-pin: fonts/images can land after first paint
+    // WITHOUT any DOM mutation or resize we observe. (v5.0: the second 1.2s
+    // timer is gone — everything it covered is now caught by _pvMo or the
+    // state-update piggyback.)
     const _lrSelf=this;
-    clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);
-    this._rootHT1=setTimeout(function(){if(_lrSelf._rendered)_lrSelf._layoutRootHeight();},250);
-    this._rootHT2=setTimeout(function(){if(_lrSelf._rendered)_lrSelf._layoutRootHeight();},1200);
+    clearTimeout(this._rootHT1);
+    this._rootHT1=setTimeout(function(){_lrSelf._requestPin('post-render-settle');},250);
     // Change detection: the ACTIVE room (merged view) drives full updates;
     // entities that only affect nav thumbnails/chips go into a cheaper
     // nav-only set (see _schedule) so busy sensors in other rooms don't
@@ -2194,6 +2234,8 @@ class RoomOverlayCard extends HTMLElement{
     const ncontent=this.shadowRoot.querySelector('.content');
     if(ghost&&wrap&&ncontent){
       wrap.appendChild(ghost);
+      // visual-only rAF below: starts the slide/fade; in a hidden tab it never
+      // fires, but the 380ms setTimeout removes the ghost regardless — safe
       if(dir){
         ncontent.style.transition='none';
         ncontent.style.transform='translateX('+(dir*100)+'%)';
@@ -2349,7 +2391,7 @@ class RoomOverlayCard extends HTMLElement{
       content.style.transition='transform .12s ease-out';
       content.style.transform=(tx===0&&ty===0)?'':'scale('+scale+') rotateX('+ty.toFixed(2)+'deg) rotateY('+tx.toFixed(2)+'deg)';
     };
-    const queue=function(){if(!raf)raf=requestAnimationFrame(apply);};
+    const queue=function(){if(!raf)raf=requestAnimationFrame(apply);}; // visual-only (parallax); pointer events don't occur in hidden tabs
     if(src!=='orientation'){
       wrap.addEventListener('pointermove',function(e){
         if(e.pointerType==='touch')return;
@@ -2755,7 +2797,7 @@ class RoomOverlayCard extends HTMLElement{
     // stay pinned at the shorter edit-mode height. State updates tick steadily,
     // and the pin early-outs when nothing changed, so this is nearly free.
     const _pcNow=Date.now();
-    if(!this._lastPinCheck||_pcNow-this._lastPinCheck>1000){this._lastPinCheck=_pcNow;this._layoutRootHeight();}
+    if(!this._lastPinCheck||_pcNow-this._lastPinCheck>1000){this._lastPinCheck=_pcNow;this._requestPin('state-update');}
     const s=this._hass.states;
     const cAll=this._config;
     const c=this._roomCfg||roomMerge(cAll,this._roomIdx); // active room view
@@ -3124,7 +3166,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._bodyRo){this._bodyRo.disconnect();this._bodyRo=null;}
     if(this._scRo){this._scRo.disconnect();this._scRo=null;}
     this._scrollEl=null;
-    clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);clearTimeout(this._rootHT3);
+    clearTimeout(this._rootHT1);
     if(this._io){this._io.disconnect();this._io=null;}
     if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
     if(this._locHandler){window.removeEventListener('location-changed',this._locHandler);window.removeEventListener('popstate',this._locHandler);this._locHandler=null;}
@@ -3155,7 +3197,7 @@ class RoomOverlayCard extends HTMLElement{
       try{this._layoutRootHeight();this._watchEditBar();}catch(_){}
       setTimeout(function(){
         if(!self._rendered||!self.isConnected)return;
-        self._layoutRootHeight();
+        self._requestPin('reconnect-settle');
         self._watchEditBar();
       },0);
     }

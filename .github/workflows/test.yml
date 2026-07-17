@@ -23,6 +23,29 @@ jobs:
       - name: Smoke tests (pure functions)
         run: node tests/smoke.test.js
 
+      - name: Render tests (jsdom)
+        run: npm i --no-save jsdom && node tests/render.test.js
+
+  e2e:
+    # Real-renderer geometry tier — headless Chromium measures PIXELS against
+    # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,
+    # anti-breathing). See V5_PLAN.md phase D.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
+
+      - name: Geometry e2e
+        run: npx playwright test
+
   hacs:
     runs-on: ubuntu-latest
     steps:

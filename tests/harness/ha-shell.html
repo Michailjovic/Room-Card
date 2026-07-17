@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<!--
+  HA-shell harness — a minimal static mock of the Home Assistant DOM skeleton
+  that room-overlay-card depends on, for real-renderer geometry tests
+  (Playwright, tests/e2e.spec.js) and for manual debugging in any browser.
+
+  It reproduces exactly what was observed live on HA 2026.x (Panel view):
+    - fixed-height body, no scrollable ancestor (page overflows via <html>)
+    - a 56px in-flow header above the view
+    - hui-view-container > hui-view > hui-panel-view[shadowRoot] > hui-card > card
+    - EDIT ENTER: an 'edit-mode' class appears on a wrapper div, the header
+      grows, and hui-panel-view's shadowRoot swaps hui-card into a new
+      hui-card-options wrapper whose OWN shadowRoot contains div.card +
+      ha-card.type-panel > div.card-actions (65px). The card element is moved
+      atomically when the browser supports moveBefore (no dis/connect
+      callbacks — matching HA), otherwise via appendChild.
+    - EDIT EXIT: the wrapper is removed and hui-card returns to the panel view.
+
+  This freezes the observed contract — it guards OUR regressions. If HA
+  changes its internals, update this mock (the card's ROC_DEBUG logging and
+  degradation notices will point there).
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>room-overlay-card — HA shell harness</title>
+<style>
+  html,body{margin:0;padding:0;}
+  body{height:100vh;overflow:hidden;background:#111;color:#eee;font-family:sans-serif;}
+  #header{height:56px;box-sizing:border-box;background:#1e2327;display:flex;align-items:center;padding:0 16px;gap:12px;}
+  #header.edit{height:110px;}
+  #view-wrap{position:relative;}
+  hui-view-container,hui-view,hui-panel-view,hui-card,hui-card-options{display:block;}
+  button{cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="header">
+  <span>HA shell</span>
+  <button id="toggle-edit">Toggle edit mode</button>
+  <span id="state">normal</span>
+</div>
+<div id="view-wrap">
+  <hui-view-container><hui-view></hui-view></hui-view-container>
+</div>
+
+<script src="../../room-overlay-card.js"></script>
+<script>
+(function(){
+  // 1×1 dark-blue images at the design aspect via SVG data URIs (no network)
+  const img=(c)=>'data:image/svg+xml;utf8,'+encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1720" height="914"><rect width="1720" height="914" fill="'+c+'"/></svg>');
+  const CONFIG={
+    type:'custom:room-overlay-card',
+    aspect_ratio:'1720/914',
+    border_radius:'0px',
+    layout:{
+      portrait:{rows:['auto','auto'],place:{nav:{row:1},image:{row:2}}},
+      landscape:{rows:['auto','auto'],place:{nav:{row:1},image:{row:2}}}
+    },
+    nav:{style:'tabs'},
+    rooms:[
+      {id:'bedroom',name:'Bedroom',base_image:img('#123'),
+       badges:[{id:'vac',position:'bottom-left',icon:'mdi:robot-vacuum',label:[{value:'Ready'}]}]},
+      {id:'kitchen',name:'Kitchen',base_image:img('#231'),
+       badges:[{id:'vac2',position:'bottom-left',icon:'mdi:robot-vacuum',label:[{value:'Ready'}]}]}
+    ]
+  };
+
+  const view=document.querySelector('hui-view');
+  const pv=document.createElement('hui-panel-view');
+  pv.style.display='block';
+  const pvSr=pv.attachShadow({mode:'open'});
+  const huiCard=document.createElement('hui-card');
+  // inline styles — document-level CSS cannot reach inside pv's shadowRoot,
+  // and an unstyled custom element defaults to display:inline (zero rect)
+  huiCard.style.display='block';
+  const card=document.createElement('room-overlay-card');
+  card.setConfig(CONFIG);
+  card.hass={states:{},callService(){},user:{name:'harness'},connection:null};
+  huiCard.appendChild(card);
+  pvSr.appendChild(huiCard);
+  view.appendChild(pv);
+
+  // atomic move like HA (no dis/connect) when the browser supports it
+  function move(node,newParent){
+    if(typeof newParent.moveBefore==='function'){try{newParent.moveBefore(node,null);return;}catch(_){}}
+    newParent.appendChild(node);
+  }
+
+  let editing=false,opts=null;
+  function enterEdit(){
+    document.getElementById('header').classList.add('edit');
+    document.getElementById('view-wrap').classList.add('edit-mode');
+    opts=document.createElement('hui-card-options');
+    opts.style.display='block';
+    const osr=opts.attachShadow({mode:'open'});
+    osr.innerHTML='<div class="card"><slot></slot></div>'
+      +'<ha-card class="type-panel" style="display:block;">'
+      +'<div class="card-actions" style="height:59px;box-sizing:border-box;border-top:1px solid #444;display:flex;align-items:center;padding:0 16px;margin-top:5px;">'
+      +'<button>Edit</button></div></ha-card>';
+    pvSr.appendChild(opts);
+    move(huiCard,opts);           // hui-card becomes the slotted light child
+    document.getElementById('state').textContent='edit';
+  }
+  function exitEdit(){
+    document.getElementById('header').classList.remove('edit');
+    document.getElementById('view-wrap').classList.remove('edit-mode');
+    // plain appendChild here: Chrome's moveBefore INTO a ShadowRoot leaves the
+    // subtree unrendered (zero rects, observed with Chrome 149) — and exit
+    // fidelity doesn't depend on it: the card's edit-transition handling works
+    // through the MutationObserver either way.
+    pvSr.appendChild(huiCard);
+    if(opts){opts.remove();opts=null;}
+    document.getElementById('state').textContent='normal';
+  }
+  document.getElementById('toggle-edit').addEventListener('click',function(){
+    editing=!editing;
+    if(editing)enterEdit();else exitEdit();
+  });
+
+  // test hooks for Playwright (shadow-piercing helpers)
+  window.__harness={
+    card:card,
+    isEditing:()=>editing,
+    toggle:()=>document.getElementById('toggle-edit').click(),
+    geo(){
+      const sr=card.shadowRoot;
+      const rb=el=>{if(!el)return null;const b=el.getBoundingClientRect();
+        return{t:Math.round(b.top),b:Math.round(b.bottom),l:Math.round(b.left),r:Math.round(b.right),h:Math.round(b.height),w:Math.round(b.width)};};
+      const bar=opts&&opts.shadowRoot?opts.shadowRoot.querySelector('.card-actions'):null;
+      return{
+        innerH:window.innerHeight,innerW:window.innerWidth,
+        pageOverflow:document.documentElement.scrollHeight-window.innerHeight,
+        cardH:parseInt((sr.querySelector('ha-card')||{style:{}}).style.height)||null,
+        card:rb(card),wrap:rb(sr.querySelector('.wrap')),
+        badge:rb(sr.querySelector('[data-b]')),
+        bar:rb(bar),
+        rootHPx:card._rootHPx,rendered:card._rendered,profile:card._profile
+      };
+    }
+  };
+})();
+</script>
+</body>
+</html>

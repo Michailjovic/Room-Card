@@ -278,5 +278,20 @@ t('ccHtml dock always visible',(function(){const h=g.coverCtlHtml(_ccP,false,'do
 t('ccHtml float tap-reveal hidden',(function(){const h=g.coverCtlHtml(_ccL,false,'float');return h.indexOf('display:none')>=0&&h.indexOf('data-cc-mode="float"')>=0;})());
 t('coverCtlHtml no rail when slider off',g.coverCtlHtml(g.coverControlNorm({id:'r',entity:'cover.x',control:{display:'dock',slider:false}})).indexOf('data-cc-rail')<0);
 
+// ---- version single-source check (v5.0 C5) --------------------------------
+// ROC_VERSION in the card source must match package.json — the two used to be
+// bumped by hand independently and could drift.
+(function(){
+  try{
+    // package.json lives next to the card file under test (repo root), which
+    // may differ from this test's own directory when a copy is tested.
+    let pkgPath=path.join(path.dirname(file),'package.json');
+    if(!fs.existsSync(pkgPath))pkgPath=path.join(__dirname,'..','package.json');
+    const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));
+    const m=code.match(/const ROC_VERSION='([^']+)'/);
+    t('ROC_VERSION matches package.json version',!!m&&m[1]===pkg.version);
+  }catch(e){t('ROC_VERSION matches package.json version (readable)',false);}
+})();
+
 console.log(fails?('FAILURES: '+fails):'ALL TESTS PASSED ('+(fails===0)+')');
 process.exit(fails?1:0);
