@@ -186,6 +186,17 @@ const _fwProf=cardRH._profile;cardRH._profile='portrait';
 const _fwH=_fwWrap.style.height;cardRH._layoutFitWrap();
 t('layoutFitWrap no-op in natural portrait',_fwWrap.style.height===_fwH);
 cardRH._profile=_fwProf;
+// v4.6.4: observer wiring is a method (rewired on reconnect), edit transitions covered
+t('wireLayoutObservers exists',typeof cardRH._wireLayoutObservers==='function');
+t('location-changed listener installed',typeof cardRH._locHandler==='function');
+let _rcThrew=false;
+try{
+  const _par=cardRH.parentNode;
+  _par.removeChild(cardRH);   // HA-style move: disconnect…
+  _par.appendChild(cardRH);   // …and reconnect — must rewire, not crash
+}catch(_){_rcThrew=true;}
+t('disconnect/reconnect cycle safe',!_rcThrew&&cardRH._rendered===true);
+t('listener survives reconnect',typeof cardRH._locHandler==='function');
 
 console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
 process.exit(fails?1:0);

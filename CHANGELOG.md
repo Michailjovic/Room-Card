@@ -1,5 +1,18 @@
 # Changelog
 
+## [4.6.4] - 2026-07-17
+
+### Edit-mode transitions are now event-driven — enter and exit recalculate instantly
+
+Both remaining edit-mode bugs — the actions bar off-screen after entering edit mode, and the card stuck at its edit-mode height after leaving until a refresh or swipe — had the same root cause, diagnosed live with instrumented observers in the running dashboard:
+
+- **`disconnectedCallback` nulled every ResizeObserver, and `connectedCallback` "re-attached" them with `if(this._ro)this._ro.observe(…)` — dead code after the nulling.** Any DOM move stripped the card of all layout triggers, leaving only the 1-second state-update piggyback, which fires only when a relevant entity happens to change — seconds to minutes later. Fixed: all observer wiring lives in one `_wireLayoutObservers()` method, called from render **and** from `connectedCallback`, recreating everything from scratch.
+- **The edit toggle itself is invisible to all conventional hooks.** Verified live: it fires no `location-changed`, doesn't resize the scroller or `body`, and doesn't even dis/connect the card element — HA atomically rebuilds the DOM *around* it (`hui-card-options` wrapper in `hui-panel-view`'s shadow tree, the actions bar in the wrapper's own shadowRoot). The card now watches exactly those two trees with a MutationObserver: they mutate precisely on edit enter/exit and never contain the card's own DOM, so the observer is silent otherwise. On every mutation the height re-pins synchronously and the observer adopts a newly created wrapper's shadowRoot.
+- **`requestAnimationFrame` was silently eating deferred recalculations** — rAF never fires in background tabs (wall-mounted kiosk dashboards!) or during HA view transitions. All deferred re-pins now use synchronous calls from MutationObserver callbacks (the DOM is already settled there) or `setTimeout(0)`, never rAF.
+- A `location-changed`/`popstate` listener re-pins after HA client-side navigations (view switches, back/forward) as well.
+
+Verified live on the real dashboard: entering edit mode settles in one self-correcting sequence (bar reserve measured the moment the bar mounts), leaving edit mode re-expands to full height in a single synchronous pin — no refresh, no swipe, no timers.
+
 ## [4.6.3] - 2026-07-17
 
 ### Release pipeline hardened — HACS "unknown error" on v4.6.2 (missing release asset)

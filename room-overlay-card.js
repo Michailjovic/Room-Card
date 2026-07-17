@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='4.6.3';
+const ROC_VERSION='4.6.4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -574,7 +574,7 @@ class RoomOverlayCard extends HTMLElement{
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
     this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;this._bodyRo=null;
-    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._rootHT2=null;this._rootHT3=null;
+    this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._rootHT2=null;this._rootHT3=null;this._locHandler=null;this._barMo=null;this._pvMo=null;this._lastPinCheck=0;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
     this._navPos='top';this._wrapTA='';
@@ -1018,6 +1018,130 @@ class RoomOverlayCard extends HTMLElement{
       clearTimeout(this._rootHT3);
       this._rootHT3=setTimeout(function(){if(_shSelf._rendered)_shSelf._layoutRootHeight();},300);
     }
+  }
+
+  // All layout observers & listeners in one place — called from _render AND
+  // from connectedCallback. HA MOVES the card element when toggling dashboard
+  // edit mode (it gets wrapped into / unwrapped from hui-card-options), which
+  // fires disconnectedCallback → all observers are disconnected and nulled.
+  // The old connectedCallback "re-attach" used `if(this._ro)this._ro.observe()`
+  // — dead code after the nulling — so a card that went through an edit-mode
+  // toggle had NO layout triggers left and stayed mis-sized until a state
+  // update or swipe happened to re-render it. Recreating everything here on
+  // every (re)connect is cheap and makes the edit transitions self-correcting.
+  _wireLayoutObservers(){
+    const self=this;
+    if(window.ResizeObserver){
+      if(this._ro)this._ro.disconnect();
+      this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutFitWrap();self._layoutStage();if(self._hass&&self._visible)self._update();}});
+      this._ro.observe(this);
+      // The image region's height changes independently of the card (grid %),
+      // so the cover-stage watches its own box too.
+      if(this._wrapRo)this._wrapRo.disconnect();
+      const _wEl=this.shadowRoot?this.shadowRoot.querySelector('.wrap'):null;
+      if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._layoutStage();});this._wrapRo.observe(_wEl);}
+      // Root-height pin (viewport mode): watch the SCROLLER's own box. HA
+      // keeps document.body at a fixed height (the app scrolls inside), so a
+      // body observer misses header settling and edit-mode toolbars entirely
+      // — but both change the scroll container's box, which this catches.
+      // body stays observed too as a fallback for exotic embeds where the
+      // page itself scrolls.
+      this._scrollEl=null; // re-resolve on every (re)wire (edit toggle rebuilds HA's DOM)
+      if(this._scRo)this._scRo.disconnect();
+      const _scEl=this._scrollParent();
+      if(_scEl&&_scEl.nodeType===1){
+        this._scRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
+        this._scRo.observe(_scEl);
+      }
+      if(this._bodyRo)this._bodyRo.disconnect();
+      if(document.body){
+        this._bodyRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
+        this._bodyRo.observe(document.body);
+      }
+    }
+    if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
+    // 'location-changed' catches HA client-side navigations (view switches,
+    // back/forward). Verified live: the edit-mode toggle does NOT fire it and
+    // does NOT move the card element either (no dis/connect) — it only
+    // rebuilds hui-panel-view's shadow tree around us. So this listener is a
+    // helper for navigations, while the panel-view MutationObserver below is
+    // THE deterministic edit ENTER/EXIT hook. Double-rAF lets HA finish its
+    // DOM shuffle before measuring.
+    if(!this._locHandler){
+      // setTimeout(0), NOT rAF — rAF never fires in background tabs (kiosk
+      // dashboards!) or during HA view transitions; a 0-delay task runs the
+      // moment the current work (HA's navigation handling) is done.
+      this._locHandler=function(){setTimeout(function(){
+        if(!self._rendered)return;
+        self._layoutRootHeight();
+        self._watchEditBar();
+      },0);};
+      window.addEventListener('location-changed',this._locHandler);
+      window.addEventListener('popstate',this._locHandler);
+    }
+    // Edit ENTER/EXIT: watch the trees that HA actually mutates. Verified
+    // live: the toggle fires NO window event and does NOT even dis/connect
+    // the card element (HA moves it atomically) — the only observable truth
+    // is the DOM around us: hui-panel-view's shadow tree gains/loses the
+    // hui-card-options wrapper, and the actions bar mounts inside
+    // hui-card-options' OWN shadowRoot (a separate tree). Watch both; after
+    // a structural change re-adopt the (possibly new) wrapper's shadow.
+    // Neither tree ever contains our own DOM (that lives in OUR shadow root,
+    // and slotted light content stays in the light tree), so these observers
+    // are silent except on real HA transitions. No polling, no timers.
+    if(this._pvMo){this._pvMo.disconnect();this._pvMo=null;}
+    if(window.MutationObserver){
+      let _pv=null,_opts=null,_n=this,_g=0;
+      while(_n&&_g++<12){
+        const _tg=_n.tagName;
+        if(_tg==='HUI-CARD-OPTIONS')_opts=_n;
+        if(_tg==='HUI-PANEL-VIEW'||_tg==='HUI-VIEW'){_pv=_n;break;}
+        _n=_n.parentElement||(_n.getRootNode&&_n.getRootNode()&&_n.getRootNode().host)||null;
+      }
+      if(_pv){
+        // SYNCHRONOUS handler — deliberately no requestAnimationFrame:
+        // MutationObserver callbacks already run AFTER the mutating task
+        // finished (the DOM is settled), and rAF never fires in background
+        // tabs / during HA view transitions (verified live: the queued rAF
+        // pin silently never ran). The pin early-outs when nothing changed.
+        const mo=this._pvMo=new MutationObserver(function(){
+          if(!self._rendered)return;
+          try{self._layoutRootHeight();}catch(_){}
+          // the structure may have brought a NEW hui-card-options — adopt
+          // its shadowRoot too (the actions bar mounts there, a separate
+          // tree; re-observing an observed target is a cheap no-op)
+          let o=null,m=self,gg=0;
+          while(m&&gg++<12){if(m.tagName==='HUI-CARD-OPTIONS'){o=m;break;}m=m.parentElement||(m.getRootNode&&m.getRootNode()&&m.getRootNode().host)||null;}
+          if(o&&o.shadowRoot)try{mo.observe(o.shadowRoot,{childList:true,subtree:true});}catch(_){}
+        });
+        if(_pv.shadowRoot)mo.observe(_pv.shadowRoot,{childList:true,subtree:true});
+        mo.observe(_pv,{childList:true});
+        if(_opts&&_opts.shadowRoot)mo.observe(_opts.shadowRoot,{childList:true,subtree:true});
+      }
+    }
+  }
+
+  // One-shot MutationObserver: on edit ENTER the hui-card-options actions bar
+  // can mount AFTER our re-pin measured (editBar=0). Watch the wrapper's
+  // shadowRoot until '.card-actions' exists, re-pin, disconnect. Event-driven,
+  // self-terminating — no timers.
+  _watchEditBar(){
+    if(this._barMo){this._barMo.disconnect();this._barMo=null;}
+    let node=this,guard=0,opts=null;
+    while(node&&guard++<12){
+      if(node.tagName==='HUI-CARD-OPTIONS'){opts=node;break;}
+      node=node.parentElement||(node.getRootNode&&node.getRootNode()&&node.getRootNode().host)||null;
+    }
+    if(!opts||!opts.shadowRoot)return;
+    if(opts.shadowRoot.querySelector('.card-actions'))return; // already there — measured by the caller
+    const self=this;
+    this._barMo=new MutationObserver(function(){
+      if(opts.shadowRoot.querySelector('.card-actions')){
+        self._barMo.disconnect();self._barMo=null;
+        if(self._rendered)self._layoutRootHeight();
+      }
+    });
+    this._barMo.observe(opts.shadowRoot,{childList:true,subtree:true});
   }
 
   _onWinResize(){
@@ -1821,35 +1945,7 @@ class RoomOverlayCard extends HTMLElement{
       },{threshold:0});
       this._io.observe(this);
     }
-    if(window.ResizeObserver){
-      if(this._ro)this._ro.disconnect();
-      const self=this;
-      this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutFitWrap();self._layoutStage();if(self._hass&&self._visible)self._update();}});
-      this._ro.observe(this);
-      // The image region's height changes independently of the card (grid %),
-      // so the cover-stage watches its own box too.
-      if(this._wrapRo)this._wrapRo.disconnect();
-      const _wEl=this.shadowRoot.querySelector('.wrap');
-      if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._layoutStage();});this._wrapRo.observe(_wEl);}
-      // Root-height pin (viewport mode): watch the SCROLLER's own box. HA
-      // keeps document.body at a fixed height (the app scrolls inside), so a
-      // body observer misses header settling and edit-mode toolbars entirely
-      // — but both change the scroll container's box, which this catches.
-      // body stays observed too as a fallback for exotic embeds where the
-      // page itself scrolls.
-      this._scrollEl=null; // re-resolve after every render (edit toggle rebuilds HA's DOM)
-      if(this._scRo)this._scRo.disconnect();
-      const _scEl=this._scrollParent();
-      if(_scEl&&_scEl.nodeType===1){
-        this._scRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
-        this._scRo.observe(_scEl);
-      }
-      if(!this._bodyRo&&document.body){
-        this._bodyRo=new ResizeObserver(function(){if(self._rendered)self._layoutRootHeight();});
-        this._bodyRo.observe(document.body);
-      }
-    }
-    if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
+    this._wireLayoutObservers();
     this._layoutRootHeight();
     this._layoutFitWrap();
     this._layoutStage();
@@ -3031,19 +3127,37 @@ class RoomOverlayCard extends HTMLElement{
     clearTimeout(this._rootHT1);clearTimeout(this._rootHT2);clearTimeout(this._rootHT3);
     if(this._io){this._io.disconnect();this._io=null;}
     if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
+    if(this._locHandler){window.removeEventListener('location-changed',this._locHandler);window.removeEventListener('popstate',this._locHandler);this._locHandler=null;}
+    if(this._barMo){this._barMo.disconnect();this._barMo=null;}
+    if(this._pvMo){this._pvMo.disconnect();this._pvMo=null;}
   }
 
   connectedCallback(){
-    // Re-attach observers & subscriptions after the element is moved back into the DOM
+    // Re-attach observers & subscriptions after the element is MOVED back into
+    // the DOM. HA does this move on every dashboard edit-mode toggle (the card
+    // gets wrapped into / unwrapped from hui-card-options), and
+    // disconnectedCallback nulls all observers — so everything must be
+    // RECREATED here, not conditionally `.observe()`d on nulled handles (the
+    // old bug: a card that went through an edit toggle had no layout triggers
+    // left and stayed mis-sized until the next state update or swipe).
     if(this._rendered&&this._config){
       if(this._io)this._io.observe(this);
-      if(this._ro)this._ro.observe(this);
-      if(this._bodyRo&&document.body)this._bodyRo.observe(document.body);
+      this._wireLayoutObservers();
       this._startCamera();
       if(!this._tmplUnsubs.length)this._setupTemplates();
       if(this._hlHandler)window.addEventListener('roc-highlight',this._hlHandler);
       if(this._hashHandler)window.addEventListener('hashchange',this._hashHandler);
-      if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
+      // Re-pin now and once more after HA's current task finishes
+      // (setTimeout(0), NOT rAF — rAF never fires in background tabs or
+      // during HA view transitions); _watchEditBar and the panel-view
+      // MutationObserver cover anything that mounts even later.
+      const self=this;
+      try{this._layoutRootHeight();this._watchEditBar();}catch(_){}
+      setTimeout(function(){
+        if(!self._rendered||!self.isConnected)return;
+        self._layoutRootHeight();
+        self._watchEditBar();
+      },0);
     }
   }
 }
