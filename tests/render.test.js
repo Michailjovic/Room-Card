@@ -210,6 +210,33 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
     !!outRoomSync&&Array.isArray(outRoomSync.rooms)&&outRoomSync.rooms[1]&&outRoomSync.rooms[1].id==='kitchen-edited'&&outRoomSync.rooms[0].id==='living');
 }
 
+// --- drag/resize edits relayed from the editor preview must not leak the preview's
+// forced/stripped fields (test_mode, _roc_preview, url_sync, follow_mode) into the
+// real saved config ---
+{
+  const edPos=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(edPos);
+  let outPos=null;
+  edPos.addEventListener('config-changed',e=>{outPos=e.detail.config;});
+  edPos.setConfig({type:'custom:room-overlay-card',card_id:'possync',base_image:'/local/x.webp',layout:{},
+    url_sync:true,follow_mode:'initial',
+    rooms:[{id:'living',name:'Living'},{id:'kitchen',name:'Kitchen'}]});
+  edPos.hass={states:{},user:{name:'x'}};
+  edPos._prevOn=true;
+  edPos._render();
+  t('preview mounts for pos-relay test',!!edPos._prevCard);
+  const previewCfg=edPos._prevCard?JSON.parse(JSON.stringify(edPos._prevCard._config)):null;
+  t('sanity: mounted preview config lacks url_sync',!!previewCfg&&previewCfg.url_sync===undefined);
+  t('sanity: mounted preview config forces follow_mode manual',!!previewCfg&&previewCfg.follow_mode==='manual');
+  t('sanity: mounted preview config forces test_mode true',!!previewCfg&&previewCfg.test_mode===true);
+  if(previewCfg)w.dispatchEvent(new w.CustomEvent('roc-pos-update',{detail:{config:previewCfg}}));
+  t('drag/resize relay restores url_sync from the real config',edPos._config.url_sync===true);
+  t('drag/resize relay restores follow_mode from the real config',edPos._config.follow_mode==='initial');
+  t('drag/resize relay strips the _roc_preview marker',edPos._config._roc_preview===undefined);
+  t('drag/resize relay strips forced test_mode (real config never had it)',edPos._config.test_mode===undefined);
+  t('fired config also carries the restored url_sync/follow_mode',!!outPos&&outPos.url_sync===true&&outPos.follow_mode==='initial');
+}
+
 // --- editor opens on the room the card was showing (in-memory store) ---
 const _memCfg={type:'custom:room-overlay-card',card_id:'memcard',base_image:'/local/m.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]};
 const cardM=w.document.createElement('room-overlay-card');

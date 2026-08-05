@@ -1,5 +1,30 @@
 # Changelog
 
+## [5.8.2] - 2026-08-05
+
+### Fix: dragging/resizing in the editor's live preview wiped `url_sync` and forced `follow_mode`
+
+Any drag or resize made inside the editor's **Drag-edit preview** silently reset `url_sync` (the
+"Sync room to URL" checkbox + hash key on the *Rooms & menu* tab) and, on multi-room cards,
+overwrote `follow_mode` with `manual` — even if you'd never touched either field yourself. It kept
+happening on every subsequent drag, so anything you'd explicitly set there never survived.
+
+Root cause: the preview is a separate `room-overlay-card` instance mounted from a clone of the
+real config with `test_mode` forced on, `url_sync` deleted (so the preview can't hijack the
+dashboard's own URL) and, for multi-room, `follow_mode` forced to `manual` (so it doesn't jump
+rooms on its own). When you drag/resize something in that preview, it relays its *own* config back
+to the editor (`roc-pos-update`) so the position sticks — but the relay handler only undid the
+`test_mode` override, not the `url_sync` deletion or the `follow_mode` override, so both leaked
+into the real config on every drag.
+
+Fixed by restoring `url_sync` and `follow_mode` from the editor's real config whenever a
+preview-relayed update comes in, alongside the existing `test_mode`/`_roc_preview` cleanup.
+
+5 new render tests: the mounted preview is confirmed to lack `url_sync` / force `follow_mode` /
+force `test_mode` (sanity), and a simulated drag-relay update is confirmed to restore both
+`url_sync` and `follow_mode` to the real config's values (and still correctly strip the preview-only
+markers). Full smoke and render test suites pass.
+
 ## [5.8.1] - 2026-08-05
 
 ### Fix: editor's Room select didn't follow room switches made inside its own live preview
