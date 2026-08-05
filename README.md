@@ -409,6 +409,8 @@ blinds:
 > **Inverted motor direction** — if your cover reports `0` = closed and `100` = open, swap: `min: 100`, `max: 0`.
 
 > **`top_offset`** — many motors keep a deliberate safety margin at their own fully-**open** limit, so the blind never actually retracts all the way — a sliver of material always stays visible. Fully **closed** is normally accurate and needs no correction. If you never see this in person and just want the on-screen blind to match reality, set `top_offset` to the real/visual coverage (%) that remains when the cover reports fully open (e.g. `3.4`); fully closed always stays 100% and is never touched. Works regardless of which raw direction your motor reports (i.e. whether you needed the "Inverted motor direction" swap above or not) — the correction is applied to open/closed, not to raw `0`/`100`. This only corrects the **visual overlay** on the image — the cover-control widget (rail/presets) keeps showing and sending the motor's raw position, unchanged. Default `0` = no correction.
+>
+> For `blind_type: day_night`, `top_offset` also determines exactly which part of the striped pattern shows in that residual sliver (solid, transparent, or a mix) — the pattern is modeled as fixed to the fabric, measured from the rail end, so the residual is always the *last* `top_offset`% of one `slat_count` period. To land the residual exactly on a slat boundary (e.g. "just one transparent half-slat remains visible"), set `top_offset: <100 * 0.5 / slat_count>` — e.g. `slat_count: 17` → `top_offset: 2.94`.
 
 #### Cover control (roleta)
 

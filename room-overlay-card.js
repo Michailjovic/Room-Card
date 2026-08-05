@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.7';
+const ROC_VERSION='5.9.8';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -519,11 +519,28 @@ function rocBuildMiniConfig(cAll,ri){
 // (min/max) the blind's own motor reports. Linear remap between those two
 // known points. Applied ONLY to the visual overlay (blindToGaugeConfig/gauge
 // fill) — the cover-control widget intentionally keeps showing/sending raw
-// motor % (see ROADMAP.md 🅿️ day_night blind model).
+// motor %. For blind_type:'day_night', see rocDayNightOffset just below —
+// the striped background's phase is derived from this same corrected pct.
 function rocApplyTopOffset(pct100,offset){
   const o=Math.max(0,Math.min(95,Number(offset)||0));
   if(!o)return pct100;
   return o+pct100*(100-o)/100;
+}
+
+// day_night blind background-position phase (the two-layer striped gradient's vertical shift).
+// Physical model: the fabric's printed pattern is fixed along its own length, measured from the
+// bottom-rail end (the end that's always visible last, closest to the window, farthest from the
+// header roll — the roll swallows the HEADER end first as the blind retracts). So whatever portion
+// is currently hanging below the header (the gauge's fill %) is always the LAST `pct*elH` pixels of
+// the full-height pattern, i.e. the segment nearest the rail. Modeling it this way means the
+// pattern's own period boundaries always land exactly at the fully-closed reference (elH is by
+// construction an exact multiple of the period, elH=slat_count*period), so combined with
+// top_offset (which floors pct instead of letting it reach 0) the residual sliver still visible at
+// fully open is whatever the LAST `top_offset`% of one period happens to be — solid, transparent,
+// or a mix, entirely determined by top_offset and slat_count, no separate phase parameter needed.
+// Continuous across the whole pct range (elH*(1-1)=0 exactly at closed — no special-casing).
+function rocDayNightOffset(elH,pct){
+  return elH*(1-Math.max(0,Math.min(1,Number(pct)||0)));
 }
 
 function blindToGaugeConfig(b){
@@ -3196,7 +3213,7 @@ class RoomOverlayCard extends HTMLElement{
       // as-is; only the open end (pct=0) gets floored to the residual coverage.
       if(g.top_offset)pct=rocApplyTopOffset(pct*100,g.top_offset)/100;
       const fill=this._gaugeFills[g.id];
-      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
+      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=rocDayNightOffset(el.offsetHeight,pct);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
       else if((g.orientation||'vertical')==='radial'){
         const meta=this._radialMeta[g.id];
         if(meta){

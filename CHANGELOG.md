@@ -1,5 +1,38 @@
 # Changelog
 
+## [5.9.8] - 2026-08-05
+
+### Fix: `day_night` blind phase drift — now composes correctly with `top_offset`
+
+The `blind_type: day_night` striped background scrolls its pattern as the blind opens/closes
+(`backgroundPositionY`), to simulate the two-layer day/night fabric look. The old formula
+(`pct * slat_count * period/2`, with a hard-coded special case at fully closed) had no defined
+relationship to `top_offset`'s floored range — so once `top_offset` stopped `pct` from ever
+reaching exactly 0, the residual sliver still visible at fully open showed an arbitrary, unsyncable
+mix of the striped pattern. No value of `top_offset` could reliably line it up with reality.
+
+Replaced with a continuous, physically-derived model: the striped pattern is fixed along the
+fabric's own length, measured from the **bottom-rail end** (the end that's always visible last —
+the header/roll swallows the opposite end first as the blind retracts). So whatever's currently
+hanging below the header is always the *last* `pct × height` pixels of the full pattern. Because
+the full height is by construction an exact multiple of the slat period, this makes the residual
+sliver's appearance at fully open **fully determined** by `top_offset` and `slat_count` alone — no
+separate phase parameter needed, and no more discontinuity at fully closed (the old special case is
+gone; the new formula is naturally continuous, reaching exactly 0 offset at `pct = 1`).
+
+Practical result: to get a *specific* residual look (e.g. "exactly one transparent half-slat
+remains visible at fully open"), set `top_offset = 50 / slat_count` (as a %) — this lands the
+residual exactly on a slat boundary. More generally, `top_offset = (residual slat-pairs / slat_count)
+× 100` predicts the residual coverage in slat-pair units.
+
+### Testing
+
+6 new smoke tests for the new `rocDayNightOffset` pure function (continuity at both ends, midpoint,
+clamping, and the exact real-world scenario: 17 band pairs, `top_offset = 50/17`, verifying the
+residual lands exactly on the transparent side of a slat boundary). 3 new render tests (jsdom has no
+real layout engine, so `offsetHeight` is mocked to a concrete value) confirming the DOM-level
+`backgroundPositionY`/fill-height output matches. Full smoke + render suites green.
+
 ## [5.9.7] - 2026-08-05
 
 ### Fix: `top_offset` corrected the wrong end of the blind (broke fully-closed)

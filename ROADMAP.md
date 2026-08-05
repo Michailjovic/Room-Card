@@ -180,12 +180,15 @@ already exist.
 ## 🅿️ Parked
 
 - **`day_night` blind model** — three failed attempts (v3.0.1–3.0.3); reverted to the
-  v3.0.0 two-layer look. Do **not** re-attempt without a precise description of the real
-  blind's motor-%→visual mapping (ideally side-by-side at specific positions). Note: v5.1.0's
-  `top_offset` fixes a related-but-narrower problem (raw-motor calibration offset) and does
-  **not** unpark this item — the dual-layer visual *style* modeling is still unsolved.
-  **Explicitly stays parked through v6.0.0** (user decision 2026-08-05) — not on the near-term
-  development order at all.
+  v3.0.0 two-layer look. **v5.9.8 fixed the one narrow, well-specified piece of this that had
+  hard real-hardware data behind it**: the striped-background phase now composes correctly with
+  `top_offset` (physically-derived "reveal from the rail end" model, see CHANGELOG [5.9.8] /
+  `rocDayNightOffset`) — verified live-pending against the user's real 17-band-pair blind. The
+  broader dual-layer visual *style* question (does the two-layer scrolling look actually match a
+  real day/night blind's optical behavior at all, independent of `top_offset`) is still unsolved
+  and still needs a precise side-by-side description before any further redesign — do not
+  re-attempt that broader piece without one. Stays otherwise parked/not on the near-term
+  development order (user decision 2026-08-05, narrowed same day by the `top_offset`-phase fix).
 
 ## Maintenance (ongoing)
 
