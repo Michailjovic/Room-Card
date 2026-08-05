@@ -331,5 +331,51 @@ t('requestPin coalesces without throwing',!_rpThrew&&cardRH._pinQueued===true);
 t('rocRowStart parses spans',w.eval('rocRowStart("3/6")')===3&&w.eval('rocRowStart(2)')===2);
 t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)')===3);
 
-console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
-process.exit(fails?1:0);
+// --- haptic on hold-registered (ROADMAP E7) — fires the MOMENT a hold
+// threshold is reached, distinct from _exec()'s existing execute-time haptic
+// ---
+(async function(){
+  const hapticCfg={type:'custom:room-overlay-card',base_image:'/local/x.webp',test_mode:false,
+    zones:[{id:'hz',top:'10%',left:'10%',width:'10%',height:'10%',hold_delay:20,
+      hold_action:{action:'toggle',entity:'light.x'}}]};
+  const hapticCard=mkCard(hapticCfg);
+  const seen=[];
+  const onHaptic=(e)=>seen.push(e.detail);
+  w.addEventListener('haptic',onHaptic);
+  const zEl=hapticCard._zoneEls['hz'];
+  zEl.dispatchEvent(new w.Event('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,60));
+  w.removeEventListener('haptic',onHaptic);
+  t('haptic fires on hold-registered (default on)',seen.includes('medium'));
+
+  // opt-out: top-level haptic:false suppresses BOTH the hold-registered tick
+  // and the existing execute-time haptic
+  const hapticOffCfg=JSON.parse(JSON.stringify(hapticCfg));hapticOffCfg.haptic=false;
+  const hapticCardOff=mkCard(hapticOffCfg);
+  const seenOff=[];
+  const onHapticOff=(e)=>seenOff.push(e.detail);
+  w.addEventListener('haptic',onHapticOff);
+  const zElOff=hapticCardOff._zoneEls['hz'];
+  zElOff.dispatchEvent(new w.Event('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,60));
+  w.removeEventListener('haptic',onHapticOff);
+  t('haptic:false suppresses the hold-registered tick',!seenOff.includes('medium'));
+
+  // editor: "Haptic feedback" checkbox in the persistent header, default checked
+  const edHaptic=w.document.createElement('room-overlay-card-editor');
+  edHaptic.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp'});
+  edHaptic.hass={states:{},user:{name:'x'}};
+  t('haptic checkbox present and checked by default',!!edHaptic.querySelector('#haptic')&&edHaptic.querySelector('#haptic').checked===true);
+  let outHaptic=null;
+  edHaptic.addEventListener('config-changed',e=>{outHaptic=e.detail.config;});
+  edHaptic.querySelector('#haptic').checked=false;
+  edHaptic.querySelector('#haptic').dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('unchecking haptic writes haptic:false',outHaptic&&outHaptic.haptic===false);
+  const edHapticOff=w.document.createElement('room-overlay-card-editor');
+  edHapticOff.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',haptic:false});
+  edHapticOff.hass={states:{},user:{name:'x'}};
+  t('haptic checkbox unchecked when config already has haptic:false',edHapticOff.querySelector('#haptic').checked===false);
+
+  console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
+  process.exit(fails?1:0);
+})();

@@ -80,8 +80,8 @@ failure broke HACS installs.
    (`off`/`composite`/`full`/`custom`) shipped v5.4.0-v5.7.0, live-verified working. Remaining
    pieces (instance-reuse perf, optional swipe-reuse Phase 3) are non-blocking follow-ups — see
    [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
-2. 🎯 **Haptic on hold-registered** (E7, mobile) — up next.
-3. 🎯 **v6.0.0 — Official HACS default-repository submission** — editor GUI/UX revalidation
+2. ✅ **Haptic on hold-registered** (E7, mobile) — shipped v5.8.0.
+3. 🎯 **v6.0.0 — Official HACS default-repository submission** — editor GUI/UX revalidation — up next.
    first (blocking), README/GitHub content overhaul as the finale right before submission.
 4. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
    during v6.0.0.
@@ -146,7 +146,7 @@ already exist.
 
 | # | Item | Note |
 |---|---|---|
-| E7 | **Haptic on hold-registered** | 🎯 up next (2nd, right after Live mini-room nav Phase 2) — fire a haptic tick the moment a hold action registers |
+| E7 | **Haptic on hold-registered** | ✅ shipped v5.8.0 — fires a haptic tick the moment a hold action registers, toggleable from the editor |
 | E3 | Draw-to-create for all element types | rubber-band currently makes zones only |
 | E4 | Edge / centre snap guides | complements the 0.5 % grid + edge snap |
 | E5 | Editor list filter / search | for long element lists |

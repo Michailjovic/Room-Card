@@ -1,5 +1,31 @@
 # Changelog
 
+## [5.8.0] - 2026-08-05
+
+### Haptic feedback the moment a hold action registers (ROADMAP E7)
+
+Zones/icons/labels/gauges with a `hold_action` already showed a visual progress ring confirming
+when the hold threshold was reached — but the card only vibrated later, on release, when the hold
+action actually executed (the same haptic pulse any tap action fires). Now there's a distinct
+tactile tick at the exact moment the hold *registers* (the ring turning green), before you even
+lift your finger — similar to how a native long-press haptic feels.
+
+Uses the same `haptic` top-level opt-out as every other haptic pulse in the card
+(`haptic: false` to disable all of it). Now also toggleable from the editor: a **Haptic feedback**
+checkbox sits in the persistent header next to Test mode / Drag-edit preview / Advanced — no more
+YAML-only.
+
+4 new render tests (the tick fires on hold-registered with default settings, `haptic: false`
+suppresses it, the editor checkbox reflects and writes the config both directions). Full smoke and
+render test suites pass.
+
+## [5.7.1] - 2026-08-05
+
+### Fix: `nav.live` dropdown order
+
+Editor's *Live thumbnails* dropdown now lists options in increasing order of complexity: Off,
+Composite, Custom, Full (was Off, Composite, Full, Custom). No config or behaviour change.
+
 ## [5.7.0] - 2026-08-05
 
 ### `nav.live: custom` — pick exactly which elements show in the mini

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.7.0';
+const ROC_VERSION='5.8.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -807,7 +807,14 @@ class RoomOverlayCard extends HTMLElement{
       held=false;cancel();
       if(holdAction){
         showTimer=setTimeout(function(){startHold(delay-sd);},sd);
-        holdTimer=setTimeout(function(){held=true;doneHold();},delay);
+        holdTimer=setTimeout(function(){
+          held=true;doneHold();
+          // Tactile confirmation the MOMENT the hold threshold is reached —
+          // distinct from _exec()'s haptic (which fires later, on release,
+          // for whichever action actually ran). Same opt-out as everywhere
+          // else in the card: top-level `haptic: false`.
+          if(self._config.haptic!==false)try{window.dispatchEvent(new CustomEvent('haptic',{detail:'medium'}));}catch(_){}
+        },delay);
       }
     };
     const onTap=function(e){
@@ -3877,6 +3884,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const _ftV=v('filter_transition','2s ease');
     if(_ftV&&_ftV!=='2s ease')c.filter_transition=_ftV;else delete c.filter_transition;
     const tm=q('#test_mode');if(tm&&tm.checked)c.test_mode=true;else delete c.test_mode;
+    const hpEl=q('#haptic');if(hpEl&&!hpEl.checked)c.haptic=false;else delete c.haptic; // default on — only write when explicitly turned off
     const _taR=this._pYaml(q('#tap_action_yaml'));
     if(_taR.ok){if(_taR.val)tgt.tap_action=_taR.val;else delete tgt.tap_action;}
     const _caR=this._pYaml(q('#cards_above_yaml'));
@@ -4893,7 +4901,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='</div>';
       const _navLiveIsMiniTier=_nav.live==='full'||_nav.live==='custom';
       roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Live thumbnails (mini-room view)</label><select id="nav-live"'+this._inp('')+'>';
-      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['full','full — live room minis (real instances, everything)'],['custom','custom — live room minis (real instances, pick which elements show)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['custom','custom — live room minis (real instances, pick which elements show)'],['full','full — live room minis (real instances, everything)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
       roomsInner+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped. Full mounts a real, independent copy of each room — gauges, labels, icons, blinds, embedded cards and all — scaled down; heavier on older tablets, test yours with more than a couple of rooms. Custom is the same, but starts empty — tick "Show in mini" on each element you want included (below, and the weather toggle in the Basic tab).</p></div>';
       roomsInner+='<div id="nav-mini-panel" style="'+(_navLiveIsMiniTier?'':'display:none;')+'border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
       roomsInner+='<label class="roc-l" style="font-weight:600;">Mini-room settings (live: '+(_nav.live==='custom'?'custom':'full')+')</label>';
@@ -5095,6 +5103,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
       +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);">Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
       +'<label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Test mode</label>'
+      +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Haptic feedback</label>'
       +'<label for="prev-on" title="A live, editable copy of the card shown right here — drag and resize elements directly, and it shows the room picked above. (The preview panel on the right is Home Assistant&#39;s own and follows live presence, so it won&#39;t track the room selector.)" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Drag-edit preview</label>'
       +'<label title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="roc-adv-toggle" type="checkbox"'+(this._showAdv?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Advanced (YAML)</label>'
       +'</div>'
@@ -5367,6 +5376,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         fire();
       });
     }
+    const hpEl2=this.querySelector('#haptic');if(hpEl2)hpEl2.addEventListener('change',fire);
     const ta=this.querySelector('#tap_action_yaml');if(ta)ta.addEventListener('change',fire);
     const caTa=this.querySelector('#cards_above_yaml');if(caTa)caTa.addEventListener('change',fire);
     const cbTa=this.querySelector('#cards_below_yaml');if(cbTa)cbTa.addEventListener('change',fire);

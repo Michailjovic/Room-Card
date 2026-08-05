@@ -214,7 +214,7 @@ Old configs (tiers, `breakpoints`, `max_height`, `media: mobile|desktop`, per-el
 | `hold_color` | string | — | Color of the in-progress hold ring |
 | `zoom` | bool | `false` | Pinch-zoom + pan (floorplan mode) |
 | `parallax` | bool/object | — | Subtle tilt on pointer/device orientation |
-| `haptic` | bool | `true` | Haptic feedback on actions (companion app) |
+| `haptic` | bool | `true` | Haptic feedback on actions (companion app), and the moment a hold action registers |
 
 ---
 
