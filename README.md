@@ -766,6 +766,21 @@ nav:
 
 Templates and camera streams are extra per-instance subscriptions, so they default off. This is heavier than `composite` (real DOM trees + scaled compositing layers, one per room) — test on your actual tablet before enabling on more than a couple of rooms.
 
+With **`nav.live: custom`** every mini uses that exact same real-instance mechanism, but instead of showing everything, it starts **empty** — only elements you opt in appear. Add `nav_mini: true` to any gauge, label, icon, badge, blind, or embedded card to include it, and `weather_nav_mini: true` (top-level or per room) for the weather overlay:
+
+```yaml
+nav:
+  style: thumbnails
+  live: custom
+gauges:
+  - id: temp_gauge
+    entity: sensor.bedroom_temp
+    nav_mini: true   # shows in the mini; omit or set false to hide it there
+weather_nav_mini: true
+```
+
+The editor has a matching "Show in mini" checkbox on every element's panel (and a weather toggle in the Basic tab) once `live: custom` is selected. Useful when a room is too busy to look good shrunk down in full, or one specific embedded card doesn't belong at thumbnail scale.
+
 Switching works several ways: nav thumbnails/tabs, the **follow button** (crosshair that lights up when you're away from your presence room; `{action: follow-room}`), **finger-attached swipe** (the room follows your finger; release past 25 % or fling to commit), **mouse-wheel** on desktop (`nav.wheel: horizontal | vertical | both`), the `switch-room` / `next-room` / `prev-room` actions, and automatic **presence follow** via `room_entity`. With **`url_sync: true`** the active room is written to the page URL as `#room=<id>` (set `url_sync: <key>` for a custom hash key), so rooms become **bookmarkable and shareable** — opening a `#room=bedroom` link jumps straight there, and browser back/forward navigates rooms. Updates, templates and camera refresh run only for the active room. Top-level room-scoped keys act as defaults for every room. Without `rooms:` the card behaves as a single room; the editor has a one-click **Convert to multi-room** button, and you can **reorder rooms** with the ▲▼ buttons in the *Rooms & menu* tab.
 
 ---

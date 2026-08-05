@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.6.0';
+const ROC_VERSION='5.7.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -447,11 +447,13 @@ function resolveSize(raw,cardW){if(!raw)return null;const s=String(raw);return s
 //
 // Three nav.live tiers (agreed 2026-08-05, see plan §13): '' (static image +
 // filter, today's baseline) | 'composite' (existing CSS image-layer stack,
-// v3.1.0) | 'full' (this function, real live instances, EVERYTHING —
-// unconditional, no per-element config) | 'custom' (planned follow-up, same
-// mechanism, per-element opt-in via a future nav_mini flag on each element —
-// NOT implemented here yet). This function currently only serves 'full', so
-// it does no per-category/per-element filtering of visual content.
+// v3.1.0) | 'full' (real live instances, EVERYTHING unconditional, no
+// per-element config) | 'custom' (same mechanism as 'full' — reuses this
+// entire function and the mount/scale/lifecycle machinery around it — but
+// keeps only gauges/labels/icons/badges/blinds/elements that opt in via
+// `nav_mini:true`, and weather only when `weather_nav_mini:true`; opt-in
+// default confirmed 2026-08-05). Both 'full' and 'custom' share every strip
+// rule below; 'custom' just adds one more filtering pass on top.
 function rocBuildMiniConfig(cAll,ri){
   const gcfg=rocClone(cAll);
   gcfg._roc_mini=true;
@@ -471,10 +473,31 @@ function rocBuildMiniConfig(cAll,ri){
   // 'full' they're part of "everything"; a specific inappropriate one (e.g.
   // a heavy custom card) is excluded via 'custom' mode instead, per-item,
   // once that's built.
+  const isCustom=!!(cAll.nav&&cAll.nav.live==='custom');
+  // weather_nav_mini is a scalar toggle, not a per-item array flag like the
+  // others below — it can live at top-level OR be overridden per-room (same
+  // ROOM_KEYS fallback pattern as weather_overlay itself), so unlike the
+  // array filters (which just check each item wherever it happens to live),
+  // this needs the ONE effective value for the SPECIFIC target room (ri):
+  // that room's own value if it set one, else the top-level default.
+  const _wxRoom=Array.isArray(gcfg.rooms)?gcfg.rooms[ri]:null;
+  const _wxOptIn=!!((_wxRoom&&_wxRoom.weather_nav_mini!==undefined)?_wxRoom.weather_nav_mini:gcfg.weather_nav_mini);
   const stripAlways=function(o){
     if(!o)return;
     delete o.cards_above;delete o.cards_below;delete o.light_controls;
     if(Array.isArray(o.blinds))o.blinds.forEach(function(b){if(b)delete b.control;});
+    if(isCustom){
+      // 'custom' tier: keep only opted-in elements (nav_mini:true) — applied
+      // to whichever layer this call is filtering (top-level defaults when
+      // called with gcfg, that room's own overrides when called per-room),
+      // so a room relying on a top-level default array is filtered exactly
+      // like one with its own array (matches the always-off strip above,
+      // which has the same top-level+per-room duality for the same reason).
+      ['gauges','labels','icons','badges','blinds','elements'].forEach(function(k){
+        if(Array.isArray(o[k]))o[k]=o[k].filter(function(it){return it&&it.nav_mini===true;});
+      });
+      if(!_wxOptIn)delete o.weather_overlay;
+    }
   };
   stripAlways(gcfg);
   if(Array.isArray(gcfg.rooms))gcfg.rooms.forEach(stripAlways);
@@ -1357,7 +1380,7 @@ class RoomOverlayCard extends HTMLElement{
     // nav.live: 'full' — persistent live mini <room-overlay-card> per thumbnail
     // (NAV_LIVE_FULL_PLAN.md). Only meaningful for thumbnails; tabs/dots have
     // no image box to host one.
-    const _navLiveFull=navStyle==='thumbnails'&&navCfg.live==='full';
+    const _navLiveReal=navStyle==='thumbnails'&&(navCfg.live==='full'||navCfg.live==='custom');
     // position: top | bottom | left | right | auto (auto = side rail on wide cards)
     let navPos=navCfg.position||'top';
     if(navPos==='auto')navPos='top'; // v4: position only orients the strip; placement comes from the layout grid
@@ -1410,8 +1433,8 @@ class RoomOverlayCard extends HTMLElement{
           if(navStyle==='tabs')
             return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
           // thumbnails — live mini-render: base image + filter + sensor chips
-          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_navLiveFull?'':(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':''))+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
-            +(_navLiveFull?'<div data-thumb-mini="'+ri+'" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;"></div>':'')
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_navLiveReal?'':(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':''))+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+            +(_navLiveReal?'<div data-thumb-mini="'+ri+'" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;"></div>':'')
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
         }).join('')+_navBreak+_navCardsEnd+_fbHtml+'</div>';
     }
@@ -1595,13 +1618,16 @@ class RoomOverlayCard extends HTMLElement{
           });
         });
       }
-      // nav.live: 'full' — mount one persistent, non-interactive mini
-      // <room-overlay-card> per thumbnail (NAV_LIVE_FULL_PLAN.md §5/§6).
-      // Fixed reference width, aspect-derived height (see _isMini/_rootH/
-      // _wrapAspect above) — then a shared ResizeObserver scales the whole
-      // thing to fit its thumb box, so every mini keeps the SAME font/icon/
-      // gauge proportions no matter each room's own aspect_ratio.
-      if(_navLiveFull){
+      // nav.live: 'full' OR 'custom' — mount one persistent, non-interactive
+      // mini <room-overlay-card> per thumbnail (NAV_LIVE_FULL_PLAN.md §5/§6/
+      // §13). Fixed reference width, aspect-derived height (see _isMini/
+      // _rootH/_wrapAspect above) — then a shared ResizeObserver scales the
+      // whole thing to fit its thumb box, so every mini keeps the SAME font/
+      // icon/gauge proportions no matter each room's own aspect_ratio. Both
+      // tiers share this entire mount/scale mechanism unchanged — only
+      // rocBuildMiniConfig's content differs (custom additionally filters by
+      // nav_mini, §13).
+      if(_navLiveReal){
         const _wRef=(navCfg.mini&&Number(navCfg.mini.width_ref))||480;
         cAll.rooms.forEach(function(r,ri){
           const host=navSelf.shadowRoot.querySelector('[data-thumb-mini="'+ri+'"]');
@@ -1629,7 +1655,7 @@ class RoomOverlayCard extends HTMLElement{
             mc._roomIdx=ri;
             if(navSelf._hass)try{mc.hass=navSelf._hass;}catch(_){}
             navSelf._navMiniEls[ri]={el:mc,host:host,widthRef:_wRef};
-          }catch(e){console.warn('[room-overlay-card] nav.live:full mini mount failed for room '+((r&&r.id)||ri)+':',e);}
+          }catch(e){console.warn('[room-overlay-card] nav.live mini mount failed for room '+((r&&r.id)||ri)+':',e);}
         });
         if(window.ResizeObserver){
           const _miniMap=navSelf._navMiniEls;
@@ -3782,6 +3808,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(_oldWo.angle!==undefined)_wo.angle=_oldWo.angle;
       tgt.weather_overlay=_wo;
     }else delete tgt.weather_overlay;
+    const _wxNmEl=q('#weather-nav-mini');if(_wxNmEl){if(_wxNmEl.checked)tgt.weather_nav_mini=true;else delete tgt.weather_nav_mini;}
     // Layout block (v4) — height/orientation/threshold/gap + per-profile grids
     (function(){
       if(!q('#ly-hmode'))return; // Layout tab not rendered (onboarding)
@@ -4007,11 +4034,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       const iconEl=q('[data-b-icon="'+i+'"]');if(iconEl){if(iconEl.value)o.icon=iconEl.value;else delete o.icon;}
       const bxEl=q('[data-b-x="'+i+'"]');if(bxEl){if(bxEl.value.trim())o.x=bxEl.value.trim();else delete o.x;}
       const byEl=q('[data-b-y="'+i+'"]');if(byEl){if(byEl.value.trim())o.y=byEl.value.trim();else delete o.y;}const bAnimEl=q('[data-b-anim="'+i+'"]');if(bAnimEl&&bAnimEl.value)o.animation=bAnimEl.value;else delete o.animation;const bAcEl=q('[data-b-ac="'+i+'"]');if(bAcEl&&bAcEl.value&&o.animation)o.animation_color=self._colorVal(bAcEl,b.animation_color);else delete o.animation_color;
+      const bNmEl=q('[data-b-nav-mini="'+i+'"]');if(bNmEl){if(bNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
       const yaR=self._pYaml(q('[data-b-yaml="'+i+'"]'));
       if(yaR.ok){
         // The YAML textarea owns every key except those with dedicated fields —
         // keys removed from the textarea are removed from the config too.
-        const KEEP=['id','icon','position','x','y','animation','animation_color'];
+        const KEEP=['id','icon','position','x','y','animation','animation_color','nav_mini'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
@@ -4033,6 +4061,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(yaR.val)Object.assign(o,yaR.val);
       }
       const elGrpEl=q('[data-el-grp="'+i+'"]');if(elGrpEl&&elGrpEl.value.trim())o.group=elGrpEl.value.trim();else delete o.group;
+      const elNmEl=q('[data-el-nav-mini="'+i+'"]');if(elNmEl){if(elNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
       return o;
     });
 
@@ -4058,6 +4087,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const holdR=self._pYaml(q('[data-ico-hold="'+i+'"]'));
       if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
       const icoGrpEl=q('[data-ico-grp="'+i+'"]');if(icoGrpEl&&icoGrpEl.value.trim())o.group=icoGrpEl.value.trim();else delete o.group;
+      const icoNmEl=q('[data-ico-nav-mini="'+i+'"]');if(icoNmEl){if(icoNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
       return o;
     });
 
@@ -4074,7 +4104,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(tmplEl){if(tmplEl.value.trim())o.template=tmplEl.value.trim();else delete o.template;}
       const yaR=self._pYaml(q('[data-lbl-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','top','left','entity','attribute','suffix','unit','color_gradient','animation','animation_color','group','template'];
+        const KEEP=['id','top','left','entity','attribute','suffix','unit','color_gradient','animation','animation_color','group','template','nav_mini'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
@@ -4087,6 +4117,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(lblGradStops.length)o.color_gradient=lblGradStops.sort((a,b)=>a.value-b.value);
       else delete o.color_gradient;
       const lblGrpEl=q('[data-lbl-grp="'+i+'"]');if(lblGrpEl&&lblGrpEl.value.trim())o.group=lblGrpEl.value.trim();else delete o.group;
+      const lblNmEl=q('[data-lbl-nav-mini="'+i+'"]');if(lblNmEl){if(lblNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
       return o;
     });
 
@@ -4103,7 +4134,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const maxEl=q('[data-g-max="'+i+'"]');if(maxEl){const _gmx=parseFloat(maxEl.value);if(isNaN(_gmx)||_gmx===100)delete o.max;else o.max=_gmx;}const orientEl=q('[data-g-orient="'+i+'"]');if(orientEl&&orientEl.value&&orientEl.value!=='vertical')o.orientation=orientEl.value;else if(orientEl&&orientEl.value==='vertical')delete o.orientation;else delete o.orientation;
       const yaR=self._pYaml(q('[data-g-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','top','left','width','height','entity','attribute','min','max','color_gradient','animation','animation_color','alert_conditions','orientation','group'];
+        const KEEP=['id','top','left','width','height','entity','attribute','min','max','color_gradient','animation','animation_color','alert_conditions','orientation','group','nav_mini'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
@@ -4121,6 +4152,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gAlertAttrEl=q('[data-g-alert-attr="'+i+'"]');
       if(gAlertEntEl&&gAlertEntEl.value.trim()&&gAlertOpEl&&gAlertOpEl.value&&gAlertValEl&&gAlertValEl.value.trim()){const _ac={entity:gAlertEntEl.value.trim(),operator:gAlertOpEl.value,value:parseFloat(gAlertValEl.value)};if(gAlertAttrEl&&gAlertAttrEl.value.trim())_ac.attribute=gAlertAttrEl.value.trim();o.alert_conditions=_ac;}else delete o.alert_conditions;
       const gGrpEl=q('[data-g-grp="'+i+'"]');if(gGrpEl&&gGrpEl.value.trim())o.group=gGrpEl.value.trim();else delete o.group;
+      const gNmEl=q('[data-g-nav-mini="'+i+'"]');if(gNmEl){if(gNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
       return o;
     });
     tgt.blinds=(tgt.blinds||[]).map(function(b,i){
@@ -4144,11 +4176,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gcEl=q('[data-bl-gap-color="'+i+'"]');if(gcEl&&gcEl.value.trim())o.gap_color=gcEl.value.trim();else delete o.gap_color;
       const yaR=self._pYaml(q('[data-bl-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group'];
+        const KEEP=['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group','nav_mini'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
       const blGrpEl=q('[data-bl-grp="'+i+'"]');if(blGrpEl&&blGrpEl.value.trim())o.group=blGrpEl.value.trim();else delete o.group;
+      const blNmEl=q('[data-bl-nav-mini="'+i+'"]');if(blNmEl){if(blNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
       const _ccDispEl=q('[data-bl-ccdisp="'+i+'"]');
       if(_ccDispEl&&_ccDispEl.value&&_ccDispEl.value!=='off'){
         const _ctl={placement:_ccDispEl.value==='dock'?'dock':'float'};
@@ -4335,6 +4368,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     return h;
   }
 
+  // 'nav.live: custom' per-element opt-in checkbox (NAV_LIVE_FULL_PLAN.md
+  // §13, opt-in default confirmed 2026-08-05). Renders nothing outside
+  // custom mode — the field/data-attribute simply won't exist in the DOM, so
+  // the generic collect loop naturally skips writing/clearing it, leaving
+  // whatever nav_mini value the config already had untouched (switching live
+  // modes back and forth never loses a user's per-element choices).
+  _navMiniField(prefix,i,checked){
+    if(!(this._config&&this._config.nav&&this._config.nav.live==='custom'))return'';
+    return '<div style="display:flex;align-items:center;gap:7px;margin-top:6px;"><input data-'+prefix+'-nav-mini="'+i+'" type="checkbox"'+(checked?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:12px;cursor:pointer;">Show in nav.live: custom mini</label></div>';
+  }
+
   _zoneItem(z,i){
     const tapYaml=z.tap_action?_yaml.s(z.tap_action):'';
     const holdYaml=z.hold_action?_yaml.s(z.hold_action):'';
@@ -4400,6 +4444,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label class="roc-l">label / visible / icon_color / tap_action / group (YAML)</label>';
     h+='<textarea data-b-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(bYaml)+'</textarea></div>';
+    h+=this._navMiniField('b',i,b.nav_mini===true);
     h+=this._mvBtns('b',i);
     h+='<button data-rm-b="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove badge</button>';
     h+='</div></details>';
@@ -4433,6 +4478,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">card / visible / z_index / border_radius (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
+    h+=this._navMiniField('el',i,el.nav_mini===true);
     h+=this._mvBtns('el',i);
     h+='<button data-dup-el="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
@@ -4470,6 +4516,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
     h+='</div>';
     h+='<div style="margin-bottom:6px;"><label class="roc-l">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._navMiniField('ico',i,ico.nav_mini===true);
     h+=this._mvBtns('ico',i);
     h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
@@ -4490,6 +4537,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="margin-bottom:8px;"><label class="roc-l">Template (Jinja — replaces entity value, e.g. {{ states(\'sensor.x\') | round(1) }})</label><textarea data-lbl-tmpl="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(lbl.template||'')+'</textarea></div>';
     h+='<div><label class="roc-l">font_size / color / visible / visible_template / format / tap_action / fade / mobile / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._navMiniField('lbl',i,lbl.nav_mini===true);
     h+=this._mvBtns('lbl',i);
     h+='<button data-dup-lbl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
@@ -4533,6 +4581,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label class="roc-l">background / transition / visible / visible_template / tap_action / fade / mobile / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._navMiniField('g',i,g.nav_mini===true);
     h+=this._mvBtns('g',i);
     h+='<button data-dup-g="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
@@ -4617,6 +4666,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="margin-bottom:8px;"><label class="roc-l">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._navMiniField('bl',i,b.nav_mini===true);
     h+=this._mvBtns('bl',i);
     h+='<button data-dup-bl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-bl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove blind</button>';
@@ -4670,6 +4720,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='</select></div>';
     basicInner+='<div><label class="roc-l">Opacity</label><input id="weather_opacity" type="number" step="0.05" min="0" max="1" value="'+(_woEd.opacity??0.45)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
+    if(this._config&&this._config.nav&&this._config.nav.live==='custom')basicInner+='<div style="display:flex;align-items:center;gap:7px;margin-top:6px;"><input id="weather-nav-mini" type="checkbox"'+(cR.weather_nav_mini===true?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="weather-nav-mini" style="font-size:12px;cursor:pointer;">Show weather in nav.live: custom mini</label></div>';
     basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;">';
     basicInner+='<div><label class="roc-l">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
     basicInner+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><input id="zoom" type="checkbox"'+(c.zoom?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="zoom">Pan &amp; pinch-zoom (floorplan mode)</label></div>';
@@ -4840,17 +4891,20 @@ class RoomOverlayCardEditor extends HTMLElement{
       [['top','top'],['bottom','bottom'],['left','left (side rail)'],['right','right (side rail)'],['auto','auto (rail on wide)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.position||'top')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
       roomsInner+='</select></div>';
       roomsInner+='</div>';
+      const _navLiveIsMiniTier=_nav.live==='full'||_nav.live==='custom';
       roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Live thumbnails (mini-room view)</label><select id="nav-live"'+this._inp('')+'>';
-      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['full','full — live room minis (real instances, everything)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped. Full mounts a real, independent copy of each room — gauges, labels, icons, blinds, embedded cards and all — scaled down; heavier on older tablets, test yours with more than a couple of rooms.</p></div>';
-      roomsInner+='<div id="nav-mini-panel" style="'+(_nav.live==='full'?'':'display:none;')+'border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
-      roomsInner+='<label class="roc-l" style="font-weight:600;">Mini-room settings (live: full)</label>';
+      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['full','full — live room minis (real instances, everything)'],['custom','custom — live room minis (real instances, pick which elements show)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      roomsInner+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped. Full mounts a real, independent copy of each room — gauges, labels, icons, blinds, embedded cards and all — scaled down; heavier on older tablets, test yours with more than a couple of rooms. Custom is the same, but starts empty — tick "Show in mini" on each element you want included (below, and the weather toggle in the Basic tab).</p></div>';
+      roomsInner+='<div id="nav-mini-panel" style="'+(_navLiveIsMiniTier?'':'display:none;')+'border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
+      roomsInner+='<label class="roc-l" style="font-weight:600;">Mini-room settings (live: '+(_nav.live==='custom'?'custom':'full')+')</label>';
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;align-items:center;">';
       roomsInner+='<div style="display:flex;align-items:center;gap:7px;"><input id="nav-mini-templates" type="checkbox"'+(_navMini.templates?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-mini-templates" style="font-size:12px;cursor:pointer;">Label/colour templates</label></div>';
       roomsInner+='<div><label class="roc-l">Camera refresh (s, min 30)</label><input id="nav-mini-camera-refresh" type="number" min="30" step="5" placeholder="30" value="'+(_navMini.camera_refresh!=null?_navMini.camera_refresh:'')+'"'+this._inp('')+'></div>';
       roomsInner+='<div><label class="roc-l">Reference width (px)</label><input id="nav-mini-width-ref" type="number" min="120" step="10" placeholder="480" value="'+(_navMini.width_ref!=null?_navMini.width_ref:'')+'"'+this._inp('')+'></div>';
       roomsInner+='</div>';
-      roomsInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Templates and camera streams are extra per-room subscriptions — off by default. Every mini shows everything unconditionally; excluding a specific element is planned for a future "custom" mode.</p>';
+      roomsInner+=(_nav.live==='custom'
+        ?'<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Nothing shows in the mini until you tick "Show in mini" on it — look for the checkbox on each gauge/label/icon/badge/blind/element panel below (and the weather toggle in the Basic tab). Templates and camera streams are extra per-room subscriptions — off by default regardless.</p>'
+        :'<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Templates and camera streams are extra per-room subscriptions — off by default. Every mini shows everything unconditionally; switch to "custom" above to pick individual elements instead.</p>');
       roomsInner+='</div>';
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
       roomsInner+='<div><label class="roc-l">Height</label><input id="nav-height" type="text" placeholder="64px" value="'+this._e(_nav.height||'')+'"'+this._inp('')+'></div>';
@@ -5224,14 +5278,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards','nav-mini-templates','nav-mini-camera-refresh','nav-mini-width-ref','url-sync','url-sync-key'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
-    // nav-live toggles the "Mini-room settings" sub-panel in place (no
-    // re-render — same pattern as #filter-mode below) since it's only
-    // relevant/visible when live:full is picked.
+    // nav-live needs a full re-render (not just a local panel toggle, unlike
+    // #filter-mode below): 'custom' adds a "Show in mini" checkbox to every
+    // gauge/label/icon/badge/blind/element panel, not just its own local
+    // sub-panel, so those need to actually (dis)appear across the form.
     const navLiveEl=this.querySelector('#nav-live');
     if(navLiveEl)navLiveEl.addEventListener('change',function(){
-      const panel=self.querySelector('#nav-mini-panel');
-      if(panel)panel.style.display=navLiveEl.value==='full'?'':'none';
-      self._fire(self._collectConfig());
+      const c=self._collectConfig();
+      self._config=c;self._render();self._fire(c);
     });
     const bidMap=this.querySelector('#bid-map');
     if(bidMap)bidMap.addEventListener('click',function(){
@@ -5247,7 +5301,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       self._config=c;self._render();self._fire(c);
     });
 
-    ['base_image','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','zoom'].forEach(function(id){
+    ['base_image','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','weather-nav-mini','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     // Per-profile inputs (aspect_ratio / border_radius / image_fit — 2 cells each)
@@ -5665,6 +5719,10 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     // Group fields on elements
     this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp]').forEach(function(el){el.addEventListener('change',fire);});
+    // nav.live:custom "Show in mini" checkboxes (NAV_LIVE_FULL_PLAN.md §13) —
+    // one shared list across every element type that has one, same pattern
+    // as the Group fields just above.
+    this.querySelectorAll('[data-b-nav-mini],[data-el-nav-mini],[data-ico-nav-mini],[data-lbl-nav-mini],[data-g-nav-mini],[data-bl-nav-mini]').forEach(function(el){el.addEventListener('change',fire);});
 
     // Groups
     const addGrp=this.querySelector('#add-grp');

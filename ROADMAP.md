@@ -76,10 +76,10 @@ failure broke HACS installs.
 
 ## Development order (agreed 2026-08-05)
 
-1. ✅ **Live mini-room nav — Phase 2** (`nav.live: full`) — core feature (mount/scale, sizing
-   bugfixes, editor UI) shipped v5.4.0-v5.6.0, live-verified working. Remaining pieces
-   (instance-reuse perf, optional swipe-reuse Phase 3, `custom` per-element mode) are non-blocking
-   follow-ups — see [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
+1. ✅ **Live mini-room nav — Phase 2** (`nav.live: full` + `custom`) — all three tiers
+   (`off`/`composite`/`full`/`custom`) shipped v5.4.0-v5.7.0, live-verified working. Remaining
+   pieces (instance-reuse perf, optional swipe-reuse Phase 3) are non-blocking follow-ups — see
+   [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
 2. 🎯 **Haptic on hold-registered** (E7, mobile) — up next.
 3. 🎯 **v6.0.0 — Official HACS default-repository submission** — editor GUI/UX revalidation
    first (blocking), README/GitHub content overhaul as the finale right before submission.
@@ -108,17 +108,18 @@ current, harder-to-navigate one.
 5. **Submit the PR to `hacs/default`.**
 6. Bump to **v6.0.0** to mark the milestone once accepted/merged.
 
-## 🎯 Live mini-room navigation — Phase 2 (`nav.live: full`) — core feature shipped + live-verified, v5.4.0-v5.6.0
+## ✅ Live mini-room navigation — Phase 2 (`nav.live: full` + `custom`) — done, v5.4.0-v5.7.0
 
 Full technical spec, code touch-points and phased implementation plan:
 [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md). **Status:** mount/scale mechanism (v5.4.0),
 three rounds of live-verified sizing bugfixes (v5.5.0-v5.5.2 — connection-order, then a
 transform-vs-getBoundingClientRect measurement bug that needed two attempts to fully nail down;
-see those CHANGELOG entries), and editor UI (v5.6.0 — *Rooms & menu* tab, "full" option reveals a
-*Mini-room settings* panel for templates/camera_refresh/width_ref) are all done and confirmed
-working live on the user's actual dashboard. Still open: instance-reuse/lifecycle optimization
-(step 4 — currently rebuilds every mini on every card render) and the `custom` live mode
-(per-element GUI picker, plan §13) — see the plan doc for details.
+see those CHANGELOG entries), editor UI for `full` (v5.6.0 — *Rooms & menu* tab, "full" option
+reveals a *Mini-room settings* panel for templates/camera_refresh/width_ref), and the `custom` tier
+(v5.7.0 — same mount/scale mechanism as `full`, per-element opt-in via `nav_mini`/a "Show in mini"
+checkbox on every gauge/label/icon/badge/blind/embedded-card panel, plus a weather toggle) are all
+done. Still open: instance-reuse/lifecycle optimization (step 4 — currently rebuilds every mini on
+every card render) and optional Phase 3 (swipe reuses the live mini instance) — see the plan doc.
 
 **Goal:** nav thumbnails become *true miniatures* — each thumbnail hosts a real,
 non-interactive `room-overlay-card` rendered at a reference width and scaled down, so

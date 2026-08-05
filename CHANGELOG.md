@@ -1,5 +1,47 @@
 # Changelog
 
+## [5.7.0] - 2026-08-05
+
+### `nav.live: custom` — pick exactly which elements show in the mini
+
+The third and final `nav.live` tier (alongside `off` and `composite`) alongside `full`: same
+real-instance mount/scale mechanism as `full`, but instead of showing everything unconditionally,
+each mini starts **empty** and only shows what you explicitly opt in.
+
+Every gauge, label, icon, badge, blind, and embedded card panel in the editor gets a **"Show in
+mini"** checkbox (only visible once `nav.live: custom` is selected) — tick it to include that
+element in the live mini-room thumbnails. Weather gets its own toggle in the Basic tab, since it's
+a single overlay rather than a list. In YAML, the same thing is a `nav_mini: true` field on any
+element, or `weather_nav_mini: true` at the top level or per room:
+
+```yaml
+nav:
+  style: thumbnails
+  live: custom
+gauges:
+  - id: temp_gauge
+    entity: sensor.bedroom_temp
+    nav_mini: true   # shows in the mini — omit or set false to hide it there
+weather_nav_mini: true
+```
+
+Nothing is a breaking change: `full` keeps showing everything as before, `nav_mini` is ignored
+entirely outside `custom` mode, and switching `nav.live` back and forth never loses your per-element
+choices — they just stop being read until you switch back to `custom`.
+
+Motivating case: a room with a lot of visual detail where you don't want every gauge/label/badge
+crammed into a thumbnail-sized mini, or one specific embedded card that looks bad at that scale —
+`custom` lets you keep everything in the main view while trimming the mini down to what actually
+reads well at a glance.
+
+10 new smoke tests (`rocBuildMiniConfig`'s custom-tier filtering: per-item opt-in across all six
+element types, room-level vs top-level default arrays filtered independently, the weather toggle's
+room-overrides-top-level resolution, `full` mode staying unaffected) and 12 new render tests (the
+`custom` option, checkboxes appearing/disappearing across every element panel, zones correctly
+excluded — not visual room content, collect round-tripping, weather toggle, and an end-to-end mount
+test confirming a live mini's actual config comes out pre-filtered). Full smoke + render suite
+green (202 smoke tests).
+
 ## [5.6.0] - 2026-08-05
 
 ### `nav.live: full` — editor UI (step 5 of the feature)

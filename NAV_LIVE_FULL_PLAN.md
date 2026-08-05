@@ -1,8 +1,10 @@
 # Live Mini-Room Nav — Phase 2 (`nav.live: full`) — Implementation Plan
 
-Status: **core done, live-verified** — Phase 0, steps 2-3 (config transform + mount/scale, v5.4.0),
+Status: **done, live-verified** — Phase 0, steps 2-3 (config transform + mount/scale, v5.4.0),
 step 5 (editor UI, v5.6.0) and step 6 (tests, alongside each step) implemented and confirmed
 working on a real dashboard (v5.5.0-v5.5.2 fixed real sizing bugs found in that live testing).
+`custom` mode (§13, per-element `nav_mini` opt-in) implemented v5.7.0 — opt-in confirmed as the
+default (not opt-out) 2026-08-05, reuses `full`'s entire mount/scale/lifecycle machinery unchanged.
 Step 4 (instance-reuse/lifecycle optimization) and Optional Phase 3 (swipe reuse) still pending —
 non-blocking follow-ups, not required for the feature to work correctly.
 
@@ -317,7 +319,7 @@ flash (screenshot diff at drag-start). A render/jsdom test for the reparent-and-
 (mini ends up back in the correct `[data-thumb-mini]` host with its original transform after a
 cancelled drag).
 
-## 13. `nav.live: custom` — future work, sketch only (not part of this pass)
+## 13. `nav.live: custom` — IMPLEMENTED v5.7.0
 
 Agreed 2026-08-05, prompted by a real case: a user knows one specific embedded card/element is
 inappropriate at thumbnail scale but wants everything else `full` shows. Rather than bolt a
@@ -326,27 +328,33 @@ see §4/§5's "no per-category filtering, on purpose"), `custom` is its own thir
 built **after** `full` ships and is tested, reusing `full`'s entire mount/scale/lifecycle machinery
 (§5-§8) — only `rocBuildMiniConfig`'s content is different for this tier.
 
-**Mechanism (sketch, not finalized):** a new optional per-element field, e.g. `nav_mini: true`,
-addable to individual entries in every element array this project already gives its own editor
-sub-panel to — `gauges`, `labels`, `icons`, `badges`, `blinds` (the visual gauge, independent of
-`control:`), `elements` (embedded HA cards), and the handful of scalar `weather_*` keys as a single
-toggle (they're not a list). `custom` mode starts from the SAME structural strip as `full` (§4's
-always-off list) but then, for the one room being rendered, keeps only elements with `nav_mini!==
-false`... or only elements with `nav_mini===true` — **this default (opt-out vs. opt-in) is the
-first thing to nail down when this is picked up**, not resolved here: opt-out (default shown,
-uncheck the one bad element) directly matches the motivating case with a single click; opt-in
-(default hidden, check the ones you want) suits someone building a deliberately minimal curated
-menu from a room with many elements. A per-tier default (opt-out under `custom`, since that's the
-motivating case) is the current leaning, but confirm before implementing.
+**Mechanism (as shipped):** a new optional per-element field `nav_mini: true`, addable to
+individual entries in `gauges`, `labels`, `icons`, `badges`, `blinds` (the visual gauge, independent
+of `control:`), `elements` (embedded HA cards) — `zones` deliberately excluded, not visual room
+content. Weather (`weather_overlay`) is a scalar, not a list, so it gets its own top-level-or-per-
+room `weather_nav_mini: true` toggle instead. `custom` mode reuses `rocBuildMiniConfig` and every
+bit of `full`'s mount/scale/lifecycle machinery unchanged — only one extra filtering pass inside
+`stripAlways`, applied to both the top-level default arrays and each room's own arrays (same
+top-level+per-room duality the always-off strip already needed). **Default resolved 2026-08-05,
+confirmed explicitly by the user: opt-in** (`nav_mini===true` required — nothing shows until
+checked), not opt-out. Weather's toggle resolves per the SPECIFIC target room being rendered: that
+room's own `weather_nav_mini` if it set one, else the top-level default — needed because
+`weather_overlay` itself can live at either level, so a naive "check the same object" approach
+would silently break whenever the two were defined at different levels.
 
-**Editor:** each element type's existing `_xxxItem()` panel (`_gaugeItem`, `_blindItem`, etc. —
-same pattern as this session's `top_offset` field on blinds) gains one checkbox, visible only when
-`nav.live==='custom'` (dead/confusing otherwise). Mechanically repetitive across ~7-8 element
-types but each addition is small (new field + checkbox + collect-loop line, same shape every time).
+**Editor:** each element type's existing `_xxxItem()` panel (`_gaugeItem`, `_blindItem`, `_icoItem`,
+`_lblItem`, `_badgeItem`, `_elItem`) gained one checkbox via a shared `_navMiniField(prefix,i,
+checked)` helper, visible only when `nav.live==='custom'`. The weather toggle lives in the Basic
+tab next to the existing weather fields, same visibility gating. Picking `full`/`custom`/etc. now
+triggers a full editor re-render (not just a local panel toggle like `nav.mini.*`'s settings panel)
+since `custom`'s checkboxes need to actually appear/disappear across every open element panel at
+once, not just one local sub-panel.
 
-**Scope estimate:** roughly doubles the editor-surface-area of the nav.live feature versus `full`
-alone (every element type touched, vs. one small "Mini-room settings" panel for `full`) — expect
-this to be its own dedicated pass, not a quick add-on.
+**Scope:** touched all 6 relevant element item builders + their collect logic + KEEP-array
+exclusions (so the checkbox's value doesn't also leak into each item's advanced-YAML textarea) +
+the shared field-level change-listener wiring — mechanically repetitive but each addition was small
+and uniform. 10 smoke tests (`rocBuildMiniConfig` custom-tier filtering) + 12 render tests (editor
+checkboxes, collect round-trip, end-to-end mount filtering).
 
 ## 14. Open questions (resolve before/while implementing, not blocking this plan)
 
@@ -356,5 +364,5 @@ this to be its own dedicated pass, not a quick add-on.
   state (position rail visible but non-interactive) instead of stripping `control:` entirely —
   default in this plan is full strip (simplest, safest); revisit only if the visual absence looks
   wrong in practice.
-- `custom` mode's opt-in vs. opt-out default (§13) — needs an explicit decision before that work
-  starts, not before `full` ships.
+- ~~`custom` mode's opt-in vs. opt-out default (§13)~~ — **resolved 2026-08-05: opt-in**,
+  implemented v5.7.0.

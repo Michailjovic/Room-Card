@@ -149,6 +149,44 @@ edMini.hass={states:{},user:{name:'x'}};
 t('mini panel pre-shown when loaded config already has live:full',!/display:none/.test(edMini.querySelector('#nav-mini-panel').getAttribute('style')||''));
 t('mini fields prefilled from loaded config',edMini.querySelector('#nav-mini-templates').checked===true&&edMini.querySelector('#nav-mini-camera-refresh').value==='45'&&edMini.querySelector('#nav-mini-width-ref').value==='360');
 
+// --- editor: nav.live:custom per-element "Show in mini" checkboxes (plan §13) ---
+t('nav-live select offers a custom option',!!edNav.querySelector('#nav-live option[value="custom"]'));
+const edCustom=w.document.createElement('room-overlay-card-editor');
+let outCustom=null;
+edCustom.addEventListener('config-changed',e=>{outCustom=e.detail.config;});
+edCustom.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+  rooms:[{id:'living',name:'Living',
+    gauges:[{id:'g1',entity:'sensor.g'}],labels:[{id:'l1',entity:'sensor.l'}],icons:[{id:'i1',icon:'mdi:x'}],
+    badges:[{id:'bd1',icon:'mdi:y'}],blinds:[{id:'bl1',entity:'cover.x'}],elements:[{id:'el1',card:{type:'markdown'}}]},
+    {id:'hall',name:'Hall'}]});
+edCustom.hass={states:{},user:{name:'x'}};
+t('no "Show in mini" checkboxes when live is not custom',!edCustom.querySelector('[data-g-nav-mini]')&&!edCustom.querySelector('[data-lbl-nav-mini]'));
+edCustom.querySelector('#nav-live').value='custom';
+edCustom.querySelector('#nav-live').dispatchEvent(new w.Event('change',{bubbles:true}));
+t('picking custom fired the config change',outCustom&&outCustom.nav&&outCustom.nav.live==='custom');
+t('mini panel also shown for custom (nav.mini.* still applies)',!/display:none/.test(edCustom.querySelector('#nav-mini-panel').getAttribute('style')||''));
+t('"Show in mini" checkbox appears on gauge/label/icon/badge/blind/element panels once custom is picked',
+  !!edCustom.querySelector('[data-g-nav-mini="0"]')&&!!edCustom.querySelector('[data-lbl-nav-mini="0"]')&&
+  !!edCustom.querySelector('[data-ico-nav-mini="0"]')&&!!edCustom.querySelector('[data-b-nav-mini="0"]')&&
+  !!edCustom.querySelector('[data-bl-nav-mini="0"]')&&!!edCustom.querySelector('[data-el-nav-mini="0"]'));
+t('zones do NOT get a "Show in mini" checkbox (not visual room content, per plan)',!edCustom.querySelector('[data-z-nav-mini]'));
+edCustom.querySelector('[data-g-nav-mini="0"]').checked=true;
+edCustom.querySelector('[data-g-nav-mini="0"]').dispatchEvent(new w.Event('change',{bubbles:true}));
+t('collect wrote nav_mini:true on the checked gauge',outCustom&&outCustom.rooms&&outCustom.rooms[0].gauges[0].nav_mini===true);
+t('collect left the unchecked label without nav_mini',outCustom&&outCustom.rooms&&outCustom.rooms[0].labels[0].nav_mini===undefined);
+// weather toggle lives in the Basic tab, not an element panel
+t('weather "Show in mini" toggle appears in Basic tab once custom is picked',!!edCustom.querySelector('#weather-nav-mini'));
+edCustom.querySelector('#weather-nav-mini').checked=true;
+edCustom.querySelector('#weather-nav-mini').dispatchEvent(new w.Event('change',{bubbles:true}));
+t('collect wrote weather_nav_mini:true (room-scoped, since editor is showing that room)',outCustom&&outCustom.rooms&&outCustom.rooms[0].weather_nav_mini===true);
+// round-trip: reopening on a config with nav_mini already set shows it checked
+const edCustom2=w.document.createElement('room-overlay-card-editor');
+edCustom2.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},nav:{live:'custom'},
+  rooms:[{id:'living',name:'Living',weather_nav_mini:true,gauges:[{id:'g1',entity:'sensor.g',nav_mini:true}]}]});
+edCustom2.hass={states:{},user:{name:'x'}};
+t('nav_mini checkbox pre-checked when loaded config already has it',edCustom2.querySelector('[data-g-nav-mini="0"]').checked===true);
+t('weather toggle pre-checked when loaded config already has weather_nav_mini',edCustom2.querySelector('#weather-nav-mini').checked===true);
+
 // --- editor opens on the room the card was showing (in-memory store) ---
 const _memCfg={type:'custom:room-overlay-card',card_id:'memcard',base_image:'/local/m.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]};
 const cardM=w.document.createElement('room-overlay-card');
@@ -275,6 +313,16 @@ t('hass forwarding reaches mounted minis',_mini0._hass===cardNavFull._hass);
 // nav.live:'composite' (existing, unaffected) never mounts mini instances
 const cardComposite=mkCard({type:'custom:room-overlay-card',nav:{style:'thumbnails',live:'composite'},rooms:[{id:'r0',base_image:'/a.webp'},{id:'r1',base_image:'/b.webp'}]});
 t('nav.live:composite does not mount mini instances (unaffected by this feature)',!cardComposite.shadowRoot.querySelector('[data-thumb-mini]'));
+
+// --- nav.live:custom — shares full's mount mechanism, filters by nav_mini (plan §13) ---
+const _navCustomCfg={type:'custom:room-overlay-card',card_id:'navcustom',
+  nav:{style:'thumbnails',live:'custom'},
+  gauges:[{id:'g1',entity:'sensor.g',nav_mini:true},{id:'g2',entity:'sensor.g2'}],
+  rooms:[{id:'r0',base_image:'/a.webp'},{id:'r1',base_image:'/b.webp'}]};
+const cardNavCustom=mkCard(_navCustomCfg);
+const _miniC0=cardNavCustom.shadowRoot.querySelector('[data-thumb-mini="0"] room-overlay-card');
+t('nav.live:custom mounts a mini too (same mechanism as full)',!!_miniC0);
+t('nav.live:custom mini config is pre-filtered to only nav_mini:true elements',_miniC0._config.gauges.length===1&&_miniC0._config.gauges[0].id==='g1');
 
 // v5.0: coalesced pin entry + shared row-span helpers
 t('requestPin exists',typeof cardRH._requestPin==='function');

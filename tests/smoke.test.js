@@ -124,6 +124,38 @@ t('mini: camera_refresh clamped >=30 when room has base_camera',mc1.rooms[1].cam
 const _miniNoTpl=g.rocBuildMiniConfig(Object.assign({},_miniBase,{nav:{style:'thumbnails',live:'full'}}),0);
 t('mini: templates default false when nav.mini absent',_miniNoTpl._roc_mini_templates===false);
 t('mini: original config untouched (deep clone, not mutated)',_miniBase.cards_above.length===1&&_miniBase.blinds[0].control!==undefined&&_miniBase.rooms[0].cards_above.length===1);
+
+// ---- nav.live: custom — per-element nav_mini opt-in filtering (plan §13) ----
+const _customBase={
+  type:'custom:room-overlay-card',
+  gauges:[{id:'g1',entity:'sensor.g',nav_mini:true},{id:'g2',entity:'sensor.g2'}],
+  labels:[{id:'l1',entity:'sensor.l'}],
+  icons:[{id:'i1',entity:'light.i',nav_mini:true},{id:'i2',entity:'light.i2',nav_mini:false}],
+  badges:[{id:'bd1',icon:'mdi:x'},{id:'bd2',icon:'mdi:y',nav_mini:true}],
+  blinds:[{id:'bl1',entity:'cover.x',nav_mini:true,control:{presets:[]}},{id:'bl2',entity:'cover.y'}],
+  elements:[{id:'el1',card:{type:'markdown'}}],
+  weather_overlay:{entity:'weather.home'},
+  nav:{style:'thumbnails',live:'custom'},
+  rooms:[
+    {id:'r0',base_image:'/a.webp',weather_nav_mini:true},
+    {id:'r1',base_image:'/b.webp',gauges:[{id:'g3',entity:'sensor.g3',nav_mini:true},{id:'g4',entity:'sensor.g4'}]}
+  ]
+};
+const cc0=g.rocBuildMiniConfig(_customBase,0);
+t('custom: only nav_mini:true gauges kept (top-level default array)',cc0.gauges.length===1&&cc0.gauges[0].id==='g1');
+t('custom: labels with no nav_mini at all excluded (nothing opted in)',cc0.labels.length===0);
+t('custom: icons — true kept, explicit false excluded',cc0.icons.length===1&&cc0.icons[0].id==='i1');
+t('custom: badges filtered',cc0.badges.length===1&&cc0.badges[0].id==='bd2');
+t('custom: blinds filtered (control still stripped separately, always-off)',cc0.blinds.length===1&&cc0.blinds[0].id==='bl1'&&cc0.blinds[0].control===undefined);
+t('custom: elements with no nav_mini excluded',cc0.elements.length===0);
+t('custom: weather kept — room 0 opts in via its OWN weather_nav_mini, overlay lives top-level',!!cc0.weather_overlay&&cc0.weather_overlay.entity==='weather.home');
+const cc1=g.rocBuildMiniConfig(_customBase,1);
+t('custom: weather stripped for a room that does not opt in (no fallback to another room)',cc1.weather_overlay===undefined);
+t('custom: room-level gauge array filtered independently of the top-level one',cc1.rooms[1].gauges.length===1&&cc1.rooms[1].gauges[0].id==='g3');
+const _customTopWx=g.rocBuildMiniConfig(Object.assign({},_customBase,{weather_nav_mini:true,rooms:[{id:'r0',base_image:'/a.webp'}]}),0);
+t('custom: weather kept via top-level default when the room sets nothing of its own',!!_customTopWx.weather_overlay);
+const cFull=g.rocBuildMiniConfig(Object.assign({},_customBase,{nav:{style:'thumbnails',live:'full'}}),0);
+t('full (not custom) ignores nav_mini entirely — everything still kept',cFull.gauges.length===2&&cFull.labels.length===1&&cFull.badges.length===2&&!!cFull.weather_overlay);
 t('escA',g.escA('a"b<c>')==='a&quot;b&lt;c&gt;');
 
 // ---- v1.4: tmplTruthy ----------------------------------------------------------
