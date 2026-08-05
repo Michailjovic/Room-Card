@@ -1,5 +1,20 @@
 # Changelog
 
+## [5.9.2] - 2026-08-05
+
+### Move the YAML toggle up next to Undo/Redo
+
+`YAML` (formerly "Advanced (YAML)") moved out of the Room/Edit mode/Haptics row and into the
+title row, right next to the Undo/Redo buttons — grouping it with the editor's other
+meta/utility controls instead of the config-toggle row below. It's now an icon-only button
+(`mdi:code-braces`, no visible text, matching Undo/Redo's compact style) that highlights when
+active.
+
+5 render tests updated/added: it's confirmed to sit right after Redo, defaults to off/hidden,
+and toggles the advanced-fields visibility class on click (was a checkbox `change` handler,
+now a button `click` handler with its own inline active-state styling since this is a lightweight
+CSS-class toggle, not a full re-render). Full smoke and render test suites pass.
+
 ## [5.9.1] - 2026-08-05
 
 ### Fix: blank gap under the editor's live preview + Advanced (YAML) gets an icon and shorter label

@@ -223,8 +223,17 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   t('preview not mounted while Edit mode is off',!edEdit._prevCard&&!edEdit.querySelector('#roc-prev-host'));
   t('Room, Edit mode, Haptics and YAML all carry an icon',
     !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:cursor-move"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:code-braces"]'));
-  const advLabelTxt=(edEdit.querySelector('#roc-adv-toggle').closest('label').textContent||'').trim();
-  t('Advanced (YAML) toggle shortened to just "YAML"',advLabelTxt==='YAML');
+  const advBtn=edEdit.querySelector('#roc-adv-toggle');
+  t('YAML toggle lives in the title row as an icon button next to Undo/Redo, not a labelled checkbox',
+    advBtn&&advBtn.tagName==='BUTTON'&&!!advBtn.previousElementSibling&&advBtn.previousElementSibling.id==='roc-redo');
+  t('YAML toggle off by default (advanced fields hidden)',
+    !!edEdit.querySelector('.roc-ed').classList.contains('roc-hideadv'));
+  advBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+  t('clicking YAML toggle reveals advanced fields',
+    !edEdit.querySelector('.roc-ed').classList.contains('roc-hideadv'));
+  advBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+  t('clicking YAML toggle again hides them',
+    edEdit.querySelector('.roc-ed').classList.contains('roc-hideadv'));
   const tmBox=edEdit.querySelector('#test_mode');
   tmBox.checked=true;
   tmBox.dispatchEvent(new w.Event('change',{bubbles:true}));

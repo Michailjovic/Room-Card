@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.1';
+const ROC_VERSION='5.9.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -5104,12 +5104,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<span style="display:flex;gap:6px;align-items:center;">'
       +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
+      +'<button id="roc-adv-toggle" type="button" title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="padding:2px 8px;border-radius:4px;border:1px solid '+(this._showAdv?'var(--primary-color)':'var(--divider-color)')+';background:'+(this._showAdv?'rgba(3,169,244,0.15)':'none')+';color:'+(this._showAdv?'var(--primary-color)':'var(--primary-text-color)')+';cursor:pointer;display:inline-flex;align-items:center;line-height:1;"><ha-icon icon="mdi:code-braces" style="--mdc-icon-size:16px;"></ha-icon></button>'
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
       +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
       +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);"><ha-icon icon="mdi:door" style="--mdc-icon-size:16px;"></ha-icon>Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
       +'<label title="Puts the card into a safe interactive editing state: real tap/hold actions are suppressed, elements can be dragged directly, and an orientation-flip test button appears. Shows a live, draggable copy of the card right here below, and — since this is saved to your config — the same behaviour on your dashboard card too, until switched off." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:cursor-move" style="--mdc-icon-size:16px;"></ha-icon>Edit mode</label>'
       +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:vibrate" style="--mdc-icon-size:16px;"></ha-icon>Haptics</label>'
-      +'<label title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="roc-adv-toggle" type="checkbox"'+(this._showAdv?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:code-braces" style="--mdc-icon-size:16px;"></ha-icon>YAML</label>'
       +'</div>'
       +(c.test_mode?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +((this._wasMigrated&&!_isEmpty)?'<div style="margin:0 4px 10px;padding:8px 12px;border:1px solid rgba(230,160,40,0.7);background:rgba(230,160,40,0.12);border-radius:8px;font-size:12px;line-height:1.5;">Config was <b>auto-migrated</b> from the v3 tier system to the v4 layout engine (in memory only). Review the <b>Layout</b> tab, then <button id="roc-mig-save" style="padding:3px 12px;border-radius:5px;background:var(--primary-color);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;">Save migrated config</button></div>':'')
@@ -5168,10 +5168,13 @@ class RoomOverlayCardEditor extends HTMLElement{
     const migBtn=this.querySelector('#roc-mig-save');
     if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;fire();});
     const advT=this.querySelector('#roc-adv-toggle');
-    if(advT)advT.addEventListener('change',function(){
-      self._showAdv=advT.checked;
+    if(advT)advT.addEventListener('click',function(){
+      self._showAdv=!self._showAdv;
       const root=self.querySelector('.roc-ed');
-      if(root)root.classList.toggle('roc-hideadv',!advT.checked);
+      if(root)root.classList.toggle('roc-hideadv',!self._showAdv);
+      advT.style.borderColor=self._showAdv?'var(--primary-color)':'var(--divider-color)';
+      advT.style.background=self._showAdv?'rgba(3,169,244,0.15)':'none';
+      advT.style.color=self._showAdv?'var(--primary-color)':'var(--primary-text-color)';
     });
     this._listen();
     this._bindHassComponents();
