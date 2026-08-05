@@ -1,5 +1,36 @@
 # Changelog
 
+## [5.5.1] - 2026-08-05
+
+### Fix: `nav.live: full` mini content box measured ~3x too small (blinds nearly invisible, everything else subtly mis-sized)
+
+v5.5.0 fixed the *connection-timing* half of the living-room blind bug, but live testing on a real
+dashboard showed it wasn't gone — the blind's gauge and fill elements now had real, non-zero
+computed styles, yet the blind still didn't visually appear.
+
+Root cause was different and deeper: minis are scaled down to fit their small nav thumbnail with
+CSS `transform: scale()`. `transform` is a *paint-only* transform — an element's own CSS layout
+(its `%`-based children, `aspect-ratio`, etc.) still resolves at the **pre-transform** size, but
+`getBoundingClientRect()` reports the **post-transform** (visually rendered, smaller) size. The
+card's cover-stage sizing (`_layoutStage()`) uses `getBoundingClientRect()` to size `.content` in
+pixels — so under a mini's ~0.29x scale, `.content` ended up pinned to roughly 0.29x its intended
+size, and everything positioned by percentage inside it (gauges, badges, icons, labels) inherited
+that wrong, too-small box. Most gauges are simple percentage fills, so this just looked slightly
+compressed. `day_night` blinds measure their own real pixel height to draw a repeating slat
+pattern — with a `.content` box already ~3.3x too small *and* the whole thing scaled down again by
+the outer transform on top, the slat pattern ended up sub-pixel wide and effectively invisible.
+
+Fixed by switching the mini scaling mechanism from `transform: scale()` to CSS `zoom`. Unlike
+`transform`, `zoom` scales layout itself — every measurement inside the zoomed subtree
+(`offsetHeight`, `getBoundingClientRect()`) stays self-consistent with the CSS percentages sizing
+it, so there's no more mismatch between how the box is measured and how it's actually laid out.
+This is a general fix, not blind-specific: it corrects sizing for anything measured by pixel
+rect inside a mini under `lock_aspect`, not just `day_night` blinds.
+
+Live-verified on the reported living-room `day_night` blind: gauge size went from a wrong 34×25px
+to the correct 114×83px (matching its configured `width:23.5%;height:32.0%`), and the slat stripe
+width went from an invisible 0.7px to a visible 2.4px.
+
 ## [5.5.0] - 2026-08-05
 
 ### Fix: `nav.live: full` mini could render a blind (esp. `day_night`) as empty
