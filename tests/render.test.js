@@ -224,8 +224,12 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   t('Room, Edit mode, Haptics and YAML all carry an icon',
     !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:cursor-move"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:code-braces"]'));
   const advBtn=edEdit.querySelector('#roc-adv-toggle');
-  t('YAML toggle lives in the title row as an icon button next to Undo/Redo, not a labelled checkbox',
-    advBtn&&advBtn.tagName==='BUTTON'&&!!advBtn.previousElementSibling&&advBtn.previousElementSibling.id==='roc-redo');
+  t('YAML toggle lives in the title row as an icon button right before Undo/Redo, not a labelled checkbox',
+    advBtn&&advBtn.tagName==='BUTTON'&&!!advBtn.nextElementSibling&&advBtn.nextElementSibling.id==='roc-undo');
+  const _verM=code.match(/const ROC_VERSION='([^']+)'/);
+  const titleSpan=edEdit.querySelector('#roc-adv-toggle').parentElement.parentElement.firstElementChild;
+  t('version number sits next to the "Room Overlay Card" title, not the button row',
+    !!_verM&&!!titleSpan&&titleSpan.textContent.indexOf('Room Overlay Card')>=0&&titleSpan.textContent.indexOf('v'+_verM[1])>=0);
   t('YAML toggle off by default (advanced fields hidden)',
     !!edEdit.querySelector('.roc-ed').classList.contains('roc-hideadv'));
   advBtn.dispatchEvent(new w.Event('click',{bubbles:true}));

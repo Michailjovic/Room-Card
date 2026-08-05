@@ -1,5 +1,19 @@
 # Changelog
 
+## [5.9.3] - 2026-08-05
+
+### Title row rebalanced — version by the title, YAML/Undo/Redo grouped and highlighted
+
+The version number moved from the far right of the title row to sit right next to "Room
+Overlay Card". Undo/Redo (and the YAML toggle right before them) now anchor the right side of
+the row on their own. All three — YAML, Undo, Redo — get a brighter, consistent border so
+they read as a clear button group instead of blending into the background; the undo/redo
+arrow glyphs already matched YAML's off-state text colour, now made explicit and consistent
+across all three.
+
+2 render tests updated/added (button order, version placement next to the title). Full smoke
+and render test suites pass.
+
 ## [5.9.2] - 2026-08-05
 
 ### Move the YAML toggle up next to Undo/Redo
