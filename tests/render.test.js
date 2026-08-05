@@ -105,6 +105,58 @@ t('editor banner',!!ed.querySelector('#roc-mig-save'));
 t('editor layout inputs',!!ed.querySelector('#ly-hmode')&&!!ed.querySelector('#ly-rows__portrait')&&!!ed.querySelector('#ly-r__landscape__cover'));
 t('editor per-profile aspect inputs',!!ed.querySelector('#aspect_ratio__portrait')&&!ed.querySelector('#aspect_ratio__mobile'));
 t('editor rows prefilled from migration',ed.querySelector('#ly-rows__landscape').value.length>0);
+t('base_image label has no bare unexplained asterisk',!/Base image URL \*/.test(ed.innerHTML));
+t('base_image field has a /local/ placeholder',ed.querySelector('#base_image').placeholder.indexOf('/local/')===0);
+
+// --- Background mode toggle (Image/Camera) — mutually exclusive, panes swap, refresh label is honest ---
+{
+  const edImg=w.document.createElement('room-overlay-card-editor');
+  edImg.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{}});
+  edImg.hass={states:{},user:{name:'x'}};
+  t('bg-mode defaults to "image" when only base_image is set',edImg.querySelector('#bg-mode').value==='image');
+  t('image pane visible, camera pane hidden by default',
+    edImg.querySelector('#bg-pane-image').style.display==='block'&&edImg.querySelector('#bg-pane-camera').style.display==='none');
+  t('camera refresh label clarifies it is a snapshot, not a live stream',
+    /not a continuous video stream/.test(edImg.innerHTML));
+
+  const edCam=w.document.createElement('room-overlay-card-editor');
+  edCam.setConfig({type:'custom:room-overlay-card',base_camera:'camera.living_room',layout:{}});
+  edCam.hass={states:{},user:{name:'x'}};
+  t('bg-mode defaults to "camera" when only base_camera is set',edCam.querySelector('#bg-mode').value==='camera');
+  t('camera pane visible, image pane hidden when base_camera is set',
+    edCam.querySelector('#bg-pane-camera').style.display==='grid'&&edCam.querySelector('#bg-pane-image').style.display==='none');
+
+  // Pre-existing config with BOTH set (the exact footgun reported) — collecting
+  // (any save) must enforce exclusivity per the active mode, not silently keep both.
+  const edBoth=w.document.createElement('room-overlay-card-editor');
+  edBoth.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',base_camera:'camera.living_room',layout:{}});
+  edBoth.hass={states:{},user:{name:'x'}};
+  t('mode defaults to camera when both are already set (matches runtime precedence)',edBoth.querySelector('#bg-mode').value==='camera');
+  const collected=edBoth._collectConfig();
+  t('collecting a stale both-set config drops base_image, keeps base_camera',
+    collected.base_camera==='camera.living_room'&&collected.base_image===undefined);
+
+  // Switching the toggle swaps panes live and clears the other field on save
+  let outToggle=null;
+  edImg.addEventListener('config-changed',e=>{outToggle=e.detail.config;});
+  const bgSel=edImg.querySelector('#bg-mode');
+  bgSel.value='camera';
+  bgSel.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('switching to camera mode swaps pane visibility without a full re-render needed',
+    edImg.querySelector('#bg-pane-camera').style.display==='grid'&&edImg.querySelector('#bg-pane-image').style.display==='none');
+  t('switching to camera mode clears base_image from the fired config',
+    !!outToggle&&outToggle.base_image===undefined);
+
+  // Pan & pinch-zoom and Filter transition still round-trip correctly after moving
+  const edZm=w.document.createElement('room-overlay-card-editor');
+  edZm.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},zoom:true,filter_transition:'1s linear'});
+  edZm.hass={states:{},user:{name:'x'}};
+  t('zoom checkbox prefilled next to the bg-mode toggle',edZm.querySelector('#zoom').checked===true);
+  t('filter_transition field prefilled (now living in Image filters)',edZm.querySelector('#filter_transition').value==='1s linear');
+  const collectedZm=edZm._collectConfig();
+  t('zoom + filter_transition still round-trip through collect',collectedZm.zoom===true&&collectedZm.filter_transition==='1s linear');
+}
+
 // collect round-trip
 let out=null;
 ed.addEventListener('config-changed',e=>{out=e.detail.config;});

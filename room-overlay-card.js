@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.3';
+const ROC_VERSION='5.9.5';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -3801,12 +3801,23 @@ class RoomOverlayCardEditor extends HTMLElement{
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
     if(hasRooms)c.rooms=c.rooms.map(function(r){return Object.assign({},r);});
     const tgt=hasRooms?c.rooms[Math.max(0,Math.min(this._editRoomIdx,c.rooms.length-1))]:c;
-    tgt.base_image=v('base_image',tgt.base_image||'');
-    if(!tgt.base_image)delete tgt.base_image;
-    const _bcam=v('base_camera','').trim();
-    if(_bcam)tgt.base_camera=_bcam;else delete tgt.base_camera;
-    const _bcr=parseFloat(v('camera_refresh',''));
-    if(_bcam&&!isNaN(_bcr)&&_bcr>0&&_bcr!==10)tgt.camera_refresh=_bcr;else delete tgt.camera_refresh;
+    // Background mode (image vs camera) — mutually exclusive at save time, not just
+    // hidden in the UI: whichever isn't the active mode is cleared, so a stale value
+    // in the other field can never silently win at render time (camera always wins
+    // there if both happened to be set).
+    const _bgModeEl=q('#bg-mode');
+    const _bgModeV=_bgModeEl?_bgModeEl.value:(tgt.base_camera?'camera':'image');
+    if(_bgModeV==='camera'){
+      delete tgt.base_image;
+      const _bcam=v('base_camera','').trim();
+      if(_bcam)tgt.base_camera=_bcam;else delete tgt.base_camera;
+      const _bcr=parseFloat(v('camera_refresh',''));
+      if(_bcam&&!isNaN(_bcr)&&_bcr>0&&_bcr!==10)tgt.camera_refresh=_bcr;else delete tgt.camera_refresh;
+    }else{
+      delete tgt.base_camera;delete tgt.camera_refresh;
+      tgt.base_image=v('base_image',tgt.base_image||'');
+      if(!tgt.base_image)delete tgt.base_image;
+    }
     const _wxEnt=v('weather_entity','').trim();
     const _wxEff=v('weather_effect','');
     const _wxOp=parseFloat(v('weather_opacity',''));
@@ -4718,25 +4729,22 @@ class RoomOverlayCardEditor extends HTMLElement{
     const btnStyle='padding:6px 14px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:13px;';
 
     let basicInner='<div style="display:grid;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Base image URL *</label><input id="base_image" type="text" value="'+this._e(cR.base_image||'')+'"'+this._inp('')+'></div>';
-    const _bicYaml=cR.base_image_conditions?_yaml.s(cR.base_image_conditions):'';
-    basicInner+='<div><label class="roc-l">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
-    basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Base camera (optional — live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'></div>';
-    basicInner+='<div><label class="roc-l">Camera refresh (s)</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(cR.camera_refresh??10)+'"'+this._inp('')+'></div>';
-    basicInner+='</div>';
-    const _woEd=typeof cR.weather_overlay==='string'?{entity:cR.weather_overlay}:(cR.weather_overlay||{});
-    basicInner+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-entities" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
-    basicInner+='<div><label class="roc-l">Effect</label><select id="weather_effect"'+this._inp('')+'>';
-    ['auto','rain','rain-heavy','snow','snow-heavy','fog','lightning'].forEach(function(ef){basicInner+='<option value="'+ef+'"'+((_woEd.effect||'auto')===ef?' selected':'')+'>'+ef+'</option>';});
+    const _bgMode=this._bgMode||(cR.base_camera?'camera':'image');
+    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;">';
+    basicInner+='<div><label class="roc-l">Background</label><select id="bg-mode"'+this._inp('')+'>';
+    basicInner+='<option value="image"'+(_bgMode==='image'?' selected':'')+'>Image — static file or URL</option>';
+    basicInner+='<option value="camera"'+(_bgMode==='camera'?' selected':'')+'>Camera — periodic snapshot</option>';
     basicInner+='</select></div>';
-    basicInner+='<div><label class="roc-l">Opacity</label><input id="weather_opacity" type="number" step="0.05" min="0" max="1" value="'+(_woEd.opacity??0.45)+'"'+this._inp('')+'></div>';
+    basicInner+='<div style="display:flex;align-items:center;gap:8px;padding-bottom:6px;"><input id="zoom" type="checkbox"'+(c.zoom?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="zoom">Pan &amp; pinch-zoom (floorplan mode)</label></div>';
     basicInner+='</div>';
-    if(this._config&&this._config.nav&&this._config.nav.live==='custom')basicInner+='<div style="display:flex;align-items:center;gap:7px;margin-top:6px;"><input id="weather-nav-mini" type="checkbox"'+(cR.weather_nav_mini===true?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="weather-nav-mini" style="font-size:12px;cursor:pointer;">Show weather in nav.live: custom mini</label></div>';
-    basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center;">';
-    basicInner+='<div><label class="roc-l">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
-    basicInner+='<div style="display:flex;align-items:center;gap:8px;padding-top:18px;"><input id="zoom" type="checkbox"'+(c.zoom?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:13px;cursor:pointer;" for="zoom">Pan &amp; pinch-zoom (floorplan mode)</label></div>';
+    basicInner+='<div id="bg-pane-image" style="display:'+(_bgMode==='image'?'block':'none')+';">';
+    basicInner+='<div><label class="roc-l">Base image URL (required, unless using a camera above)</label><input id="base_image" type="text" placeholder="/local/images/room.webp" value="'+this._e(cR.base_image||'')+'"'+this._inp('')+'></div>';
+    const _bicYaml=cR.base_image_conditions?_yaml.s(cR.base_image_conditions):'';
+    basicInner+='<div style="margin-top:8px;"><label class="roc-l">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
+    basicInner+='</div>';
+    basicInner+='<div id="bg-pane-camera" style="display:'+(_bgMode==='camera'?'grid':'none')+';grid-template-columns:2fr 1fr;gap:8px;">';
+    basicInner+='<div><label class="roc-l">Base camera (live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Snapshot refresh (s) — a periodic photo, not a continuous video stream</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(cR.camera_refresh??10)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
     basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
     const _caY=cR.cards_above?_yaml.s(cR.cards_above):'';
@@ -4744,6 +4752,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;"><label class="roc-l" style="margin-bottom:2px;">Companion cards — paste card YAML to stack full Home Assistant cards above / below the image (handy on mobile). A YAML list; each item is a card config, or <code>{card: {...}, height, media: all|mobile|tablet|desktop|ultrawide}</code>.</label></div>';
     basicInner+='<div><label class="roc-l">Cards above image (YAML)</label><textarea id="cards_above_yaml" rows="4" placeholder="- type: entities&#10;  entities: [light.kitchen]"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_caY)+'</textarea></div>';
     basicInner+='<div><label class="roc-l">Cards below image (YAML)</label><textarea id="cards_below_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cbY)+'</textarea></div>';
+    const _woEd=typeof cR.weather_overlay==='string'?{entity:cR.weather_overlay}:(cR.weather_overlay||{});
+    basicInner+='<div style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">';
+    basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-entities" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Effect</label><select id="weather_effect"'+this._inp('')+'>';
+    ['auto','rain','rain-heavy','snow','snow-heavy','fog','lightning'].forEach(function(ef){basicInner+='<option value="'+ef+'"'+((_woEd.effect||'auto')===ef?' selected':'')+'>'+ef+'</option>';});
+    basicInner+='</select></div>';
+    basicInner+='<div><label class="roc-l">Opacity</label><input id="weather_opacity" type="number" step="0.05" min="0" max="1" value="'+(_woEd.opacity??0.45)+'"'+this._inp('')+'></div>';
+    basicInner+='</div>';
+    if(this._config&&this._config.nav&&this._config.nav.live==='custom')basicInner+='<div style="display:flex;align-items:center;gap:7px;margin-top:6px;"><input id="weather-nav-mini" type="checkbox"'+(cR.weather_nav_mini===true?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="weather-nav-mini" style="font-size:12px;cursor:pointer;">Show weather in nav.live: custom mini</label></div>';
     basicInner+='</div>';
 
     let filterInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Conditions are evaluated in order — first match wins. A block without an entity is the default (fallback).</p>';
@@ -4807,6 +4824,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     filtCombined+='<option value="conditional"'+(_fMode==='conditional'?' selected':'')+'>Conditional — discrete states (first match wins)</option>';
     filtCombined+='<option value="smooth"'+(_fMode==='smooth'?' selected':'')+'>Smooth — interpolate from a sensor (brightness model)</option>';
     filtCombined+='</select></div>';
+    filtCombined+='<div style="margin-bottom:12px;"><label class="roc-l">Filter transition</label><input id="filter_transition" type="text" value="'+this._e(c.filter_transition||'2s ease')+'"'+this._inp('')+'></div>';
     filtCombined+='<div id="filter-pane-conditional" style="'+(_fMode==='conditional'?'':'display:none;')+'">'+filterInner+'</div>';
     filtCombined+='<div id="filter-pane-smooth" style="'+(_fMode==='smooth'?'':'display:none;')+'">'+bmInner+'</div>';
 
@@ -5451,6 +5469,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     }
 
+    // Background mode toggle (image/camera) — swap panes (no re-render) + persist choice
+    const bgModeEl=this.querySelector('#bg-mode');
+    if(bgModeEl)bgModeEl.addEventListener('change',function(){
+      self._bgMode=bgModeEl.value;
+      const pi=self.querySelector('#bg-pane-image'),pc2=self.querySelector('#bg-pane-camera');
+      if(pi)pi.style.display=bgModeEl.value==='image'?'block':'none';
+      if(pc2)pc2.style.display=bgModeEl.value==='camera'?'grid':'none';
+      self._fire(self._collectConfig());
+    });
     // Filter mode toggle — swap panes (no re-render) + persist choice
     const fmodeEl=this.querySelector('#filter-mode');
     if(fmodeEl)fmodeEl.addEventListener('change',function(){

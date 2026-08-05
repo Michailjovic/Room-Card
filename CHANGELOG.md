@@ -1,5 +1,46 @@
 # Changelog
 
+## [5.9.5] - 2026-08-05
+
+### Background & basics reorganized: Image/Camera mode toggle, moved fields
+
+**Fix (real bug, not just UX):** it was possible to fill in both `base_image` and `base_camera`
+at once. At runtime `base_camera` silently won (its snapshot polling overwrites the background
+every refresh, `base_image` only ever flashed briefly on first paint) — confusing, and the
+editor gave no indication of this precedence. Replaced with a **Background: Image / Camera**
+mode toggle. Only the active mode's fields are shown; switching modes (or simply saving a config
+that already had both set from before) now clears the inactive one from the saved config, so the
+two can never coexist again.
+
+**Camera refresh** relabeled to **Snapshot refresh** with an explicit note: *"a periodic photo,
+not a continuous video stream."* This is accurate to how it already works — `base_camera` polls
+the camera entity's `entity_picture` and swaps the background image every `camera_refresh`
+seconds; it was never a live HLS/WebRTC stream. Chosen deliberately over embedding HA's native
+live-stream player: it works with any camera entity regardless of stream support, has near-zero
+overhead, and avoids the same native-component-lifecycle fragility that already broke
+`ha-entity-picker` once in this editor's innerHTML-rebuild-per-render architecture.
+
+**Reorganized the rest of the panel** per user feedback: **Pan & pinch-zoom** now sits next to
+the new Image/Camera toggle at the top; **Filter transition** moved into the **Image filters**
+tab (it's a filter-behavior setting, not a background setting); **Weather overlay** moved to the
+very bottom of the panel.
+
+9 new render tests (mode defaults from existing config, pane visibility swapping, mutual-exclusion
+enforcement on both toggle-switch and stale-config-save paths, relabeled refresh copy, and
+regression coverage for zoom/filter_transition after their move). Full smoke and render test
+suites pass.
+
+## [5.9.4] - 2026-08-05
+
+### Clarify the Base image URL field
+
+The bare `*` on "Base image URL" had no legend anywhere explaining it — replaced with an inline
+note matching the style already used by its sibling fields: **Base image URL (required, unless
+using a camera below)**. Also added a `/local/images/room.webp`-style placeholder so the expected
+path format is clear at a glance, same as Base camera's `camera.living_room` placeholder.
+
+2 new render tests. Full smoke and render test suites pass.
+
 ## [5.9.3] - 2026-08-05
 
 ### Title row rebalanced — version by the title, YAML/Undo/Redo grouped and highlighted
