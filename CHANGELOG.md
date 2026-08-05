@@ -1,5 +1,25 @@
 # Changelog
 
+## [5.8.1] - 2026-08-05
+
+### Fix: editor's Room select didn't follow room switches made inside its own live preview
+
+With **Drag-edit preview** on, clicking a different room in the preview's own thumbnail nav strip
+changed what the preview showed, but left the editor's *Room* dropdown (and every per-room panel)
+pointed at whichever room was selected before — so any field edit made right after silently landed
+on the wrong room's config.
+
+Root cause: the preview is a real, independent `room-overlay-card` instance; its internal room
+switch (`_switchRoom`) had no way to tell the surrounding editor it had moved. Fixed by having the
+preview dispatch a `roc-room-switch` window event (only for preview instances, matched by config
+identity) whenever it switches room; the editor listens for it while the preview is mounted and
+syncs `_editRoomIdx` (and re-renders, so the Room select and every per-room panel follow along) —
+same pattern already used for relaying drag/resize edits back from the preview (`roc-pos-update`).
+
+4 new render tests: the preview mounts, the editor starts on room 0, switching room inside the
+preview updates the editor's tracked room index and the Room select's value, and a field edit made
+afterward lands on the room now shown rather than room 0. Full smoke and render test suites pass.
+
 ## [5.8.0] - 2026-08-05
 
 ### Haptic feedback the moment a hold action registers (ROADMAP E7)

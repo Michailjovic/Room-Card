@@ -81,32 +81,38 @@ failure broke HACS installs.
    pieces (instance-reuse perf, optional swipe-reuse Phase 3) are non-blocking follow-ups — see
    [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
 2. ✅ **Haptic on hold-registered** (E7, mobile) — shipped v5.8.0.
-3. 🎯 **v6.0.0 — Official HACS default-repository submission** — editor GUI/UX revalidation — up next.
-   first (blocking), README/GitHub content overhaul as the finale right before submission.
-4. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
+3. 🎯 **Editor GUI/UX revalidation** — up next, ships under **v5.9.x** (own minor version, not
+   bundled into v6.0.0 — decided 2026-08-05: v6.0.0 is reserved for the finished product,
+   README overhaul included, right before HACS submission).
+4. 🎯 **v6.0.0 — Official HACS default-repository submission** — README/GitHub content overhaul
+   as the finale, once the revalidated editor (step 3) has landed and settled.
+5. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
    during v6.0.0.
+
+## 🎯 Editor GUI/UX revalidation — up next, ships as v5.9.x
+
+A full pass over the editor for consistency and discoverability. The control surface has grown a
+lot across v3–v4 and is getting hard to navigate, even for the author. Scope to be broken down
+when picked up. **Versioned separately from v6.0.0** (decided 2026-08-05) — this is a real
+feature pass in its own right, not just a pre-submission checkbox.
 
 ## 🎯 v6.0.0 — Official HACS default-repository submission
 
 **Goal:** the card gets listed in HACS's own default repository, so new users can install
-it straight from HACS search instead of adding it as a custom/manual repository. **Editor
-GUI/UX revalidation is a required step, done first** — the submission (and the fresh
-screenshots that go with it) should show off the editor in its improved state, not the
-current, harder-to-navigate one.
+it straight from HACS search instead of adding it as a custom/manual repository. Depends on the
+editor GUI/UX revalidation (above) having already shipped and settled — the submission
+screenshots should show off the finished, revalidated editor.
 
-1. **Editor GUI/UX revalidation** (blocks everything below) — a full pass over the editor
-   for consistency and discoverability. The control surface has grown a lot across v3–v4 and
-   is getting hard to navigate, even for the author. Scope to be broken down when picked up.
-2. **GitHub content overhaul** — a much more detailed, beginner-friendly README and fresh
+1. **GitHub content overhaul** — a much more detailed, beginner-friendly README and fresh
    screenshots reflecting the v4 layout engine, cover control, light controls (sliders +
    switches), and the **revalidated** editor. Current screenshots predate all of this.
-3. **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
+2. **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
    `lovelace`, `custom-card`, `hacs`, …) — required by the `hacs/default` review.
-4. **Re-verify against the `hacs/default` validation checklist** — the repo's own HACS
+3. **Re-verify against the `hacs/default` validation checklist** — the repo's own HACS
    validation Action has shipped since v1.8.0 ✅; confirm it still covers everything the
    default-repo submission specifically checks for (README, `hacs.json`, releases, brands).
-5. **Submit the PR to `hacs/default`.**
-6. Bump to **v6.0.0** to mark the milestone once accepted/merged.
+4. **Submit the PR to `hacs/default`.**
+5. Bump to **v6.0.0** to mark the milestone once accepted/merged.
 
 ## ✅ Live mini-room navigation — Phase 2 (`nav.live: full` + `custom`) — done, v5.4.0-v5.7.0
 

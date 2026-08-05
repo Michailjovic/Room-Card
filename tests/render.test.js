@@ -187,6 +187,29 @@ edCustom2.hass={states:{},user:{name:'x'}};
 t('nav_mini checkbox pre-checked when loaded config already has it',edCustom2.querySelector('[data-g-nav-mini="0"]').checked===true);
 t('weather toggle pre-checked when loaded config already has weather_nav_mini',edCustom2.querySelector('#weather-nav-mini').checked===true);
 
+// --- editor's Room select follows room switches made inside its own live preview ---
+{
+  const edRoomSync=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(edRoomSync);
+  let outRoomSync=null;
+  edRoomSync.addEventListener('config-changed',e=>{outRoomSync=e.detail.config;});
+  edRoomSync.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    rooms:[{id:'living',name:'Living',base_image:'/a.webp'},{id:'kitchen',name:'Kitchen',base_image:'/b.webp'}]});
+  edRoomSync.hass={states:{},user:{name:'x'}};
+  edRoomSync._prevOn=true;
+  edRoomSync._render();
+  t('preview mounts when drag-edit preview is on',!!edRoomSync._prevCard);
+  t('editor starts on room 0',edRoomSync._editRoomIdx===0);
+  if(edRoomSync._prevCard)edRoomSync._prevCard._switchRoom(1,1,true); // simulates a click in the preview's own nav strip
+  t('editor follows the room switched to inside the preview',edRoomSync._editRoomIdx===1);
+  const roomSelAfter=edRoomSync.querySelector('#room-select');
+  t('Room select reflects the synced room',!!roomSelAfter&&roomSelAfter.value==='1');
+  const roomIdField=edRoomSync.querySelector('#room-id');
+  if(roomIdField){roomIdField.value='kitchen-edited';roomIdField.dispatchEvent(new w.Event('change',{bubbles:true}));}
+  t('edit made after preview room-switch lands on the room now shown, not room 0',
+    !!outRoomSync&&Array.isArray(outRoomSync.rooms)&&outRoomSync.rooms[1]&&outRoomSync.rooms[1].id==='kitchen-edited'&&outRoomSync.rooms[0].id==='living');
+}
+
 // --- editor opens on the room the card was showing (in-memory store) ---
 const _memCfg={type:'custom:room-overlay-card',card_id:'memcard',base_image:'/local/m.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]};
 const cardM=w.document.createElement('room-overlay-card');

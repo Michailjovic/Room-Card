@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.8.0';
+const ROC_VERSION='5.8.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2437,6 +2437,10 @@ class RoomOverlayCard extends HTMLElement{
     }
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
+    // Editor preview instance (see _mountPreview): tell the editor GUI so its
+    // Room select / per-room panels follow clicks made inside the live preview's
+    // own nav strip, instead of silently staying on the previously selected room.
+    if(cAll._roc_preview)window.dispatchEvent(new CustomEvent('roc-room-switch',{detail:{cfgKey:cfgKey(cAll),idx:idx}}));
     this._rendered=false;
     this._render();
     const wrap=this.shadowRoot.querySelector('.wrap');
@@ -3584,7 +3588,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
@@ -5178,6 +5182,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       this._rocPosHandler=this._makeRocPosHandler();
       window.addEventListener('roc-pos-update',this._rocPosHandler);
     }
+    if(this._rocRoomHandler){window.removeEventListener('roc-room-switch',this._rocRoomHandler);this._rocRoomHandler=null;}
+    if(this._prevOn){
+      this._rocRoomHandler=this._makeRocRoomHandler();
+      window.addEventListener('roc-room-switch',this._rocRoomHandler);
+    }
   }
 
   _makeRocPosHandler(){
@@ -5195,6 +5204,22 @@ class RoomOverlayCardEditor extends HTMLElement{
       self._config=nc;
       self._render(); // refresh position inputs, otherwise the next edit reverts the drag
       self._fire(nc);
+    };
+  }
+
+  // Room switches made by clicking inside the live preview's own nav strip —
+  // keep the editor's Room select and per-room panels following along, otherwise
+  // edits silently land on whatever room the header dropdown was last set to.
+  _makeRocRoomHandler(){
+    const self=this;
+    return function(e){
+      const d=e.detail;
+      if(!d||d.cfgKey!==cfgKey(self._config))return;
+      if(!Array.isArray(self._config.rooms))return;
+      const idx=Math.max(0,Math.min(d.idx,self._config.rooms.length-1));
+      if(idx===self._editRoomIdx)return;
+      self._editRoomIdx=idx;
+      self._render();
     };
   }
 
