@@ -1,5 +1,38 @@
 # Changelog
 
+## [5.5.2] - 2026-08-05
+
+### Fix: v5.5.1's `zoom` fix didn't survive a real page load (async re-layout undid it)
+
+v5.5.1 switched mini scaling from `transform: scale()` to CSS `zoom` to fix a content-box
+mis-sizing bug. Live-verified correct in the moment — but after actually deploying it and doing a
+full page reload, the living room blind was *still* invisible.
+
+Root cause: `zoom`'s effect on `getBoundingClientRect()` isn't consistent over time. Right after
+setting `zoom`, a rect read on a descendant can still report the pre-zoom (correct) size — but a
+later, asynchronous re-layout pass (triggered by the mini's own `ResizeObserver` on its `.wrap`
+box, which runs for legitimate reasons unrelated to this bug) re-measures once the zoom has fully
+"settled," and *that* read comes back zoomed/shrunk — silently re-corrupting the content box that
+had been correctly sized moments earlier. This is exactly why it looked fixed when checked
+immediately but wasn't fixed after a real reload.
+
+Real fix this time: `_layoutStage()` (which sizes the mini's internal content box, and is the root
+of this whole bug class) now measures with `wrap.offsetWidth`/`wrap.offsetHeight` instead of
+`wrap.getBoundingClientRect()`. Unlike `getBoundingClientRect()`, `offsetWidth`/`offsetHeight` are
+specified to always report an element's own CSS layout box, completely unaffected by *any*
+ancestor visual transform (`transform` or `zoom`) — regardless of timing. Scaling mechanism
+reverted back to plain `transform: scale()` (simpler, more predictable, no longer matters which
+one is used since the measurement itself is now immune). Also added a `_roc_mini` bail to
+`_layoutFitWrap()` — its viewport-height budget-fitting logic was never meant for minis (they
+always render at a fixed reference width with an aspect-derived auto height, never in
+viewport-height mode) and was reading rects that had the same theoretical exposure.
+
+Live-verified this time with an approach that specifically covers what broke last time: forced the
+mini's layout pass, then waited 2.5s for any async re-layout to settle, and re-checked — content
+box and gauge size stayed correct and *stable* across both reads (479.9×255 / 118×87, unchanged
+before and after the wait), unlike the `zoom` version which silently regressed during that same
+window.
+
 ## [5.5.1] - 2026-08-05
 
 ### Fix: `nav.live: full` mini content box measured ~3x too small (blinds nearly invisible, everything else subtly mis-sized)

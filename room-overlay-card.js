@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.5.1';
+const ROC_VERSION='5.5.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -888,7 +888,12 @@ class RoomOverlayCard extends HTMLElement{
   _layoutFitWrap(){
     if(!this.shadowRoot||!this._config)return;
     const c=this._roomCfg||this._config;
-    if(c._roc_ghost)return;
+    // Viewport-height budget fitting is irrelevant to a mini — it always
+    // renders at a fixed reference width/auto height (see _isMini), never in
+    // viewport-height mode — and its card/region rects sit inside a scaled
+    // thumbnail host, not a real scrolling page, so the budget math here
+    // wouldn't mean anything useful for it anyway.
+    if(c._roc_ghost||c._roc_mini)return;
     if(this._profile==='portrait'&&((this._config.layout&&this._config.layout.height)||'viewport')==='viewport')return; // natural portrait sizes itself
     const wrap=this.shadowRoot.querySelector('.wrap');
     if(!wrap||!wrap.style.aspectRatio)return; // only the intrinsic image box
@@ -948,7 +953,15 @@ class RoomOverlayCard extends HTMLElement{
       const _as=da.toFixed(4);
       if(wrap.style.aspectRatio!==_as)wrap.style.aspectRatio=_as;
     }
-    const r=wrap.getBoundingClientRect();
+    // offsetWidth/offsetHeight, NOT getBoundingClientRect(): the latter reports
+    // the PAINTED (post-transform/zoom) size, which for a scaled-down
+    // nav.live:full mini is smaller than the size its own CSS (%, aspect-ratio)
+    // actually lays out at — pinning .content from that shrunk rect corrupts
+    // every %-positioned child inside it (gauges, badges, icons…). offset*
+    // always reports the true CSS layout box, immune to any ancestor visual
+    // transform, so this stays correct regardless of how (or whether) a mini
+    // is being scaled down for its thumbnail.
+    const r={width:wrap.offsetWidth,height:wrap.offsetHeight};
     if(!(r.width>0)||!(r.height>0))return;
     const key=Math.round(r.width)+'x'+Math.round(r.height)+':'+da.toFixed(4)+':'+fit;
     if(content.dataset.rocStage===key)return; // unchanged
@@ -1595,21 +1608,12 @@ class RoomOverlayCard extends HTMLElement{
           if(!host)return;
           try{
             const mc=document.createElement('room-overlay-card');
-            // Scaled with CSS `zoom`, not `transform:scale()`. transform is a
-            // paint-only transform: the element's own CSS layout (aspect-ratio,
-            // %-based children) still resolves at the PRE-scale size, but
-            // getBoundingClientRect() (which _layoutStage()/_layoutFitWrap()
-            // use to size .content and everything positioned by % inside it)
-            // reports the POST-scale visual size — a live day_night blind in a
-            // <1 thumb showed this exactly: .content measured ~0.29x too small
-            // (matching the scale factor), so its %-positioned gauge came out
-            // roughly THREE times smaller than intended (once from the wrong
-            // .content box, once again from the outer paint transform) — thin
-            // enough that the slat gradient was sub-pixel and invisible. `zoom`
-            // scales layout itself, so every measurement inside the subtree
-            // (offsetHeight, getBoundingClientRect) stays self-consistent with
-            // the CSS percentages that size it — single shrink, no mismatch.
-            mc.style.cssText='display:block;position:absolute;top:0;left:0;width:'+_wRef+'px;';
+            // Scaled down with transform:scale() to fit the thumbnail. transform
+            // is paint-only — it never affects offsetWidth/offsetHeight, which is
+            // exactly what _layoutStage() now measures with (see its comment) —
+            // so nothing inside the mini ever sees a shrunk box to mis-size
+            // itself against, regardless of the applied scale.
+            mc.style.cssText='display:block;position:absolute;top:0;left:0;width:'+_wRef+'px;transform-origin:top left;';
             // Connect to the document BEFORE setConfig/hass: several layout
             // reads happen synchronously on the first render/update pass
             // (_layoutFitWrap/_layoutStage, and — the one that actually bit a
@@ -1634,7 +1638,7 @@ class RoomOverlayCard extends HTMLElement{
               const _ri=en.target.dataset.thumb;
               const rec=_miniMap[_ri];if(!rec)continue;
               const w=en.contentRect.width||0;
-              rec.el.style.zoom=w>0?String(w/rec.widthRef):'';
+              rec.el.style.transform=w>0?'scale('+(w/rec.widthRef)+')':'';
             }
           });
           for(const _ri in this._navMiniEls){
