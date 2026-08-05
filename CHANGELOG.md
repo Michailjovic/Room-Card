@@ -1,5 +1,49 @@
 # Changelog
 
+## [5.4.0] - 2026-08-05
+
+### `nav.live: full` — nav thumbnails become real, live mini-rooms (early/experimental, YAML-only)
+
+*(v5.2.0/v5.3.0 intentionally unused — reserved during development, never released.)*
+
+`nav.live` gains a third value, `full`, alongside the existing `composite`. Where `composite`
+(v3.1.0) composites base image + active overlay images + a filter as CSS backgrounds, `full`
+mounts a real, independent, non-interactive `room-overlay-card` instance for every room —
+gauges, labels, icons, badges, blinds, embedded elements and all — rendered at a fixed reference
+width and scaled down with a CSS transform, so fonts/icons/gauge strokes keep exact proportions.
+It shows **everything unconditionally** — no per-element configuration in this release.
+
+```yaml
+nav:
+  style: thumbnails
+  live: full
+  mini:
+    templates: false     # opt-in — label/colour templates cost a WS subscription per mini
+    camera_refresh: 30    # seconds, clamped >= 30 regardless of the room's own setting
+    width_ref: 480         # px — reference width each mini renders at before scaling down
+```
+
+**Status — please read before enabling on more than a couple of rooms:**
+- **No editor UI yet.** `nav.live: full` and the `nav.mini.*` options are YAML-only this release —
+  set them via the card's Advanced/YAML editor. A GUI dropdown + settings panel is planned next.
+- **Not yet performance-tuned.** Every mini instance currently rebuilds on every full card render
+  (matches the existing `nav.cards` behaviour) rather than only when a room's identity changes —
+  more subscription/DOM churn than the final design targets. Fine for trying it out; revisit
+  before leaning on it with many rooms on a permanently-open kiosk display.
+- **Real cost, on purpose.** Each mini is a genuine card instance — real DOM, real state
+  subscriptions. A soft cap of ~8 rooms is recommended; test on your actual wall tablet before
+  going further. `composite` remains the lightweight default for anyone who doesn't need this.
+- Camera/template subscriptions stay off by default per mini and must be explicitly opted into via
+  `nav.mini.templates` — a real per-instance cost otherwise.
+- Always excluded from every mini, regardless of the live mode (this is page furniture around the
+  image, not room content): `cards_above`, `cards_below`, `light_controls`, blind `control:`
+  blocks, `nav.cards`, `zoom`/`parallax`, `url_sync`.
+
+A future `custom` mode (planned, not in this release) will add per-element GUI checkboxes to
+curate exactly what shows in a mini — useful if, say, one specific embedded card is unsuitable at
+thumbnail scale while everything else should stay. Full design: `NAV_LIVE_FULL_PLAN.md` in the
+repo.
+
 ## [5.1.0] - 2026-08-05
 
 ### Blind visual overlay calibration (`top_offset`)

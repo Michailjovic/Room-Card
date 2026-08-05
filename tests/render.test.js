@@ -197,6 +197,54 @@ try{
 }catch(_){_rcThrew=true;}
 t('disconnect/reconnect cycle safe',!_rcThrew&&cardRH._rendered===true);
 t('listener survives reconnect',typeof cardRH._locHandler==='function');
+
+// --- nav.live:full Phase 0: _roc_mini shares the ghost's collapsed grid but
+// NOT its 100%-stretch height — a mini renders at a fixed reference width
+// with its OWN aspect-derived height (auto, via an aspect-ratio'd .wrap),
+// never stretched to fit an externally-dictated box, or it'd distort when
+// scaled (NAV_LIVE_FULL_PLAN.md §3/§6 — corrected mid-session, see project
+// memory). This jsdom fixture has no ResizeObserver and no HUI-PANEL-VIEW
+// ancestor, so _ro/_scRo/_bodyRo/_pvMo creation itself isn't observable here
+// for ANY card (restricted or not) — that part is verified by code reading,
+// same as other browser-API-gated paths in this suite. What IS observable
+// and discriminating: the render-shape (grid/root-height/wrap aspect) and
+// the plain window-event _locHandler wiring, no special browser API needed.
+const _miniCfg={type:'custom:room-overlay-card',_roc_mini:true,base_image:'/local/x.webp'};
+const cardMini=mkCard(_miniCfg);
+t('mini gets auto root height (aspect-derived, not stretched)',/height:auto/.test(cardMini.shadowRoot.querySelector('ha-card').getAttribute('style')));
+t('mini wrap gets an aspect-ratio lock',/aspect-ratio:/.test(cardMini.shadowRoot.querySelector('.wrap').getAttribute('style')||''));
+const _miniRegs=[...cardMini.shadowRoot.querySelectorAll('.roc-reg')].map(r=>r.dataset.reg);
+t('mini collapses to image-only grid',_miniRegs.length===1&&_miniRegs[0]==='image');
+t('mini skips location-changed listener',!cardMini._locHandler);
+// ghost (unaffected by the correction — still stretches to 100%, its real use case)
+const cardGhostShape=mkCard({type:'custom:room-overlay-card',_roc_ghost:true,base_image:'/local/x.webp'});
+t('ghost still gets 100% root height (fills its exact-fit swipe container)',/height:100%/.test(cardGhostShape.shadowRoot.querySelector('ha-card').getAttribute('style')));
+// same restriction applies to the existing swipe-ghost/preview flags
+const cardGhost=mkCard({type:'custom:room-overlay-card',_roc_ghost:true,_roc_preview:true,base_image:'/local/x.webp'});
+t('ghost also skips location-changed listener',!cardGhost._locHandler);
+// a normal (unrestricted) card is unaffected — still installs it (pre-existing
+// assertion above, 'location-changed listener installed', covers this too)
+t('normal card still installs location-changed listener',typeof cardRH._locHandler==='function');
+
+// --- nav.live:full step 3: mount + scale wrapper (NAV_LIVE_FULL_PLAN.md §6) ---
+const _navFullCfg={type:'custom:room-overlay-card',card_id:'navfull',
+  nav:{style:'thumbnails',live:'full'},
+  rooms:[{id:'r0',base_image:'/a.webp'},{id:'r1',base_image:'/b.webp'}]};
+const cardNavFull=mkCard(_navFullCfg);
+const _mini0=cardNavFull.shadowRoot.querySelector('[data-thumb-mini="0"] room-overlay-card');
+const _mini1=cardNavFull.shadowRoot.querySelector('[data-thumb-mini="1"] room-overlay-card');
+t('nav.live:full mounts one nested room-overlay-card per thumbnail',!!_mini0&&!!_mini1);
+t('each mini is pinned to its OWN room index',_mini0._roomIdx===0&&_mini1._roomIdx===1);
+t('mini instances tracked in _navMiniEls, keyed by room index',cardNavFull._navMiniEls[0].el===_mini0&&cardNavFull._navMiniEls[1].el===_mini1);
+t('mini config is restricted (_roc_mini) and never shows its own nav',_mini0._config._roc_mini===true&&_mini0._config.nav.style==='none');
+// hass forwarding reaches mounted minis (hass is a setter-only property —
+// no getter — so compare against the internal _hass field, not cardNavFull.hass)
+cardNavFull.hass={states:{},callService(){},user:{name:'x'}};
+t('hass forwarding reaches mounted minis',_mini0._hass===cardNavFull._hass);
+// nav.live:'composite' (existing, unaffected) never mounts mini instances
+const cardComposite=mkCard({type:'custom:room-overlay-card',nav:{style:'thumbnails',live:'composite'},rooms:[{id:'r0',base_image:'/a.webp'},{id:'r1',base_image:'/b.webp'}]});
+t('nav.live:composite does not mount mini instances (unaffected by this feature)',!cardComposite.shadowRoot.querySelector('[data-thumb-mini]'));
+
 // v5.0: coalesced pin entry + shared row-span helpers
 t('requestPin exists',typeof cardRH._requestPin==='function');
 let _rpThrew=false;try{cardRH._requestPin('test');cardRH._requestPin('test2');}catch(_){_rpThrew=true;}

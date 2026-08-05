@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.1.0';
+const ROC_VERSION='5.4.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -436,6 +436,55 @@ function bmFilter(bm,s,presortedFg){
 
 function resolveSize(raw,cardW){if(!raw)return null;const s=String(raw);return s.endsWith('%')?Math.round(cardW*parseFloat(s)/100)+'px':s;}
 
+// ---- Live mini-room nav (nav.live: full / custom, Phase 2) ----------------
+// Builds the stripped/scoped config for ONE persistent mini <room-overlay-card>
+// instance living inside a nav thumbnail. Pure function (no `this`) — smoke-
+// testable directly, no jsdom needed. The caller (mount step, §6) creates the
+// element, calls setConfig(result), then pins el._roomIdx = ri — the target
+// room is NOT baked into the returned config itself, matching how
+// _renderNeighbourPreview/_mountPreview already pin _roomIdx after setConfig
+// rather than pre-selecting a room. See NAV_LIVE_FULL_PLAN.md §5.
+//
+// Three nav.live tiers (agreed 2026-08-05, see plan §13): '' (static image +
+// filter, today's baseline) | 'composite' (existing CSS image-layer stack,
+// v3.1.0) | 'full' (this function, real live instances, EVERYTHING —
+// unconditional, no per-element config) | 'custom' (planned follow-up, same
+// mechanism, per-element opt-in via a future nav_mini flag on each element —
+// NOT implemented here yet). This function currently only serves 'full', so
+// it does no per-category/per-element filtering of visual content.
+function rocBuildMiniConfig(cAll,ri){
+  const gcfg=rocClone(cAll);
+  gcfg._roc_mini=true;
+  gcfg._roc_preview=true;                        // suppress Save button etc. (shared w/ editor preview)
+  gcfg._roc_mini_templates=!!(cAll.nav&&cAll.nav.mini&&cAll.nav.mini.templates); // preserved separately — nav gets wiped below
+  gcfg.follow_mode='manual';                      // a mini always shows its OWN room, never presence-follows
+  gcfg.test_mode=false;
+  gcfg.nav={style:'none'};                        // recursion guard — a mini never mounts its own nav strip
+  delete gcfg.url_sync;                           // must never touch the page URL
+  delete gcfg.zoom;delete gcfg.parallax;
+  // Always off, in EVERY live tier (full and the future custom alike) —
+  // this is page furniture around the image, not "how the room looks", so
+  // it's orthogonal to the full/custom fidelity choice: cards_above/
+  // cards_below/light_controls mirrors _renderNeighbourPreview's existing
+  // recipe; blind control: blocks (interactive) the same idea. `elements`
+  // (embedded HA cards) is intentionally NOT in this always-off list — in
+  // 'full' they're part of "everything"; a specific inappropriate one (e.g.
+  // a heavy custom card) is excluded via 'custom' mode instead, per-item,
+  // once that's built.
+  const stripAlways=function(o){
+    if(!o)return;
+    delete o.cards_above;delete o.cards_below;delete o.light_controls;
+    if(Array.isArray(o.blinds))o.blinds.forEach(function(b){if(b)delete b.control;});
+  };
+  stripAlways(gcfg);
+  if(Array.isArray(gcfg.rooms))gcfg.rooms.forEach(stripAlways);
+  // camera_refresh — clamp >= 30s for a persistent mini (room-scoped key;
+  // resolved the same way _startCamera already falls back top-level -> 10).
+  const _room=Array.isArray(gcfg.rooms)?gcfg.rooms[ri]:null;
+  if(_room&&_room.base_camera)_room.camera_refresh=Math.max(30,Number(_room.camera_refresh??gcfg.camera_refresh??10)||10);
+  return gcfg;
+}
+
 // Roleta top-offset calibration: the motor's raw 0% often doesn't reach the
 // true physical fully-open state (a safety margin baked into the motor's own
 // limits — never meant to be recalibrated away), while raw 100% (fully
@@ -595,6 +644,7 @@ class RoomOverlayCard extends HTMLElement{
     this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._locHandler=null;this._barMo=null;this._pvMo=null;this._lastPinCheck=0;this._pinQueued=false;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._zoomScale=1;
+    this._navMiniEls={};this._navMiniRo=null;
     this._navPos='top';this._wrapTA='';
     this._orientHandler=null;this._roomDragActive=false;
     this._lastRoomDragEnd=0;this._followInit=false;this._navFollowEl=null;
@@ -638,6 +688,7 @@ class RoomOverlayCard extends HTMLElement{
     // (even while off-screen, so they're current the moment the card scrolls back)
     for(const k in this._cardEls){try{this._cardEls[k].hass=h;}catch(_){}}
     for(const el of(this._navCardEls||[]))try{el.hass=h;}catch(_){}
+    for(const ri in(this._navMiniEls||{}))try{this._navMiniEls[ri].el.hass=h;}catch(_){}
     for(const el of(this._stripCardEls||[]))try{el.hass=h;}catch(_){}
     for(const o of(this._lcEls||[]))try{o.el.hass=h;}catch(_){}
     if(!this._visible)return;
@@ -1016,7 +1067,7 @@ class RoomOverlayCard extends HTMLElement{
   _layoutRootHeight(){
     if(!this.shadowRoot||!this._config)return;
     const c=this._roomCfg||this._config;
-    if(c._roc_ghost||c._roc_preview)return;
+    if(c._roc_ghost||c._roc_preview||c._roc_mini)return;
     if(((this._config.layout&&this._config.layout.height)||'viewport')!=='viewport')return;
     if(this._profile==='portrait')return; // natural content height — nothing to pin
     const card=this.shadowRoot.querySelector('ha-card');
@@ -1081,6 +1132,16 @@ class RoomOverlayCard extends HTMLElement{
   // every (re)connect is cheap and makes the edit transitions self-correcting.
   _wireLayoutObservers(){
     const self=this;
+    // Restricted instances (swipe ghost / editor preview / nav.live:full mini,
+    // §3 of NAV_LIVE_FULL_PLAN.md) are never a top-level HA dashboard card — they
+    // have no meaningful scroller/body/hui-panel-view relationship of their own
+    // (a MutationObserver walk from deep inside a thumbnail resolves the SAME
+    // ancestors the OUTER card already watches, so one per mini would just be a
+    // duplicate observer on a node someone else already owns). They still get
+    // their OWN box + wrap-box resize handling below (image aspect-fit; needed
+    // even at thumbnail scale) — only the viewport-pin machinery is skipped.
+    const _rc=this._roomCfg||this._config;
+    const _restricted=!!(_rc&&(_rc._roc_ghost||_rc._roc_preview||_rc._roc_mini));
     if(window.ResizeObserver){
       if(this._ro)this._ro.disconnect();
       this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutFitWrap();self._layoutStage();if(self._hass&&self._visible)self._update();}});
@@ -1095,18 +1156,21 @@ class RoomOverlayCard extends HTMLElement{
       // body observer misses header settling and edit-mode toolbars entirely
       // — but both change the scroll container's box, which this catches.
       // body stays observed too as a fallback for exotic embeds where the
-      // page itself scrolls.
-      this._scrollEl=null; // re-resolve on every (re)wire (edit toggle rebuilds HA's DOM)
-      if(this._scRo)this._scRo.disconnect();
-      const _scEl=this._scrollParent();
-      if(_scEl&&_scEl.nodeType===1){
-        this._scRo=new ResizeObserver(function(){self._requestPin('scroller-resize');});
-        this._scRo.observe(_scEl);
-      }
-      if(this._bodyRo)this._bodyRo.disconnect();
-      if(document.body){
-        this._bodyRo=new ResizeObserver(function(){self._requestPin('body-resize');});
-        this._bodyRo.observe(document.body);
+      // page itself scrolls. Restricted instances never pin a viewport height
+      // (_layoutRootHeight already no-ops for them) — skip creating these.
+      if(this._scRo){this._scRo.disconnect();this._scRo=null;}
+      if(this._bodyRo){this._bodyRo.disconnect();this._bodyRo=null;}
+      if(!_restricted){
+        this._scrollEl=null; // re-resolve on every (re)wire (edit toggle rebuilds HA's DOM)
+        const _scEl=this._scrollParent();
+        if(_scEl&&_scEl.nodeType===1){
+          this._scRo=new ResizeObserver(function(){self._requestPin('scroller-resize');});
+          this._scRo.observe(_scEl);
+        }
+        if(document.body){
+          this._bodyRo=new ResizeObserver(function(){self._requestPin('body-resize');});
+          this._bodyRo.observe(document.body);
+        }
       }
     }
     if(!this._winHandler){this._winHandler=this._onWinResize.bind(this);window.addEventListener('resize',this._winHandler);}
@@ -1116,8 +1180,10 @@ class RoomOverlayCard extends HTMLElement{
     // rebuilds hui-panel-view's shadow tree around us. So this listener is a
     // helper for navigations, while the panel-view MutationObserver below is
     // THE deterministic edit ENTER/EXIT hook. Double-rAF lets HA finish its
-    // DOM shuffle before measuring.
-    if(!this._locHandler){
+    // DOM shuffle before measuring. Restricted instances are never themselves
+    // navigated to/from — skip.
+    if(this._locHandler){window.removeEventListener('location-changed',this._locHandler);window.removeEventListener('popstate',this._locHandler);this._locHandler=null;}
+    if(!_restricted&&!this._locHandler){
       // setTimeout(0), NOT rAF — rAF never fires in background tabs (kiosk
       // dashboards!) or during HA view transitions; a 0-delay task runs the
       // moment the current work (HA's navigation handling) is done.
@@ -1139,8 +1205,13 @@ class RoomOverlayCard extends HTMLElement{
     // Neither tree ever contains our own DOM (that lives in OUR shadow root,
     // and slotted light content stays in the light tree), so these observers
     // are silent except on real HA transitions. No polling, no timers.
+    // Restricted instances skip this entirely — see note at the top of this
+    // method: the ancestor walk from deep inside a nested instance resolves
+    // the OUTER card's own hui-panel-view, which the outer card already
+    // watches — a restricted instance adding its own observer on the same
+    // node would be pure duplication, not a second real hook.
     if(this._pvMo){this._pvMo.disconnect();this._pvMo=null;}
-    if(window.MutationObserver){
+    if(!_restricted&&window.MutationObserver){
       let _pv=null,_opts=null,_n=this,_g=0;
       while(_n&&_g++<12){
         const _tg=_n.tagName;
@@ -1229,9 +1300,21 @@ class RoomOverlayCard extends HTMLElement{
     this._tier=_tier;
     const _vt=_rt; // per-profile SCALARS follow the real profile even in test mode
     this._vt=_vt;this._profile=_rt;
+    // Swipe ghosts AND nav.live:full minis (§3 NAV_LIVE_FULL_PLAN.md) both want the
+    // collapsed image-only grid below — a mini is a persistent restricted
+    // instance, not a <0.5s ghost, but shares the same "just render the room
+    // picture" grid shape. Height behaviour DIFFERS from a ghost though (see
+    // _isMini/_rootH below): a ghost stretches to fill an externally-dictated
+    // box (the swipe container, already sized to match the real card); a mini
+    // renders at a fixed reference WIDTH with its own aspect-derived height,
+    // then gets scaled as a whole to fit its thumbnail (NAV_LIVE_FULL_PLAN.md
+    // §6) — stretching it to an arbitrary thumb height would distort it.
+    // Camera/template skipping stays gated on the literal c._roc_ghost checks
+    // elsewhere (unaffected by this) — minis opt into those via nav.mini.*.
     const _isGhost=!!c._roc_ghost;
-    // Grid definition for the active profile (swipe ghosts render the image region only)
-    const _lp=_isGhost?{columns:[100],rows:[100],place:{image:{row:1,col:1}}}
+    const _isMini=!!c._roc_mini;
+    // Grid definition for the active profile (swipe ghosts + minis render the image region only)
+    const _lp=(_isGhost||_isMini)?{columns:[100],rows:[100],place:{image:{row:1,col:1}}}
       :(rocProfileDef(cAll,_rt)||{columns:[100],rows:[100],place:{image:{row:1,col:1}}});
     this._lp=_lp;
     const _arResolved=tVal(c.aspect_ratio,_vt)||'16/9';
@@ -1245,9 +1328,10 @@ class RoomOverlayCard extends HTMLElement{
     // proportionally past what it actually needs. Landscape (the kiosk/wall-
     // tablet use case) keeps the viewport-fill goal. An explicit
     // layout.height (container/fixed) always wins, in either profile.
-    const _naturalRoot=!_isGhost&&!c._roc_preview&&_rt==='portrait'&&_lhRaw==='viewport';
+    const _naturalRoot=!_isGhost&&!_isMini&&!c._roc_preview&&_rt==='portrait'&&_lhRaw==='viewport';
     let _rootH;
     if(_isGhost)_rootH='100%';
+    else if(_isMini)_rootH='auto';       // aspect-derived, via _wrapAspect below — never stretched
     else if(c._roc_preview)_rootH='420px';
     else if(_naturalRoot)_rootH='auto';
     else if(_lhRaw==='viewport')_rootH=this._rootHPx?this._rootHPx+'px':'calc(100svh - var(--header-height,56px))'; // pinned px survives re-renders (room switch); CSS calc is first-paint only, refined by _layoutRootHeight()
@@ -1257,6 +1341,10 @@ class RoomOverlayCard extends HTMLElement{
     let navHtml='';
     const navCfg=cAll.nav||{};
     const navStyle=Array.isArray(cAll.rooms)&&cAll.rooms.length>1?(navCfg.style||'thumbnails'):'none';
+    // nav.live: 'full' — persistent live mini <room-overlay-card> per thumbnail
+    // (NAV_LIVE_FULL_PLAN.md). Only meaningful for thumbnails; tabs/dots have
+    // no image box to host one.
+    const _navLiveFull=navStyle==='thumbnails'&&navCfg.live==='full';
     // position: top | bottom | left | right | auto (auto = side rail on wide cards)
     let navPos=navCfg.position||'top';
     if(navPos==='auto')navPos='top'; // v4: position only orients the strip; placement comes from the layout grid
@@ -1309,7 +1397,8 @@ class RoomOverlayCard extends HTMLElement{
           if(navStyle==='tabs')
             return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
           // thumbnails — live mini-render: base image + filter + sensor chips
-          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'" tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_navLiveFull?'':(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':''))+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease;">'
+            +(_navLiveFull?'<div data-thumb-mini="'+ri+'" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;"></div>':'')
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:monospace;font-weight:bold;font-size:11px;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:#fff;"></div></div>';
         }).join('')+_navBreak+_navCardsEnd+_fbHtml+'</div>';
     }
@@ -1387,11 +1476,13 @@ class RoomOverlayCard extends HTMLElement{
     }).join('')+'</div>':'';
 
     // ---- Cover controls (roleta) — build tap-reveal overlays -------------
-    const _ccGhost=_isGhost;
+    // Minis strip `control:` from every blind already (rocBuildMiniConfig),
+    // so _ccList would end up empty anyway — this is defense-in-depth.
+    const _ccGhost=_isGhost||_isMini;
     const _ccList=_ccGhost?[]:(c.blinds||[]).map(function(b){return coverControlNorm(tApply(b,_tier),_rt);}).filter(Boolean);
     // A dock needs a placed cover region — otherwise fall back to float so the
     // controller never silently disappears.
-    if(!_isGhost&&!(_lp.place&&_lp.place.cover)){
+    if(!_ccGhost&&!(_lp.place&&_lp.place.cover)){
       let _ccWarned=false;
       _ccList.forEach(function(cc){
         if(cc.placement!=='dock')return;
@@ -1441,7 +1532,10 @@ class RoomOverlayCard extends HTMLElement{
     const _imgPl=(_lp.place&&_lp.place.image)||{row:1,col:1};
     // image row 'auto' → intrinsic height from the design aspect (refined to the
     // image's natural ratio by _layoutStage once it loads under lock_aspect)
-    const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
+    // Mini: _rootH is 'auto', so the image box needs its own intrinsic size —
+    // lock it to the room's design aspect ratio at the fixed reference width
+    // (NAV_LIVE_FULL_PLAN.md §6), same mechanism natural-portrait already uses.
+    const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
     this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
@@ -1456,6 +1550,8 @@ class RoomOverlayCard extends HTMLElement{
     if(_wrapBox)this.shadowRoot.querySelectorAll('.content > .badge, .content > .tm-info, .content > .tm-flip, .content > .tm-prof, .content > .tm-save').forEach(function(el){_wrapBox.appendChild(el);});
     // ---- Nav wiring -------------------------------------------------------
     this._navThumbEls={};this._navChipEls=[];this._navCardEls=[];this._navFollowEl=null;
+    if(this._navMiniRo){this._navMiniRo.disconnect();this._navMiniRo=null;}
+    this._navMiniEls={};
     if(navStyle!=='none'){
       const navSelf=this;
       this.shadowRoot.querySelectorAll('[data-nav-room]').forEach(function(btn){
@@ -1485,6 +1581,43 @@ class RoomOverlayCard extends HTMLElement{
             navSelf._navChipEls.push({el:span,cfg:chCfg,entity:String(chCfg.entity||'').replace(/\{room\}/g,r.id||'')});
           });
         });
+      }
+      // nav.live: 'full' — mount one persistent, non-interactive mini
+      // <room-overlay-card> per thumbnail (NAV_LIVE_FULL_PLAN.md §5/§6).
+      // Fixed reference width, aspect-derived height (see _isMini/_rootH/
+      // _wrapAspect above) — then a shared ResizeObserver scales the whole
+      // thing to fit its thumb box, so every mini keeps the SAME font/icon/
+      // gauge proportions no matter each room's own aspect_ratio.
+      if(_navLiveFull){
+        const _wRef=(navCfg.mini&&Number(navCfg.mini.width_ref))||480;
+        cAll.rooms.forEach(function(r,ri){
+          const host=navSelf.shadowRoot.querySelector('[data-thumb-mini="'+ri+'"]');
+          if(!host)return;
+          try{
+            const mc=document.createElement('room-overlay-card');
+            mc.style.cssText='display:block;position:absolute;top:0;left:0;width:'+_wRef+'px;transform-origin:top left;';
+            mc.setConfig(rocBuildMiniConfig(cAll,ri));
+            mc._roomIdx=ri;
+            if(navSelf._hass)try{mc.hass=navSelf._hass;}catch(_){}
+            host.appendChild(mc);
+            navSelf._navMiniEls[ri]={el:mc,host:host,widthRef:_wRef};
+          }catch(e){console.warn('[room-overlay-card] nav.live:full mini mount failed for room '+((r&&r.id)||ri)+':',e);}
+        });
+        if(window.ResizeObserver){
+          const _miniMap=navSelf._navMiniEls;
+          navSelf._navMiniRo=new ResizeObserver(function(entries){
+            for(const en of entries){
+              const _ri=en.target.dataset.thumb;
+              const rec=_miniMap[_ri];if(!rec)continue;
+              const w=en.contentRect.width||0;
+              rec.el.style.transform=w>0?'scale('+(w/rec.widthRef)+')':'';
+            }
+          });
+          for(const _ri in this._navMiniEls){
+            const _thumbHost=navSelf.shadowRoot.querySelector('[data-thumb="'+_ri+'"]');
+            if(_thumbHost)navSelf._navMiniRo.observe(_thumbHost);
+          }
+        }
       }
       // Custom HA cards embedded in the nav strip
       (navCfg.cards||[]).forEach(function(cc,ci){
@@ -2315,7 +2448,10 @@ class RoomOverlayCard extends HTMLElement{
 
   _setupTemplates(){
     const c=this._config,self=this;
-    if(!this._hass||!this._hass.connection||c._roc_ghost)return;
+    // nav.live:full minis subscribe to templates only when nav.mini.templates
+    // opts in (§5 NAV_LIVE_FULL_PLAN.md — a real per-instance WS subscription
+    // cost, off by default for up to 8 persistent instances).
+    if(!this._hass||!this._hass.connection||c._roc_ghost||(c._roc_mini&&!c._roc_mini_templates))return;
     const sub=function(tpl,cb){
       try{
         const p=self._hass.connection.subscribeMessage(function(msg){cb(msg?msg.result:undefined);},{type:'render_template',template:tpl});
@@ -3188,6 +3324,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._locHandler){window.removeEventListener('location-changed',this._locHandler);window.removeEventListener('popstate',this._locHandler);this._locHandler=null;}
     if(this._barMo){this._barMo.disconnect();this._barMo=null;}
     if(this._pvMo){this._pvMo.disconnect();this._pvMo=null;}
+    if(this._navMiniRo){this._navMiniRo.disconnect();this._navMiniRo=null;}
   }
 
   connectedCallback(){

@@ -1,11 +1,13 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v4.5.0** (2026-07-11). Verified against Home Assistant 2026.6.
+Current release: **v5.4.0** (2026-08-05, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, and the entire
-v3.1 – v4.5 feature run are complete.** The card is feature-complete for daily
-use — remaining work is one big optional vision item (live mini-room nav),
-a short editor/UX polish backlog, and a planned **v5.0** pass over the GUI + docs.
+v3.1 – v5.1 feature run are complete.** The card is feature-complete for daily
+use — remaining work is the push to get it into HACS's own default repository
+(**v6.0.0**), one big optional vision item (live mini-room nav), and a short
+editor/UX polish backlog.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped · ⛔ dropped · 🅿️ parked
 
@@ -48,9 +50,69 @@ Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped · ⛔ dro
 | **v4.4.0** | Fix: record the viewed room only on an actual room switch, so HA's edit-mode card recreation no longer clobbers it |
 | **v4.5.0** | HA's **own preview pane follows the edited room** — the editor writes the `url_sync` hash (+ `hashchange`) on open and room-pick |
 
+### v4.5.1 – v4.6.4 — responsiveness + edit-mode hardening — ✅ SHIPPED
+
+Five generations of fixes to the viewport-height engine and edit-mode transitions,
+diagnosed live against the real dashboard each time: natural portrait height,
+landscape edit-bar reservation, scroll-container-relative measurement (not viewport),
+intrinsic image budget-fit (letterbox, never crop), the edit-mode "breathing" loop,
+and finally fully event-driven transitions (MutationObserver on HA's own DOM, no rAF,
+no timers). v4.6.3 also hardened the release pipeline itself after a silent asset-upload
+failure broke HACS installs.
+
+### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
+
+- **v5.0.0** — layout-engine cleanup: every layout trigger routed through one coalesced
+  `_requestPin` entry point, rAF audit (background/kiosk-tab safe), `ROC_DEBUG` diagnostics,
+  and a new Playwright **geometry regression harness** asserting real pixels in headless
+  Chromium (not just jsdom). No config or behaviour changes.
+- **v5.1.0** — blind visual-overlay **`top_offset`** calibration: many motors keep a
+  deliberate safety margin at their own "fully open" (raw 0%) limit, so the blind still
+  hangs a little even there. `top_offset` (%) linearly remaps the **visual overlay only**
+  to match reality; the cover-control widget keeps showing/sending the raw motor position,
+  unchanged. Default `0` = no behaviour change.
+
 ---
 
-## 🔭 Live mini-room navigation — Phase 2 (`nav.live: full`) — planned, not committed
+## Development order (agreed 2026-08-05)
+
+1. 🎯 **Live mini-room nav — Phase 2** (`nav.live: full`) — up next. Full technical spec:
+   [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
+2. 🎯 **Haptic on hold-registered** (E7, mobile) — right after.
+3. 🎯 **v6.0.0 — Official HACS default-repository submission** — editor GUI/UX revalidation
+   first (blocking), README/GitHub content overhaul as the finale right before submission.
+4. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
+   during v6.0.0.
+
+## 🎯 v6.0.0 — Official HACS default-repository submission
+
+**Goal:** the card gets listed in HACS's own default repository, so new users can install
+it straight from HACS search instead of adding it as a custom/manual repository. **Editor
+GUI/UX revalidation is a required step, done first** — the submission (and the fresh
+screenshots that go with it) should show off the editor in its improved state, not the
+current, harder-to-navigate one.
+
+1. **Editor GUI/UX revalidation** (blocks everything below) — a full pass over the editor
+   for consistency and discoverability. The control surface has grown a lot across v3–v4 and
+   is getting hard to navigate, even for the author. Scope to be broken down when picked up.
+2. **GitHub content overhaul** — a much more detailed, beginner-friendly README and fresh
+   screenshots reflecting the v4 layout engine, cover control, light controls (sliders +
+   switches), and the **revalidated** editor. Current screenshots predate all of this.
+3. **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
+   `lovelace`, `custom-card`, `hacs`, …) — required by the `hacs/default` review.
+4. **Re-verify against the `hacs/default` validation checklist** — the repo's own HACS
+   validation Action has shipped since v1.8.0 ✅; confirm it still covers everything the
+   default-repo submission specifically checks for (README, `hacs.json`, releases, brands).
+5. **Submit the PR to `hacs/default`.**
+6. Bump to **v6.0.0** to mark the milestone once accepted/merged.
+
+## 🎯 Live mini-room navigation — Phase 2 (`nav.live: full`) — in progress, shipped early/experimental in v5.4.0
+
+Full technical spec, code touch-points and phased implementation plan:
+[`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md). **v5.4.0 status:** the config-transform +
+mount/scale mechanism works and is tested (YAML-only, no editor UI yet, not yet perf-tuned — see
+release notes). Still open: instance-reuse/lifecycle optimization, editor UI, and the `custom`
+live mode (per-element GUI picker, plan §13) — see the plan doc for details.
 
 **Goal:** nav thumbnails become *true miniatures* — each thumbnail hosts a real,
 non-interactive `room-overlay-card` rendered at a reference width and scaled down, so
@@ -77,36 +139,25 @@ already exist.
 
 | # | Item | Note |
 |---|---|---|
-| E7 | **Haptic on hold-registered** | 🎯 next candidate — fire a haptic tick the moment a hold action registers |
+| E7 | **Haptic on hold-registered** | 🎯 up next (2nd, right after Live mini-room nav Phase 2) — fire a haptic tick the moment a hold action registers |
 | E3 | Draw-to-create for all element types | rubber-band currently makes zones only |
 | E4 | Edge / centre snap guides | complements the 0.5 % grid + edge snap |
 | E5 | Editor list filter / search | for long element lists |
 | E6 | Inline save-failure hint | surface a failed Save in-editor |
 | D7 | Editor round-trip test harness | automate collect → config → re-render checks |
 
-## 🔭 v5.0 — GUI/UX revalidation + GitHub overhaul — planned (later)
-
-A dedicated milestone, to be started later:
-
-1. **Complete UX/GUI revalidation** — a full pass over the editor for consistency and
-   discoverability (the control surface has grown a lot across v3–v4 and is getting hard
-   to navigate, even for the author). Bump to **v5.0** on completion.
-2. **GitHub content overhaul** — a much more detailed, beginner-friendly guide/README
-   and fresh screenshots reflecting the v4 layout engine, cover control, light controls
-   (sliders + switches), and the current editor.
-
 ## 🅿️ Parked
 
 - **`day_night` blind model** — three failed attempts (v3.0.1–3.0.3); reverted to the
   v3.0.0 two-layer look. Do **not** re-attempt without a precise description of the real
-  blind's motor-%→visual mapping (ideally side-by-side at specific positions).
+  blind's motor-%→visual mapping (ideally side-by-side at specific positions). Note: v5.1.0's
+  `top_offset` fixes a related-but-narrower problem (raw-motor calibration offset) and does
+  **not** unpark this item — the dual-layer visual *style* modeling is still unsolved.
+  **Explicitly stays parked through v6.0.0** (user decision 2026-08-05) — not on the near-term
+  development order at all.
 
 ## Maintenance (ongoing)
 
-- **HACS default-repository submission** — validation action shipped in v1.8.0 ✅;
-  remaining: repo topics + submission PR to `hacs/default`.
-- **Fresh screenshots** — current ones predate the v4 layout engine, cover control and
-  light controls; to be redone as part of the v5.0 GitHub overhaul.
 - **Watch-list of internal APIs** (re-verify each HA major):
   - `lovelace/config` (+ `/save`) WS — test-mode Save button; undocumented but stable.
   - `window.browser_mod` (popup action) — third-party.

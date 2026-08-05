@@ -87,6 +87,43 @@ t('rocApplyTopOffset offset 0 = identity',g.rocApplyTopOffset(42,0)===42);
 t('rocApplyTopOffset undefined offset = identity',g.rocApplyTopOffset(42,undefined)===42);
 t('rocApplyTopOffset clamps runaway offset (100-><100 divide-by-zero guard)',isFinite(g.rocApplyTopOffset(0,100)));
 t('rocApplyTopOffset clamps negative offset',g.rocApplyTopOffset(0,-10)===0);
+
+// ---- nav.live: full — rocBuildMiniConfig (NAV_LIVE_FULL_PLAN.md §5) ----------
+const _miniBase={
+  type:'custom:room-overlay-card',url_sync:true,zoom:{enabled:true},parallax:{strength:5},
+  cards_above:[{type:'markdown',content:'top'}],cards_below:[{type:'markdown',content:'bot'}],
+  light_controls:{entities:['light.a']},elements:[{type:'entities',entities:['sensor.x']}],
+  gauges:[{id:'g1',entity:'sensor.g'}],labels:[{id:'l1',entity:'sensor.l'}],icons:[{id:'i1',entity:'light.i'}],
+  weather_entity:'weather.home',camera_refresh:10,
+  blinds:[{id:'bl1',entity:'cover.x',control:{presets:[{position:50}]}}],
+  nav:{style:'thumbnails',live:'full',mini:{templates:true,width_ref:480}},
+  rooms:[
+    {id:'r0',base_image:'/a.webp',cards_above:[{type:'markdown',content:'r0-top'}],
+      blinds:[{id:'bl2',entity:'cover.y',control:{presets:[]}}]},
+    {id:'r1',base_image:'/b.webp',base_camera:'camera.r1',camera_refresh:5,
+      gauges:[{id:'g2',entity:'sensor.g2'}],elements:[{type:'entities',entities:['sensor.y']}]}
+  ]
+};
+const mc0=g.rocBuildMiniConfig(_miniBase,0);
+t('mini: flags set',mc0._roc_mini===true&&mc0._roc_preview===true&&mc0._roc_mini_templates===true);
+t('mini: follow_mode manual, test_mode off',mc0.follow_mode==='manual'&&mc0.test_mode===false);
+t('mini: nav wiped (recursion guard)',mc0.nav&&mc0.nav.style==='none');
+t('mini: url_sync/zoom/parallax stripped',mc0.url_sync===undefined&&mc0.zoom===undefined&&mc0.parallax===undefined);
+t('mini: cards_above/below/light_controls stripped top-level',mc0.cards_above===undefined&&mc0.cards_below===undefined&&mc0.light_controls===undefined);
+t('mini: cards_above stripped per-room too',mc0.rooms[0].cards_above===undefined);
+t('mini: blind control stripped (top-level + per-room)',mc0.blinds[0].control===undefined&&mc0.rooms[0].blinds[0].control===undefined);
+t('mini: full = everything else kept (elements/gauges/labels/icons/weather)',
+  Array.isArray(mc0.elements)&&mc0.elements.length===1&&
+  Array.isArray(mc0.gauges)&&mc0.gauges.length===1&&
+  Array.isArray(mc0.labels)&&mc0.labels.length===1&&
+  Array.isArray(mc0.icons)&&mc0.icons.length===1&&
+  mc0.weather_entity==='weather.home');
+t('mini: camera_refresh untouched when room has no base_camera',mc0.rooms[0].camera_refresh===undefined);
+const mc1=g.rocBuildMiniConfig(_miniBase,1);
+t('mini: camera_refresh clamped >=30 when room has base_camera',mc1.rooms[1].camera_refresh===30);
+const _miniNoTpl=g.rocBuildMiniConfig(Object.assign({},_miniBase,{nav:{style:'thumbnails',live:'full'}}),0);
+t('mini: templates default false when nav.mini absent',_miniNoTpl._roc_mini_templates===false);
+t('mini: original config untouched (deep clone, not mutated)',_miniBase.cards_above.length===1&&_miniBase.blinds[0].control!==undefined&&_miniBase.rooms[0].cards_above.length===1);
 t('escA',g.escA('a"b<c>')==='a&quot;b&lt;c&gt;');
 
 // ---- v1.4: tmplTruthy ----------------------------------------------------------
