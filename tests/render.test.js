@@ -511,37 +511,6 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
     !!fillTO&&fillTO.style.height==='60%');
 }
 
-// --- day_night blind phase (rocDayNightOffset) composes correctly with top_offset — v5.9.8
-// bug: the old scrolling formula (pct*slat_count*period/2) had no defined relationship to
-// top_offset's floored pct, so the residual sliver's phase (solid vs transparent) was
-// unpredictable/unsyncable at any top_offset value. New formula (elH*(1-pct)) is a continuous,
-// physically-derived "reveal from the rail end" model with no free phase parameter — reproduces
-// the user's exact reported hardware: 17 band pairs, ~1.3 slats' worth of real reserve that never
-// retracts, and they want top_offset tuned so exactly one transparent half-period remains visible
-// at fully open (jsdom has no real layout engine — offsetHeight is mocked to a concrete 170px,
-// matching the pure rocDayNightOffset smoke tests above) ---
-{
-  const _nDN=17,_perDN=170/17,_swDN=_perDN/2,_topOffsetDN=50/17; // exact: floored pct = one half-period
-  const cfgDN={type:'custom:room-overlay-card',base_image:'/local/x.webp',
-    blinds:[{id:'d1',entity:'cover.roleta_dn',attribute:'current_position',min:100,max:0,top_offset:_topOffsetDN,
-      top:'10%',left:'10%',width:'20%',height:'40%',blind_type:'day_night',slat_count:_nDN}]};
-  const cardDN=mkCard(cfgDN);
-  const gaugeElDN=cardDN.shadowRoot.querySelector('[data-gauge="__bl_d1"]');
-  const fillDN=gaugeElDN?gaugeElDN.querySelector('.gfill'):null;
-  if(gaugeElDN)Object.defineProperty(gaugeElDN,'offsetHeight',{value:170,configurable:true});
-  cardDN.hass={states:{'cover.roleta_dn':{state:'closed',attributes:{current_position:0}}},callService(){},user:{name:'x'}};
-  cardDN._update();
-  t('day_night: fully closed -> no background scroll (offset 0px)',
-    !!fillDN&&Math.abs(parseFloat(fillDN.style.backgroundPositionY))===0);
-  cardDN.hass={states:{'cover.roleta_dn':{state:'open',attributes:{current_position:100}}},callService(){},user:{name:'x'}};
-  cardDN._update();
-  t('day_night: fully open respects top_offset (residual fill %, not 0%)',
-    !!fillDN&&fillDN.style.height===(Math.round(_topOffsetDN*10)/10)+'%');
-  const _offParsed=fillDN?parseFloat(fillDN.style.backgroundPositionY):NaN;
-  t('day_night: residual sliver at fully open lands exactly on the solid/transparent boundary (pure transparent, matches the reported hardware)',
-    !isNaN(_offParsed)&&Math.abs((Math.abs(_offParsed)%_perDN)-_swDN)<0.05);
-}
-
 // --- haptic on hold-registered (ROADMAP E7) — fires the MOMENT a hold
 // threshold is reached, distinct from _exec()'s existing execute-time haptic
 // ---

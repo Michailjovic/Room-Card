@@ -1,5 +1,41 @@
 # Changelog
 
+## [5.9.9] - 2026-08-05
+
+### Revert: v5.9.8's `day_night` phase change broke the fully-closed look
+
+User-caught regression, tested live the same day: after v5.9.8, a `day_night` blind at fully
+closed (even with `top_offset: 0`, i.e. no correction at all) rendered visibly "a bit open"
+instead of solid. Root cause: the old formula's `pct>=1 → offset = one half-period` special case
+wasn't an arbitrary discontinuity as v5.9.8 assumed — it was the **load-bearing anchor** that
+keeps the two striped background layers in anti-phase at fully closed, which is what makes the
+blind render fully opaque (no see-through gaps) when drawn. v5.9.8's "continuous, no special-case"
+replacement reached offset `0` at fully closed instead — aligning the two layers instead of
+anti-phasing them, letting the gaps show through everywhere, including at 100% coverage.
+
+**Reverted the render formula to its exact pre-5.9.8 behavior.** Removed the `rocDayNightOffset`
+helper and its tests (smoke + render) added in 5.9.8, since they encoded the incorrect model.
+
+### Structural finding (kept for any future attempt — see ROADMAP.md 🅿️ `day_night` blind model)
+
+While reverting, traced the two-layer compositing precisely: one gradient layer is permanently
+fixed at background-position `0`, the other scrolls with `pct`. Because the fixed layer's pattern
+always starts **solid** at position `0`, and the fill area always starts at row `0` (top-anchored),
+**the very first visible row of any `day_night` fill is unconditionally opaque, at any `pct`, at any
+phase** — the fixed layer guarantees it whenever the scrolling layer happens to be transparent
+there. This means a residual sliver that is *purely* transparent (as opposed to "mostly transparent
+with an always-present opaque cap row") is not achievable via phase-tuning alone with the current
+two-fixed/one-scrolling rendering approach — it would need a structurally different mechanism. This
+is exactly the kind of finding the ROADMAP's parked note asks for before any further `day_night`
+redesign is attempted; documented there for whoever (likely the same author) picks this up next.
+`top_offset` continues to correctly control **coverage amount** for `day_night` blinds (that part
+of v5.9.7 is unaffected and still correct) — it just doesn't (and currently can't cleanly) also
+control the striped pattern's exact phase.
+
+### Testing
+
+Full smoke + render suites green (0 FAIL) after the revert.
+
 ## [5.9.8] - 2026-08-05
 
 ### Fix: `day_night` blind phase drift — now composes correctly with `top_offset`

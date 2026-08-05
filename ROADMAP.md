@@ -180,15 +180,23 @@ already exist.
 ## 🅿️ Parked
 
 - **`day_night` blind model** — three failed attempts (v3.0.1–3.0.3); reverted to the
-  v3.0.0 two-layer look. **v5.9.8 fixed the one narrow, well-specified piece of this that had
-  hard real-hardware data behind it**: the striped-background phase now composes correctly with
-  `top_offset` (physically-derived "reveal from the rail end" model, see CHANGELOG [5.9.8] /
-  `rocDayNightOffset`) — verified live-pending against the user's real 17-band-pair blind. The
-  broader dual-layer visual *style* question (does the two-layer scrolling look actually match a
-  real day/night blind's optical behavior at all, independent of `top_offset`) is still unsolved
-  and still needs a precise side-by-side description before any further redesign — do not
-  re-attempt that broader piece without one. Stays otherwise parked/not on the near-term
-  development order (user decision 2026-08-05, narrowed same day by the `top_offset`-phase fix).
+  v3.0.0 two-layer look. **A fourth attempt (v5.9.8) tried to make the striped-background phase
+  compose with `top_offset`, and was reverted the same day (v5.9.9)** — it broke the fully-closed
+  look (see CHANGELOG [5.9.8]/[5.9.9]). Current rendering (two gradient layers: one fixed at
+  background-position 0, one scrolling with `pct`, snapping to a half-period anti-phase exactly at
+  `pct=1` to force full opacity when closed) is restored and known-good for the closed state.
+  **Structural finding from the v5.9.9 investigation, worth keeping for whoever attempts a fifth
+  redesign:** because the fixed layer's pattern always starts *solid* at position 0, and the fill
+  area is always top-anchored starting at row 0, **the topmost visible row of any `day_night` fill
+  is unconditionally opaque at any phase/`pct`** — so a *purely* transparent residual sliver (what
+  `top_offset` users would want for a "just a sheer gap remains" look) is not achievable by tuning
+  the existing two-fixed/one-scrolling formula at all; it would need a different rendering
+  mechanism entirely. `top_offset` itself still correctly controls **coverage amount** for
+  `day_night` blinds (unaffected by this — that part is v5.1.0/v5.9.7's job, works fine); only the
+  *phase/look* of the residual sliver is the unsolved piece. Do **not** re-attempt the phase piece
+  without a precise description of the real blind's motor-%→visual mapping (ideally side-by-side
+  photos at specific positions) AND a rendering approach that doesn't rely on a permanently-fixed
+  background layer. **Stays parked, not on the near-term development order.**
 
 ## Maintenance (ongoing)
 

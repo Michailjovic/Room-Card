@@ -88,20 +88,6 @@ t('rocApplyTopOffset undefined offset = identity',g.rocApplyTopOffset(42,undefin
 t('rocApplyTopOffset clamps runaway offset (100-><100 divide-by-zero guard)',isFinite(g.rocApplyTopOffset(0,100)));
 t('rocApplyTopOffset clamps negative offset',g.rocApplyTopOffset(0,-10)===0);
 
-// ---- rocDayNightOffset (day_night blind background-position phase) --------
-t('rocDayNightOffset: fully closed (pct=1) -> 0, no scroll',g.rocDayNightOffset(170,1)===0);
-t('rocDayNightOffset: fully open (pct=0) -> full height',g.rocDayNightOffset(170,0)===170);
-t('rocDayNightOffset: midpoint',g.rocDayNightOffset(170,0.5)===85);
-t('rocDayNightOffset: clamps pct>1',g.rocDayNightOffset(170,1.5)===0);
-t('rocDayNightOffset: clamps pct<0',g.rocDayNightOffset(170,-0.2)===170);
-// The exact scenario reported: 17 band pairs, top_offset chosen so the residual sliver at fully
-// open is exactly one transparent half-period (perDN=170/17=10, swDN=5). top_offset=50/17 means
-// the floored pct = (50/17)/100 = 0.5/17 — residual coverage is exactly half a slat period.
-const _perDN17=170/17,_swDN17=_perDN17/2;
-const _pctFloor17=(50/17)/100;
-const _offDN17=g.rocDayNightOffset(170,_pctFloor17);
-t('rocDayNightOffset: 17-pair real scenario lands exactly on the solid/transparent boundary (pure transparent sliver)',Math.abs((_offDN17%_perDN17)-_swDN17)<1e-9);
-
 // ---- nav.live: full — rocBuildMiniConfig (NAV_LIVE_FULL_PLAN.md §5) ----------
 const _miniBase={
   type:'custom:room-overlay-card',url_sync:true,zoom:{enabled:true},parallax:{strength:5},
