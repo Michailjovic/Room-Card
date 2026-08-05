@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.9.6] - 2026-08-05
+
+### Fix: Companion cards YAML intro text stayed visible with Advanced/YAML off
+
+The explanatory paragraph above the Cards above/below YAML boxes ("Companion cards — paste
+card YAML...") wasn't wrapped in the same `.roc-adv` visibility class as the two textareas it
+describes, so it stayed on screen even with YAML mode off — an orphaned description for fields
+that weren't there. Now hidden/shown together with the fields it explains.
+
+1 new render test. Full smoke and render test suites pass.
+
 ## [5.9.5] - 2026-08-05
 
 ### Background & basics reorganized: Image/Camera mode toggle, moved fields

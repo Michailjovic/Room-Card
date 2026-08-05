@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.5';
+const ROC_VERSION='5.9.6';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4749,7 +4749,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
     const _caY=cR.cards_above?_yaml.s(cR.cards_above):'';
     const _cbY=cR.cards_below?_yaml.s(cR.cards_below):'';
-    basicInner+='<div style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;"><label class="roc-l" style="margin-bottom:2px;">Companion cards — paste card YAML to stack full Home Assistant cards above / below the image (handy on mobile). A YAML list; each item is a card config, or <code>{card: {...}, height, media: all|mobile|tablet|desktop|ultrawide}</code>.</label></div>';
+    basicInner+='<div class="roc-adv" style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;"><label class="roc-l" style="margin-bottom:2px;">Companion cards — paste card YAML to stack full Home Assistant cards above / below the image (handy on mobile). A YAML list; each item is a card config, or <code>{card: {...}, height, media: all|mobile|tablet|desktop|ultrawide}</code>.</label></div>';
     basicInner+='<div><label class="roc-l">Cards above image (YAML)</label><textarea id="cards_above_yaml" rows="4" placeholder="- type: entities&#10;  entities: [light.kitchen]"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_caY)+'</textarea></div>';
     basicInner+='<div><label class="roc-l">Cards below image (YAML)</label><textarea id="cards_below_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cbY)+'</textarea></div>';
     const _woEd=typeof cR.weather_overlay==='string'?{entity:cR.weather_overlay}:(cR.weather_overlay||{});

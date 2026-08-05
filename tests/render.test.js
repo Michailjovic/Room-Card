@@ -107,6 +107,9 @@ t('editor per-profile aspect inputs',!!ed.querySelector('#aspect_ratio__portrait
 t('editor rows prefilled from migration',ed.querySelector('#ly-rows__landscape').value.length>0);
 t('base_image label has no bare unexplained asterisk',!/Base image URL \*/.test(ed.innerHTML));
 t('base_image field has a /local/ placeholder',ed.querySelector('#base_image').placeholder.indexOf('/local/')===0);
+t('Companion cards YAML intro text only shows in Advanced/YAML mode',
+  (()=>{const introEl=[...ed.querySelectorAll('label.roc-l')].find(l=>l.textContent.indexOf('Companion cards')===0);
+    return !!introEl&&introEl.closest('.roc-adv')!==null;})());
 
 // --- Background mode toggle (Image/Camera) — mutually exclusive, panes swap, refresh label is honest ---
 {
