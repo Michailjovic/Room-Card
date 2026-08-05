@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.4.0';
+const ROC_VERSION='5.5.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1596,10 +1596,20 @@ class RoomOverlayCard extends HTMLElement{
           try{
             const mc=document.createElement('room-overlay-card');
             mc.style.cssText='display:block;position:absolute;top:0;left:0;width:'+_wRef+'px;transform-origin:top left;';
+            // Connect to the document BEFORE setConfig/hass: several layout
+            // reads happen synchronously on the first render/update pass
+            // (_layoutFitWrap/_layoutStage, and — the one that actually bit a
+            // live day_night blind — the gauge fill's el.offsetHeight slat
+            // measurement). offsetHeight/getBoundingClientRect always read 0
+            // on a still-disconnected element, so day_night's `if(_perDN>0)`
+            // guard silently skipped setting any fill at all on first paint.
+            // A later IntersectionObserver-triggered _update() can self-heal
+            // plain percentage-fill gauges, but there's no reason to rely on
+            // that race at all — just connect first.
+            host.appendChild(mc);
             mc.setConfig(rocBuildMiniConfig(cAll,ri));
             mc._roomIdx=ri;
             if(navSelf._hass)try{mc.hass=navSelf._hass;}catch(_){}
-            host.appendChild(mc);
             navSelf._navMiniEls[ri]={el:mc,host:host,widthRef:_wRef};
           }catch(e){console.warn('[room-overlay-card] nav.live:full mini mount failed for room '+((r&&r.id)||ri)+':',e);}
         });

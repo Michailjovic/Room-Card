@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.5.0] - 2026-08-05
+
+### Fix: `nav.live: full` mini could render a blind (esp. `day_night`) as empty
+
+Live-tested v5.4.0 on a real dashboard: the bedroom mini showed its blind correctly, the living
+room mini didn't show its `day_night` blind at all.
+
+Root cause: the mini `<room-overlay-card>` instance had `hass` assigned (which triggers its first
+render/update pass) **before** it was attached to the document. A disconnected element always
+reports `offsetHeight`/`getBoundingClientRect()` as zero — harmless for plain percentage-fill
+gauges (a later visibility check quietly corrects them), but `day_night` blinds specifically
+measure their own pixel height via `offsetHeight` to position their slat pattern, and silently
+skip drawing any fill at all when that measurement comes back zero. Fixed by connecting the mini
+to the DOM before configuring it, so every layout measurement on its first pass is already
+accurate — no more relying on a later self-correction that wasn't guaranteed for every blind type.
+
 ## [5.4.0] - 2026-08-05
 
 ### `nav.live: full` — nav thumbnails become real, live mini-rooms (early/experimental, YAML-only)
