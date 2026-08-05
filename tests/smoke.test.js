@@ -76,6 +76,17 @@ const bg=g.blindToGaugeConfig({id:'b1',entity:'cover.x',blind_type:'roller'});
 t('blind roller',bg.length===1&&bg[0].id==='__bl_b1'&&bg[0].orientation==='top');
 const bgVt=g.blindToGaugeConfig({id:'b2',entity:'cover.x',blind_type:'roller',visible_template:'{{ 1 }}'});
 t('blind passes visible_template',bgVt[0].visible_template==='{{ 1 }}');
+const bgTo=g.blindToGaugeConfig({id:'b3',entity:'cover.x',blind_type:'roller',top_offset:3.4});
+t('blind passes top_offset',bgTo[0].top_offset===3.4);
+const bgNoTo=g.blindToGaugeConfig({id:'b4',entity:'cover.x',blind_type:'roller'});
+t('blind omits top_offset when unset',bgNoTo[0].top_offset===undefined);
+t('rocApplyTopOffset raw0 -> offset',g.rocApplyTopOffset(0,3.4)===3.4);
+t('rocApplyTopOffset raw100 -> 100 (unaffected)',g.rocApplyTopOffset(100,3.4)===100);
+t('rocApplyTopOffset raw50 -> midpoint',Math.abs(g.rocApplyTopOffset(50,3.4)-51.7)<0.001);
+t('rocApplyTopOffset offset 0 = identity',g.rocApplyTopOffset(42,0)===42);
+t('rocApplyTopOffset undefined offset = identity',g.rocApplyTopOffset(42,undefined)===42);
+t('rocApplyTopOffset clamps runaway offset (100-><100 divide-by-zero guard)',isFinite(g.rocApplyTopOffset(0,100)));
+t('rocApplyTopOffset clamps negative offset',g.rocApplyTopOffset(0,-10)===0);
 t('escA',g.escA('a"b<c>')==='a&quot;b&lt;c&gt;');
 
 // ---- v1.4: tmplTruthy ----------------------------------------------------------

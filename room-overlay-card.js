@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.0.0';
+const ROC_VERSION='5.1.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -436,6 +436,20 @@ function bmFilter(bm,s,presortedFg){
 
 function resolveSize(raw,cardW){if(!raw)return null;const s=String(raw);return s.endsWith('%')?Math.round(cardW*parseFloat(s)/100)+'px':s;}
 
+// Roleta top-offset calibration: the motor's raw 0% often doesn't reach the
+// true physical fully-open state (a safety margin baked into the motor's own
+// limits — never meant to be recalibrated away), while raw 100% (fully
+// closed) matches reality. top_offset (%) is the real/visual position that
+// corresponds to raw 0; raw 100 always maps to visual 100. Linear remap
+// between those two known points. Applied ONLY to the visual overlay
+// (blindToGaugeConfig/gauge fill) — the cover-control widget intentionally
+// keeps showing/sending raw motor % (see ROADMAP.md 🅿️ day_night blind model).
+function rocApplyTopOffset(raw,offset){
+  const o=Math.max(0,Math.min(95,Number(offset)||0));
+  if(!o)return raw;
+  return o+raw*(100-o)/100;
+}
+
 function blindToGaugeConfig(b){
   const type=b.blind_type||'roller';
   const sw=b.slat_width??7,sg=b.slat_gap??sw;
@@ -445,6 +459,7 @@ function blindToGaugeConfig(b){
     top:b.top,left:b.left,width:b.width,height:b.height,z_index:z,
     orientation:'top',background:b.background||'transparent',border_radius:b.border_radius||'0'};
   if(b.attribute!==undefined)base.attribute=b.attribute;
+  if(b.top_offset!==undefined)base.top_offset=b.top_offset;
   if(b.transition!==undefined)base.transition=b.transition;
   if(b.visible!==undefined)base.visible=b.visible;
   if(b.visible_conditions!==undefined)base.visible_conditions=b.visible_conditions;
@@ -2966,8 +2981,9 @@ class RoomOverlayCard extends HTMLElement{
       this._setVis(el,gShow2,'',g.fade,g.slide);
       if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
-      const val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
+      let val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
       if(isNaN(val))continue;
+      if(g.top_offset)val=rocApplyTopOffset(val,g.top_offset);
       const mn=g.min??0,mx=g.max??100;
       const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       const fill=this._gaugeFills[g.id];
@@ -3954,6 +3970,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const atEl=q('[data-bl-attr="'+i+'"]');if(atEl){if(atEl.value.trim())o.attribute=atEl.value.trim();else delete o.attribute;}
       const minEl=q('[data-bl-min="'+i+'"]');if(minEl){const _bmn=parseFloat(minEl.value);if(isNaN(_bmn)||_bmn===0)delete o.min;else o.min=_bmn;}
       const maxEl=q('[data-bl-max="'+i+'"]');if(maxEl){const _bmx=parseFloat(maxEl.value);if(isNaN(_bmx)||_bmx===100)delete o.max;else o.max=_bmx;}
+      const toEl=q('[data-bl-top-offset="'+i+'"]');if(toEl){const _bto=parseFloat(toEl.value);if(isNaN(_bto)||_bto===0)delete o.top_offset;else o.top_offset=_bto;}
       const typeEl=q('[data-bl-type="'+i+'"]');if(typeEl)o.blind_type=typeEl.value;else o.blind_type='roller';
       const scEl=q('[data-bl-slat-color="'+i+'"]');if(scEl&&scEl.value.trim())o.slat_color=scEl.value.trim();else delete o.slat_color;
       const scntEl=q('[data-bl-slat-count="'+i+'"]');if(scntEl&&scntEl.value)o.slat_count=parseInt(scntEl.value,10)||6;else delete o.slat_count;
@@ -3962,7 +3979,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gcEl=q('[data-bl-gap-color="'+i+'"]');if(gcEl&&gcEl.value.trim())o.gap_color=gcEl.value.trim();else delete o.gap_color;
       const yaR=self._pYaml(q('[data-bl-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group'];
+        const KEEP=['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
@@ -4369,6 +4386,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Attribute</label><input data-bl-attr="'+i+'" type="text" value="'+this._e(b.attribute||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Min</label><input data-bl-min="'+i+'" type="number" value="'+this._e(String(b.min??0))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='<div><label class="roc-l">Max</label><input data-bl-max="'+i+'" type="number" value="'+this._e(String(b.max??100))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l" title="Real/visual position (%) at raw motor 0% — the roleta\'s own safety margin the motor never fully drives past. Corrects the VISUAL overlay only, so it matches reality even when you can\'t see the blind in person. 0 = off.">Top offset (%)</label><input data-bl-top-offset="'+i+'" type="number" step="0.1" min="0" max="95" value="'+this._e(String(b.top_offset??0))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">Blind type</label><select data-bl-type="'+i+'"'+this._inp('')+'>';
     h+='<option value="roller"'+(type==='roller'?' selected':'')+'>roller &#8211; solid fill</option>';
@@ -4424,7 +4442,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     }
     h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:2px 0 0;">Tap the blind to reveal the controller. Up / Stop / Down always shown. Name = tooltip only. Use real MDI icons e.g. <code>mdi:roller-shade</code> / <code>mdi:blinds</code> (materialdesignicons.com). Colour: HA name (indigo, amber, blue-grey) or CSS.</p>';
     h+='</div>';
-    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group','control'].forEach(function(k){delete cpBl[k];});
+    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group','control'].forEach(function(k){delete cpBl[k];});
     const ysBl=Object.keys(cpBl).length?_yaml.s(cpBl):'';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
@@ -5431,7 +5449,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-top-offset],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-add-ccp]').forEach(function(btn){btn.addEventListener('click',function(){
       const i=parseInt(btn.dataset.addCcp,10);const c=self._collectConfig();const bl=A(c,'blinds')[i];if(!bl)return;
       if(!bl.control||typeof bl.control!=='object')bl.control={display:'popover'};

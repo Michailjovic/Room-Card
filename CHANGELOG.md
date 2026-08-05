@@ -1,5 +1,16 @@
 # Changelog
 
+## [5.1.0] - 2026-08-05
+
+### Blind visual overlay calibration (`top_offset`)
+
+Many roller-blind motors keep a deliberate safety margin at their own "fully open" (0%) limit — the motor never actually winds all the way up, so the blind still hangs a few centimetres even at `current_position: 0`. Until now the card drew the visual overlay assuming raw `0` meant truly fully open, so the on-screen blind never quite matched reality at intermediate positions.
+
+- New optional per-blind field **`top_offset`** (%, decimals allowed, e.g. `3.4`) — the real/visual position that corresponds to the motor's raw `0`. Raw `100` is assumed to already match reality (most motors close accurately) and needs no correction. The card linearly remaps every position in between for the **visual overlay only** (`blinds:` gauge rendering on the room image).
+- The cover-control widget (drag rail, up/stop/down, presets) is **unaffected on purpose** — it keeps showing and sending the motor's raw position, so dragging the rail or tapping a preset still behaves exactly as before.
+- Default `0` = fully backward compatible, no behaviour change for existing configs.
+- New editor field "Top offset (%)" next to Min/Max on each blind.
+
 ## [5.0.0] - 2026-07-17
 
 ### Layout engine cleanup + real-renderer regression harness

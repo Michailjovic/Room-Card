@@ -393,6 +393,7 @@ blinds:
     attribute: current_position   # omit to use entity state (open/closed)
     min: 0      # entity value = fully open
     max: 100    # entity value = fully closed
+    top_offset: 3.4  # real/visual % at raw 0 — see note below
     top: "10%"
     left: "30%"
     width: "25%"
@@ -408,6 +409,8 @@ blinds:
 - **`day_night`** — zebra / dual-layer blind; band pattern cycles `slat_count` times across the travel.
 
 > **Inverted motor direction** — if your cover reports `0` = closed and `100` = open, swap: `min: 100`, `max: 0`.
+
+> **`top_offset`** — many motors keep a deliberate safety margin at their own "fully open" (0%) limit, so the blind is never actually driven to the true top — it still hangs a little. If you never see this in person and just want the on-screen blind to match reality, set `top_offset` to the real/visual position (%) that corresponds to raw `0` (e.g. `3.4`); raw `100` is assumed to already match reality and needs no correction. This only corrects the **visual overlay** on the image — the cover-control widget (rail/presets) keeps showing and sending the motor's raw position, unchanged. Default `0` = no correction.
 
 #### Cover control (roleta)
 
