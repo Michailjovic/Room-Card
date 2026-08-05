@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.9.1] - 2026-08-05
+
+### Fix: blank gap under the editor's live preview + Advanced (YAML) gets an icon and shorter label
+
+**Fix:** the editor's live preview (`_roc_preview`) card had its root height hardcoded to a
+guessed `420px`, regardless of how tall its actual content (nav strip, lights row, image, cover
+rail) needed to be — leaving a blank gap below shorter content. It now sizes the same way mini
+nav thumbnails already do: `height:auto` on the card, with the `.wrap` locked to the room's design
+`aspect_ratio` (resolved from its rendered width) instead of a fixed guess.
+
+**Advanced (YAML)** stays in the header (decided against relocating it near each YAML-capable
+panel, per further discussion) — it now has an icon (`mdi:code-braces`) and a shortened label,
+just **YAML**, matching Room/Edit mode/Haptics.
+
+2 new render tests for the preview height fix, 2 more for the YAML icon/label. Full smoke and
+render test suites pass.
+
 ## [5.9.0] - 2026-08-05
 
 ### Editor GUI/UX revalidation, part 1 — merge Test mode + Drag-edit preview into "Edit mode"

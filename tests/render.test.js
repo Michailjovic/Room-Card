@@ -221,8 +221,10 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   t('no separate Drag-edit preview checkbox remains',!edEdit.querySelector('#prev-on'));
   t('Edit mode checkbox present, off by default',!!edEdit.querySelector('#test_mode')&&edEdit.querySelector('#test_mode').checked===false);
   t('preview not mounted while Edit mode is off',!edEdit._prevCard&&!edEdit.querySelector('#roc-prev-host'));
-  t('Room, Edit mode and Haptics all carry an icon',
-    !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:cursor-move"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]'));
+  t('Room, Edit mode, Haptics and YAML all carry an icon',
+    !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:cursor-move"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:code-braces"]'));
+  const advLabelTxt=(edEdit.querySelector('#roc-adv-toggle').closest('label').textContent||'').trim();
+  t('Advanced (YAML) toggle shortened to just "YAML"',advLabelTxt==='YAML');
   const tmBox=edEdit.querySelector('#test_mode');
   tmBox.checked=true;
   tmBox.dispatchEvent(new w.Event('change',{bubbles:true}));
@@ -259,6 +261,18 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   t('drag/resize relay strips the _roc_preview marker',edPos._config._roc_preview===undefined);
   t('drag/resize relay keeps test_mode true (Edit mode is the real config value here)',edPos._config.test_mode===true);
   t('fired config also carries the restored url_sync/follow_mode',!!outPos&&outPos.url_sync===true&&outPos.follow_mode==='initial');
+}
+
+// --- editor preview (_roc_preview) root height: aspect-derived, not a guessed fixed px
+// (was hardcoded 420px regardless of actual nav/lights/image content -> blank gap below) ---
+{
+  const prevCfg={type:'custom:room-overlay-card',_roc_preview:true,base_image:'/local/x.webp',aspect_ratio:'16/9',
+    layout:{landscape:{rows:[15,85],place:{nav:{row:1},image:{row:2}}},portrait:{rows:[100],place:{image:{row:1}}}}};
+  const cardPrev=mkCard(prevCfg);
+  const haCardPrev=cardPrev.shadowRoot.querySelector('ha-card');
+  t('editor preview ha-card height is auto, not a fixed guessed px',haCardPrev.style.height==='auto');
+  const wrapPrev=cardPrev.shadowRoot.querySelector('.wrap');
+  t('editor preview .wrap gets an aspect-ratio lock matching aspect_ratio',(wrapPrev.getAttribute('style')||'').indexOf('aspect-ratio:'+(16/9).toFixed(4))>=0);
 }
 
 // --- editor opens on the room the card was showing (in-memory store) ---
