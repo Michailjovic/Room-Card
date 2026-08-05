@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.6';
+const ROC_VERSION='5.9.7';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -508,18 +508,22 @@ function rocBuildMiniConfig(cAll,ri){
   return gcfg;
 }
 
-// Roleta top-offset calibration: the motor's raw 0% often doesn't reach the
-// true physical fully-open state (a safety margin baked into the motor's own
-// limits — never meant to be recalibrated away), while raw 100% (fully
-// closed) matches reality. top_offset (%) is the real/visual position that
-// corresponds to raw 0; raw 100 always maps to visual 100. Linear remap
-// between those two known points. Applied ONLY to the visual overlay
-// (blindToGaugeConfig/gauge fill) — the cover-control widget intentionally
-// keeps showing/sending raw motor % (see ROADMAP.md 🅿️ day_night blind model).
-function rocApplyTopOffset(raw,offset){
+// Roleta top-offset calibration: many motors keep a deliberate safety margin
+// at their own fully-OPEN limit (never meant to be recalibrated away), so the
+// blind never actually retracts all the way — a sliver of material always
+// stays visible. The fully-CLOSED limit, by contrast, is normally accurate.
+// top_offset (%) is the real/visual coverage that corresponds to fully open;
+// fully closed always stays 100 (never corrected). Applied to the gauge's
+// already min/max-normalized 0–100 fill % (0=open,1=closed — see caller),
+// NOT the raw entity value, so this works regardless of which raw direction
+// (min/max) the blind's own motor reports. Linear remap between those two
+// known points. Applied ONLY to the visual overlay (blindToGaugeConfig/gauge
+// fill) — the cover-control widget intentionally keeps showing/sending raw
+// motor % (see ROADMAP.md 🅿️ day_night blind model).
+function rocApplyTopOffset(pct100,offset){
   const o=Math.max(0,Math.min(95,Number(offset)||0));
-  if(!o)return raw;
-  return o+raw*(100-o)/100;
+  if(!o)return pct100;
+  return o+pct100*(100-o)/100;
 }
 
 function blindToGaugeConfig(b){
@@ -3184,9 +3188,13 @@ class RoomOverlayCard extends HTMLElement{
       const ent=s[g.entity];if(!ent)continue;
       let val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
       if(isNaN(val))continue;
-      if(g.top_offset)val=rocApplyTopOffset(val,g.top_offset);
       const mn=g.min??0,mx=g.max??100;
-      const pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+      let pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+      // top_offset corrects the visual fill only, AFTER min/max normalization —
+      // pct here is always 0=open/1=closed regardless of the blind's own raw
+      // motor direction (see rocApplyTopOffset). Closed (pct=1) is left exactly
+      // as-is; only the open end (pct=0) gets floored to the residual coverage.
+      if(g.top_offset)pct=rocApplyTopOffset(pct*100,g.top_offset)/100;
       const fill=this._gaugeFills[g.id];
       if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
       else if((g.orientation||'vertical')==='radial'){
@@ -4629,7 +4637,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Attribute</label><input data-bl-attr="'+i+'" type="text" value="'+this._e(b.attribute||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Min</label><input data-bl-min="'+i+'" type="number" value="'+this._e(String(b.min??0))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='<div><label class="roc-l">Max</label><input data-bl-max="'+i+'" type="number" value="'+this._e(String(b.max??100))+'"'+this._inp('font-size:12px;')+'></div>';
-    h+='<div><label class="roc-l" title="Real/visual position (%) at raw motor 0% — the roleta\'s own safety margin the motor never fully drives past. Corrects the VISUAL overlay only, so it matches reality even when you can\'t see the blind in person. 0 = off.">Top offset (%)</label><input data-bl-top-offset="'+i+'" type="number" step="0.1" min="0" max="95" value="'+this._e(String(b.top_offset??0))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l" title="Real/visual coverage (%) at fully OPEN — the roleta\'s own safety margin the motor never fully retracts past, so a sliver of material always stays visible. Fully CLOSED is left untouched (always 100%). Corrects the VISUAL overlay only, so it matches reality even when you can\'t see the blind in person. 0 = off.">Top offset (%)</label><input data-bl-top-offset="'+i+'" type="number" step="0.1" min="0" max="95" value="'+this._e(String(b.top_offset??0))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">Blind type</label><select data-bl-type="'+i+'"'+this._inp('')+'>';
     h+='<option value="roller"'+(type==='roller'?' selected':'')+'>roller &#8211; solid fill</option>';

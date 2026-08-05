@@ -487,6 +487,30 @@ t('requestPin coalesces without throwing',!_rpThrew&&cardRH._pinQueued===true);
 t('rocRowStart parses spans',w.eval('rocRowStart("3/6")')===3&&w.eval('rocRowStart(2)')===2);
 t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)')===3);
 
+// --- top_offset fix: corrects the OPEN end of the visual fill, leaves CLOSED
+// untouched, regardless of the blind's raw motor direction (min/max) — v5.9.7
+// bug: was previously applied to the raw entity value pre-normalization, which
+// broke the closed state for any inverted (min:100/max:0) blind ---
+{
+  const cfgTO={type:'custom:room-overlay-card',base_image:'/local/x.webp',
+    blinds:[{id:'b1',entity:'cover.roleta',attribute:'current_position',min:100,max:0,top_offset:20,
+      top:'10%',left:'10%',width:'20%',height:'40%',blind_type:'roller'}]};
+  const cardTO=mkCard(cfgTO);
+  const fillTO=cardTO.shadowRoot.querySelector('[data-gauge="__bl_b1"] .gfill');
+  cardTO.hass={states:{'cover.roleta':{state:'open',attributes:{current_position:0}}},callService(){},user:{name:'x'}};
+  cardTO._update(); // hass setter only schedules a rAF-batched update — force it synchronously for the test
+  t('top_offset: fully closed (current_position:0, inverted min/max) stays 100% fill, unaffected',
+    !!fillTO&&fillTO.style.height==='100%');
+  cardTO.hass={states:{'cover.roleta':{state:'open',attributes:{current_position:100}}},callService(){},user:{name:'x'}};
+  cardTO._update();
+  t('top_offset: fully open (current_position:100) shows the residual coverage instead of 0%',
+    !!fillTO&&fillTO.style.height==='20%');
+  cardTO.hass={states:{'cover.roleta':{state:'open',attributes:{current_position:50}}},callService(){},user:{name:'x'}};
+  cardTO._update();
+  t('top_offset: midpoint interpolates between residual and fully-closed',
+    !!fillTO&&fillTO.style.height==='60%');
+}
+
 // --- haptic on hold-registered (ROADMAP E7) — fires the MOMENT a hold
 // threshold is reached, distinct from _exec()'s existing execute-time haptic
 // ---

@@ -1,5 +1,29 @@
 # Changelog
 
+## [5.9.7] - 2026-08-05
+
+### Fix: `top_offset` corrected the wrong end of the blind (broke fully-closed)
+
+`top_offset` was applied to the **raw entity value**, before `min`/`max` normalization — so it
+implicitly assumed raw `0` was always the end needing correction and raw `100` always needed
+none. That only happens to hold for the card's own default (`min: 0`/`max: 100`) convention. Any
+blind using the documented **"Inverted motor direction"** setup (`min: 100`/`max: 0` — i.e. a
+cover that reports the standard `current_position: 0 = closed`) got the correction applied to
+its **closed** end instead of its open end: fully closed stopped rendering as fully closed, and
+the actual problem (a residual, un-retracted sliver at fully open) was never addressed at all.
+
+Fixed by moving `top_offset` to apply **after** `min`/`max` normalization, to the gauge's already
+open(0)/closed(1) fill percentage rather than the raw motor value. This is direction-agnostic —
+it now works the same regardless of which way your motor's `min`/`max` are configured. Fully
+closed is always left untouched (100%); only the open end is floored to the residual coverage.
+
+Editor tooltip and README rewritten to describe `top_offset` in terms of open/closed, not raw
+`0`/`100`, to avoid the same confusion going forward.
+
+3 new render tests covering the exact reported scenario (inverted min/max, closed stays 100%,
+open shows the residual, midpoint interpolates correctly). Full smoke and render test suites
+pass.
+
 ## [5.9.6] - 2026-08-05
 
 ### Fix: Companion cards YAML intro text stayed visible with Advanced/YAML off
