@@ -77,7 +77,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 
 1. **Add the card** to a dashboard — *Add card → Custom: Room Overlay Card*.
 2. The editor opens on a single step: **set a background image** (a room photo or floor-plan, e.g. `/local/bedroom.webp`). The rest of the editor appears once it's set.
-3. Turn on **Drag-edit preview** in the header. Now drag elements straight onto the image.
+3. Turn on **Edit mode** in the header. Now drag elements straight onto the image.
 4. In the **Elements** tab, add an icon, label, zone or embedded card and drop it on the right spot.
 5. Save. That's it — you never had to touch YAML.
 
@@ -95,16 +95,14 @@ aspect_ratio: "16/9"
 
 The GUI editor is organized into four tabs, with a persistent header on top.
 
-**Header (always visible):** the **room picker** (when the card is multi-room — switches which room the Image and Elements tabs edit), **Test mode**, and **Drag-edit preview**.
+**Header (always visible):** the **room picker** (when the card is multi-room — switches which room the Image and Elements tabs edit), **Edit mode**, and **Haptics**.
 
 - **Image** — the background (image or camera), image-swap conditions, weather overlay, CSS filters, the brightness model, filter transition and zoom. Also the **companion cards** (above/below the image).
 - **Elements** — everything you place on the image: zones, icons, labels, badges, gauges, blinds, embedded cards, overlays, and groups. Each type is a collapsible section with a count.
 - **Layout** — height source, orientation, threshold and both profile grids (see the next section).
 - **Rooms & menu** — the room list (add / remove / reorder), presence-follow, and the navigation strip.
 
-**Drag-edit preview** is a live, editable copy of the card shown inside the editor. You can drag and resize elements right there, and it shows the room picked in the header. (The preview panel Home Assistant shows on the right is its own — it follows live presence and won't track the room picker.)
-
-**Test mode** (`test_mode: true`, or the header toggle) overlays editing affordances on the card: red outlines on zones, blue dashed outlines on embedded cards, a live **viewport + active-profile badge**, region outlines with names, and a **profile switch button**. **Click an element to select it** — only the selected element shows resize handles, so the card stays readable even with many overlapping elements. Drag to move (snaps to a 0.5 % grid, magnetic alignment guides, hold **Alt** for free movement), drag a handle to resize, or nudge the selection with the **arrow keys** (Shift = 0.1 %). Drag on an empty area to **draw a new zone**. The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y).
+**Edit mode** (`test_mode: true`, or the header toggle — same field, one name) puts the card into a safe editing state instead of its normal live behaviour: real tap/hold actions are suppressed, and editing affordances appear — red outlines on zones, blue dashed outlines on embedded cards, a live **viewport + active-profile badge**, region outlines with names, and a **profile switch button**. **Click an element to select it** — only the selected element shows resize handles, so the card stays readable even with many overlapping elements. Drag to move (snaps to a 0.5 % grid, magnetic alignment guides, hold **Alt** for free movement), drag a handle to resize, or nudge the selection with the **arrow keys** (Shift = 0.1 %). Drag on an empty area to **draw a new zone**. Since it's a saved config field, turning it on inside the editor also shows a **live, draggable copy of the card right there in the header** (matching the room picked above — the preview panel Home Assistant shows on the right is its own and follows live presence, so it won't track the room picker), and — because it's saved — the same safe/draggable behaviour carries over to the real card on your dashboard until you switch it off again. The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y).
 
 ---
 
@@ -154,7 +152,7 @@ Rules and notes:
 - Put the **image on an `auto` row** and its box sizes itself from the image's aspect — exact fit with no crop and no letterbox (ideal when you have controls at the image edges). Use a fixed `%` row + `image_fit` when you want to dictate the height instead.
 - The card is designed for **panel-view / full-screen** dashboards. `height: viewport` measures the real available height (HA header, view padding and safe-areas accounted for). Use `container` or a fixed value when embedding.
 - The **image region** gets a fixed box from the grid; the image renders inside it at its design aspect with `image_fit: cover` (crop, default) or `contain` (letterbox). **Element `%` positions stay glued to the image** — the lock_aspect stage from v3 does this everywhere now.
-- **Test mode** shows region outlines with names, a live viewport + profile badge, and a **profile switch button** to preview the other profile.
+- **Edit mode** shows region outlines with names, a live viewport + profile badge, and a **profile switch button** to preview the other profile.
 - Everything is editable in the GUI **Layout tab**: height source, orientation/threshold, per-device pin, both profile grids and all region placements.
 
 ### Per-element profile overrides
@@ -208,7 +206,7 @@ Old configs (tiers, `breakpoints`, `max_height`, `media: mobile|desktop`, per-el
 | `groups` | list | `[]` | Client-side element groups (toggle/show/hide) |
 | `rooms` | list | — | Multi-room definitions (see Multi-room) |
 | `nav` | object | — | Multi-room navigation strip |
-| `test_mode` | bool | `false` | Outlines, click-to-select, resize handles, Save button |
+| `test_mode` | bool | `false` | Edit mode — outlines, click-to-select, resize handles, editor's live preview |
 | `tap_action` | action | — | Action on card background click |
 | `hold_feedback` | bool | `true` | Show the hold-gesture progress ring |
 | `hold_color` | string | — | Color of the in-progress hold ring |
@@ -847,7 +845,7 @@ See **[PRESETS.md](PRESETS.md)** for a gallery of copy-paste recipes (day/night 
 
 ## Positioning tips
 
-All `top`, `left`, `width`, `height` values are percentage strings relative to the card. Enable **Test mode** to position by eye: click an element to select it, drag to move (snaps to 0.5 %, Alt = free), drag handles to resize, arrow keys to nudge, or draw a new zone on an empty area. The live viewport/profile badge shows which layout profile is active.
+All `top`, `left`, `width`, `height` values are percentage strings relative to the card. Enable **Edit mode** to position by eye: click an element to select it, drag to move (snaps to 0.5 %, Alt = free), drag handles to resize, arrow keys to nudge, or draw a new zone on an empty area. The live viewport/profile badge shows which layout profile is active.
 
 ---
 

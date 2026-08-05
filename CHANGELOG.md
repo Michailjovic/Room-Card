@@ -1,5 +1,32 @@
 # Changelog
 
+## [5.9.0] - 2026-08-05
+
+### Editor GUI/UX revalidation, part 1 — merge Test mode + Drag-edit preview into "Edit mode"
+
+First shipped step of the editor GUI/UX revalidation (see `EDITOR_UX_REVALIDATION.md`), tracked as
+its own **v5.9.x** line, separate from v6.0.0.
+
+**Test mode** and **Drag-edit preview** were two separate header checkboxes doing almost the same
+thing slightly differently — confusing, and worse, easy to get wrong: Test mode was a persisted
+config field that could be left on and silently disable real tap/hold actions on your live
+dashboard card, while Drag-edit preview was editor-only and never saved. They're now **one field**:
+**Edit mode** (still `test_mode` in YAML, unchanged). Checking it in the editor both persists
+`test_mode: true` to the saved config *and* immediately shows the live, draggable preview panel
+right there in the header — no separate toggle, no waiting for Home Assistant to echo the config
+back before the preview appears.
+
+Also added icons to the header's **Room** picker (`mdi:door`), **Edit mode** (`mdi:cursor-move`)
+and **Haptics** (`mdi:vibrate`, shortened from "Haptic feedback") — first step toward fitting the
+whole row on one line instead of wrapping awkwardly.
+
+`Advanced (YAML)` stays in the header for now — relocating it to live next to the fields it
+actually affects is a separate, still-undecided step in the same revalidation effort.
+
+12 new/updated render tests (checkbox removed, Edit mode toggling mounts/unmounts the preview
+synchronously, persists/removes `test_mode` correctly, icons present, room-switch and drag-relay
+tests from v5.8.1/v5.8.2 updated for the merged field). Full smoke and render test suites pass.
+
 ## [5.8.2] - 2026-08-05
 
 ### Fix: dragging/resizing in the editor's live preview wiped `url_sync` and forced `follow_mode`

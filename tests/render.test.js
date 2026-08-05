@@ -193,12 +193,11 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   w.document.body.appendChild(edRoomSync);
   let outRoomSync=null;
   edRoomSync.addEventListener('config-changed',e=>{outRoomSync=e.detail.config;});
-  edRoomSync.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+  edRoomSync.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},test_mode:true,
     rooms:[{id:'living',name:'Living',base_image:'/a.webp'},{id:'kitchen',name:'Kitchen',base_image:'/b.webp'}]});
   edRoomSync.hass={states:{},user:{name:'x'}};
-  edRoomSync._prevOn=true;
   edRoomSync._render();
-  t('preview mounts when drag-edit preview is on',!!edRoomSync._prevCard);
+  t('preview mounts when Edit mode is on',!!edRoomSync._prevCard);
   t('editor starts on room 0',edRoomSync._editRoomIdx===0);
   if(edRoomSync._prevCard)edRoomSync._prevCard._switchRoom(1,1,true); // simulates a click in the preview's own nav strip
   t('editor follows the room switched to inside the preview',edRoomSync._editRoomIdx===1);
@@ -210,6 +209,32 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
     !!outRoomSync&&Array.isArray(outRoomSync.rooms)&&outRoomSync.rooms[1]&&outRoomSync.rooms[1].id==='kitchen-edited'&&outRoomSync.rooms[0].id==='living');
 }
 
+// --- v5.9.0: Test mode + Drag-edit preview merged into a single "Edit mode" toggle ---
+{
+  const edEdit=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(edEdit);
+  let outEdit=null;
+  edEdit.addEventListener('config-changed',e=>{outEdit=e.detail.config;});
+  edEdit.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',
+    rooms:[{id:'living',name:'Living'},{id:'kitchen',name:'Kitchen'}]});
+  edEdit.hass={states:{},user:{name:'x'}};
+  t('no separate Drag-edit preview checkbox remains',!edEdit.querySelector('#prev-on'));
+  t('Edit mode checkbox present, off by default',!!edEdit.querySelector('#test_mode')&&edEdit.querySelector('#test_mode').checked===false);
+  t('preview not mounted while Edit mode is off',!edEdit._prevCard&&!edEdit.querySelector('#roc-prev-host'));
+  t('Room, Edit mode and Haptics all carry an icon',
+    !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:cursor-move"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]'));
+  const tmBox=edEdit.querySelector('#test_mode');
+  tmBox.checked=true;
+  tmBox.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('checking Edit mode mounts the live preview immediately (no extra _render needed)',!!edEdit._prevCard&&!!edEdit.querySelector('#roc-prev-host'));
+  t('checking Edit mode persists test_mode:true to the fired config',!!outEdit&&outEdit.test_mode===true);
+  const tmBox2=edEdit.querySelector('#test_mode');
+  tmBox2.checked=false;
+  tmBox2.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('unchecking Edit mode unmounts the preview',!edEdit._prevCard&&!edEdit.querySelector('#roc-prev-host'));
+  t('unchecking Edit mode deletes test_mode from the fired config',!!outEdit&&outEdit.test_mode===undefined);
+}
+
 // --- drag/resize edits relayed from the editor preview must not leak the preview's
 // forced/stripped fields (test_mode, _roc_preview, url_sync, follow_mode) into the
 // real saved config ---
@@ -219,10 +244,9 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   let outPos=null;
   edPos.addEventListener('config-changed',e=>{outPos=e.detail.config;});
   edPos.setConfig({type:'custom:room-overlay-card',card_id:'possync',base_image:'/local/x.webp',layout:{},
-    url_sync:true,follow_mode:'initial',
+    test_mode:true,url_sync:true,follow_mode:'initial',
     rooms:[{id:'living',name:'Living'},{id:'kitchen',name:'Kitchen'}]});
   edPos.hass={states:{},user:{name:'x'}};
-  edPos._prevOn=true;
   edPos._render();
   t('preview mounts for pos-relay test',!!edPos._prevCard);
   const previewCfg=edPos._prevCard?JSON.parse(JSON.stringify(edPos._prevCard._config)):null;
@@ -233,7 +257,7 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   t('drag/resize relay restores url_sync from the real config',edPos._config.url_sync===true);
   t('drag/resize relay restores follow_mode from the real config',edPos._config.follow_mode==='initial');
   t('drag/resize relay strips the _roc_preview marker',edPos._config._roc_preview===undefined);
-  t('drag/resize relay strips forced test_mode (real config never had it)',edPos._config.test_mode===undefined);
+  t('drag/resize relay keeps test_mode true (Edit mode is the real config value here)',edPos._config.test_mode===true);
   t('fired config also carries the restored url_sync/follow_mode',!!outPos&&outPos.url_sync===true&&outPos.follow_mode==='initial');
 }
 

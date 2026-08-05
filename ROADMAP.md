@@ -81,20 +81,38 @@ failure broke HACS installs.
    pieces (instance-reuse perf, optional swipe-reuse Phase 3) are non-blocking follow-ups — see
    [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
 2. ✅ **Haptic on hold-registered** (E7, mobile) — shipped v5.8.0.
-3. 🎯 **Editor GUI/UX revalidation** — up next, ships under **v5.9.x** (own minor version, not
-   bundled into v6.0.0 — decided 2026-08-05: v6.0.0 is reserved for the finished product,
-   README overhaul included, right before HACS submission).
+3. 🚧 **Editor GUI/UX revalidation** — in progress, shipping incrementally under **v5.9.x** (own
+   minor version, not bundled into v6.0.0 — decided 2026-08-05: v6.0.0 is reserved for the
+   finished product, README overhaul included, right before HACS submission). v5.9.0 shipped:
+   header **Edit mode** merge (Test mode + Drag-edit preview → one field) + Room/Edit
+   mode/Haptics icons. Rest of the header (Advanced-YAML relocation, room-picker prominence,
+   separator + tab-bar styling) and the tab content itself still to come — see
+   [`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md).
 4. 🎯 **v6.0.0 — Official HACS default-repository submission** — README/GitHub content overhaul
    as the finale, once the revalidated editor (step 3) has landed and settled.
 5. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
    during v6.0.0.
 
-## 🎯 Editor GUI/UX revalidation — up next, ships as v5.9.x
+## 🚧 Editor GUI/UX revalidation — in progress, shipping as v5.9.x
 
 A full pass over the editor for consistency and discoverability. The control surface has grown a
-lot across v3–v4 and is getting hard to navigate, even for the author. Scope to be broken down
-when picked up. **Versioned separately from v6.0.0** (decided 2026-08-05) — this is a real
-feature pass in its own right, not just a pre-submission checkbox.
+lot across v3–v4 and is getting hard to navigate, even for the author. **Versioned separately
+from v6.0.0** (decided 2026-08-05) — this is a real feature pass in its own right, not just a
+pre-submission checkbox. Analysis + proposals in
+[`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md), discussed and refined interactively
+with the user rather than implemented wholesale.
+
+Progress:
+- ✅ v5.9.0 — merged **Test mode** + **Drag-edit preview** into one **Edit mode** header toggle
+  (persists `test_mode`, shows the live preview immediately, no separate ephemeral flag); added
+  icons to Room/Edit mode/Haptics, shortened "Haptic feedback" → "Haptics".
+- 🎯 next — user re-reviewing the visual result before further header changes (Advanced-YAML
+  relocation out of the header, Room-picker visual prominence/placement, separator line +
+  stronger tab-bar styling before the Image/Elements/Layout/Rooms&menu tabs).
+- Not yet started — the room-accordion sections under each tab (Background & basics, Image
+  filters, etc.) and the tab content itself (Elements-section reordering by intent, Rooms&menu
+  sub-accordions, per-item Advanced-YAML, item search/filter, Layout-tab live preview) — full
+  list of proposals in `EDITOR_UX_REVALIDATION.md`.
 
 ## 🎯 v6.0.0 — Official HACS default-repository submission
 

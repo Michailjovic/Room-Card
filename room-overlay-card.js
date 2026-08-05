@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.8.2';
+const ROC_VERSION='5.9.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -3588,7 +3588,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevOn=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
@@ -3736,12 +3736,13 @@ class RoomOverlayCardEditor extends HTMLElement{
       dl.innerHTML=this._dlOptions();
   }
 
-  // Interactive preview inside the editor — a real card instance with
-  // test_mode forced on, without touching the dashboard config
+  // Interactive preview inside the editor — a real card instance mirroring
+  // Edit mode (config.test_mode); shown here whenever it's on, since it's the
+  // same saved config field that also puts the real dashboard card into it.
   _mountPreview(){
     const host=this.querySelector('#roc-prev-host');
     this._prevCard=null;
-    if(!host||!this._prevOn)return;
+    if(!host||!this._config||!this._config.test_mode)return;
     try{
       const el=document.createElement('room-overlay-card');
       const cfg=rocClone(this._config);
@@ -5105,13 +5106,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
       +'<span style="font-size:11px;color:var(--secondary-text-color);margin-left:4px;">v'+ROC_VERSION+'</span></span></div>'
       +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
-      +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);">Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
-      +'<label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Test mode</label>'
-      +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Haptic feedback</label>'
-      +'<label for="prev-on" title="A live, editable copy of the card shown right here — drag and resize elements directly, and it shows the room picked above. (The preview panel on the right is Home Assistant&#39;s own and follows live presence, so it won&#39;t track the room selector.)" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="prev-on" type="checkbox"'+(this._prevOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Drag-edit preview</label>'
+      +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);"><ha-icon icon="mdi:door" style="--mdc-icon-size:16px;"></ha-icon>Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
+      +'<label title="Puts the card into a safe interactive editing state: real tap/hold actions are suppressed, elements can be dragged directly, and an orientation-flip test button appears. Shows a live, draggable copy of the card right here below, and — since this is saved to your config — the same behaviour on your dashboard card too, until switched off." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:cursor-move" style="--mdc-icon-size:16px;"></ha-icon>Edit mode</label>'
+      +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:vibrate" style="--mdc-icon-size:16px;"></ha-icon>Haptics</label>'
       +'<label title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="roc-adv-toggle" type="checkbox"'+(this._showAdv?' checked':'')+' style="width:16px;height:16px;cursor:pointer;">Advanced (YAML)</label>'
       +'</div>'
-      +(this._prevOn?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
+      +(c.test_mode?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +((this._wasMigrated&&!_isEmpty)?'<div style="margin:0 4px 10px;padding:8px 12px;border:1px solid rgba(230,160,40,0.7);background:rgba(230,160,40,0.12);border-radius:8px;font-size:12px;line-height:1.5;">Config was <b>auto-migrated</b> from the v3 tier system to the v4 layout engine (in memory only). Review the <b>Layout</b> tab, then <button id="roc-mig-save" style="padding:3px 12px;border-radius:5px;background:var(--primary-color);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;">Save migrated config</button></div>':'')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
       +'</div>';
@@ -5178,12 +5178,12 @@ class RoomOverlayCardEditor extends HTMLElement{
     this._mountPreview();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
-    if(c.test_mode||this._prevOn){
+    if(c.test_mode){
       this._rocPosHandler=this._makeRocPosHandler();
       window.addEventListener('roc-pos-update',this._rocPosHandler);
     }
     if(this._rocRoomHandler){window.removeEventListener('roc-room-switch',this._rocRoomHandler);this._rocRoomHandler=null;}
-    if(this._prevOn){
+    if(c.test_mode){
       this._rocRoomHandler=this._makeRocRoomHandler();
       window.addEventListener('roc-room-switch',this._rocRoomHandler);
     }
@@ -5347,8 +5347,6 @@ class RoomOverlayCardEditor extends HTMLElement{
     ROC_PROFILES.forEach(function(pk){['aspect_ratio','border_radius','image_fit'].forEach(function(idb){
       const el=self.querySelector('#'+idb+'__'+pk);if(el)el.addEventListener('change',fire);
     });});
-    const prevOnEl=this.querySelector('#prev-on');
-    if(prevOnEl)prevOnEl.addEventListener('change',function(){self._prevOn=prevOnEl.checked;self._render();});
     const undoBtn=this.querySelector('#roc-undo');
     if(undoBtn)undoBtn.addEventListener('click',function(){self._undo();});
     const redoBtn=this.querySelector('#roc-redo');
@@ -5397,13 +5395,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     const tm=this.querySelector('#test_mode');
     if(tm){
       tm.addEventListener('change',function(){
-        // Re-register roc-pos-update listener — _render() is skipped by same-check when only test_mode toggles
-        if(self._rocPosHandler){window.removeEventListener('roc-pos-update',self._rocPosHandler);self._rocPosHandler=null;}
-        if(tm.checked){
-          self._rocPosHandler=self._makeRocPosHandler();
-          window.addEventListener('roc-pos-update',self._rocPosHandler);
-        }
-        fire();
+        // Edit mode also toggles the live preview panel below — force a local
+        // re-render rather than just fire(), since setConfig()'s same-config
+        // check would otherwise skip re-rendering for this field alone and the
+        // preview host div (and its pos/room relay listeners) wouldn't appear.
+        const c=self._collectConfig();
+        self._config=c;
+        self._render();
+        self._fire(c);
       });
     }
     const hpEl2=this.querySelector('#haptic');if(hpEl2)hpEl2.addEventListener('change',fire);
