@@ -118,6 +118,37 @@ t('collect wrote image row',out&&out.layout.landscape.place.image.row===3);
 t('collect kept aspect per-profile',out&&out.aspect_ratio&&out.aspect_ratio.portrait==='4/3');
 t('collect dropped legacy keys',out&&out.max_height===undefined&&out.breakpoints===undefined);
 
+// --- editor: nav.live:full option + mini-room settings sub-panel ---
+// (nav.* settings only render for multi-room configs — single-room cards get
+// the "Convert to multi-room" prompt instead — so this needs its own
+// multi-room editor instance, separate from the single-room `ed` above.)
+const edNav=w.document.createElement('room-overlay-card-editor');
+let outNav=null;
+edNav.addEventListener('config-changed',e=>{outNav=e.detail.config;});
+edNav.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]});
+edNav.hass={states:{},user:{name:'x'}};
+t('nav-live select offers a full option',!!edNav.querySelector('#nav-live option[value="full"]'));
+t('mini panel hidden by default (live not full)',/display:none/.test(edNav.querySelector('#nav-mini-panel').getAttribute('style')||''));
+edNav.querySelector('#nav-live').value='full';
+edNav.querySelector('#nav-live').dispatchEvent(new w.Event('change',{bubbles:true}));
+t('mini panel shown once live:full picked',!/display:none/.test(edNav.querySelector('#nav-mini-panel').getAttribute('style')||''));
+t('picking live:full fired the config change',outNav&&outNav.nav&&outNav.nav.live==='full');
+edNav.querySelector('#nav-mini-templates').checked=true;
+edNav.querySelector('#nav-mini-templates').dispatchEvent(new w.Event('change',{bubbles:true}));
+edNav.querySelector('#nav-mini-camera-refresh').value='45';
+edNav.querySelector('#nav-mini-camera-refresh').dispatchEvent(new w.Event('change',{bubbles:true}));
+edNav.querySelector('#nav-mini-width-ref').value='360';
+edNav.querySelector('#nav-mini-width-ref').dispatchEvent(new w.Event('change',{bubbles:true}));
+t('collect wrote nav.mini.templates',outNav&&outNav.nav&&outNav.nav.mini&&outNav.nav.mini.templates===true);
+t('collect wrote nav.mini.camera_refresh',outNav&&outNav.nav&&outNav.nav.mini&&outNav.nav.mini.camera_refresh===45);
+t('collect wrote nav.mini.width_ref',outNav&&outNav.nav&&outNav.nav.mini&&outNav.nav.mini.width_ref===360);
+// round-trip: re-open the editor on a config that already has nav.mini set
+const edMini=w.document.createElement('room-overlay-card-editor');
+edMini.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}],nav:{live:'full',mini:{templates:true,camera_refresh:45,width_ref:360}}});
+edMini.hass={states:{},user:{name:'x'}};
+t('mini panel pre-shown when loaded config already has live:full',!/display:none/.test(edMini.querySelector('#nav-mini-panel').getAttribute('style')||''));
+t('mini fields prefilled from loaded config',edMini.querySelector('#nav-mini-templates').checked===true&&edMini.querySelector('#nav-mini-camera-refresh').value==='45'&&edMini.querySelector('#nav-mini-width-ref').value==='360');
+
 // --- editor opens on the room the card was showing (in-memory store) ---
 const _memCfg={type:'custom:room-overlay-card',card_id:'memcard',base_image:'/local/m.webp',layout:{},rooms:[{id:'living',name:'Living'},{id:'hall',name:'Hall'}]};
 const cardM=w.document.createElement('room-overlay-card');

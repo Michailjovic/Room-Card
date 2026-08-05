@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.5.2';
+const ROC_VERSION='5.6.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4214,6 +4214,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _ns=v('nav-style','thumbnails');if(_ns&&_ns!=='thumbnails')_navO.style=_ns;
       const _np=v('nav-position','top');if(_np&&_np!=='top')_navO.position=_np;
       const _nlv=v('nav-live','');if(_nlv)_navO.live=_nlv;
+      const _navMiniO={};
+      const _nmtEl=q('#nav-mini-templates');if(_nmtEl&&_nmtEl.checked)_navMiniO.templates=true;
+      const _nmcr=parseFloat(v('nav-mini-camera-refresh',''));if(!isNaN(_nmcr))_navMiniO.camera_refresh=_nmcr;
+      const _nmwr=parseFloat(v('nav-mini-width-ref',''));if(!isNaN(_nmwr))_navMiniO.width_ref=_nmwr;
+      if(Object.keys(_navMiniO).length)_navO.mini=_navMiniO;
       const _nh=v('nav-height','').trim();if(_nh)_navO.height=_nh;
       const _nw=v('nav-width','').trim();if(_nw)_navO.width=_nw;
       const _nmh=v('nav-mobile-height','').trim();if(_nmh)_navO.mobile_height=_nmh;
@@ -4825,6 +4830,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       }
       roomsInner+='</div>';
       const _nav=(c.nav&&typeof c.nav==='object')?c.nav:{};
+      const _navMini=(_nav.mini&&typeof _nav.mini==='object')?_nav.mini:{};
       roomsInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;margin-top:4px;"><label class="roc-l" style="font-weight:600;">Navigation menu</label>';
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
       roomsInner+='<div><label class="roc-l">Style</label><select id="nav-style"'+this._inp('')+'>';
@@ -4835,8 +4841,17 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='</select></div>';
       roomsInner+='</div>';
       roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Live thumbnails (mini-room view)</label><select id="nav-live"'+this._inp('')+'>';
-      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped.</p></div>';
+      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['full','full — live room minis (real instances, everything)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      roomsInner+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped. Full mounts a real, independent copy of each room — gauges, labels, icons, blinds, embedded cards and all — scaled down; heavier on older tablets, test yours with more than a couple of rooms.</p></div>';
+      roomsInner+='<div id="nav-mini-panel" style="'+(_nav.live==='full'?'':'display:none;')+'border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
+      roomsInner+='<label class="roc-l" style="font-weight:600;">Mini-room settings (live: full)</label>';
+      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;align-items:center;">';
+      roomsInner+='<div style="display:flex;align-items:center;gap:7px;"><input id="nav-mini-templates" type="checkbox"'+(_navMini.templates?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-mini-templates" style="font-size:12px;cursor:pointer;">Label/colour templates</label></div>';
+      roomsInner+='<div><label class="roc-l">Camera refresh (s, min 30)</label><input id="nav-mini-camera-refresh" type="number" min="30" step="5" placeholder="30" value="'+(_navMini.camera_refresh!=null?_navMini.camera_refresh:'')+'"'+this._inp('')+'></div>';
+      roomsInner+='<div><label class="roc-l">Reference width (px)</label><input id="nav-mini-width-ref" type="number" min="120" step="10" placeholder="480" value="'+(_navMini.width_ref!=null?_navMini.width_ref:'')+'"'+this._inp('')+'></div>';
+      roomsInner+='</div>';
+      roomsInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Templates and camera streams are extra per-room subscriptions — off by default. Every mini shows everything unconditionally; excluding a specific element is planned for a future "custom" mode.</p>';
+      roomsInner+='</div>';
       roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
       roomsInner+='<div><label class="roc-l">Height</label><input id="nav-height" type="text" placeholder="64px" value="'+this._e(_nav.height||'')+'"'+this._inp('')+'></div>';
       roomsInner+='<div><label class="roc-l">Item width (css or auto)</label><input id="nav-width" type="text" placeholder="auto / 120px" value="'+this._e(_nav.width||'')+'"'+this._inp('')+'></div>';
@@ -5206,8 +5221,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     const convRooms=this.querySelector('#conv-rooms');
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
-    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-live','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards','url-sync','url-sync-key'].forEach(function(id){
+    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards','nav-mini-templates','nav-mini-camera-refresh','nav-mini-width-ref','url-sync','url-sync-key'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
+    });
+    // nav-live toggles the "Mini-room settings" sub-panel in place (no
+    // re-render — same pattern as #filter-mode below) since it's only
+    // relevant/visible when live:full is picked.
+    const navLiveEl=this.querySelector('#nav-live');
+    if(navLiveEl)navLiveEl.addEventListener('change',function(){
+      const panel=self.querySelector('#nav-mini-panel');
+      if(panel)panel.style.display=navLiveEl.value==='full'?'':'none';
+      self._fire(self._collectConfig());
     });
     const bidMap=this.querySelector('#bid-map');
     if(bidMap)bidMap.addEventListener('click',function(){

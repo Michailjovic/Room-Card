@@ -752,6 +752,20 @@ rooms:
 
 With **`nav.live: composite`** every thumbnail becomes a **live mini-room**: it stacks the room's currently *active* overlay images (lit lamps, open windows, …) over its base image, applies the room's conditional base image and its `filter_conditions` / `brightness_model` filter — so the menu really is a scaled-down copy of each room's current look, updating live. It's pure CSS background compositing (no extra card instances or subscriptions), with two approximations: an overlay shows whenever its opacity resolves above 0, and grouped (pop-up panel) or `visible_template`-driven overlays are skipped.
 
+With **`nav.live: full`** every thumbnail becomes a real, independent, non-interactive copy of the room — gauges, labels, icons, badges, blinds, embedded cards, everything, not just image layers. Each mini renders at a fixed reference width (`nav.mini.width_ref`) and is scaled down as a whole, so fonts/icons/gauge strokes keep the exact same proportions as the full-size card, just smaller. It shows everything unconditionally — there's no per-element filtering (a future `custom` mode is planned for that). Configurable in the editor (*Rooms & menu* tab → *Live thumbnails* → *full*, reveals a *Mini-room settings* panel) or directly in YAML:
+
+```yaml
+nav:
+  style: thumbnails
+  live: full
+  mini:
+    templates: false     # opt-in — label/colour templates cost a WS subscription per mini
+    camera_refresh: 30    # seconds, clamped >= 30 regardless of the room's own setting
+    width_ref: 480         # px — reference width each mini renders at before scaling down
+```
+
+Templates and camera streams are extra per-instance subscriptions, so they default off. This is heavier than `composite` (real DOM trees + scaled compositing layers, one per room) — test on your actual tablet before enabling on more than a couple of rooms.
+
 Switching works several ways: nav thumbnails/tabs, the **follow button** (crosshair that lights up when you're away from your presence room; `{action: follow-room}`), **finger-attached swipe** (the room follows your finger; release past 25 % or fling to commit), **mouse-wheel** on desktop (`nav.wheel: horizontal | vertical | both`), the `switch-room` / `next-room` / `prev-room` actions, and automatic **presence follow** via `room_entity`. With **`url_sync: true`** the active room is written to the page URL as `#room=<id>` (set `url_sync: <key>` for a custom hash key), so rooms become **bookmarkable and shareable** — opening a `#room=bedroom` link jumps straight there, and browser back/forward navigates rooms. Updates, templates and camera refresh run only for the active room. Top-level room-scoped keys act as defaults for every room. Without `rooms:` the card behaves as a single room; the editor has a one-click **Convert to multi-room** button, and you can **reorder rooms** with the ▲▼ buttons in the *Rooms & menu* tab.
 
 ---

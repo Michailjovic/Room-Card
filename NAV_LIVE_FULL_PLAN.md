@@ -1,8 +1,10 @@
 # Live Mini-Room Nav — Phase 2 (`nav.live: full`) — Implementation Plan
 
-Status: **in progress** — Phase 0 (observer/flag prerequisites) and steps 2-3 (config transform +
-mount/scale) implemented 2026-08-05, syntax-checked, not yet tested or live-verified. Steps 4-7
-(lifecycle/reuse, editor UI, tests, docs) still pending.
+Status: **core done, live-verified** — Phase 0, steps 2-3 (config transform + mount/scale, v5.4.0),
+step 5 (editor UI, v5.6.0) and step 6 (tests, alongside each step) implemented and confirmed
+working on a real dashboard (v5.5.0-v5.5.2 fixed real sizing bugs found in that live testing).
+Step 4 (instance-reuse/lifecycle optimization) and Optional Phase 3 (swipe reuse) still pending —
+non-blocking follow-ups, not required for the feature to work correctly.
 
 **Three `nav.live` tiers, agreed 2026-08-05** (see §13 for the full rationale): `''`/off (today's
 baseline — static base image + filter, no compositing) → `'composite'` (existing, shipped v3.1.0

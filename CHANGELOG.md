@@ -1,5 +1,26 @@
 # Changelog
 
+## [5.6.0] - 2026-08-05
+
+### `nav.live: full` — editor UI (step 5 of the feature)
+
+`nav.live: full` (real live mini-rooms in the nav thumbnails, shipped v5.4.0, sizing bugs fixed
+through v5.5.2) was YAML-only until now. The editor's *Rooms & menu* tab gets:
+
+- A `full` option on the existing *Live thumbnails* dropdown, alongside `off` and `composite`.
+- A *Mini-room settings* panel, shown only when `full` is selected: a templates checkbox, a
+  camera-refresh number field (min 30s), and a reference-width field — matching `nav.mini.templates`
+  / `nav.mini.camera_refresh` / `nav.mini.width_ref` in YAML.
+
+No behaviour change for existing `off`/`composite` configs. New render tests cover the option
+being present, the panel showing/hiding on selection, config round-tripping correctly on
+`config-changed`, and pre-filling correctly when reopening the editor on a config that already has
+`nav.mini` set. 168 smoke + full render suite green.
+
+This closes out the `nav.live: full` feature build-out (mount mechanism, three rounds of live
+sizing fixes, now editor UI) — remaining items (instance-reuse performance, the planned `custom`
+per-element mode) are non-blocking follow-ups, not required for today's `full` mode to work.
+
 ## [5.5.2] - 2026-08-05
 
 ### Fix: v5.5.1's `zoom` fix didn't survive a real page load (async re-layout undid it)
