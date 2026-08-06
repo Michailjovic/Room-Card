@@ -511,6 +511,35 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
     !!fillTO&&fillTO.style.height==='60%');
 }
 
+// --- fix: nav thumbnail wrapper filter must NOT apply when nav.live is full/custom — the real
+// mounted mini instance already applies its own brightness_model/filter_conditions internally
+// (same render code path as the main card); a CSS filter on the outer wrapper stacked ON TOP of
+// that, double-exposing/double-dimming the thumbnail. Reported live: composite thumbnails looked
+// correct, full/custom looked overexposed — v5.9.10 bug ---
+{
+  const _fcRooms=[{id:'r0',base_image:'/a.webp',filter_conditions:[{filter:'brightness(1.6)'}]},{id:'r1',base_image:'/b.webp'}];
+  const cardFullFc=mkCard({type:'custom:room-overlay-card',nav:{style:'thumbnails',live:'full'},rooms:_fcRooms});
+  cardFullFc.hass={states:{},callService(){},user:{name:'x'}};
+  cardFullFc._update();
+  t('nav.live:full — thumbnail wrapper stays filter-free (mini instance applies its own filter)',
+    cardFullFc._navThumbEls[0].style.filter==='');
+  const cardCustomFc=mkCard({type:'custom:room-overlay-card',nav:{style:'thumbnails',live:'custom'},rooms:_fcRooms});
+  cardCustomFc.hass={states:{},callService(){},user:{name:'x'}};
+  cardCustomFc._update();
+  t('nav.live:custom — thumbnail wrapper also stays filter-free',
+    cardCustomFc._navThumbEls[0].style.filter==='');
+  const cardCompositeFc=mkCard({type:'custom:room-overlay-card',nav:{style:'thumbnails',live:'composite'},rooms:_fcRooms});
+  cardCompositeFc.hass={states:{},callService(){},user:{name:'x'}};
+  cardCompositeFc._update();
+  t('nav.live:composite — unaffected, still applies filter_conditions to the wrapper (no mini instance to double up with)',
+    cardCompositeFc._navThumbEls[0].style.filter==='brightness(1.6)');
+  const cardOffFc=mkCard({type:'custom:room-overlay-card',nav:{style:'thumbnails'},rooms:_fcRooms});
+  cardOffFc.hass={states:{},callService(){},user:{name:'x'}};
+  cardOffFc._update();
+  t('nav.live off (classic static thumbs) — also unaffected, filter_conditions still applies',
+    cardOffFc._navThumbEls[0].style.filter==='brightness(1.6)');
+}
+
 // --- haptic on hold-registered (ROADMAP E7) — fires the MOMENT a hold
 // threshold is reached, distinct from _exec()'s existing execute-time haptic
 // ---

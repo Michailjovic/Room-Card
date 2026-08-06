@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.9';
+const ROC_VERSION='5.9.10';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -3268,13 +3268,20 @@ class RoomOverlayCard extends HTMLElement{
     if(!this._hass||!this._rendered)return;
     const s=this._hass.states,cAll=this._config;
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length){
-      const _live=!!(cAll.nav&&cAll.nav.live); // 'composite' (and future modes) — falsy = classic thumbs
+      const _navLiveVal=cAll.nav&&cAll.nav.live;
+      const _live=_navLiveVal==='composite'; // composite draws its own base+overlay stack on tEl, filtered here
+      const _liveReal=_navLiveVal==='full'||_navLiveVal==='custom'; // real mounted mini instances — they
+      // apply their own brightness_model/filter_conditions internally (same code path as the main card);
+      // a CSS filter set on the WRAPPER (tEl) would stack on top of the mini's own already-correct
+      // per-layer filter, double-exposing/double-dimming it. So the wrapper must stay filter-free here.
       for(let ri=0;ri<cAll.rooms.length;ri++){
         const tEl=this._navThumbEls[ri];if(!tEl)continue;
         const r=cAll.rooms[ri];
         let tf='';
-        if(_live){const bf=bmFilter(r.brightness_model,s,this._navBmSorted[ri]);if(bf&&bf!=='none')tf=bf;}
-        if(!tf&&r.filter_conditions?.length){const f=resolveFilter(r.filter_conditions,s);if(f&&f!=='none')tf=f;}
+        if(!_liveReal){
+          if(_live){const bf=bmFilter(r.brightness_model,s,this._navBmSorted[ri]);if(bf&&bf!=='none')tf=bf;}
+          if(!tf&&r.filter_conditions?.length){const f=resolveFilter(r.filter_conditions,s);if(f&&f!=='none')tf=f;}
+        }
         setSt(tEl,'filter',tf);
         if(!_live)continue;
         // Conditional base image (mirror of the main card's logic)

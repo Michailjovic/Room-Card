@@ -1,5 +1,30 @@
 # Changelog
 
+## [5.9.10] - 2026-08-05
+
+### Fix: `nav.live: full`/`custom` thumbnails were overexposed vs. `composite`
+
+`_updateNav()` applied each room's `brightness_model`/`filter_conditions`-derived CSS `filter`
+directly to the thumbnail **wrapper** element (`.roc-thumb`), regardless of `nav.live` mode. For
+`composite` (and classic static thumbnails) that's correct — the wrapper paints the room's
+background/overlay stack itself, so it needs its own filter. But for `full`/`custom`, the wrapper
+instead hosts a **real, independently-rendering `<room-overlay-card>` mini instance**, which
+already applies its own `brightness_model`/`filter_conditions` internally (the exact same render
+code path as the main card). Setting a CSS `filter` on the wrapper composited it on top of the
+mini's already-correct rendering — brightness stacking on brightness — producing a visibly
+overexposed/washed-out thumbnail. Reported live: composite thumbnails looked normal, full/custom
+looked overexposed.
+
+Fixed by skipping the wrapper filter entirely when `nav.live` is `full` or `custom` — the mounted
+mini instance is fully self-sufficient for its own lighting/filter state. `composite` and classic
+static thumbnails are unaffected.
+
+### Testing
+
+4 new render tests (full/custom stay filter-free; composite and classic-static are confirmed
+unaffected, still applying `filter_conditions` to the wrapper as before). Full smoke + render
+suites pass.
+
 ## [5.9.9] - 2026-08-05
 
 ### Revert: v5.9.8's `day_night` phase change broke the fully-closed look
