@@ -16,6 +16,13 @@ Target ship version: **v5.9.x** (explicitly not bundled into v6.0.0).
   illustrative mini grid preview per profile, and a real fix so Layout edits reach the mounted
   Edit-mode preview card (they never did — `layout` wasn't part of `setConfig()`'s item-count diff
   that decides whether to remount it).
+- Proposal 4 (sub-accordion Rooms & menu) — **done in v5.9.13**: 4 `sec()` accordions (Room
+  identity / Presence & follow / Navigation menu / Deep-linking), same pattern as Elements. Picked
+  4 over 5 sections after comparing both as mockups with the user.
+
+All four "high impact" proposals from this document are now shipped. Remaining: 5 (per-item
+Advanced-YAML), 6 (search/filter — rejected, see above), 8 (copy-to-other-rooms), 9 (audit other
+alphabetical lists).
 
 Scope: `RoomOverlayCardEditor` (the `room-overlay-card-editor` custom element in
 `room-overlay-card.js`) — the 4-tab editor (Image / Elements / Layout / Rooms & menu),

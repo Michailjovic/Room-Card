@@ -1,5 +1,22 @@
 # Changelog
 
+## [5.9.13] - 2026-08-08
+
+### Editor: Rooms & menu tab — sub-accordions (proposal 4 from the editor GUI/UX revalidation)
+
+The Rooms & menu tab was one unbroken flat block — roughly 15 distinct concerns back to back with no sub-headers, the densest tab in the editor. Split into 4 collapsible `sec()` accordions (the same pattern already used on the Elements tab), decided after comparing a 5-section and a 4-section mockup with the user — 4 won out:
+
+- **Room identity** — Room id, Name, Room icon, Area match, Thumbnail chips override. Open by default the first time the editor ever renders (same one-time nudge the Image tab's "Background & basics" section already gets), since it's the section most people reach for first.
+- **Presence & follow** — room_entity, Follow hold, card_id, Follow mode, room_state_entity, and the "This device" browser_mod mapping (kept here rather than split out — it's just another way of resolving the active room).
+- **Navigation menu** — style, position, live thumbnails + the conditional Mini-room settings panel, height/width/mobile height, auto breakpoint, wheel switch, follow button, and the Chips/Cards YAML lists. Still the biggest section, but now fenced off from room identity and presence, and collapsible on its own.
+- **Deep-linking** — the Sync-room-to-URL checkbox + hash key, now with a one-line explanation of what it actually does (`#room=<id>` in the address bar) that didn't fit anywhere before.
+
+Every field keeps its exact same id — this is a pure DOM regrouping, `_collectConfig()` needed zero changes.
+
+### Testing
+
+7 new render tests: all 4 accordion panels present, Room identity open by default on first render (others closed), and the right fields land inside the right panel (spot-checked room-id / nav-style / url-sync). Full smoke + render suites green (0 FAIL).
+
 ## [5.9.12] - 2026-08-08
 
 ### Editor: Layout tab — two small follow-ups to v5.9.11, per live user feedback on the rendered result

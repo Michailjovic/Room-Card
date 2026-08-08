@@ -125,6 +125,27 @@ t('...and the field that was typed into keeps its value (no re-render/focus loss
 t('sub-tab buttons carry a portrait/landscape mdi icon',/mdi:crop-portrait/.test(ed.querySelector('[data-rocsub="portrait"]').innerHTML)&&/mdi:crop-landscape/.test(ed.querySelector('[data-rocsub="landscape"]').innerHTML));
 t('Image fit is a dropdown, not a free-text field',ed.querySelector('#image_fit__landscape').tagName==='SELECT'&&ed.querySelector('#image_fit__portrait').tagName==='SELECT');
 t('Image fit dropdown offers cover/contain options',['cover','contain'].every(function(v){return!!ed.querySelector('#image_fit__landscape option[value="'+v+'"]');}));
+
+// --- editor: Rooms & menu tab — sub-accordions ---
+(function(){
+  const edRm=w.document.createElement('room-overlay-card-editor');
+  edRm.setConfig({base_image:'/local/x.webp',rooms:[
+    {id:'living',name:'Living room',base_image:'/local/x.webp'},
+    {id:'bedroom',name:'Bedroom',base_image:'/local/x.webp'}
+  ]});
+  edRm.hass={states:{},user:{name:'x'}};
+  const _roomsTabBtn=edRm.querySelector('[data-roctab="rooms"]');
+  if(_roomsTabBtn)_roomsTabBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+  t('Rooms & menu renders 4 accordion sections',
+    !!edRm.querySelector('[data-panel="room-identity"]')&&!!edRm.querySelector('[data-panel="room-presence"]')&&!!edRm.querySelector('[data-panel="room-nav"]')&&!!edRm.querySelector('[data-panel="room-deeplink"]'));
+  t('Room identity section is open by default on first render',edRm.querySelector('[data-panel="room-identity"]').hasAttribute('open'));
+  t('Presence & follow section starts closed',!edRm.querySelector('[data-panel="room-presence"]').hasAttribute('open'));
+  t('all field ids still present, just regrouped (room-id, room_entity, nav-style, url-sync)',
+    !!edRm.querySelector('#room-id')&&!!edRm.querySelector('#room_entity')&&!!edRm.querySelector('#nav-style')&&!!edRm.querySelector('#url-sync'));
+  t('room-id lives inside the Room identity panel',!!edRm.querySelector('[data-panel="room-identity"] #room-id'));
+  t('nav-style lives inside the Navigation menu panel',!!edRm.querySelector('[data-panel="room-nav"] #nav-style'));
+  t('url-sync lives inside the Deep-linking panel',!!edRm.querySelector('[data-panel="room-deeplink"] #url-sync'));
+})();
 t('Companion cards YAML intro text only shows in Advanced/YAML mode',
   (()=>{const introEl=[...ed.querySelectorAll('label.roc-l')].find(l=>l.textContent.indexOf('Companion cards')===0);
     return !!introEl&&introEl.closest('.roc-adv')!==null;})());

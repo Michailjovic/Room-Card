@@ -112,12 +112,14 @@ Progress:
   card (they never did before — `layout` wasn't part of the item-count diff that decides whether
   `setConfig()` remounts it). Decided (2026-08-08): Elements-tab alphabetical-with-icons ordering
   (proposal 1) stays as-is — reviewed and preferred over reordering by intent.
+- ✅ v5.9.13 — **Rooms & menu tab**: split into 4 `sec()` accordions (Room identity / Presence &
+  follow / Navigation menu / Deep-linking), same pattern as Elements. All four "high impact"
+  proposals from `EDITOR_UX_REVALIDATION.md` are now shipped.
 - 🎯 next — user re-reviewing the visual result before further header changes (Advanced-YAML
   relocation out of the header, Room-picker visual prominence/placement, separator line +
   stronger tab-bar styling before the Image/Elements/Layout/Rooms&menu tabs).
-- Not yet started — the room-accordion sections under each tab (Background & basics, Image
-  filters, etc.), Rooms&menu sub-accordions, per-item Advanced-YAML, item search/filter — full
-  list of proposals in `EDITOR_UX_REVALIDATION.md`.
+- Not yet started — per-item Advanced-YAML, copy-to-other-rooms, audit remaining alphabetical
+  lists — "medium"/"lower impact" proposals in `EDITOR_UX_REVALIDATION.md`.
 
 ## 🎯 v6.0.0 — Official HACS default-repository submission
 

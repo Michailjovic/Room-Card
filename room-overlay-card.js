@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.12';
+const ROC_VERSION='5.9.13';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4768,7 +4768,7 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     const tapYaml=cR.tap_action?_yaml.s(cR.tap_action):'';
     const sec=function(id,label,count,inner,icon){
-      const isOpen=open.has(id)||(firstRender&&id==='basic');
+      const isOpen=open.has(id)||(firstRender&&(id==='basic'||id==='room-identity'));
       const _d=label.indexOf(' — ');
       const _nm=_d>=0?label.slice(0,_d):label;
       const _ds=_d>=0?label.slice(_d+3):'';
@@ -4938,88 +4938,98 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button>';
       roomsInner+='</span>';
       roomsInner+='</div>';
-      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
-      roomsInner+='<div><label class="roc-l">Room id</label><input id="room-id" type="text" value="'+this._e(er.id||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Name</label><input id="room-name" type="text" value="'+this._e(er.name||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Room icon (shown only when nav style = tabs)</label><input id="room-icon" type="text" placeholder="mdi:sofa" value="'+this._e(er.icon||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='</div>';
-      roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Area match (comma-separated states of room_entity that map to this room, e.g. Bermuda area names)</label><input id="room-area-match" type="text" placeholder="Bedroom, Ložnice" value="'+this._e(Array.isArray(er.area_match)?er.area_match.join(', '):'')+'"'+this._inp('')+'></div>';
+      // --- Room identity ---------------------------------------------------
+      let riIdentity='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+      riIdentity+='<div><label class="roc-l">Room id</label><input id="room-id" type="text" value="'+this._e(er.id||'')+'"'+this._inp('')+'></div>';
+      riIdentity+='<div><label class="roc-l">Name</label><input id="room-name" type="text" value="'+this._e(er.name||'')+'"'+this._inp('')+'></div>';
+      riIdentity+='<div><label class="roc-l">Room icon (shown only when nav style = tabs)</label><input id="room-icon" type="text" placeholder="mdi:sofa" value="'+this._e(er.icon||'')+'"'+this._inp('')+'></div>';
+      riIdentity+='</div>';
+      riIdentity+='<div style="margin-bottom:8px;"><label class="roc-l">Area match (comma-separated states of room_entity that map to this room, e.g. Bermuda area names)</label><input id="room-area-match" type="text" placeholder="Bedroom, Ložnice" value="'+this._e(Array.isArray(er.area_match)?er.area_match.join(', '):'')+'"'+this._inp('')+'></div>';
       const _rch=er.chips?_yaml.s(er.chips):'';
-      roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Thumbnail chips override (YAML list — falls back to nav.chips; {room} = room id)</label><textarea id="room-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_rch)+'</textarea></div>';
-      roomsInner+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+      riIdentity+='<div><label class="roc-l">Thumbnail chips override (YAML list — falls back to nav.chips; {room} = room id)</label><textarea id="room-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_rch)+'</textarea></div>';
+
+      // --- Presence & follow -------------------------------------------------
+      let riPresence='<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
       const _reIsObj=typeof c.room_entity==='object'&&c.room_entity;
-      roomsInner+='<div><label class="roc-l">room_entity (active room follows it — e.g. Bermuda area sensor or input_select)</label><input id="room_entity" type="text" list="roc-entities"'+(_reIsObj?' disabled placeholder="per-device mapping active — edit by_user/by_browser in YAML"':' placeholder="sensor.phone_area"')+' value="'+this._e(typeof c.room_entity==='string'?c.room_entity:'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Follow hold (s after manual switch)</label><input id="follow_hold" type="number" min="0" step="5" value="'+(c.follow_hold??60)+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">card_id (pairing key)</label><input id="card_id" type="text" value="'+this._e(c.card_id||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='</div>';
-      roomsInner+='<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">';
-      roomsInner+='<div><label class="roc-l">Follow mode</label><select id="follow_mode"'+this._inp('')+'>';
-      [['always','always — follow continuously'],['initial','initial — only when the card loads'],['manual','manual — button / action only']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((c.follow_mode||'always')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select></div>';
+      riPresence+='<div><label class="roc-l">room_entity (active room follows it — e.g. Bermuda area sensor or input_select)</label><input id="room_entity" type="text" list="roc-entities"'+(_reIsObj?' disabled placeholder="per-device mapping active — edit by_user/by_browser in YAML"':' placeholder="sensor.phone_area"')+' value="'+this._e(typeof c.room_entity==='string'?c.room_entity:'')+'"'+this._inp('')+'></div>';
+      riPresence+='<div><label class="roc-l">Follow hold (s after manual switch)</label><input id="follow_hold" type="number" min="0" step="5" value="'+(c.follow_hold??60)+'"'+this._inp('')+'></div>';
+      riPresence+='<div><label class="roc-l">card_id (pairing key)</label><input id="card_id" type="text" value="'+this._e(c.card_id||'')+'"'+this._inp('')+'></div>';
+      riPresence+='</div>';
+      riPresence+='<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">';
+      riPresence+='<div><label class="roc-l">Follow mode</label><select id="follow_mode"'+this._inp('')+'>';
+      [['always','always — follow continuously'],['initial','initial — only when the card loads'],['manual','manual — button / action only']].forEach(function(o){riPresence+='<option value="'+o[0]+'"'+((c.follow_mode||'always')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      riPresence+='</select></div>';
       const _rseIsObj=typeof c.room_state_entity==='object'&&c.room_state_entity;
-      roomsInner+='<div><label class="roc-l">room_state_entity (card writes the active room here — input_text / input_select)</label><input id="room_state_entity" type="text" list="roc-entities"'+(_rseIsObj?' disabled placeholder="per-device mapping — edit in YAML"':' placeholder="input_text.active_room"')+' value="'+this._e(typeof c.room_state_entity==='string'?c.room_state_entity:'')+'"'+this._inp('')+'></div>';
-      roomsInner+='</div>';
+      riPresence+='<div><label class="roc-l">room_state_entity (card writes the active room here — input_text / input_select)</label><input id="room_state_entity" type="text" list="roc-entities"'+(_rseIsObj?' disabled placeholder="per-device mapping — edit in YAML"':' placeholder="input_text.active_room"')+' value="'+this._e(typeof c.room_state_entity==='string'?c.room_state_entity:'')+'"'+this._inp('')+'></div>';
+      riPresence+='</div>';
       const _bidNow=window.browser_mod?.browserID||window.browser_mod?.browser_id||'';
-      roomsInner+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
-      roomsInner+='<label class="roc-l">This device — browser_mod ID: <b>'+this._e(_bidNow||'(browser_mod not detected)')+'</b></label>';
+      riPresence+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;">';
+      riPresence+='<label class="roc-l">This device — browser_mod ID: <b>'+this._e(_bidNow||'(browser_mod not detected)')+'</b></label>';
       if(_bidNow){
-        roomsInner+='<div style="display:grid;grid-template-columns:2fr auto;gap:8px;align-items:end;">';
-        roomsInner+='<div><label class="roc-l">Presence sensor for this device (e.g. its Bermuda area sensor)</label><input id="bid-entity" type="text" list="roc-entities" placeholder="sensor.tablet_area"'+this._inp('')+'></div>';
-        roomsInner+='<button id="bid-map" style="'+btnStyle+'">Map this device</button>';
-        roomsInner+='</div>';
-        roomsInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Adds/updates room_entity.by_browser for this device. Open the editor on each device you want to map.</p>';
+        riPresence+='<div style="display:grid;grid-template-columns:2fr auto;gap:8px;align-items:end;">';
+        riPresence+='<div><label class="roc-l">Presence sensor for this device (e.g. its Bermuda area sensor)</label><input id="bid-entity" type="text" list="roc-entities" placeholder="sensor.tablet_area"'+this._inp('')+'></div>';
+        riPresence+='<button id="bid-map" style="'+btnStyle+'">Map this device</button>';
+        riPresence+='</div>';
+        riPresence+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Adds/updates room_entity.by_browser for this device. Open the editor on each device you want to map.</p>';
       }
-      roomsInner+='</div>';
+      riPresence+='</div>';
+
+      // --- Navigation menu -----------------------------------------------------
       const _nav=(c.nav&&typeof c.nav==='object')?c.nav:{};
       const _navMini=(_nav.mini&&typeof _nav.mini==='object')?_nav.mini:{};
-      roomsInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;margin-top:4px;"><label class="roc-l" style="font-weight:600;">Navigation menu</label>';
-      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-      roomsInner+='<div><label class="roc-l">Style</label><select id="nav-style"'+this._inp('')+'>';
-      [['thumbnails','thumbnails — live room minis'],['tabs','tabs — icon + name'],['dots','dots'],['none','none (hide menu)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.style||'thumbnails')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select></div>';
-      roomsInner+='<div><label class="roc-l">Position</label><select id="nav-position"'+this._inp('')+'>';
-      [['top','top'],['bottom','bottom'],['left','left (side rail)'],['right','right (side rail)'],['auto','auto (rail on wide)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.position||'top')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select></div>';
-      roomsInner+='</div>';
+      let riNav='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+      riNav+='<div><label class="roc-l">Style</label><select id="nav-style"'+this._inp('')+'>';
+      [['thumbnails','thumbnails — live room minis'],['tabs','tabs — icon + name'],['dots','dots'],['none','none (hide menu)']].forEach(function(o){riNav+='<option value="'+o[0]+'"'+((_nav.style||'thumbnails')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      riNav+='</select></div>';
+      riNav+='<div><label class="roc-l">Position</label><select id="nav-position"'+this._inp('')+'>';
+      [['top','top'],['bottom','bottom'],['left','left (side rail)'],['right','right (side rail)'],['auto','auto (rail on wide)']].forEach(function(o){riNav+='<option value="'+o[0]+'"'+((_nav.position||'top')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      riNav+='</select></div>';
+      riNav+='</div>';
       const _navLiveIsMiniTier=_nav.live==='full'||_nav.live==='custom';
-      roomsInner+='<div style="margin-bottom:8px;"><label class="roc-l">Live thumbnails (mini-room view)</label><select id="nav-live"'+this._inp('')+'>';
-      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['custom','custom — live room minis (real instances, pick which elements show)'],['full','full — live room minis (real instances, everything)']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped. Full mounts a real, independent copy of each room — gauges, labels, icons, blinds, embedded cards and all — scaled down; heavier on older tablets, test yours with more than a couple of rooms. Custom is the same, but starts empty — tick "Show in mini" on each element you want included (below, and the weather toggle in the Basic tab).</p></div>';
-      roomsInner+='<div id="nav-mini-panel" style="'+(_navLiveIsMiniTier?'':'display:none;')+'border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
-      roomsInner+='<label class="roc-l" style="font-weight:600;">Mini-room settings (live: '+(_nav.live==='custom'?'custom':'full')+')</label>';
-      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;align-items:center;">';
-      roomsInner+='<div style="display:flex;align-items:center;gap:7px;"><input id="nav-mini-templates" type="checkbox"'+(_navMini.templates?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-mini-templates" style="font-size:12px;cursor:pointer;">Label/colour templates</label></div>';
-      roomsInner+='<div><label class="roc-l">Camera refresh (s, min 30)</label><input id="nav-mini-camera-refresh" type="number" min="30" step="5" placeholder="30" value="'+(_navMini.camera_refresh!=null?_navMini.camera_refresh:'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Reference width (px)</label><input id="nav-mini-width-ref" type="number" min="120" step="10" placeholder="480" value="'+(_navMini.width_ref!=null?_navMini.width_ref:'')+'"'+this._inp('')+'></div>';
-      roomsInner+='</div>';
-      roomsInner+=(_nav.live==='custom'
+      riNav+='<div style="margin-bottom:8px;"><label class="roc-l">Live thumbnails (mini-room view)</label><select id="nav-live"'+this._inp('')+'>';
+      [['','off — base image + filter (classic)'],['composite','composite — base + active overlays + filters (live mini-room)'],['custom','custom — live room minis (real instances, pick which elements show)'],['full','full — live room minis (real instances, everything)']].forEach(function(o){riNav+='<option value="'+o[0]+'"'+((_nav.live||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      riNav+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Composite thumbs mirror each room’s current look — lit lamps, day/night filter, conditional base images. Pop-up (grouped) and template-driven overlays are skipped. Full mounts a real, independent copy of each room — gauges, labels, icons, blinds, embedded cards and all — scaled down; heavier on older tablets, test yours with more than a couple of rooms. Custom is the same, but starts empty — tick "Show in mini" on each element you want included (below, and the weather toggle in the Basic tab).</p></div>';
+      riNav+='<div id="nav-mini-panel" style="'+(_navLiveIsMiniTier?'':'display:none;')+'border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
+      riNav+='<label class="roc-l" style="font-weight:600;">Mini-room settings (live: '+(_nav.live==='custom'?'custom':'full')+')</label>';
+      riNav+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;align-items:center;">';
+      riNav+='<div style="display:flex;align-items:center;gap:7px;"><input id="nav-mini-templates" type="checkbox"'+(_navMini.templates?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-mini-templates" style="font-size:12px;cursor:pointer;">Label/colour templates</label></div>';
+      riNav+='<div><label class="roc-l">Camera refresh (s, min 30)</label><input id="nav-mini-camera-refresh" type="number" min="30" step="5" placeholder="30" value="'+(_navMini.camera_refresh!=null?_navMini.camera_refresh:'')+'"'+this._inp('')+'></div>';
+      riNav+='<div><label class="roc-l">Reference width (px)</label><input id="nav-mini-width-ref" type="number" min="120" step="10" placeholder="480" value="'+(_navMini.width_ref!=null?_navMini.width_ref:'')+'"'+this._inp('')+'></div>';
+      riNav+='</div>';
+      riNav+=(_nav.live==='custom'
         ?'<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Nothing shows in the mini until you tick "Show in mini" on it — look for the checkbox on each gauge/label/icon/badge/blind/element panel below (and the weather toggle in the Basic tab). Templates and camera streams are extra per-room subscriptions — off by default regardless.</p>'
         :'<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Templates and camera streams are extra per-room subscriptions — off by default. Every mini shows everything unconditionally; switch to "custom" above to pick individual elements instead.</p>');
-      roomsInner+='</div>';
-      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
-      roomsInner+='<div><label class="roc-l">Height</label><input id="nav-height" type="text" placeholder="64px" value="'+this._e(_nav.height||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Item width (css or auto)</label><input id="nav-width" type="text" placeholder="auto / 120px" value="'+this._e(_nav.width||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Mobile height</label><input id="nav-mobile-height" type="text" placeholder="48px" value="'+this._e(_nav.mobile_height||'')+'"'+this._inp('')+'></div>';
-      roomsInner+='</div>';
-      roomsInner+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center;">';
-      roomsInner+='<div><label class="roc-l">Auto breakpoint (px)</label><input id="nav-auto-bp" type="number" min="0" step="10" placeholder="1100" value="'+(_nav.auto_breakpoint!=null?_nav.auto_breakpoint:'')+'"'+this._inp('')+'></div>';
-      roomsInner+='<div><label class="roc-l">Wheel switch</label><select id="nav-wheel"'+this._inp('')+'>';
+      riNav+='</div>';
+      riNav+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+      riNav+='<div><label class="roc-l">Height</label><input id="nav-height" type="text" placeholder="64px" value="'+this._e(_nav.height||'')+'"'+this._inp('')+'></div>';
+      riNav+='<div><label class="roc-l">Item width (css or auto)</label><input id="nav-width" type="text" placeholder="auto / 120px" value="'+this._e(_nav.width||'')+'"'+this._inp('')+'></div>';
+      riNav+='<div><label class="roc-l">Mobile height</label><input id="nav-mobile-height" type="text" placeholder="48px" value="'+this._e(_nav.mobile_height||'')+'"'+this._inp('')+'></div>';
+      riNav+='</div>';
+      riNav+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;align-items:center;">';
+      riNav+='<div><label class="roc-l">Auto breakpoint (px)</label><input id="nav-auto-bp" type="number" min="0" step="10" placeholder="1100" value="'+(_nav.auto_breakpoint!=null?_nav.auto_breakpoint:'')+'"'+this._inp('')+'></div>';
+      riNav+='<div><label class="roc-l">Wheel switch</label><select id="nav-wheel"'+this._inp('')+'>';
       const _whCur=(_nav.wheel===true?'horizontal':(_nav.wheel||''));
-      [['','off'],['horizontal','horizontal'],['vertical','vertical'],['both','both']].forEach(function(o){roomsInner+='<option value="'+o[0]+'"'+(_whCur===o[0]?' selected':'')+'>'+o[1]+'</option>';});
-      roomsInner+='</select></div>';
-      roomsInner+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="nav-follow-btn" type="checkbox"'+(_nav.follow_button!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-follow-btn" style="font-size:12px;cursor:pointer;">Follow button</label></div>';
-      roomsInner+='</div>';
-      // URL deep-linking (top-level url_sync) — bookmarkable #room=<id>
-      const _usCur=c.url_sync,_usOn=!!_usCur,_usKey=(typeof _usCur==='string')?_usCur:'';
-      roomsInner+='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px;margin-bottom:8px;align-items:center;">';
-      roomsInner+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="url-sync" type="checkbox"'+(_usOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="url-sync" style="font-size:12px;cursor:pointer;">Sync room to URL</label></div>';
-      roomsInner+='<div><label class="roc-l">URL hash key (blank = "room" → #room=&lt;id&gt;)</label><input id="url-sync-key" type="text" placeholder="room" value="'+this._e(_usKey)+'"'+this._inp('')+'></div>';
-      roomsInner+='</div>';
+      [['','off'],['horizontal','horizontal'],['vertical','vertical'],['both','both']].forEach(function(o){riNav+='<option value="'+o[0]+'"'+(_whCur===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      riNav+='</select></div>';
+      riNav+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="nav-follow-btn" type="checkbox"'+(_nav.follow_button!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="nav-follow-btn" style="font-size:12px;cursor:pointer;">Follow button</label></div>';
+      riNav+='</div>';
       const _chY=_nav.chips?_yaml.s(_nav.chips):'';
-      roomsInner+='<div><label class="roc-l">Chips (YAML list — sensor pills on thumbnails; {room} = room id)</label><textarea id="nav-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_chY)+'</textarea></div>';
+      riNav+='<div><label class="roc-l">Chips (YAML list — sensor pills on thumbnails; {room} = room id)</label><textarea id="nav-chips" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_chY)+'</textarea></div>';
       const _cdY=_nav.cards?_yaml.s(_nav.cards):'';
-      roomsInner+='<div style="margin-top:6px;"><label class="roc-l">Cards (YAML list — custom HA cards in the strip; keys: card, width, placement, media)</label><textarea id="nav-cards" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cdY)+'</textarea></div>';
-      roomsInner+='</div>';
+      riNav+='<div style="margin-top:6px;"><label class="roc-l">Cards (YAML list — custom HA cards in the strip; keys: card, width, placement, media)</label><textarea id="nav-cards" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cdY)+'</textarea></div>';
+
+      // --- Deep-linking ---------------------------------------------------
+      const _usCur=c.url_sync,_usOn=!!_usCur,_usKey=(typeof _usCur==='string')?_usCur:'';
+      let riDeep='<div style="display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;">';
+      riDeep+='<div style="display:flex;align-items:center;gap:7px;padding-top:18px;"><input id="url-sync" type="checkbox"'+(_usOn?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label for="url-sync" style="font-size:12px;cursor:pointer;">Sync room to URL</label></div>';
+      riDeep+='<div><label class="roc-l">URL hash key (blank = "room" → #room=&lt;id&gt;)</label><input id="url-sync-key" type="text" placeholder="room" value="'+this._e(_usKey)+'"'+this._inp('')+'></div>';
+      riDeep+='</div>';
+      riDeep+='<p style="font-size:11px;color:var(--secondary-text-color);margin:8px 0 0;line-height:1.5;">Puts the active room in the page URL as <code>#'+this._e(_usKey||'room')+'=&lt;id&gt;</code> — bookmarkable, and lets HA\'s own dashboard navigation land on a specific room.</p>';
+
+      roomsInner+=sec('room-identity','Room identity — id, name, icon, area match',undefined,riIdentity,'mdi:home-account');
+      roomsInner+=sec('room-presence','Presence &amp; follow — which room is "active", and how',undefined,riPresence,'mdi:radar');
+      roomsInner+=sec('room-nav','Navigation menu — style, live thumbnails, sizing, chips &amp; cards',undefined,riNav,'mdi:menu');
+      roomsInner+=sec('room-deeplink','Deep-linking — bookmarkable room URL',undefined,riDeep,'mdi:link-variant');
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
