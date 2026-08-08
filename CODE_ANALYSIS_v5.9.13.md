@@ -343,8 +343,8 @@ refactor — worth scheduling, not worth rushing.
 ## 10. Housekeeping — **P3**
 
 - `_lyPvT` is declared in the editor constructor and never used. Dead.
-- 40 `RELEASE_NOTES_v*.md` files in the repo root — `CHANGELOG.md` (178 KB) already has
-  all of it. Move them to `docs/releases/`.
+- ~~40~~ 54 `RELEASE_NOTES_v*.md` files in the repo root — `CHANGELOG.md` (178 KB) already
+  has all of it. Move them to `docs/releases/`. **(done in v5.10.1)**
 - `test-results/` holds stale failure artifacts from an environment without Chromium
   installed. Gitignored, so harmless, but it makes `.last-run.json` misleading — worth
   deleting so the next reader isn't sent chasing 6 phantom failures.

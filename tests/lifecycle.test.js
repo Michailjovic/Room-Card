@@ -276,6 +276,49 @@ badEl.hass={states:{},callService(){},user:{},locale:{},
   connection:{subscribeMessage(){return Promise.reject(new Error('template error'));}}};
 w.document.body.appendChild(badEl);
 
+// =====================================================================
+// 7. Editor honesty: no control may exist that the card cannot act on.
+//    dock_side was such a control — the editor offered a left/right select,
+//    coverControlNorm turned it into `side`, and nothing ever read it (a
+//    docked control is flex:1 1 0 and fills its whole cover region).
+// =====================================================================
+const edDock=w.document.createElement('room-overlay-card-editor');
+edDock.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',
+  blinds:[{id:'b1',entity:'cover.x',top:'1%',left:'1%',width:'10%',height:'20%',
+    control:{placement:'dock',slider:true,presets:[{position:50,icon:'mdi:blinds'}]}}]});
+edDock.hass=mkHass();
+w.document.body.appendChild(edDock);
+t('editor no longer offers a Dock side control',!edDock.querySelector('[data-bl-ccside]'));
+t('...and does not write dock_side back into the config',
+  !JSON.stringify(edDock._collectConfig()).includes('dock_side'));
+// an existing dock_side in an old config must not break anything
+const edLegacy=w.document.createElement('room-overlay-card-editor');
+let legacyErr=null;
+try{
+  edLegacy.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',
+    blinds:[{id:'b1',entity:'cover.x',top:'1%',left:'1%',width:'10%',height:'20%',
+      control:{placement:'dock',dock_side:'left',slider:true}}]});
+  edLegacy.hass=mkHass();w.document.body.appendChild(edLegacy);
+  edLegacy._collectConfig();
+}catch(e){legacyErr=e.message;}
+t('legacy dock_side in an existing config is harmless'+(legacyErr?' — '+legacyErr:''),!legacyErr);
+
+// =====================================================================
+// 8. Editor escaping matches the card's (escA), including nullish handling.
+//    The editor's own _e() used String(s), so an unset field rendered the
+//    literal text "undefined" into its input box.
+// =====================================================================
+const edEsc=w.document.createElement('room-overlay-card-editor');
+edEsc.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp'});
+edEsc.hass=mkHass();
+w.document.body.appendChild(edEsc);
+t('unset editor fields never render the literal "undefined"',
+  !/value="undefined"|>undefined</.test(edEsc.innerHTML));
+t('unset editor fields never render the literal "null"',
+  !/value="null"|>null</.test(edEsc.innerHTML));
+t('_e escapes apostrophes like escA does',edEsc._e("it's")==="it&#39;s");
+t('_e maps nullish to empty string',edEsc._e(undefined)===''&&edEsc._e(null)==='');
+
 await new Promise(r=>setTimeout(r,300));
 t('rejected template subscription is caught, not unhandled',unhandled===0);
 

@@ -325,9 +325,13 @@ t('coverControlNorm none',g.coverControlNorm({id:'b',entity:'cover.x'})===null);
 t('coverControlNorm off',g.coverControlNorm({id:'b',entity:'cover.x',control:{display:'off'}})===null);
 t('coverControlNorm no entity',g.coverControlNorm({id:'b',control:{display:'dock'}})===null);
 const _ccn=g.coverControlNorm({id:'b1',entity:'cover.x',control:{display:'dock',dock_side:'left',slider:false,presets:[{position:150,icon:'mdi:sun',color:'amber',name:'Open'},{position:-5}]}});
-t('coverControlNorm normalizes',_ccn&&_ccn.placement==='dock'&&_ccn.side==='left'&&_ccn.slider===false);
+t('coverControlNorm normalizes',_ccn&&_ccn.placement==='dock'&&_ccn.slider===false);
+// v5.10.1: dock_side is accepted (old configs still have it) but produces NO
+// field — a docked control is flex:1 1 0 and fills its whole cover region, so
+// there is nothing to align. The side comes from the layout grid instead.
+t('coverControlNorm drops the dead dock_side/side field',_ccn&&_ccn.side===undefined);
 t('coverControlNorm clamps presets',_ccn.presets[0].position===100&&_ccn.presets[1].position===0);
-t('coverControlNorm defaults',(function(){const n=g.coverControlNorm({id:'b',entity:'cover.x',control:true});return n.placement==='float'&&n.side==='right'&&n.slider===true&&n.buttons.join(',')==='up,stop,down';})());
+t('coverControlNorm defaults',(function(){const n=g.coverControlNorm({id:'b',entity:'cover.x',control:true});return n.placement==='float'&&n.slider===true&&n.buttons.join(',')==='up,stop,down';})());
 t('coverControlNorm legacy display popover',g.coverControlNorm({id:'b',entity:'cover.x',control:{display:'popover'}}).placement==='float');
 t('coverControlNorm legacy display dock',g.coverControlNorm({id:'b',entity:'cover.x',control:{display:'dock'}}).placement==='dock');
 t('coverCtlHtml horizontal (mobile) class',g.coverCtlHtml(g.coverControlNorm({id:'h',entity:'cover.x',control:{placement:'float'}}),true).indexOf('cc-h')>=0);

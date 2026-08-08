@@ -1,5 +1,23 @@
 # Changelog
 
+## [5.10.1] - 2026-08-08
+
+### Editor honesty & repo tidy-up (closes the code audit)
+
+**The "Dock side" select did nothing — removed.** The blind editor offered a left/right dropdown that wrote `control.dock_side`; `coverControlNorm()` turned it into a `side` field that **nothing ever read**. It could not have worked: a docked cover control is `flex:1 1 0` and therefore *fills* its `cover` grid region, so there is no free space to align it within — the side comes entirely from where the `cover` region sits in the Layout tab, per profile. (The README already said exactly that, one bullet below the line documenting `dock_side`.) Removed rather than reimplemented: a knob that cannot affect anything is worse than no knob, because it sends you hunting for a layout bug that isn't there. **No visual impact** — it never had an effect. An existing `dock_side:` key is ignored exactly as before and is dropped the next time the blind is saved from the editor. README corrected; historical CHANGELOG entries left as-is.
+
+**Editor escaping unified with the card's.** The editor carried its own escaping helper that differed from `escA()` in two ways, both bugs: it did not escape `'` (harmless today — all 136 call sites were checked and every one lands in a double-quoted attribute or a text node — but a trap for the next single-quoted attribute anyone adds), and it used `String(s)` rather than `String(s ?? '')`, so an unset field rendered the literal text `undefined` (or `null`) into its input box. `_e()` now delegates to `escA()`; verified beforehand that the editor uses no inline `on*` handlers, so escaping apostrophes can't break anything.
+
+**Housekeeping.** 54 `RELEASE_NOTES_v*.md` files moved from the repo root to `docs/releases/` — they were crowding out the documents people actually open (README, LAYOUT, PRESETS, ROADMAP). Moved with `git mv`, so `git log --follow` still works on each; `CHANGELOG.md` stays the canonical history. Stale `test-results/` artifacts deleted — they recorded six "failures" that were only ever a missing Chromium install in a sandbox, and made the suite look broken at a glance.
+
+### Testing
+
+8 new assertions in `tests/lifecycle.test.js` (43 total). Four of them fail against v5.10.0 — they reproduce the bugs rather than just describing the fixes; the other four are regression nets around nullish rendering. Also covered: a legacy `dock_side:` key in an existing config still loads and saves without error. Full suite green against both the source and the minified bundle.
+
+### Not done: the structural refactor
+
+Step 4 of `CODE_ANALYSIS_v5.9.13.md` (splitting the file into `src/`) is **dropped**, and the report's recommendation there was wrong on two counts. It claimed the split would make the pure helpers unit-testable — they already are, via `smoke.test.js` loading the file with `vm.runInContext` and exercising them off the sandbox global (100+ assertions). And `src/` already existed once as TypeScript + rollup, drifted out of sync with the shipped JS, and was deliberately removed in v1.3.0 with the note that `room-overlay-card.js` is now the single source of truth; re-splitting would recreate precisely that failure mode. The editor's real problem — 101 fields described three times across `_render`/`_collectConfig`/`_listen`, 1633 lines — is genuine but currently *correct*: an audit of all 101 ids found no dead or drifted controls. Future maintenance risk, not a present defect; better as a deliberate incremental project than on refactor momentum.
+
 ## [5.10.0] - 2026-08-08
 
 ### Minified release build (step 3 of the code audit)

@@ -429,7 +429,6 @@ blinds:
       placement: float        # float (place freely via top/left) | dock (edge rail)
       top: "12%"              # float position — sized to the window height
       left: "34%"
-      dock_side: right        # left | right   (dock only)
       slider: true            # draggable position rail (auto-hidden for assumed-state covers)
       presets:
         - {position: 100, icon: mdi:blinds-open,         color: amber,     name: Open}
@@ -438,7 +437,7 @@ blinds:
         - {position: 0,   icon: mdi:roller-shade-closed, color: indigo,    name: Closed}
 ```
 
-- **`placement`** — `float` (place freely with `top` / `left`; the controller is sized to the window height) or `dock` (a slim rail pinned to the image edge, `dock_side: left | right`, filling the full height).
+- **`placement`** — `float` (place freely with `top` / `left`; the controller is sized to the window height) or `dock` (a rail that fills the `cover` layout region — put that region wherever you want the rail, per profile, in the Layout tab).
 - **`float`** (default): tap the blind to reveal / hide the controller next to it (horizontal bottom bar on portrait). **`dock`**: the controller is permanently visible in the `cover` layout region — its side and size come from where you place that region in each profile. `placement` accepts `{portrait, landscape}` (e.g. dock on landscape, float on portrait).
 - **`slider`** — show the draggable position rail (`cover.set_cover_position`). Auto-hidden when the cover reports no `current_position` (assumed-state).
 - **Up / Stop / Down** are always shown — a tap does a full `open_cover` / `close_cover`; `Stop` (`stop_cover`) highlights while the cover is moving.

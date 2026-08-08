@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.10.0';
+const ROC_VERSION='5.10.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -614,9 +614,10 @@ function coverControlNorm(b,profile){
   const presets=(Array.isArray(ctl.presets)?ctl.presets:[]).map(function(pp){
     return{position:Math.max(0,Math.min(100,Math.round(Number(pp.position)||0))),icon:pp.icon||'',color:pp.color||'',name:pp.name||''};
   });
+  // No `side` field: a docked control is flex:1 1 0 and fills its cover grid
+  // region, so there is nothing to align. Placement comes from the Layout tab.
   return{id:b.id,entity:b.entity,
     placement:placement,
-    side:(ctl.dock_side==='left')?'left':'right',
     top:ctl.top||b.top||'10%',
     left:ctl.left||b.left||'10%',
     height:ctl.height||b.height||'30%',
@@ -3950,7 +3951,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     }catch(e){console.warn('[room-overlay-card] editor preview failed:',e);}
   }
 
-  _e(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  // Single escaping helper shared with the card (escA). The editor used to have
+  // its own copy that differed in two ways, both of them bugs:
+  //   · it did not escape ' — harmless today (every _e() output lands in a
+  //     double-quoted attribute or a text node, verified), but a trap for the
+  //     next single-quoted attribute someone adds;
+  //   · it used String(s) rather than String(s ?? ''), so an undefined field
+  //     rendered the literal text "undefined" (and null → "null") into the
+  //     input box instead of leaving it empty.
+  _e(s){return escA(s);}
 
   _fire(c){
     this._pushHist(c);
@@ -4426,7 +4435,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _ccDispEl=q('[data-bl-ccdisp="'+i+'"]');
       if(_ccDispEl&&_ccDispEl.value&&_ccDispEl.value!=='off'){
         const _ctl={placement:_ccDispEl.value==='dock'?'dock':'float'};
-        const _ccSideEl=q('[data-bl-ccside="'+i+'"]');if(_ccSideEl)_ctl.dock_side=_ccSideEl.value==='left'?'left':'right';
+        // dock_side deliberately NOT written (v5.10.1) — see the note in
+        // _blindItem. An existing key in an older config is simply dropped the
+        // next time the blind is saved from the editor; the card ignored it
+        // either way, so nothing changes visually.
         const _ccSlEl=q('[data-bl-ccslider="'+i+'"]');_ctl.slider=_ccSlEl?!!_ccSlEl.checked:true;
         const _ccTopEl=q('[data-bl-cctop="'+i+'"]');if(_ccTopEl&&_ccTopEl.value.trim())_ctl.top=_ccTopEl.value.trim();
         const _ccLeftEl=q('[data-bl-ccleft="'+i+'"]');if(_ccLeftEl&&_ccLeftEl.value.trim())_ctl.left=_ccLeftEl.value.trim();
@@ -4868,7 +4880,6 @@ class RoomOverlayCardEditor extends HTMLElement{
     }
     const _cc=(b.control&&typeof b.control==='object')?b.control:{};
     const _ccPl=_cc.placement||({popover:'float',dock:'dock'})[_cc.display]||(b.control?'float':'off');
-    const _ccSide=_cc.dock_side||'right';
     const _ccPresets=Array.isArray(_cc.presets)?_cc.presets:[];
     h+='<div style="border-top:1px dashed var(--divider-color);padding-top:8px;margin-bottom:8px;">';
     h+='<label class="roc-l" style="font-weight:600;">Cover control (roleta)</label>';
@@ -4878,10 +4889,12 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<option value="float"'+(_ccPl==='float'?' selected':'')+'>float &#8211; place freely</option>';
     h+='<option value="dock"'+(_ccPl==='dock'?' selected':'')+'>dock &#8211; edge rail</option>';
     h+='</select></div>';
-    h+='<div><label class="roc-l">Dock side</label><select data-bl-ccside="'+i+'"'+this._inp('')+'>';
-    h+='<option value="right"'+(_ccSide==='right'?' selected':'')+'>right</option>';
-    h+='<option value="left"'+(_ccSide==='left'?' selected':'')+'>left</option>';
-    h+='</select></div>';
+    // (v5.10.1) The "Dock side" select is gone: a docked control is
+    // `flex:1 1 0` and therefore FILLS its cover grid region, so there is no
+    // free space to align it within — the side is decided entirely by where you
+    // place the `cover` region in the Layout tab. The select wrote dock_side,
+    // coverControlNorm turned it into `side`, and nothing ever read it. Offering
+    // a control that cannot do anything is worse than not offering it.
     h+='<div style="display:flex;align-items:center;gap:6px;padding-bottom:7px;"><input data-bl-ccslider="'+i+'" type="checkbox"'+(_cc.slider!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label class="roc-l" style="margin:0;">Slider</label></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
@@ -6087,7 +6100,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       bl.control.presets.splice(j,1);
       self._config=c;self._render();self._fire(c);
     });});
-    this.querySelectorAll('[data-bl-ccdisp],[data-bl-ccside],[data-bl-ccslider],[data-bl-cctop],[data-bl-ccleft],[data-bl-ccwidth],[data-ccp-pos],[data-ccp-icon],[data-ccp-color],[data-ccp-name]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-bl-ccdisp],[data-bl-ccslider],[data-bl-cctop],[data-bl-ccleft],[data-bl-ccwidth],[data-ccp-pos],[data-ccp-icon],[data-ccp-color],[data-ccp-name]').forEach(function(el){el.addEventListener('change',fire);});
 
     // Duplicate (clone) handlers
     function _cp(v,dflt){if(!v)return dflt||'3%';const n=parseFloat(v);return(!isNaN(n)&&String(v).trim().endsWith('%'))?Math.min(n+3,95).toFixed(1)+'%':v;}
