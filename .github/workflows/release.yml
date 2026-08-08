@@ -34,13 +34,25 @@ jobs:
         with:
           ref: ${{ steps.tag.outputs.tag }}
 
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # The released artifact is MINIFIED (~31 % smaller raw, ~36 % gzipped);
+      # the repo keeps the readable source. build.js --check fails the run if the
+      # output is truncated, not smaller than the source, or missing the version
+      # / custom-element registrations.
+      - name: Build the minified bundle
+        run: npm i --no-save terser jsdom && npm run build:verify
+
       - name: Upload room-overlay-card.js (retry on transient GitHub errors)
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           for i in 1 2 3 4 5; do
-            if gh release upload "$TAG" room-overlay-card.js --clobber; then
+            if gh release upload "$TAG" dist/room-overlay-card.js dist/room-overlay-card.js.map --clobber; then
               exit 0
             fi
             echo "Upload attempt $i failed — retrying in $((i*10)) s…"
@@ -49,14 +61,28 @@ jobs:
           echo "::error::All upload attempts failed"
           exit 1
 
-      - name: Verify the asset is attached
+      # Verify by DOWNLOADING the asset back, not just by listing names: an
+      # asset can exist and still be the wrong or a truncated file. v4.6.2
+      # shipped an asset-less release after a transient 503 and failed in HACS
+      # with "unknown error"; a wrong-contents asset would fail just as opaquely.
+      - name: Verify the attached asset is the built bundle
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          if gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx 'room-overlay-card.js'; then
-            echo "room-overlay-card.js is attached to $TAG"
-          else
+          if ! gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx 'room-overlay-card.js'; then
             echo "::error::room-overlay-card.js is NOT attached to $TAG — HACS installs of this version will fail"
             exit 1
           fi
+          rm -rf /tmp/verify && mkdir -p /tmp/verify
+          gh release download "$TAG" -p 'room-overlay-card.js' -D /tmp/verify --clobber
+          if ! cmp -s /tmp/verify/room-overlay-card.js dist/room-overlay-card.js; then
+            echo "::error::the attached asset does not match the freshly built bundle"
+            exit 1
+          fi
+          VER="$(node -p "require('./package.json').version")"
+          if ! grep -q "$VER" /tmp/verify/room-overlay-card.js; then
+            echo "::error::attached asset does not contain version $VER"
+            exit 1
+          fi
+          echo "room-overlay-card.js v$VER verified on $TAG ($(wc -c < /tmp/verify/room-overlay-card.js) bytes)"

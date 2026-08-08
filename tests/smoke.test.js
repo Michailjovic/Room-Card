@@ -368,8 +368,14 @@ t('coverCtlHtml no rail when slider off',g.coverCtlHtml(g.coverControlNorm({id:'
     let pkgPath=path.join(path.dirname(file),'package.json');
     if(!fs.existsSync(pkgPath))pkgPath=path.join(__dirname,'..','package.json');
     const pkg=JSON.parse(fs.readFileSync(pkgPath,'utf8'));
-    const m=code.match(/const ROC_VERSION='([^']+)'/);
-    t('ROC_VERSION matches package.json version',!!m&&m[1]===pkg.version);
+    // Read the version at RUNTIME, from the customCards registration the card
+    // performs on load, rather than by matching `const ROC_VERSION='…'` in the
+    // text. This file also runs against the minified bundle (npm run
+    // build:verify), where the identifier is gone and the quote style differs —
+    // a source regex would report a phantom failure there.
+    const reg=(g.customCards||[]).find(c=>c&&c.type==='room-overlay-card');
+    const vm2=reg&&/\(v([0-9][^)]*)\)/.exec(reg.description||'');
+    t('ROC_VERSION matches package.json version',!!vm2&&vm2[1]===pkg.version);
   }catch(e){t('ROC_VERSION matches package.json version (readable)',false);}
 })();
 

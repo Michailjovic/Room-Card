@@ -320,7 +320,11 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   const advBtn=edEdit.querySelector('#roc-adv-toggle');
   t('YAML toggle lives in the title row as an icon button right before Undo/Redo, not a labelled checkbox',
     advBtn&&advBtn.tagName==='BUTTON'&&!!advBtn.nextElementSibling&&advBtn.nextElementSibling.id==='roc-undo');
-  const _verM=code.match(/const ROC_VERSION='([^']+)'/);
+  // Version read at RUNTIME from the customCards registration, not by matching
+  // `const ROC_VERSION='…'` in the source: this file also runs against the
+  // minified bundle (npm run build:verify), where that identifier is gone.
+  const _regCard=(w.customCards||[]).find(c=>c&&c.type==='room-overlay-card');
+  const _verM=_regCard&&/\(v([0-9][^)]*)\)/.exec(_regCard.description||'');
   const titleSpan=edEdit.querySelector('#roc-adv-toggle').parentElement.parentElement.firstElementChild;
   t('version number sits next to the "Room Overlay Card" title, not the button row',
     !!_verM&&!!titleSpan&&titleSpan.textContent.indexOf('Room Overlay Card')>=0&&titleSpan.textContent.indexOf('v'+_verM[1])>=0);

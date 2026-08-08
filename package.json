@@ -13,10 +13,13 @@
     "test": "node tests/smoke.test.js && node tests/render.test.js && node tests/lifecycle.test.js",
     "test:smoke": "node tests/smoke.test.js",
     "test:lifecycle": "node tests/lifecycle.test.js",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build": "node build.js --check",
+    "build:verify": "node build.js --check && node tests/smoke.test.js dist/room-overlay-card.js && node tests/render.test.js dist/room-overlay-card.js && node tests/lifecycle.test.js dist/room-overlay-card.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
-    "jsdom": "^30.0.1"
+    "jsdom": "^30.0.1",
+    "terser": "^5.37.0"
   }
 }

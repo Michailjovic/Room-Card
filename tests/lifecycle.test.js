@@ -114,8 +114,19 @@ t('roc-highlight handler survives the DOM move',after.hl);
 t('relative-time ticker survives the DOM move',after.rel);
 t('IntersectionObserver is re-observing the card',lc._io.targets.indexOf(lc)>=0);
 
-// no-IntersectionObserver environments must never suppress updates
-t('_visible guard only applies while an IO exists',/!this\._visible&&this\._io/.test(code));
+// Environments without IntersectionObserver must never suppress updates:
+// _visible can never be corrected there, so it must not gate anything.
+// Asserted behaviourally, not by matching source text — this file also runs
+// against the minified bundle, where a source regex would be meaningless.
+const noIo=mkCard({base_image:'/local/x.webp',labels:[{id:'q',entity:'sensor.a',top:'1%',left:'1%'}]},st);
+noIo._io=null;noIo._visible=false;     // simulate "no IO available at all"
+let noIoUpdated=false;
+const _noIoU=noIo._update.bind(noIo);
+noIo._update=function(){noIoUpdated=true;return _noIoU();};
+const _rafSave=w.requestAnimationFrame;w.requestAnimationFrame=f=>f();
+noIo.hass=mkHass({'sensor.a':{state:'77',attributes:{}}});
+w.requestAnimationFrame=_rafSave;
+t('without an IntersectionObserver, updates are never suppressed',noIoUpdated);
 
 (async()=>{
 

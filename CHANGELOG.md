@@ -2,6 +2,16 @@
 
 ## [5.10.0] - 2026-08-08
 
+### Minified release build (step 3 of the code audit)
+
+The release asset is now minified: **413.8 → 284.8 KB raw, 110.1 → 69.8 KB gzipped (−36.5 %)**, on a file every dashboard load pulls. The repo keeps the readable source — only the published artifact is compressed, so manual installs from the repo and HACS installs from the release differ in size but not behaviour.
+
+`build.js` runs terser with **property mangling explicitly off**, which is the one setting that must never change: mangling properties would rename `setConfig`, `hass`, `getCardSize` and break every HA integration point at once. Class and function names are manglable — custom elements register by string and nothing reads `constructor.name`. `--check` fails the build if the output is truncated, not smaller than the source, or missing the version string / element registrations.
+
+`npm run build:verify` runs all three test tiers **against the minified bundle**. The tiers already accepted a path argument, so this cost nothing to add — and it's the check that matters, since the bundle is what users install. Source and bundle produce byte-for-byte identical pass/fail output across all 213 assertions. Two tests had to change: the version checks in `smoke.test.js` and `render.test.js` matched `const ROC_VERSION='…'` in the source text, which doesn't survive minification; both now read the version at runtime from the `customCards` registration.
+
+The release workflow builds before uploading and then **downloads the asset back and byte-compares it** against the freshly built file, instead of only checking that an asset with the right name exists. v4.6.2 shipped an asset-less release after a transient GitHub 503 and failed in HACS with "unknown error" — an asset with wrong or truncated contents would fail just as opaquely, and name-only verification wouldn't catch it. The sourcemap ships as a second asset. CI builds and verifies on every push, so a terser setting that silently breaks the card fails the PR.
+
 ### Hot-path performance (step 2 of the code audit)
 
 Pure optimisation — no new features, no config changes, no visible behaviour change. Measured against v5.9.14 on a 3-room config (6 overlays + 5 zones + 8 icons + 8 labels + 4 gauges per room): **300× `_update()` went from 234 ms / 2 400 `querySelector` / 300 `offsetWidth` to 148 ms / 0 / 0 (−37 % time)**, and a **60-frame resize drag from 32 ms / 480 `querySelector` / 120 `offsetWidth` to 1.3 ms / 0 / 60 (−96 % time)**. jsdom timings aren't browser timings — the percentages are the signal, the DOM-op counts are exact.

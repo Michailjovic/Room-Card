@@ -33,6 +33,13 @@ jobs:
       - name: Lifecycle tests (jsdom)
         run: node tests/lifecycle.test.js
 
+      # The release asset is the MINIFIED bundle, so the minified bundle is what
+      # has to be green — not just the source. All three tiers accept a path
+      # argument for exactly this reason. Catches a terser setting that silently
+      # breaks the card (e.g. anyone ever enabling property mangling).
+      - name: Build + verify the minified bundle
+        run: npm i --no-save terser && npm run build:verify
+
   e2e:
     # Real-renderer geometry tier — headless Chromium measures PIXELS against
     # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,

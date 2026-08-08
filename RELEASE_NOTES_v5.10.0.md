@@ -1,8 +1,9 @@
-# v5.10.0 — Hot-path performance
+# v5.10.0 — Hot-path performance + minified release build
 
-Step 2 of the audit in `CODE_ANALYSIS_v5.9.13.md`. Pure optimisation: no new
-features, no config changes, no behaviour change you should be able to see —
-except that busy dashboards and window resizes get noticeably cheaper.
+Steps 2 and 3 of the audit in `CODE_ANALYSIS_v5.9.13.md`. Pure optimisation: no
+new features, no config changes, no behaviour change you should be able to see —
+except that the card downloads ~36 % smaller and busy dashboards and window
+resizes get noticeably cheaper.
 
 ## Measured
 
@@ -60,6 +61,37 @@ cached node no longer belongs to the current shadow tree (exactly what an
 Also: the instance fields introduced here are declared in the constructor,
 restoring the "constructor documents the instance shape" contract the audit
 flagged as broken.
+
+## Minified release build
+
+The release asset is now minified: **413.8 → 284.8 KB raw, 110.1 → 69.8 KB
+gzipped (−36.5 %)** — on a file every dashboard load pulls. The repo keeps the
+readable source; only the published artifact is compressed.
+
+`build.js` runs terser with **property mangling explicitly off**. That is the
+one setting that must never change: mangling properties would rename
+`setConfig`, `hass`, `getCardSize` and break every Home Assistant integration
+point at once. Class and function names *are* manglable — the custom elements
+register by string and nothing reads `constructor.name`.
+
+`npm run build:verify` runs all three test tiers **against the minified bundle**,
+not just the source. The tests already accepted a path argument, so this was
+free — and it is the check that matters, because the bundle is what users
+install. Result: byte-for-byte identical pass/fail output between source and
+bundle across all 213 assertions.
+
+Two tests had to change to make that possible: the version checks in
+`smoke.test.js` and `render.test.js` matched `const ROC_VERSION='…'` in the
+source text, which does not survive minification. They now read the version at
+runtime from the `customCards` registration — which is what a user actually
+sees anyway.
+
+The release workflow builds before uploading and then **downloads the asset back
+and byte-compares it** against the freshly built file, rather than only checking
+that an asset with the right name exists. v4.6.2 shipped an asset-less release
+after a transient GitHub 503 and failed in HACS with "unknown error"; an asset
+with wrong or truncated contents would fail just as opaquely, and name-only
+verification would not have caught it.
 
 ## Testing
 
