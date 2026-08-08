@@ -26,6 +26,13 @@ jobs:
       - name: Render tests (jsdom)
         run: npm i --no-save jsdom && node tests/render.test.js
 
+      # Lifecycle tier: what happens when HA MOVES the card element (edit-mode
+      # toggle → disconnect + connect) and when config fields use their scalar
+      # shorthand. Polyfills IntersectionObserver/ResizeObserver, which jsdom
+      # lacks — see the header comment in tests/lifecycle.test.js.
+      - name: Lifecycle tests (jsdom)
+        run: node tests/lifecycle.test.js
+
   e2e:
     # Real-renderer geometry tier — headless Chromium measures PIXELS against
     # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,

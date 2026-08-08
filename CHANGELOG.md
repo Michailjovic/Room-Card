@@ -1,5 +1,29 @@
 # Changelog
 
+## [5.9.14] - 2026-08-08
+
+### Lifecycle & config-shape hardening (full code audit)
+
+Six real defects found by a full audit of the card, three of which could leave a card permanently dead until a page reload. No new features, no config migrations — all fixes are backwards compatible.
+
+**Scalar config values crashed the card.** `resolveVal()` assumed its argument was always a `[{condition,value}]` list. A bare scalar — `label: Kitchen`, `icon_color: red`, `color: "#fff"`, `conditions: {opacity: 0.5}`, `conditions: {filter: "blur(2px)"}` — reached `conds.find(...)` and threw a `TypeError` out of `set hass`: the card rendered once, then never updated again, with a console error on every state change. Two call sites (label colour, gauge colour) had been hardened with `Array.isArray` at some point; five had not. The guard now lives in `resolveVal` / `resolveFilter` / `resolveFilterInverted` themselves, so the scalar form is a supported shorthand everywhere and every future call site is covered. Reachable from the GUI editor, not just hand-written YAML — badges are edited through a free-form `label / visible / icon_color / tap_action / group (YAML)` textarea.
+
+**Four hooks died on every dashboard edit-mode toggle.** HA moves the card element when entering/leaving edit mode → `disconnectedCallback` + `connectedCallback`. `_io`, `_hlHandler`, `_relTimer` and `_orientHandler` were nulled on the way out and revived with `if(this._x)…` on the way back in — dead code once null. Result after one toggle: no IntersectionObserver, no `roc-highlight` listener (editor→card flash broken), no 30 s ticker (`format: relative` labels frozen), no device-orientation parallax. Worst case: `_visible` is set *only* by the IntersectionObserver, so a card that was off-screen when HA moved it kept `_visible=false` with nothing alive to flip it back — `set hass` bailed forever and **the card was frozen until a page reload**. Revivable handles are now detached rather than nulled; `_wireVisibility()` and `_wireRelTimer()` (re)build the observer and the ticker from both `_render()` and `connectedCallback()`; and `set hass` now only trusts `_visible` while an observer actually exists to correct it, so no future regression of this class can freeze a card. Same defect class as the v4.6.4 layout-observer fix — four siblings were missed then.
+
+**Per-room templates never subscribed.** `_setupTemplates()` read `this._config` while the rest of `_render()` worked on the merged room view (`this._roomCfg`). `labels`/`badges`/`zones`/`icons`/`overlays`/`elements`/`gauges` are all `ROOM_KEYS`, so `roomMerge()` replaces them with the active room's copies — meaning in any `rooms:` config the element ids never matched and every template lookup silently `continue`d. Affected `label.template`, `badge.label_template` and `visible_template` on every element type. `_startCamera()` already handled this correctly; `_setupTemplates` was the one that was missed.
+
+**`label_template` did nothing on its own.** The badge text span was only emitted when `label` was defined, so a badge using only `label_template` — the exact form documented in the README — had no element to write into. Now emitted for either key.
+
+**Editor leaked a window listener per open.** `disconnectedCallback` removed `roc-pos-update` but not `roc-room-switch`; every open/close left a live listener pinning the dead editor instance and still firing on room switches. The mounted `_prevCard` preview is released too. Also dropped the unused `_lyPvT` field.
+
+**Unhandled promise rejections from invalid templates.** HA rejects the subscription for a bad Jinja template; with no `.catch` this surfaced as a bare console error with no card or template context. Now caught and logged with the offending template string.
+
+### Testing
+
+New `tests/lifecycle.test.js` (27 assertions) covering the blind spot all six bugs lived in: the existing suite only ever asserted on a card rendered once and left alone, never on one that gets **moved**. It polyfills `IntersectionObserver` and `ResizeObserver` — jsdom ships neither, and without them "the observer is gone" is indistinguishable from "the API never existed", which produces a false PASS on the `_io` assertions and a false FAIL on `_ro`. Kept in its own file so those polyfills don't perturb `render.test.js`. Also enforces a hot-path budget (`_update()` must not scale `querySelector` calls with item count) so perf regressions fail CI. Wired into `npm test` and the CI workflow; the 178 existing render assertions and the smoke tier are unchanged and still pass.
+
+Full audit report, including the performance and structural findings deferred to later releases: `CODE_ANALYSIS_v5.9.13.md`.
+
 ## [5.9.13] - 2026-08-08
 
 ### Editor: Rooms & menu tab — sub-accordions (proposal 4 from the editor GUI/UX revalidation)

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.13';
+const ROC_VERSION='5.9.14';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -351,24 +351,36 @@ function evalCond(c,s){
   return r;
 }
 
+// Conditional-value resolvers. Every one of these accepts EITHER the full
+// [{condition,value},…] list OR a bare scalar shorthand (`label: Kitchen`,
+// `icon_color: red`, `opacity: 0.5`, `filter: blur(2px)`) — the scalar form is
+// the obvious thing to write and the GUI editor's free-form YAML boxes let you
+// write it, so it must never throw. Before v5.9.14 a scalar reached
+// `conds.find(...)` (strings iterate char-by-char, then die; numbers die on
+// `for…of`) and the TypeError escaped `set hass` → the card rendered once and
+// then never updated again. Guard lives HERE, in the resolvers, so every
+// present and future call site is covered.
 function resolveVal(conds,states,fallback){
-  for(const cv of conds){if(cv.condition===undefined)continue;if(evalCond(cv.condition,states))return cv.value;}
-  const d=conds.find(cv=>cv.condition===undefined);return d!==undefined?d.value:fallback;
+  if(!Array.isArray(conds))return conds===undefined?fallback:conds;
+  for(const cv of conds){if(!cv||cv.condition===undefined)continue;if(evalCond(cv.condition,states))return cv.value;}
+  const d=conds.find(cv=>cv&&cv.condition===undefined);return d!==undefined?d.value:fallback;
 }
 
 function resolveFilter(conds,states){
-  for(const fc of conds){if(fc.condition===undefined)continue;if(evalCond(fc.condition,states))return fc.filter;}
-  const d=conds.find(fc=>fc.condition===undefined);return d?d.filter:'none';
+  if(!Array.isArray(conds))return conds==null?'none':conds;
+  for(const fc of conds){if(!fc||fc.condition===undefined)continue;if(evalCond(fc.condition,states))return fc.filter;}
+  const d=conds.find(fc=>fc&&fc.condition===undefined);return d?d.filter:'none';
 }
 
 function resolveFilterInverted(conds,states){
+  if(!Array.isArray(conds))return conds==null?'none':conds;
   // Najdi aktuálně matchující podmínku
   let curIdx=-1;
-  for(let i=0;i<conds.length;i++){const fc=conds[i];if(fc.condition===undefined)continue;if(evalCond(fc.condition,states)){curIdx=i;break;}}
+  for(let i=0;i<conds.length;i++){const fc=conds[i];if(!fc||fc.condition===undefined)continue;if(evalCond(fc.condition,states)){curIdx=i;break;}}
   // Pokud matchuje podmínka → zobraz default (fallback)
-  if(curIdx!==-1){const d=conds.find(fc=>fc.condition===undefined);return d?d.filter:'none';}
+  if(curIdx!==-1){const d=conds.find(fc=>fc&&fc.condition===undefined);return d?d.filter:'none';}
   // Pokud je aktivní default → zobraz první podmíněný filter
-  const first=conds.find(fc=>fc.condition!==undefined);return first?first.filter:'none';
+  const first=conds.find(fc=>fc&&fc.condition!==undefined);return first?first.filter:'none';
 }
 
 function parseCssColor(c){let m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);if(m)return[parseInt(m[1]),parseInt(m[2]),parseInt(m[3])];m=c.match(/^#([0-9a-f]{6})$/i);if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];m=c.match(/^#([0-9a-f]{3})$/i);if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];return null;}
@@ -685,7 +697,7 @@ class RoomOverlayCard extends HTMLElement{
     this._selectedTM=null;this._tmKeyHandler=null;
     this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;this._lcToggles=[];
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
-    this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;
+    this._tmplUnsubs=[];this._tmplVals={};this._tmplVis={};this._relTimer=null;this._relNeeded=false;
     this._gdH=null;this._gdV=null;this._tier=null;this._vt=null;this._profile=null;this._profFlipped=false;this._lp=null;this._winHandler=null;this._wrapRo=null;this._bodyRo=null;
     this._scRo=null;this._scrollEl=null;this._rootHPx=0;this._rootHRaw=0;this._rootHT1=null;this._locHandler=null;this._barMo=null;this._pvMo=null;this._lastPinCheck=0;this._pinQueued=false;
     this._roomIdx=0;this._roomCfg=null;this._manualHoldUntil=0;
@@ -737,7 +749,12 @@ class RoomOverlayCard extends HTMLElement{
     for(const ri in(this._navMiniEls||{}))try{this._navMiniEls[ri].el.hass=h;}catch(_){}
     for(const el of(this._stripCardEls||[]))try{el.hass=h;}catch(_){}
     for(const o of(this._lcEls||[]))try{o.el.hass=h;}catch(_){}
-    if(!this._visible)return;
+    // Only trust _visible while an IntersectionObserver is actually alive to
+    // flip it back. Without this, ANY future path that loses the IO turns a
+    // stale `_visible=false` into a permanently frozen card (see the v5.9.14
+    // note on disconnectedCallback). Browsers without IO keep _io null and so
+    // never suppress updates at all — which is the correct fallback.
+    if(!this._visible&&this._io)return;
     if(this._relevantEntities){
       const s=h.states,p=this._prevStates;
       const chg=this._relevantEntities.some(id=>s[id]?.state!==p[id])
@@ -1187,6 +1204,35 @@ class RoomOverlayCard extends HTMLElement{
     // which the _pvMo MutationObserver now catches deterministically.
   }
 
+  // IntersectionObserver — suppress updates while the card is off-screen.
+  // Called from _render AND from connectedCallback: an IO whose disconnect()
+  // ran is still a perfectly usable object (disconnect only drops the target
+  // list), so a reconnect just needs a fresh observe(). Creating it here rather
+  // than inline in _render is what makes that possible.
+  _wireVisibility(){
+    if(typeof IntersectionObserver==='undefined')return; // no IO → _visible stays true forever (see the guard in set hass)
+    if(this._io)this._io.disconnect();
+    else{
+      const self=this;
+      this._io=new IntersectionObserver(function(entries){
+        self._visible=entries[entries.length-1].isIntersecting;
+        if(self._visible&&self._hass&&self._rendered)self._update();
+      },{threshold:0});
+    }
+    this._io.observe(this);
+  }
+
+  // 30 s ticker for `format: relative` labels. Idempotent — safe to call from
+  // both _render and connectedCallback.
+  _wireRelTimer(){
+    if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
+    if(!this._relNeeded)return;
+    const self=this;
+    this._relTimer=setInterval(function(){
+      if(self._visible&&self._hass&&self._rendered)self._update();
+    },30000);
+  }
+
   // All layout observers & listeners in one place — called from _render AND
   // from connectedCallback. HA MOVES the card element when toggling dashboard
   // edit mode (it gets wrapped into / unwrapped from hui-card-options), which
@@ -1480,6 +1526,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
+    this._relNeeded=false; // recomputed from the new config at the end of _render
     if(this._orientHandler){window.removeEventListener('deviceorientation',this._orientHandler);this._orientHandler=null;}
     if(this._hashHandler){window.removeEventListener('hashchange',this._hashHandler);this._hashHandler=null;}
     this._teardownTemplates();
@@ -1497,7 +1544,7 @@ class RoomOverlayCard extends HTMLElement{
 
     const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${escA(ov.id)}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};"></div>`).join('');
     const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
-    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+escA(b.id)+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
+    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+escA(b.id)+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
     const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const _ibg=ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'';const a11y=ico.tap_action?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;"></ha-icon></div>';}).join('');
 
@@ -2206,16 +2253,7 @@ class RoomOverlayCard extends HTMLElement{
       const wrapPx=this.shadowRoot.querySelector('.wrap');
       if(wrapPx&&content)this._attachParallax(wrapPx,content);
     }
-    // IntersectionObserver — zastav updates když karta není ve viewportu
-    if(this._io)this._io.disconnect();
-    if(typeof IntersectionObserver!=='undefined'){
-      const self=this;
-      this._io=new IntersectionObserver(function(entries){
-        self._visible=entries[0].isIntersecting;
-        if(self._visible&&self._hass&&self._rendered)self._update();
-      },{threshold:0});
-      this._io.observe(this);
-    }
+    this._wireVisibility();
     this._wireLayoutObservers();
     this._layoutRootHeight(); // first paint: direct & synchronous (no flash)
     this._layoutFitWrap();
@@ -2283,13 +2321,11 @@ class RoomOverlayCard extends HTMLElement{
     window.addEventListener('roc-highlight',this._hlHandler);
     this._startCamera();
     this._setupTemplates();
-    // 30 s ticker for labels with format: relative
-    if((c.labels||[]).some(function(l){return l.format==='relative';})){
-      const rtSelf=this;
-      this._relTimer=setInterval(function(){
-        if(rtSelf._visible&&rtSelf._hass&&rtSelf._rendered)rtSelf._update();
-      },30000);
-    }
+    // 30 s ticker for labels with format: relative — a real interval, so unlike
+    // the observers it cannot be "re-observed"; it has to be recreated after a
+    // reconnect. _relNeeded records whether this config wants one.
+    this._relNeeded=(c.labels||[]).some(function(l){return l.format==='relative';});
+    this._wireRelTimer();
     this._update();
     this._syncRoomState();
     this._layoutStage();
@@ -2527,7 +2563,7 @@ class RoomOverlayCard extends HTMLElement{
   _teardownTemplates(){
     (this._tmplUnsubs||[]).forEach(function(u){
       try{
-        if(u&&typeof u.then==='function')u.then(function(f){try{if(typeof f==='function')f();else if(f&&f.unsubscribe)f.unsubscribe();}catch(_){}});
+        if(u&&typeof u.then==='function')u.then(function(f){try{if(typeof f==='function')f();else if(f&&f.unsubscribe)f.unsubscribe();}catch(_){}}).catch(function(){});
         else if(typeof u==='function')u();
       }catch(_){}
     });
@@ -2535,14 +2571,26 @@ class RoomOverlayCard extends HTMLElement{
   }
 
   _setupTemplates(){
-    const c=this._config,self=this;
+    // MERGED room view, not this._config: labels/badges/zones/icons/overlays/
+    // elements/gauges are all ROOM_KEYS, so roomMerge() REPLACES the top-level
+    // arrays with rooms[i]'s. Reading this._config here meant that in any
+    // rooms: config the per-room templates were never subscribed at all (the
+    // element ids didn't match, so every lookup silently `continue`d) — no
+    // warning, the label just never updated. Fixed v5.9.14; _startCamera()
+    // already did this correctly.
+    const c=this._roomCfg||this._config,self=this;
     // nav.live:full minis subscribe to templates only when nav.mini.templates
     // opts in (§5 NAV_LIVE_FULL_PLAN.md — a real per-instance WS subscription
     // cost, off by default for up to 8 persistent instances).
     if(!this._hass||!this._hass.connection||c._roc_ghost||(c._roc_mini&&!c._roc_mini_templates))return;
     const sub=function(tpl,cb){
       try{
-        const p=self._hass.connection.subscribeMessage(function(msg){cb(msg?msg.result:undefined);},{type:'render_template',template:tpl});
+        // .catch is REQUIRED: HA rejects the subscription for an invalid Jinja
+        // template, and an uncaught rejection surfaces in the console with no
+        // card context at all. Resolving to null keeps the unsub loop safe —
+        // _teardownTemplates already type-checks before calling.
+        const p=self._hass.connection.subscribeMessage(function(msg){cb(msg?msg.result:undefined);},{type:'render_template',template:tpl})
+          .catch(function(e){console.warn('[room-overlay-card] template failed:',tpl,e);return null;});
         self._tmplUnsubs.push(p);
       }catch(e){console.warn('[room-overlay-card] template subscribe failed:',e);}
     };
@@ -3404,12 +3452,23 @@ class RoomOverlayCard extends HTMLElement{
         break;
     }
   }
+  // NOTE (v5.9.14): handles that connectedCallback needs in order to REVIVE a
+  // hook are deliberately NOT nulled here — only detached. HA moves the card
+  // element on every dashboard edit-mode toggle, which runs this callback and
+  // then connectedCallback. The old code nulled _io/_hlHandler/_orientHandler
+  // and then revived them with `if(this._x)…`, which is dead code once they're
+  // null — so after one edit toggle the card had no IntersectionObserver, no
+  // roc-highlight listener, no relative-time ticker and no parallax tilt. Worst
+  // case: the card was off-screen at move time, _visible stayed false, and
+  // `set hass` bailed forever → frozen card until a page reload. Observers that
+  // _wireLayoutObservers() recreates wholesale (_ro/_wrapRo/_bodyRo/_scRo/
+  // _pvMo/_barMo) are still nulled — that path builds them from scratch.
   disconnectedCallback(){
     if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
-    if(this._hlHandler){window.removeEventListener('roc-highlight',this._hlHandler);this._hlHandler=null;}
+    if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
-    if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;}
-    if(this._orientHandler){window.removeEventListener('deviceorientation',this._orientHandler);this._orientHandler=null;}
+    if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart
+    if(this._orientHandler)window.removeEventListener('deviceorientation',this._orientHandler); // kept — revived on reconnect
     if(this._hashHandler)window.removeEventListener('hashchange',this._hashHandler);
     this._teardownTemplates();
     if(this._ro){this._ro.disconnect();this._ro=null;}
@@ -3418,7 +3477,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._scRo){this._scRo.disconnect();this._scRo=null;}
     this._scrollEl=null;
     clearTimeout(this._rootHT1);
-    if(this._io){this._io.disconnect();this._io=null;}
+    if(this._io)this._io.disconnect(); // kept — re-observed on reconnect
     if(this._winHandler){window.removeEventListener('resize',this._winHandler);this._winHandler=null;}
     if(this._locHandler){window.removeEventListener('location-changed',this._locHandler);window.removeEventListener('popstate',this._locHandler);this._locHandler=null;}
     if(this._barMo){this._barMo.disconnect();this._barMo=null;}
@@ -3435,11 +3494,15 @@ class RoomOverlayCard extends HTMLElement{
     // old bug: a card that went through an edit toggle had no layout triggers
     // left and stayed mis-sized until the next state update or swipe).
     if(this._rendered&&this._config){
-      if(this._io)this._io.observe(this);
+      this._wireVisibility();
       this._wireLayoutObservers();
+      this._wireRelTimer();
       this._startCamera();
       if(!this._tmplUnsubs.length)this._setupTemplates();
+      // addEventListener dedupes identical (type, listener) pairs, so re-adding
+      // a handler that was never detached is a no-op — safe unconditionally.
       if(this._hlHandler)window.addEventListener('roc-highlight',this._hlHandler);
+      if(this._orientHandler)window.addEventListener('deviceorientation',this._orientHandler);
       if(this._hashHandler)window.addEventListener('hashchange',this._hashHandler);
       // Re-pin now and once more after HA's current task finishes
       // (setTimeout(0), NOT rAF — rAF never fires in background tabs or
@@ -3622,7 +3685,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;this._lySub=null;this._lyPvT=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;this._lySub=null;}
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
@@ -5969,6 +6032,13 @@ class RoomOverlayCardEditor extends HTMLElement{
   disconnectedCallback(){
     clearTimeout(this._fdT);
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
+    // v5.9.14: this one was missing — every editor open/close left a live
+    // roc-room-switch listener pinning the dead editor instance in memory and
+    // still firing on room switches.
+    if(this._rocRoomHandler){window.removeEventListener('roc-room-switch',this._rocRoomHandler);this._rocRoomHandler=null;}
+    // Drop the mounted preview card so its own observers/timers can be
+    // collected (it is a full room-overlay-card instance).
+    this._prevCard=null;
   }
 }
 
