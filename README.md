@@ -42,8 +42,8 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 
 | | |
 |---|---|
-| ![Responsive — one card across devices](screenshots/responsive.png) | ![Tabbed GUI editor](screenshots/editor.png) |
-| *One card, every screen — the same card at different widths* | *Tabbed GUI editor — build it without YAML* |
+| ![Responsive — one card across devices](screenshots/responsive.png) | ![Tabbed GUI editor](screenshots/editor-image-tab.png) |
+| *One card, every screen — the same card at different widths* | *Tabbed GUI editor (v6.0.0) — build it without YAML, [full walkthrough with more screenshots](docs/EDITOR.md)* |
 | ![Day scene](screenshots/day.png) | ![Night scene](screenshots/night.png) |
 | *Day scene — full brightness* | *Night mode — dim filter active* |
 | ![Gauges](screenshots/gauges.png) | ![Blinds](screenshots/blinds.png) |

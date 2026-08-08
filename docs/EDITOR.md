@@ -19,6 +19,13 @@ editor as it exists today, then summarizes the UX rebuild that got it here.
    spot.
 5. Save. You never had to touch YAML.
 
+![Image tab — background, filters, live preview](../screenshots/editor-image-tab.png)
+
+*The editor opens on the **Image** tab. `v6.0.0` next to the card name (top left) is the
+installed version — check it here if something in this guide doesn't match what you see. The
+panel on the right is a live, draggable preview of the room you're editing, not a static
+mock-up.*
+
 ---
 
 ## Header (always visible)
@@ -37,12 +44,50 @@ editor as it exists today, then summarizes the UX rebuild that got it here.
   blinds, embedded cards, overlays, and groups. Each type is a collapsible section with a count,
   listed alphabetically (icons next to each label make it scannable without needing to reorder
   by intent).
+
+  ![Elements tab — collapsible sections with counts](../screenshots/editor-elements-tab.png)
+
+  *A room with one badge, one blind, one embedded card, and three light controls — the badge
+  next to each count (blue "1"/"3") is the quick way to see what a room actually uses without
+  opening every section.*
+
 - **Layout** — height source, orientation, threshold, and both profile grids as Portrait /
   Landscape sub-tabs, each with a live mini grid preview. See
   [Configuration → Layout](CONFIGURATION.md#layout--two-profiles-on-a--grid) for the underlying
   YAML.
+
+  ![Layout tab — height, orientation and per-profile grid](../screenshots/editor-layout-tab.png)
+  ![Layout tab — live region preview](../screenshots/editor-layout-preview.png)
+
+  *Rows/columns as comma-separated percentages on the left; the coloured preview underneath
+  (Nav / Lights / Image / Cover) redraws live as you type, so a typo that breaks the grid shows
+  up immediately instead of on save.*
+
 - **Rooms & menu** — four accordions: Room identity, Presence & follow, Navigation menu, and
   Deep-linking. Add / remove / reorder rooms here.
+
+### Live navigation thumbnails (`nav.live`)
+
+One of the more popular settings, and easy to miss: on the **Navigation menu** accordion, the
+**Live thumbnails** dropdown controls whether the room-switcher thumbnails at the top of the card
+are static images or living miniatures of each room.
+
+![Rooms & menu → Navigation menu → Live thumbnails](../screenshots/editor-nav-live.png)
+
+- **off** — plain thumbnail images.
+- **composite** — thumbnails layer in each room's currently-active overlays (lit lamps, open
+  windows…) and its filters, so a dimmed room looks dimmed in the menu too. Cheap — pure CSS
+  compositing, no extra card instances.
+- **full** — every thumbnail is a real, independent mini `room-overlay-card` — gauges, labels,
+  icons, badges, blinds, all of it, scaled down. Heaviest option; the *Mini-room settings* panel
+  shown above lets you cap the cost (`Reference width`, `Camera refresh`, and whether
+  label/colour templates subscribe at all).
+- **custom** — same real-instance mechanism as `full`, but starts empty; you opt individual
+  elements in with a "Show in mini" checkbox on their own panel. Use this when a room is too busy
+  to look good shrunk down whole.
+
+The underlying YAML (`nav.live`, `nav.mini.*`) is documented in
+[Configuration → Multi-room](CONFIGURATION.md#multi-room-one-card--whole-home).
 
 ## Edit mode
 

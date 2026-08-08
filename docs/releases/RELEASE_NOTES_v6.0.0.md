@@ -18,6 +18,12 @@ plus two new focused docs:
 
 `LAYOUT.md` and `PRESETS.md` are unchanged and now linked from both new docs.
 
+**Screenshots refreshed against a live v6.0.0 install.** The previous editor screenshot showed
+`v1.15.2` and a "Responsive" tab that no longer exists. Seven new screenshots replace it: the
+Image tab, the Elements tab, the Layout tab (with its live region preview), the Rooms & menu
+"Live thumbnails" (`nav.live`) setting, and the Cover control and Light controls panels — the
+latter two now live next to their YAML in `docs/CONFIGURATION.md`.
+
 ## Editor UX rebuild — now complete
 
 This release also marks the finish line for the editor GUI/UX revalidation that shipped across

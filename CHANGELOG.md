@@ -20,6 +20,15 @@ pitch, install steps and quick start under a wall of YAML examples. It's now a s
 
 `LAYOUT.md` and `PRESETS.md` are unchanged and now cross-linked from both new docs.
 
+**Live screenshots, captured against this release.** The old `editor.png` showed a `v1.15.2`
+editor with a "Responsive" tab and mobile/tablet/desktop breakpoint fields — none of which exist
+any more (superseded by the v4.0.0 layout engine and the v5.9.x editor rebuild). Seven new
+screenshots were captured directly against a live `v6.0.0` install: the Image tab (replaces
+`editor.png` in the README), the Elements tab overview, the Layout tab and its live region
+preview, the Rooms & menu "Live thumbnails" (`nav.live`) setting, and the Cover control and Light
+controls panels — the latter two now sit next to their matching YAML in
+`docs/CONFIGURATION.md` instead of only existing as abstract examples.
+
 **Marks the editor GUI/UX revalidation as done.** v5.9.0–v5.10.1 shipped four changes from the
 `EDITOR_UX_REVALIDATION.md` review, discussed and decided incrementally rather than implemented
 wholesale: the header's *Test mode* + *Drag-edit preview* merged into one **Edit mode** toggle

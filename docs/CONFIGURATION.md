@@ -396,6 +396,12 @@ blinds:
   `indigo` / `amber` / `blue-grey`, or any CSS colour) and `name` (shown as a tooltip). Presets
   render as **icons only**.
 
+![Editor — Cover control (roleta) panel](../screenshots/editor-cover-control.png)
+
+*The same `control:` block from the GUI, on a `dock — edge rail` blind with four presets
+(Otevřeno / Den / Skulina / Zavřeno — Open / Day / Gap / Closed). The live preview highlights the
+selected blind so you can see exactly which window you're editing.*
+
 ---
 
 ## Clickable zones
@@ -609,6 +615,12 @@ a toggle pill sharing the same lux ring instead of a brightness slider.
 
 Requires the `material-slider-card` resource to be installed. In the GUI these live in the
 **Elements** tab under *Light controls*.
+
+![Editor — Light & switch controls panel](../screenshots/editor-light-controls.png)
+
+*Three lights with per-slider names, a lux sensor driving the gradient, and the live gradient
+preview — the same blue→amber ramp `color_low`/`color_high` produce, rendered so you can check it
+before saving instead of guessing at hex values.*
 
 ---
 
