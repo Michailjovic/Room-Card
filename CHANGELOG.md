@@ -1,5 +1,50 @@
 # Changelog
 
+## [6.0.0] - 2026-08-08
+
+### Documentation overhaul + editor UX rebuild milestone
+
+**README split into a landing page + two focused docs.** The README had grown to ~860 lines,
+most of it the configuration reference and the editor walkthrough — useful, but it buried the
+pitch, install steps and quick start under a wall of YAML examples. It's now a short landing page
+(pitch, feature table, screenshots, install, quick start, links out) plus:
+
+- **[`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)** — the full YAML reference: every top-level
+  key, the layout engine, conditions, filters, overlays, gauges, blinds & cover control, zones,
+  badges, icons/labels, embedded cards, companion cards, light controls, camera/weather, template
+  visibility, groups, multi-room, and the complete example. Moved verbatim from the README, not
+  rewritten — no behaviour or documented-key changes.
+- **[`docs/EDITOR.md`](docs/EDITOR.md)** — the GUI editor tab by tab (Image / Elements / Layout /
+  Rooms & menu), Edit mode in full, and a new summary section rolling up what the editor UX
+  rebuild (below) actually changed and why.
+
+`LAYOUT.md` and `PRESETS.md` are unchanged and now cross-linked from both new docs.
+
+**Marks the editor GUI/UX revalidation as done.** v5.9.0–v5.10.1 shipped four changes from the
+`EDITOR_UX_REVALIDATION.md` review, discussed and decided incrementally rather than implemented
+wholesale: the header's *Test mode* + *Drag-edit preview* merged into one **Edit mode** toggle
+(v5.9.0); the **Layout tab** gained Portrait/Landscape sub-tabs with a live mini grid preview,
+plus a real fix so Layout edits reach the mounted Edit-mode preview card (v5.9.11); the **Rooms &
+menu tab** split into four accordions matching the Elements tab's pattern (v5.9.13); and the dead
+`dock_side` blind-editor control, found by the code audit, was removed (v5.10.1). Two proposals
+from the same review were explicitly rejected after discussion — reordering Elements sections by
+intent (alphabetical-with-icons stays) and a per-section text filter (low value at typical room
+sizes). Full history in `ROADMAP.md` and `EDITOR_UX_REVALIDATION.md`.
+
+### Roadmap re-scope
+
+`ROADMAP.md` had reserved v6.0.0 for the HACS default-repository submission milestone (decided
+2026-08-05), with the version bump meant to land only after a `hacs/default` PR is accepted. That
+plan changed today: v6.0.0 now marks this documentation overhaul instead, and the HACS submission
+becomes its own later milestone with a version number chosen at that time — so v6.0.0 isn't
+reserved-then-reused, it just means something different than originally planned. `ROADMAP.md`
+updated to reflect this and to correct its stale "current release" line (it still said v5.4.0).
+
+### Not done
+
+No code, config keys, or behaviour changed in this release — documentation and versioning only.
+`ROC_VERSION` and `package.json` bumped to match.
+
 ## [5.10.1] - 2026-08-08
 
 ### Editor honesty & repo tidy-up (closes the code audit)

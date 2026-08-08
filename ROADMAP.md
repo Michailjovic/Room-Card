@@ -1,13 +1,21 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v5.4.0** (2026-08-05, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.0.0** (2026-08-08, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
-**The original roadmap, the v2.0.0 milestone, the v3.0 backlog, and the entire
-v3.1 – v5.1 feature run are complete.** The card is feature-complete for daily
-use — remaining work is the push to get it into HACS's own default repository
-(**v6.0.0**), one big optional vision item (live mini-room nav), and a short
-editor/UX polish backlog.
+**The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
+v3.1 – v5.1 feature run, and the editor GUI/UX revalidation (v5.9.0–v5.10.1) are
+complete.** The card is feature-complete for daily use — remaining work is the
+push to get it into HACS's own default repository, one big optional vision item
+(live mini-room nav), and a short editor/UX polish backlog.
+
+**Re-scope decided 2026-08-08:** v6.0.0 no longer marks the HACS default-repo
+submission (see below) — it marks the **documentation overhaul** (README split
+into a short landing page + [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) +
+[`docs/EDITOR.md`](docs/EDITOR.md)) plus the now-complete editor UX rebuild it
+documents. The HACS submission keeps its own checklist below but moves to the
+**next** milestone, versioned once it actually happens — not pre-assigned, so no
+version number gets reserved-then-reused.
 
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped · ⛔ dropped · 🅿️ parked
 
@@ -81,28 +89,29 @@ failure broke HACS installs.
    pieces (instance-reuse perf, optional swipe-reuse Phase 3) are non-blocking follow-ups — see
    [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
 2. ✅ **Haptic on hold-registered** (E7, mobile) — shipped v5.8.0.
-3. 🚧 **Editor GUI/UX revalidation** — in progress, shipping incrementally under **v5.9.x** (own
-   minor version, not bundled into v6.0.0 — decided 2026-08-05: v6.0.0 is reserved for the
-   finished product, README overhaul included, right before HACS submission). v5.9.0 shipped:
-   header **Edit mode** merge (Test mode + Drag-edit preview → one field) + Room/Edit
-   mode/Haptics icons. Rest of the header (Advanced-YAML relocation, room-picker prominence,
-   separator + tab-bar styling) and the tab content itself still to come — see
-   [`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md).
-4. 🎯 **v6.0.0 — Official HACS default-repository submission** — README/GitHub content overhaul
-   as the finale, once the revalidated editor (step 3) has landed and settled.
-5. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
-   during v6.0.0.
+3. ✅ **Editor GUI/UX revalidation** — shipped incrementally as **v5.9.x–v5.10.x**. All four
+   "high impact" proposals landed: v5.9.0 header **Edit mode** merge (Test mode + Drag-edit
+   preview → one field) + Room/Edit mode/Haptics icons; v5.9.11 **Layout tab** sub-tabs + live
+   mini grid preview; v5.9.13 **Rooms & menu** split into 4 accordions; v5.10.1 removed the
+   dead `dock_side` control found by the code audit. See
+   [`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md) and [`docs/EDITOR.md`](docs/EDITOR.md).
+4. ✅ **v6.0.0 — Documentation overhaul** — README split into a landing page +
+   [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) + [`docs/EDITOR.md`](docs/EDITOR.md),
+   marking the editor rebuild (step 3) as done and documented.
+5. 🎯 **Official HACS default-repository submission** — next milestone, see below. Version
+   number TBD at submission time (not v6.0.0 — see re-scope note above).
+6. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
+   during the HACS submission push.
 
-## 🚧 Editor GUI/UX revalidation — in progress, shipping as v5.9.x
+## ✅ Editor GUI/UX revalidation — done, shipped v5.9.0–v5.10.1
 
-A full pass over the editor for consistency and discoverability. The control surface has grown a
-lot across v3–v4 and is getting hard to navigate, even for the author. **Versioned separately
-from v6.0.0** (decided 2026-08-05) — this is a real feature pass in its own right, not just a
-pre-submission checkbox. Analysis + proposals in
+A full pass over the editor for consistency and discoverability. The control surface had grown a
+lot across v3–v4 and was getting hard to navigate, even for the author. Analysis + proposals in
 [`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md), discussed and refined interactively
-with the user rather than implemented wholesale.
+with the user rather than implemented wholesale. User-facing walkthrough now lives in
+[`docs/EDITOR.md`](docs/EDITOR.md).
 
-Progress:
+Shipped:
 - ✅ v5.9.0 — merged **Test mode** + **Drag-edit preview** into one **Edit mode** header toggle
   (persists `test_mode`, shows the live preview immediately, no separate ephemeral flag); added
   icons to Room/Edit mode/Haptics, shortened "Haptic feedback" → "Haptics".
@@ -114,30 +123,32 @@ Progress:
   (proposal 1) stays as-is — reviewed and preferred over reordering by intent.
 - ✅ v5.9.13 — **Rooms & menu tab**: split into 4 `sec()` accordions (Room identity / Presence &
   follow / Navigation menu / Deep-linking), same pattern as Elements. All four "high impact"
-  proposals from `EDITOR_UX_REVALIDATION.md` are now shipped.
-- 🎯 next — user re-reviewing the visual result before further header changes (Advanced-YAML
-  relocation out of the header, Room-picker visual prominence/placement, separator line +
-  stronger tab-bar styling before the Image/Elements/Layout/Rooms&menu tabs).
-- Not yet started — per-item Advanced-YAML, copy-to-other-rooms, audit remaining alphabetical
-  lists — "medium"/"lower impact" proposals in `EDITOR_UX_REVALIDATION.md`.
+  proposals from `EDITOR_UX_REVALIDATION.md` are shipped.
+- ✅ v5.10.1 — removed the dead `dock_side` select (code audit finding, never had any effect).
+- Deferred, not blocking: per-item Advanced-YAML, copy-to-other-rooms, audit remaining
+  alphabetical lists — "medium"/"lower impact" proposals in `EDITOR_UX_REVALIDATION.md`, and the
+  header polish item (Advanced-YAML relocation, room-picker prominence, tab-bar styling) noted
+  there as "next" — picked up opportunistically, not gating any release.
 
-## 🎯 v6.0.0 — Official HACS default-repository submission
+## 🎯 Official HACS default-repository submission — next milestone
 
 **Goal:** the card gets listed in HACS's own default repository, so new users can install
-it straight from HACS search instead of adding it as a custom/manual repository. Depends on the
-editor GUI/UX revalidation (above) having already shipped and settled — the submission
-screenshots should show off the finished, revalidated editor.
+it straight from HACS search instead of adding it as a custom/manual repository. The editor
+GUI/UX revalidation (above) has shipped and settled, and the documentation overhaul (v6.0.0,
+this release) gives the submission screenshots something finished to show off.
 
-1. **GitHub content overhaul** — a much more detailed, beginner-friendly README and fresh
-   screenshots reflecting the v4 layout engine, cover control, light controls (sliders +
-   switches), and the **revalidated** editor. Current screenshots predate all of this.
-2. **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
+1. ✅ **GitHub content overhaul** — done in v6.0.0: README split into a landing page +
+   [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) + [`docs/EDITOR.md`](docs/EDITOR.md),
+   reflecting the v4 layout engine, cover control, light controls (sliders + switches), and the
+   revalidated editor. Screenshots already exist in `screenshots/` and are current.
+2. 🎯 **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
    `lovelace`, `custom-card`, `hacs`, …) — required by the `hacs/default` review.
-3. **Re-verify against the `hacs/default` validation checklist** — the repo's own HACS
+3. 🎯 **Re-verify against the `hacs/default` validation checklist** — the repo's own HACS
    validation Action has shipped since v1.8.0 ✅; confirm it still covers everything the
    default-repo submission specifically checks for (README, `hacs.json`, releases, brands).
-4. **Submit the PR to `hacs/default`.**
-5. Bump to **v6.0.0** to mark the milestone once accepted/merged.
+4. 🎯 **Submit the PR to `hacs/default`.**
+5. 🎯 Bump version to mark the milestone once accepted/merged — number chosen at that time
+   (v6.0.0 is already spent on the documentation overhaul above).
 
 ## ✅ Live mini-room navigation — Phase 2 (`nav.live: full` + `custom`) — done, v5.4.0-v5.7.0
 
