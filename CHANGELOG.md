@@ -1,5 +1,17 @@
 # Changelog
 
+## [5.9.12] - 2026-08-08
+
+### Editor: Layout tab — two small follow-ups to v5.9.11, per live user feedback on the rendered result
+
+**Portrait/Landscape sub-tab buttons now carry an icon** (`mdi:crop-portrait` / `mdi:crop-landscape`) alongside the label, so which profile is which is visible at a glance instead of relying on reading the word.
+
+**Image fit is now a dropdown, not a free-text field.** `cover`/`contain` was previously typed as plain text per profile (placeholder `cover|contain`) — easy to typo silently (the render falls back to `cover` for anything that isn't exactly `contain`, so a typo just fails silently rather than erroring). Replaced with a `<select>` per profile: `— same as landscape —` / `— default: cover —`, `cover — crop to fill`, `contain — letterbox`. Same underlying config keys and parsing (`_collProf` already worked generically off `.value`, so no parsing changes were needed) — purely removes the chance of a bad string.
+
+### Testing
+
+3 new render tests: sub-tab buttons contain the right mdi icon each, Image fit renders as `<select>` for both profiles, and the dropdown offers both `cover`/`contain` options. Full smoke + render suites green (0 FAIL).
+
 ## [5.9.11] - 2026-08-08
 
 ### Editor: Layout tab — Portrait/Landscape sub-tabs, live mini grid preview, and a real live-preview fix

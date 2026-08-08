@@ -122,6 +122,9 @@ _lyNavRow.value='1';
 _lyNavRow.dispatchEvent(new w.Event('input',{bubbles:true}));
 t('typing a region row repaints its mini preview live (no full re-render)',/Nav/.test(ed.querySelector('#ly-preview__landscape').innerHTML));
 t('...and the field that was typed into keeps its value (no re-render/focus loss)',ed.querySelector('#ly-r__landscape__nav').value==='1');
+t('sub-tab buttons carry a portrait/landscape mdi icon',/mdi:crop-portrait/.test(ed.querySelector('[data-rocsub="portrait"]').innerHTML)&&/mdi:crop-landscape/.test(ed.querySelector('[data-rocsub="landscape"]').innerHTML));
+t('Image fit is a dropdown, not a free-text field',ed.querySelector('#image_fit__landscape').tagName==='SELECT'&&ed.querySelector('#image_fit__portrait').tagName==='SELECT');
+t('Image fit dropdown offers cover/contain options',['cover','contain'].every(function(v){return!!ed.querySelector('#image_fit__landscape option[value="'+v+'"]');}));
 t('Companion cards YAML intro text only shows in Advanced/YAML mode',
   (()=>{const introEl=[...ed.querySelectorAll('label.roc-l')].find(l=>l.textContent.indexOf('Companion cards')===0);
     return !!introEl&&introEl.closest('.roc-adv')!==null;})());

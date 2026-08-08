@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.11';
+const ROC_VERSION='5.9.12';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -5087,9 +5087,10 @@ class RoomOverlayCardEditor extends HTMLElement{
       return h;
     };
     const _lySub=this._lySub==='landscape'?'landscape':'portrait';
-    respInner+='<div style="display:flex;gap:6px;margin-bottom:10px;">'+['portrait','landscape'].map(function(pk){
-      const on=_lySub===pk;
-      return '<button data-rocsub="'+pk+'" type="button" style="padding:5px 14px;border-radius:999px;font-size:12px;font-weight:'+(on?'700':'400')+';border:1px solid '+(on?'var(--primary-color)':'var(--divider-color)')+';background:'+(on?'rgba(3,169,244,0.15)':'none')+';color:'+(on?'var(--primary-color)':'var(--primary-text-color)')+';cursor:pointer;">'+(pk==='portrait'?'Portrait':'Landscape')+'</button>';
+    const _lySubDef=[['portrait','mdi:crop-portrait','Portrait'],['landscape','mdi:crop-landscape','Landscape']];
+    respInner+='<div style="display:flex;gap:6px;margin-bottom:10px;">'+_lySubDef.map(function(d){
+      const pk=d[0],icon=d[1],label=d[2],on=_lySub===pk;
+      return '<button data-rocsub="'+pk+'" type="button" style="padding:5px 14px;border-radius:999px;font-size:12px;font-weight:'+(on?'700':'400')+';border:1px solid '+(on?'var(--primary-color)':'var(--divider-color)')+';background:'+(on?'rgba(3,169,244,0.15)':'none')+';color:'+(on?'var(--primary-color)':'var(--primary-text-color)')+';cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><ha-icon icon="'+icon+'" style="--mdc-icon-size:16px;"></ha-icon>'+label+'</button>';
     }).join('')+'</div>';
     respInner+='<div data-rocsubpanel="portrait" style="display:'+(_lySub==='portrait'?'block':'none')+';">'+_profBox('portrait')+'</div>';
     respInner+='<div data-rocsubpanel="landscape" style="display:'+(_lySub==='landscape'?'block':'none')+';">'+_profBox('landscape')+'</div>';
@@ -5106,10 +5107,25 @@ class RoomOverlayCardEditor extends HTMLElement{
       h+='</div></div>';
       return h;
     };
+    const _profRowSelect=function(idb,label,val,opts){
+      const isObj=val&&typeof val==='object';
+      const sc=(val!=null&&!isObj)?String(val):'';
+      let h='<div style="margin-bottom:8px;"><label class="roc-l">'+label+'</label>';
+      h+='<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;">';
+      ROC_PROFILES.forEach(function(pk){
+        const v0=isObj?(val[pk]!=null?String(val[pk]):''):(pk==='landscape'?sc:'');
+        h+='<select id="'+idb+'__'+pk+'"'+self._inp('font-size:12px;')+'>';
+        h+='<option value=""'+(!v0?' selected':'')+'>'+(pk==='portrait'?'&#8212; same as landscape &#8212;':'&#8212; default: cover &#8212;')+'</option>';
+        opts.forEach(function(o){h+='<option value="'+o[0]+'"'+(v0===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+        h+='</select>';
+      });
+      h+='</div></div>';
+      return h;
+    };
     respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;line-height:1.5;">Per profile: Portrait / Landscape. Fill only <b>Landscape</b> to use one value everywhere.</p>';
     respInner+=_profRow('aspect_ratio','Aspect ratio (design shape of the image)',c.aspect_ratio,'e.g. 16/9');
     respInner+=_profRow('border_radius','Border radius',c.border_radius,'e.g. 12px');
-    respInner+=_profRow('image_fit','Image fit (cover = crop, contain = letterbox)',c.image_fit,'cover|contain');
+    respInner+=_profRowSelect('image_fit','Image fit',c.image_fit,[['cover','cover — crop to fill'],['contain','contain — letterbox']]);
     respInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;"><label class="roc-l">Lock layout to image</label>';
     respInner+='<input id="lock_aspect" type="text" placeholder="off — or: true (auto from image) / 16/9" value="'+this._e(c.lock_aspect===true?'true':(c.lock_aspect||''))+'"'+this._inp('')+'>';
     respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;line-height:1.5;">When set, zones / icons / blinds etc. stay glued to the image across every tier — per-tier <code>aspect_ratio</code> then only changes how much of the image is cropped, not where elements sit. Use <b>true</b> to take the design shape from the image automatically, or pin an explicit aspect like <b>1720/968</b> (your source image’s real W/H).</p></div>';
