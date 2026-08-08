@@ -106,12 +106,17 @@ Progress:
 - ✅ v5.9.0 — merged **Test mode** + **Drag-edit preview** into one **Edit mode** header toggle
   (persists `test_mode`, shows the live preview immediately, no separate ephemeral flag); added
   icons to Room/Edit mode/Haptics, shortened "Haptic feedback" → "Haptics".
+- ✅ v5.9.11 — **Layout tab**: Portrait/Landscape sub-tabs (was two stacked profile boxes),
+  illustrative live mini grid preview per profile (reuses the real `rocGridCss`/`rocRegionCss`
+  render functions), and a real fix so Layout edits actually reach the mounted Edit-mode preview
+  card (they never did before — `layout` wasn't part of the item-count diff that decides whether
+  `setConfig()` remounts it). Decided (2026-08-08): Elements-tab alphabetical-with-icons ordering
+  (proposal 1) stays as-is — reviewed and preferred over reordering by intent.
 - 🎯 next — user re-reviewing the visual result before further header changes (Advanced-YAML
   relocation out of the header, Room-picker visual prominence/placement, separator line +
   stronger tab-bar styling before the Image/Elements/Layout/Rooms&menu tabs).
 - Not yet started — the room-accordion sections under each tab (Background & basics, Image
-  filters, etc.) and the tab content itself (Elements-section reordering by intent, Rooms&menu
-  sub-accordions, per-item Advanced-YAML, item search/filter, Layout-tab live preview) — full
+  filters, etc.), Rooms&menu sub-accordions, per-item Advanced-YAML, item search/filter — full
   list of proposals in `EDITOR_UX_REVALIDATION.md`.
 
 ## 🎯 v6.0.0 — Official HACS default-repository submission

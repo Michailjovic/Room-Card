@@ -1,5 +1,21 @@
 # Changelog
 
+## [5.9.11] - 2026-08-08
+
+### Editor: Layout tab — Portrait/Landscape sub-tabs, live mini grid preview, and a real live-preview fix
+
+Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md)) — this pass covers the Layout tab specifically (proposal 7, "Live preview for the Layout tab"), plus two smaller usability wins for the same tab. The Elements tab's alphabetical-with-icons section ordering (proposal 1) was reviewed and kept as-is — it reads fine and is out of scope for this round.
+
+**1. Portrait / Landscape as sub-tabs, not stacked boxes.** The two profile editors used to render one after another, doubling the tab's length and making it easy to edit the wrong profile by mistake. They're now behind a small Portrait/Landscape pill toggle (same pattern as the top-level Image/Elements/Layout/Rooms&menu tabs); both profiles stay mounted underneath so field values and focus survive switching, only visibility toggles.
+
+**2. Illustrative mini grid preview per profile.** Each profile box now shows a small color-coded diagram of its regions (Nav/Cards↑/Image/Lights/Cards↓/Cover), built from the exact same `rocGridCss`/`rocRegionCss` functions the real card render path uses — so it can't drift out of sync with the actual CSS Grid semantics (including the `1/6` grid-line span syntax). It repaints on every keystroke via a direct `innerHTML` swap of just the preview box (the same technique already used for the Light Controls gradient preview), so typing in a field never loses focus or triggers a full editor re-render. Purely a visual aid inside the editor form — it does not touch the real card.
+
+**3. Fix: Layout tab edits didn't actually reach the Edit-mode live preview card.** Investigated whether the existing Edit-mode preview (the real, interactive `<room-overlay-card>` instance mounted in the editor when Edit mode is on) already reflected Layout tab changes, as the roadmap note suggested checking before building anything new. It didn't — not even on blur. Root cause: the editor's own `setConfig()` only re-mounts that preview instance when an item-count diff (`same` check — zones/icons/labels/badges/etc. array lengths) says something changed; `layout` was never part of that comparison, so a Layout-only edit could never trigger a remount, at any point, before this fix. Added a dedicated debounced path (`_lyDebouncedUpdate`, 150ms, mirroring the existing `_fireDebounced` used elsewhere) that pushes the freshly-collected config straight into the mounted preview card's `setConfig()`, bypassing the editor's own DOM re-render entirely — so typing in a Layout field now updates the live preview almost immediately, without any risk to input focus.
+
+### Testing
+
+9 new jsdom render tests: sub-tab buttons present and default to Portrait, clicking Landscape shows/hides the right panel, both mini-preview divs render, the landscape preview is pre-filled from an auto-migrated config, typing a region's row live-repaints its mini preview without losing the field's own value, and — with fake timers advanced past the debounce — a Layout tab edit (input, no blur) reaches the mounted Edit-mode preview card's `_config.layout`. Full smoke + render suites green (0 FAIL). Playwright e2e suite unaffected by this change (none of the 6 geometry specs touch the editor) but could not be executed in this environment — the Chromium binary failed to install offline; unrelated to this diff.
+
 ## [5.9.10] - 2026-08-05
 
 ### Fix: `nav.live: full`/`custom` thumbnails were overexposed vs. `composite`

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.10';
+const ROC_VERSION='5.9.11';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -125,6 +125,24 @@ function rocRegionCss(pl){
   let st='grid-row:'+rocLine(pl&&pl.row)+';grid-column:'+rocLine(pl&&(pl.col!=null?pl.col:1))+';overflow:'+ov+';position:relative;min-width:0;min-height:0;';
   if(pl&&pl.align&&pl.align!=='stretch')st+='align-self:'+pl.align+';';
   return st;
+}
+// Editor-only: illustrative mini preview of a layout profile's grid — NOT used
+// by the real card render path. Reuses rocGridCss/rocRegionCss so the little
+// diagram always matches the actual CSS Grid semantics (grid-line row/col
+// syntax etc.), just at editor-form scale, purely as a visual aid while typing.
+const ROC_LY_REGIONS=[['nav','Nav','#4f8cff'],['cards_above','Cards ↑','#8a6dff'],['image','Image','#2ecc71'],['lights','Lights','#f5a623'],['cards_below','Cards ↓','#e17055'],['cover','Cover','#00b8d9']];
+function rocLyPreviewHtml(lp){
+  lp=lp||{};
+  const gridCss=rocGridCss(lp,lp.gap);
+  let inner='';
+  ROC_LY_REGIONS.forEach(function(r){
+    const rg=r[0],label=r[1],color=r[2];
+    const pl=lp.place&&lp.place[rg];
+    if(!pl)return;
+    inner+='<div style="'+rocRegionCss(pl)+'background:'+color+'2b;border:1px solid '+color+';border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+color+';min-height:12px;overflow:hidden;padding:1px;text-align:center;line-height:1.1;">'+label+'</div>';
+  });
+  if(!inner)inner='<div style="grid-column:1;grid-row:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--secondary-text-color);">No regions placed yet</div>';
+  return '<div style="'+gridCss+'height:100%;">'+inner+'</div>';
 }
 // True when the image region sits on an 'auto' row — the image box then sizes
 // itself from the design aspect (CSS aspect-ratio on .wrap): exact fit, no crop,
@@ -3604,7 +3622,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;this._lySub=null;this._lyPvT=null;}
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
@@ -3806,6 +3824,31 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     clearTimeout(this._fdT);
     this._fdT=setTimeout(function(){self._fire(self._collectConfig());},150);
+  }
+
+  // Layout-tab fields debounce through here instead of _fireDebounced(): the
+  // mounted Edit-mode preview card (_prevCard, see _mountPreview) only gets a
+  // fresh setConfig() when this editor's own setConfig() runs a full _render()
+  // — which it skips whenever array item counts are unchanged (see the `same`
+  // check in setConfig()). layout.* isn't part of that count comparison at
+  // all, so a pure Layout edit never reaches _prevCard through the normal
+  // path. Push it there directly instead, without touching the editor's own
+  // DOM (no _render() here — keeps focus/cursor in the field being typed).
+  _lyDebouncedUpdate(){
+    const self=this;
+    clearTimeout(this._fdT);
+    this._fdT=setTimeout(function(){
+      const cfg=self._collectConfig();
+      self._fire(cfg);
+      if(self._prevCard){
+        try{
+          const pc=rocClone(cfg);pc.test_mode=true;pc._roc_preview=true;delete pc.url_sync;
+          if(Array.isArray(pc.rooms)&&pc.rooms.length)pc.follow_mode='manual';
+          self._prevCard.setConfig(pc);
+          if(Array.isArray(pc.rooms)&&pc.rooms.length)self._prevCard._roomIdx=Math.max(0,Math.min(self._editRoomIdx,pc.rooms.length-1));
+        }catch(e){console.warn('[room-overlay-card] editor live layout preview failed:',e);}
+      }
+    },150);
   }
 
   _collectConfig(){
@@ -5038,10 +5081,18 @@ class RoomOverlayCardEditor extends HTMLElement{
         h+='</div>';
       });
       h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:8px 0 0;line-height:1.5;">Empty <b>Row</b> = region hidden in this profile. Spans use CSS grid lines: <code>1/6</code> = rows 1&#8211;5. The <b>cover</b> region shows blinds whose control placement is <code>dock</code>; <code>float</code> controls stay as tap-reveal overlays on the image.</p>';
+      h+='<div style="margin-top:10px;"><label class="roc-l" style="margin-bottom:4px;">Preview <span style="font-weight:400;color:var(--secondary-text-color);">(illustrative diagram, not a live render)</span></label>';
+      h+='<div id="ly-preview__'+pk+'" style="height:120px;border:1px dashed var(--divider-color);border-radius:6px;padding:4px;box-sizing:border-box;background:rgba(255,255,255,0.02);">'+rocLyPreviewHtml(lp)+'</div></div>';
       h+='</div>';
       return h;
     };
-    respInner+=_profBox('portrait')+_profBox('landscape');
+    const _lySub=this._lySub==='landscape'?'landscape':'portrait';
+    respInner+='<div style="display:flex;gap:6px;margin-bottom:10px;">'+['portrait','landscape'].map(function(pk){
+      const on=_lySub===pk;
+      return '<button data-rocsub="'+pk+'" type="button" style="padding:5px 14px;border-radius:999px;font-size:12px;font-weight:'+(on?'700':'400')+';border:1px solid '+(on?'var(--primary-color)':'var(--divider-color)')+';background:'+(on?'rgba(3,169,244,0.15)':'none')+';color:'+(on?'var(--primary-color)':'var(--primary-text-color)')+';cursor:pointer;">'+(pk==='portrait'?'Portrait':'Landscape')+'</button>';
+    }).join('')+'</div>';
+    respInner+='<div data-rocsubpanel="portrait" style="display:'+(_lySub==='portrait'?'block':'none')+';">'+_profBox('portrait')+'</div>';
+    respInner+='<div data-rocsubpanel="landscape" style="display:'+(_lySub==='landscape'?'block':'none')+';">'+_profBox('landscape')+'</div>';
     // Per-profile scalar inputs — fill only Landscape to use one value everywhere.
     const _profRow=function(idb,label,val,ph){
       const isObj=val&&typeof val==='object';
@@ -5177,10 +5228,70 @@ class RoomOverlayCardEditor extends HTMLElement{
         });
       });
     }
-    // Responsive tab — breakpoint fields save on change
+    // Responsive tab — breakpoint fields save on change, and (Layout-tab grid
+    // fields only) also debounce-push straight to the Edit-mode preview card
+    // on every keystroke — see _lyDebouncedUpdate() for why that needs a
+    // dedicated path instead of the usual _fireDebounced().
     this.querySelectorAll('#lock_aspect,#ly-hmode,#ly-hcustom,#ly-orient,#ly-threshold,#ly-pin,#ly-gap,[id^="ly-rows__"],[id^="ly-cols__"],[id^="ly-r__"],[id^="ly-c__"],[id^="ly-o__"]').forEach(function(el){
       el.addEventListener('change',function(){self._fire(self._collectConfig());});
+      el.addEventListener('input',function(){self._lyDebouncedUpdate();});
     });
+
+    // Layout tab — Portrait/Landscape sub-tab toggle (visibility only, keeps
+    // both profiles mounted so field state/focus survives switching).
+    const _lySubBtns=this.querySelectorAll('[data-rocsub]');
+    if(_lySubBtns.length){
+      _lySubBtns.forEach(function(btn){
+        btn.addEventListener('click',function(){
+          const pk=btn.dataset.rocsub;self._lySub=pk;
+          self.querySelectorAll('[data-rocsubpanel]').forEach(function(p){p.style.display=(p.dataset.rocsubpanel===pk)?'block':'none';});
+          _lySubBtns.forEach(function(b){
+            const on=b.dataset.rocsub===pk;
+            b.style.borderColor=on?'var(--primary-color)':'var(--divider-color)';
+            b.style.background=on?'rgba(3,169,244,0.15)':'none';
+            b.style.color=on?'var(--primary-color)':'var(--primary-text-color)';
+            b.style.fontWeight=on?'700':'400';
+          });
+        });
+      });
+    }
+
+    // Layout tab — mini grid preview repaint on every keystroke, no full
+    // re-render (see rocLyPreviewHtml — purely illustrative, editor-only).
+    (function(){
+      const _numOrLy=function(s){const t=String(s).trim();if(!t)return null;return/^[\d.]+$/.test(t)?parseFloat(t):t;};
+      const _lyReadProfile=function(pk){
+        const q2=function(id){return self.querySelector('#'+id);};
+        const v2=function(id){const el=q2(id);return el?el.value:'';};
+        const lp={};
+        const rw=v2('ly-rows__'+pk).trim(),cl=v2('ly-cols__'+pk).trim();
+        if(rw)lp.rows=rw.split(',').map(_numOrLy).filter(function(x){return x!==null;});
+        if(cl)lp.columns=cl.split(',').map(_numOrLy).filter(function(x){return x!==null;});
+        const place={};
+        ['nav','cards_above','image','lights','cards_below','cover'].forEach(function(rg){
+          const rr=v2('ly-r__'+pk+'__'+rg).trim();
+          if(!rr)return;
+          const pl={row:_numOrLy(rr)};
+          const cc2=v2('ly-c__'+pk+'__'+rg).trim();if(cc2)pl.col=_numOrLy(cc2);
+          const ov2=q2('ly-o__'+pk+'__'+rg);if(ov2&&ov2.checked)pl.overflow='auto';
+          place[rg]=pl;
+        });
+        if(Object.keys(place).length)lp.place=place;
+        const gp2=v2('ly-gap').trim();if(gp2)lp.gap=gp2;
+        return lp;
+      };
+      const _repaint=function(pk){
+        const host=self.querySelector('#ly-preview__'+pk);
+        if(host)host.innerHTML=rocLyPreviewHtml(_lyReadProfile(pk));
+      };
+      ['portrait','landscape'].forEach(function(pk){
+        self.querySelectorAll('[id^="ly-rows__'+pk+'"],[id^="ly-cols__'+pk+'"],[id^="ly-r__'+pk+'__"],[id^="ly-c__'+pk+'__"],[id^="ly-o__'+pk+'__"]').forEach(function(el){
+          el.addEventListener('input',function(){_repaint(pk);});
+        });
+      });
+      const gapEl=self.querySelector('#ly-gap');
+      if(gapEl)gapEl.addEventListener('input',function(){_repaint('portrait');_repaint('landscape');});
+    })();
 
     if(!this._keysBound){
       this._keysBound=true;

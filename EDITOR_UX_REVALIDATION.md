@@ -1,7 +1,21 @@
 # Editor GUI/UX Revalidation — analysis & proposals
 
-Status: **analysis only, no code changed yet.** For discussion before any implementation.
-Target ship version if/when approved: **v5.9.x** (explicitly not bundled into v6.0.0).
+Status: analysis + proposals below, discussed and decided on incrementally with the user.
+Target ship version: **v5.9.x** (explicitly not bundled into v6.0.0).
+
+**Decisions so far (2026-08-08):**
+- Proposal 1 (re-group Elements tab by intent) — **rejected**, keeping alphabetical. The icons
+  added alongside each section label already make it easy enough to scan; user finds it navigable
+  as-is.
+- Proposal 3 (disambiguate "Elements") — **turns out already resolved**: the embedded-HA-cards
+  section's user-facing label is `"Embedded HA cards"`, not bare "Elements" (only its internal
+  `id` is `'elements'`, which users never see). Only the tab itself is labeled "Elements". No
+  change needed.
+- Proposal 6 (text filter/search per section) — **rejected**, low use case for typical room sizes.
+- Proposal 7 (Layout-tab live preview) — **done in v5.9.11**: Portrait/Landscape sub-tabs,
+  illustrative mini grid preview per profile, and a real fix so Layout edits reach the mounted
+  Edit-mode preview card (they never did — `layout` wasn't part of `setConfig()`'s item-count diff
+  that decides whether to remount it).
 
 Scope: `RoomOverlayCardEditor` (the `room-overlay-card-editor` custom element in
 `room-overlay-card.js`) — the 4-tab editor (Image / Elements / Layout / Rooms & menu),

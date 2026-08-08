@@ -107,6 +107,21 @@ t('editor per-profile aspect inputs',!!ed.querySelector('#aspect_ratio__portrait
 t('editor rows prefilled from migration',ed.querySelector('#ly-rows__landscape').value.length>0);
 t('base_image label has no bare unexplained asterisk',!/Base image URL \*/.test(ed.innerHTML));
 t('base_image field has a /local/ placeholder',ed.querySelector('#base_image').placeholder.indexOf('/local/')===0);
+
+// --- editor: Layout tab — Portrait/Landscape sub-tabs + illustrative mini grid preview ---
+t('layout sub-tab buttons present',!!ed.querySelector('[data-rocsub="portrait"]')&&!!ed.querySelector('[data-rocsub="landscape"]'));
+t('portrait sub-panel visible by default',ed.querySelector('[data-rocsubpanel="portrait"]').style.display==='block');
+t('landscape sub-panel hidden by default',ed.querySelector('[data-rocsubpanel="landscape"]').style.display==='none');
+ed.querySelector('[data-rocsub="landscape"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+t('clicking Landscape sub-tab shows it',ed.querySelector('[data-rocsubpanel="landscape"]').style.display==='block');
+t('clicking Landscape sub-tab hides Portrait',ed.querySelector('[data-rocsubpanel="portrait"]').style.display==='none');
+t('mini preview divs present for both profiles',!!ed.querySelector('#ly-preview__portrait')&&!!ed.querySelector('#ly-preview__landscape'));
+t('landscape preview pre-filled from migrated config (image region block present)',/Image/.test(ed.querySelector('#ly-preview__landscape').innerHTML));
+const _lyNavRow=ed.querySelector('#ly-r__landscape__nav');
+_lyNavRow.value='1';
+_lyNavRow.dispatchEvent(new w.Event('input',{bubbles:true}));
+t('typing a region row repaints its mini preview live (no full re-render)',/Nav/.test(ed.querySelector('#ly-preview__landscape').innerHTML));
+t('...and the field that was typed into keeps its value (no re-render/focus loss)',ed.querySelector('#ly-r__landscape__nav').value==='1');
 t('Companion cards YAML intro text only shows in Advanced/YAML mode',
   (()=>{const introEl=[...ed.querySelectorAll('label.roc-l')].find(l=>l.textContent.indexOf('Companion cards')===0);
     return !!introEl&&introEl.closest('.roc-adv')!==null;})());
@@ -584,6 +599,24 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
   edHapticOff.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',haptic:false});
   edHapticOff.hass={states:{},user:{name:'x'}};
   t('haptic checkbox unchecked when config already has haptic:false',edHapticOff.querySelector('#haptic').checked===false);
+
+  // editor: Layout-tab edit (input, no blur) reaches the mounted Edit-mode
+  // preview card (_prevCard) — layout.* is invisible to the item-count `same`
+  // check in setConfig(), so this needs _lyDebouncedUpdate()'s direct push
+  // rather than the normal _fireDebounced() + editor setConfig() round trip.
+  const edLive=w.document.createElement('room-overlay-card-editor');
+  edLive.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',test_mode:true,
+    layout:{portrait:{rows:[100],place:{image:{row:1}}},landscape:{rows:[100],place:{image:{row:1}}}}});
+  edLive.hass={states:{},user:{name:'x'}};
+  w.document.body.appendChild(edLive);
+  t('editor Edit-mode preview card is mounted (_prevCard)',!!edLive._prevCard);
+  const _lyBefore=JSON.stringify((edLive._prevCard._config.layout||{}).landscape);
+  const _lyRowsInput=edLive.querySelector('#ly-rows__landscape');
+  _lyRowsInput.value='20, 80';
+  _lyRowsInput.dispatchEvent(new w.Event('input',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,220));
+  const _lyAfter=JSON.stringify((edLive._prevCard._config.layout||{}).landscape);
+  t('...and the debounced update reaches _prevCard.setConfig() with the new rows',_lyBefore!==_lyAfter&&/20/.test(_lyAfter));
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
