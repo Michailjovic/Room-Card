@@ -1,5 +1,27 @@
 # Changelog
 
+## [5.10.0] - 2026-08-08
+
+### Hot-path performance (step 2 of the code audit)
+
+Pure optimisation — no new features, no config changes, no visible behaviour change. Measured against v5.9.14 on a 3-room config (6 overlays + 5 zones + 8 icons + 8 labels + 4 gauges per room): **300× `_update()` went from 234 ms / 2 400 `querySelector` / 300 `offsetWidth` to 148 ms / 0 / 0 (−37 % time)**, and a **60-frame resize drag from 32 ms / 480 `querySelector` / 120 `offsetWidth` to 1.3 ms / 0 / 60 (−96 % time)**. jsdom timings aren't browser timings — the percentages are the signal, the DOM-op counts are exact.
+
+**`_update()` no longer touches the DOM to find nodes.** Each icon's inner `<ha-icon>` was re-queried every tick — 20 icons = 20 `querySelector` calls per state change, for a node that cannot change between renders. Now cached at render time in `_icoIconEls`, the same pattern badges already used for `_biconEls`/`_blabelEls`.
+
+**Forced layout is now conditional.** `_update()` read `this.offsetWidth` unconditionally to resolve `%`-based icon sizes and label font sizes, even for configs that use none. A per-render `_needsCardWidth` flag records whether any item actually sizes in `%` — including sizes hidden in per-profile overrides (`portrait: {size: "12%"}`) and legacy tier keys. Detection is deliberately conservative (a non-string value counts as "yes"): a false positive costs one reflow, a false negative would break sizing.
+
+**Geometry events no longer run a state pass.** The ResizeObserver called the full `_update()` — every condition on every overlay, zone, badge, icon, label and gauge re-evaluated — once per frame during a window drag or an opening keyboard. Only three things in `_update()` depend on the box, so resize now runs a narrow `_applyResizeStyles()`. The one entangled case (day/night blind gauges, whose slat gradient derives from both their own height and the state value) still delegates to the full pass, gated on `_hasDayNightGauge`.
+
+**Layout passes coalesce.** Several observers can fire in one frame, each previously running its own fit+stage sequence. All now funnel through `_requestLayout()`, collapsing a burst into one microtask pass — same pattern as the existing `_requestPin()`. Stage-only requests (`.wrap` resized but not the card) upgrade to a full fit if a full request lands in the same microtask, mirroring `_schedule()`'s nav-only/full upgrade.
+
+**Layout element refs cached.** `_layoutFitWrap()`, `_layoutStage()` and `_layoutRootHeight()` each re-queried `.wrap`, `.content` and `ha-card` per call — 11 `querySelector` calls per observer callback. Now behind `_elWrap()`/`_elContent()`/`_elCard()`, which re-resolve only when the cached node has left the current shadow tree (`getRootNode()!==this.shadowRoot` — exactly what `innerHTML` replacement does to it), so no manual invalidation is needed.
+
+New instance fields are declared in the constructor, restoring the "constructor documents the instance shape" contract the audit flagged.
+
+### Testing
+
+`tests/lifecycle.test.js` → 35 assertions. The hot-path budget is now a hard ceiling: `_update()` must do **zero** `querySelector` calls and **zero** `offsetWidth` reads on a 40-item card, so an uncached query or forced read reintroduced in a per-item loop fails CI. The riskiest failure mode of this change — a `%` size silently ceasing to resolve — is covered behaviourally rather than structurally: a `10%` icon on a 400 px card must compute to `40px` and re-compute to `80px` at 800 px. Coalescing (50 requests → 1 pass) and the absence of `_update()` from the resize path are asserted directly. Render (178) and smoke tiers unchanged and passing; render output diffed line-by-line against v5.9.14 and identical.
+
 ## [5.9.14] - 2026-08-08
 
 ### Lifecycle & config-shape hardening (full code audit)

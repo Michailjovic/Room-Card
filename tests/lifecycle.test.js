@@ -189,19 +189,70 @@ t('editor open/close leaks no roc-* window listeners',countRoc()===edBase,);
 w.addEventListener=_wAdd;w.removeEventListener=_wRm;
 
 // =====================================================================
-// 5. Hot-path budget: _update() must not re-query the DOM per item.
-//    A ceiling, not an exact number — this fails CI if someone reintroduces
-//    an uncached querySelector in a loop.
+// 5. Hot-path budget. These are ceilings, not exact numbers — they exist so
+//    that reintroducing an uncached DOM query or a forced layout read in a
+//    per-item loop fails CI instead of being noticed months later.
 // =====================================================================
 const perf=mkCard({base_image:'/local/x.webp',
-  icons:Array.from({length:20},(_,i)=>({id:'i'+i,entity:'sensor.a',icon:'mdi:home',top:'1%',left:'1%'}))},st);
-let qs=0;
+  icons:Array.from({length:20},(_,i)=>({id:'i'+i,entity:'sensor.a',icon:'mdi:home',top:'1%',left:'1%',size:'20px'})),
+  labels:Array.from({length:20},(_,i)=>({id:'pl'+i,entity:'sensor.a',top:'1%',left:'1%'}))},st);
+const counters={qs:0,offW:0};
 const _q=w.Element.prototype.querySelector;
-w.Element.prototype.querySelector=function(...a){qs++;return _q.apply(this,a);};
+w.Element.prototype.querySelector=function(...a){counters.qs++;return _q.apply(this,a);};
+const _ow=Object.getOwnPropertyDescriptor(w.HTMLElement.prototype,'offsetWidth');
+Object.defineProperty(w.HTMLElement.prototype,'offsetWidth',{..._ow,get(){counters.offW++;return _ow.get.call(this);}});
 perf._update();
+const updOps={...counters};
+counters.qs=0;counters.offW=0;
+perf._applyResizeStyles();
+const rezOps={...counters};
 w.Element.prototype.querySelector=_q;
-console.log('     (20 icons → '+qs+' element.querySelector calls per _update)');
-t('_update() does not scale querySelector with item count (<=20 for 20 icons)',qs<=20);
+Object.defineProperty(w.HTMLElement.prototype,'offsetWidth',_ow);
+console.log('     (40 items → _update: '+updOps.qs+' querySelector, '+updOps.offW+' offsetWidth'
+  +'  |  _applyResizeStyles: '+rezOps.qs+' / '+rezOps.offW+')');
+t('_update() does not scale querySelector with item count',updOps.qs===0);
+t('_update() skips the offsetWidth reflow when no item is %-sized',updOps.offW===0);
+t('resize restyle is free when nothing is %-sized',rezOps.qs===0&&rezOps.offW===0);
+
+// ...but a %-sized icon MUST still resolve against the real card width
+const pct=mkCard({base_image:'/local/x.webp',
+  icons:[{id:'pi',entity:'sensor.a',icon:'mdi:home',top:'1%',left:'1%',size:'10%'}]},st);
+t('%-sized icon sets _needsCardWidth',pct._needsCardWidth===true);
+// ...and actually resolves to px. This is the real risk of the lazy-offsetWidth
+// change: a %-size that silently stops resolving would look fine in jsdom
+// unless the computed value is asserted.
+Object.defineProperty(pct,'offsetWidth',{configurable:true,get(){return 400;}});
+pct._update();
+const _pcIcon=pct._icoIconEls['pi'];
+t('%-sized icon resolves against card width (10% of 400 = 40px)',
+  !!_pcIcon&&_pcIcon.style.getPropertyValue('--mdc-icon-size')==='40px');
+Object.defineProperty(pct,'offsetWidth',{configurable:true,get(){return 800;}});
+pct._applyResizeStyles();
+t('...and _applyResizeStyles re-resolves it on resize (10% of 800 = 80px)',
+  _pcIcon.style.getPropertyValue('--mdc-icon-size')==='80px');
+t('non-%-sized config leaves _needsCardWidth false',perf._needsCardWidth===false);
+// per-profile override must be detected too (tApply pulls size from it)
+const pctProf=mkCard({base_image:'/local/x.webp',
+  icons:[{id:'pp',entity:'sensor.a',icon:'mdi:home',top:'1%',left:'1%',size:'20px',portrait:{size:'12%'}}]},st);
+t('%-size hidden in a per-profile override is detected',pctProf._needsCardWidth===true);
+
+// the ResizeObserver must NOT run a full state pass any more
+const noUpd=mkCard({base_image:'/local/x.webp',
+  icons:[{id:'n',entity:'sensor.a',icon:'mdi:home',top:'1%',left:'1%',size:'20px'}]},st);
+let fullPasses=0;
+const _origU=noUpd._update.bind(noUpd);
+noUpd._update=function(){fullPasses++;return _origU();};
+noUpd._applyResizeStyles();
+t('resize restyle does not trigger a full _update() pass',fullPasses===0);
+
+// coalescing: many layout requests in one task collapse to a single pass
+const coal=mkCard({base_image:'/local/x.webp'},st);
+let fits=0,stages=0;
+coal._layoutFitWrap=function(){fits++;};
+coal._layoutStage=function(){stages++;};
+for(let i=0;i<50;i++)coal._requestLayout();
+await Promise.resolve();await Promise.resolve();
+t('50 layout requests in one task coalesce into one pass',fits===1&&stages===1);
 
 // =====================================================================
 // 6. Template subscription failures must not become unhandled rejections.

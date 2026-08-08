@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='5.9.14';
+const ROC_VERSION='5.10.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -465,6 +465,22 @@ function bmFilter(bm,s,presortedFg){
 }
 
 function resolveSize(raw,cardW){if(!raw)return null;const s=String(raw);return s.endsWith('%')?Math.round(cardW*parseFloat(s)/100)+'px':s;}
+// Every key tApply() might pull a per-profile override from.
+const ROC_TIER_KEYS=ROC_PROFILES.concat(ROC_LEGACY_TIERS);
+// Does any item (or any of its per-profile overrides) size itself in % — i.e.
+// does resolveSize actually need the card width? Reading offsetWidth is a
+// forced layout, so _update()/_applyResizeStyles() skip it when this is false.
+// Deliberately conservative: a non-string value counts as "yes". A false
+// positive costs one reflow; a false negative would break sizing.
+function rocNeedsPctWidth(items,key){
+  for(const it of(items||[])){
+    if(!it)continue;
+    const probe=function(v){return v===undefined?false:(typeof v==='string'?v.trim().endsWith('%'):v!=null);};
+    if(probe(it[key]))return true;
+    for(const p of ROC_TIER_KEYS){const o=it[p];if(o&&typeof o==='object'&&probe(o[key]))return true;}
+  }
+  return false;
+}
 
 // ---- Live mini-room nav (nav.live: full / custom, Phase 2) ----------------
 // Builds the stripped/scoped config for ONE persistent mini <room-overlay-card>
@@ -690,7 +706,10 @@ class RoomOverlayCard extends HTMLElement{
     this._config=null;this._hass=null;this._rendered=false;
     this._baseEl=null;this._ovEls={};this._zoneEls={};
     this._biconEls={};this._blabelEls={};this._cardEls={};this._contEls={};
-    this._icoEls={};
+    this._icoEls={};this._icoIconEls={};
+    this._wrapEl=null;this._contentEl=null;this._cardEl=null; // layout refs (see _elWrap/_elContent/_elCard)
+    this._layoutQueued=false;this._layoutFitDirty=false;
+    this._needsCardWidth=false;this._hasDayNightGauge=false; // geometry-dependency flags, set per render
     this._rafPending=false;this._relevantEntities=null;this._relevantAttrSources=null;this._prevStates={};
     this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
@@ -965,10 +984,10 @@ class RoomOverlayCard extends HTMLElement{
     // wouldn't mean anything useful for it anyway.
     if(c._roc_ghost||c._roc_mini)return;
     if(this._profile==='portrait'&&((this._config.layout&&this._config.layout.height)||'viewport')==='viewport')return; // natural portrait sizes itself
-    const wrap=this.shadowRoot.querySelector('.wrap');
+    const wrap=this._elWrap();
     if(!wrap||!wrap.style.aspectRatio)return; // only the intrinsic image box
     const region=wrap.parentElement;
-    const card=this.shadowRoot.querySelector('ha-card');
+    const card=this._elCard();
     if(!region||!card)return;
     const da=parseFloat(wrap.style.aspectRatio)||16/9;
     const cardR=card.getBoundingClientRect();
@@ -1011,8 +1030,8 @@ class RoomOverlayCard extends HTMLElement{
 
   _layoutStage(){
     if(!this.shadowRoot)return;
-    const content=this.shadowRoot.querySelector('.content');
-    const wrap=this.shadowRoot.querySelector('.wrap');
+    const content=this._elContent();
+    const wrap=this._elWrap();
     if(!content||!wrap)return;
     const c=this._roomCfg||this._config;if(!c)return;
     const prof=this._vt||'landscape';
@@ -1123,6 +1142,36 @@ class RoomOverlayCard extends HTMLElement{
     });
   }
 
+  // Cached refs to the three structural nodes the layout engine measures on
+  // every pass. _render() sets them directly; these accessors re-resolve if the
+  // cached node no longer belongs to the current shadow tree (which is exactly
+  // what innerHTML replacement does to it), so they stay correct without any
+  // manual invalidation. Before v5.10.0 each layout pass re-queried all three —
+  // 11 querySelector calls per ResizeObserver callback, once per frame during
+  // a resize drag.
+  _elWrap(){const e=this._wrapEl;return(e&&e.getRootNode()===this.shadowRoot)?e:(this._wrapEl=this.shadowRoot?this.shadowRoot.querySelector('.wrap'):null);}
+  _elContent(){const e=this._contentEl;return(e&&e.getRootNode()===this.shadowRoot)?e:(this._contentEl=this.shadowRoot?this.shadowRoot.querySelector('.content'):null);}
+  _elCard(){const e=this._cardEl;return(e&&e.getRootNode()===this.shadowRoot)?e:(this._cardEl=this.shadowRoot?this.shadowRoot.querySelector('ha-card'):null);}
+
+  // Coalesce a burst of layout requests into one pass. Several observers can
+  // fire within the same frame; without this each one ran its own sequence.
+  // stageOnly requests (the .wrap box changed, but not the card) upgrade to a
+  // full fit if a full request lands in the same microtask — same pattern as
+  // _schedule()'s nav-only/full upgrade. Microtask timing matches _requestPin.
+  _requestLayout(stageOnly){
+    if(!stageOnly)this._layoutFitDirty=true;
+    if(this._layoutQueued)return;
+    this._layoutQueued=true;
+    const self=this;
+    const mt=typeof queueMicrotask==='function'?queueMicrotask:function(f){Promise.resolve().then(f);};
+    mt(function(){
+      self._layoutQueued=false;
+      const full=self._layoutFitDirty;self._layoutFitDirty=false;
+      if(!self._rendered)return;
+      try{if(full)self._layoutFitWrap();self._layoutStage();}catch(_){}
+    });
+  }
+
   // Nearest scrollable ancestor across shadow boundaries — HA's view scroller
   // (falls back to documentElement). Cached per instance; HA recreates the
   // card whenever it rebuilds the surrounding DOM (view switch, edit toggle),
@@ -1153,7 +1202,7 @@ class RoomOverlayCard extends HTMLElement{
     if(c._roc_ghost||c._roc_preview||c._roc_mini)return;
     if(((this._config.layout&&this._config.layout.height)||'viewport')!=='viewport')return;
     if(this._profile==='portrait')return; // natural content height — nothing to pin
-    const card=this.shadowRoot.querySelector('ha-card');
+    const card=this._elCard();
     if(!card)return;
     const r=this.getBoundingClientRect();
     if(!(r.width>0))return; // display:none / not laid out yet
@@ -1256,13 +1305,15 @@ class RoomOverlayCard extends HTMLElement{
     const _restricted=!!(_rc&&(_rc._roc_ghost||_rc._roc_preview||_rc._roc_mini));
     if(window.ResizeObserver){
       if(this._ro)this._ro.disconnect();
-      this._ro=new ResizeObserver(function(){if(self._rendered){self._layoutFitWrap();self._layoutStage();if(self._hass&&self._visible)self._update();}});
+      // Coalesced + narrowed (v5.10.0): a geometry event runs the layout pass
+      // and _applyResizeStyles(), NOT the full _update() state pass it used to.
+      this._ro=new ResizeObserver(function(){if(self._rendered){self._requestLayout();self._applyResizeStyles();}});
       this._ro.observe(this);
       // The image region's height changes independently of the card (grid %),
       // so the cover-stage watches its own box too.
       if(this._wrapRo)this._wrapRo.disconnect();
-      const _wEl=this.shadowRoot?this.shadowRoot.querySelector('.wrap'):null;
-      if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._layoutStage();});this._wrapRo.observe(_wEl);}
+      const _wEl=this._elWrap();
+      if(_wEl){this._wrapRo=new ResizeObserver(function(){if(self._rendered)self._requestLayout(true);});this._wrapRo.observe(_wEl);}
       // Root-height pin (viewport mode): watch the SCROLLER's own box. HA
       // keeps document.body at a fixed height (the app scrolls inside), so a
       // body observer misses header settling and edit-mode toolbars entirely
@@ -1385,7 +1436,7 @@ class RoomOverlayCard extends HTMLElement{
     const c=this._roomCfg||this._config;
     if((c.test_mode??false)&&this._profFlipped)p=(p==='portrait')?'landscape':'portrait';
     if(p!==this._profile){this._rendered=false;this._render();return;}
-    this._requestPin('window-resize');this._layoutFitWrap();this._layoutStage();
+    this._requestPin('window-resize');this._requestLayout();this._applyResizeStyles();
   }
 
   _render(){
@@ -1652,7 +1703,12 @@ class RoomOverlayCard extends HTMLElement{
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
     this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
-    const content=this.shadowRoot.querySelector('.content');
+    // Structural refs the layout engine measures every pass — cached here
+    // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
+    this._contentEl=this.shadowRoot.querySelector('.content');
+    this._wrapEl=this.shadowRoot.querySelector('.wrap');
+    this._cardEl=this.shadowRoot.querySelector('ha-card');
+    const content=this._contentEl;
     this._baseEl=this.shadowRoot.querySelector('.base');
     this._tmInfoEl=tm?this.shadowRoot.querySelector('.tm-info'):null;
     this._wxEl=this.shadowRoot.querySelector('[data-wx]');
@@ -1923,10 +1979,15 @@ class RoomOverlayCard extends HTMLElement{
       this._bcontEls[b.id]=bel;
       if(bel&&b.tap_action){bel.addEventListener('click',e=>this._exec(b.tap_action,e));bel.addEventListener('touchend',e=>this._exec(b.tap_action,e));}
     }
-    this._icoEls={};
+    this._icoEls={};this._icoIconEls={};
     for(const ico of(c.icons||[])){
       const el=this.shadowRoot.querySelector('[data-ico="'+escSel(ico.id)+'"]');
       if(!el)continue;this._icoEls[ico.id]=el;
+      // Cache the inner <ha-icon> alongside its container (same pattern as
+      // _biconEls/_blabelEls for badges). _update() used to re-query this per
+      // icon per tick — 20 icons meant 20 querySelector calls on every state
+      // change, for a node that cannot change between renders.
+      this._icoIconEls[ico.id]=el.querySelector('ha-icon');
       if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
     this._lblEls={};this._sortedLblGrads={};
@@ -2326,6 +2387,10 @@ class RoomOverlayCard extends HTMLElement{
     // reconnect. _relNeeded records whether this config wants one.
     this._relNeeded=(c.labels||[]).some(function(l){return l.format==='relative';});
     this._wireRelTimer();
+    // Geometry-dependency flags, computed once per render so the hot paths
+    // (_update / _applyResizeStyles) can skip forced layout reads entirely.
+    this._needsCardWidth=rocNeedsPctWidth(c.icons,'size')||rocNeedsPctWidth(c.labels,'font_size');
+    this._hasDayNightGauge=(this._blindGaugeCfgs||[]).some(function(g){return g&&g._dayNight;});
     this._update();
     this._syncRoomState();
     this._layoutStage();
@@ -3076,6 +3141,32 @@ class RoomOverlayCard extends HTMLElement{
     return st;
   }
 
+  // Geometry-only restyle, for ResizeObserver callbacks. The RO used to call
+  // the full _update(), i.e. a complete state pass — every overlay, zone,
+  // badge, icon, label and gauge re-evaluated — triggered by a pure geometry
+  // event, once per frame during a window drag or an opening keyboard. Only
+  // three things in _update() actually depend on the box: %-based icon sizes,
+  // %-based label font sizes, and the day/night gauge slat pattern (which
+  // measures its own height and is entangled with the state value, so that one
+  // case still delegates to the full pass).
+  _applyResizeStyles(){
+    if(!this._rendered||!this._config)return;
+    if(this._hasDayNightGauge){if(this._hass&&this._visible)this._update();return;}
+    if(!this._needsCardWidth)return;
+    const c=this._roomCfg||this._config;
+    const w=this.offsetWidth||300;
+    for(const ico of(c.icons||[])){
+      const haicon=this._icoIconEls[ico.id];if(!haicon)continue;
+      const sz=resolveSize(tApply(ico,this._tier).size||ico.size||'20px',w);
+      if(sz&&haicon.style.getPropertyValue('--mdc-icon-size')!==sz){haicon.style.setProperty('--mdc-icon-size',sz);haicon.style.width=sz;haicon.style.height=sz;}
+    }
+    for(const lbl of(c.labels||[])){
+      const el=this._lblEls[lbl.id];if(!el)continue;
+      const raw=tApply(lbl,this._tier).font_size||lbl.font_size;
+      if(raw){const fs=resolveSize(raw,w);if(fs)setSt(el,'fontSize',fs);}
+    }
+  }
+
   _update(){
     if(!this._hass||!this._config||!this._rendered)return;
     // Throttled root-height re-check piggybacked on state updates: leaving
@@ -3189,7 +3280,11 @@ class RoomOverlayCard extends HTMLElement{
       const lel=this._blabelEls[b.id];
       if(lel&&b.label){const t=resolveVal(b.label,s,'');if(lel.textContent!==t)lel.textContent=t;}
     }
-    const _icoW=this.offsetWidth||300;
+    // Card width is only needed to resolve %-based icon sizes / label font
+    // sizes. Reading offsetWidth is a forced layout, so skip it entirely for
+    // the (common) config that uses none — _needsCardWidth is computed once
+    // per render.
+    const _icoW=this._needsCardWidth?(this.offsetWidth||300):0;
     for(const ico of(c.icons||[])){
       const el=this._icoEls[ico.id];if(!el)continue;
       const gShow=!ico.group||(this._groupState[ico.group]??true);
@@ -3197,7 +3292,7 @@ class RoomOverlayCard extends HTMLElement{
       if(!gShow)continue;
       const iShow=ico.visible_template!==undefined?(this._tmplVis['i:'+ico.id]??true):(ico.visible?evalCond(ico.visible,s):true);
       this._setVis(el,iShow,'flex',ico.fade,ico.slide);
-      const haicon=el.querySelector('ha-icon');
+      const haicon=this._icoIconEls[ico.id];
       if(haicon){
         const sz=resolveSize(tApply(ico,this._tier).size||ico.size||'20px',_icoW);
         if(haicon.style.getPropertyValue('--mdc-icon-size')!==sz){haicon.style.setProperty('--mdc-icon-size',sz);haicon.style.width=sz;haicon.style.height=sz;}
