@@ -1,5 +1,55 @@
 # Changelog
 
+## [6.1.0] - 2026-08-19
+
+### `day_night` blind — the striped pattern's phase is now calibratable, and the reserve no longer shifts it
+
+Reported live: with a real zebra blind (17 band pairs) that keeps an un-retracted reserve at its
+motor's fully-open limit, the striped overlay had "a shift overall" and could not be synced at any
+`top_offset` value.
+
+**Root cause.** The phase of the scrolling gradient layer was computed from `pct` *after*
+`rocApplyTopOffset` had floored it, so the reserve slid the entire phase curve sideways. With 17
+pairs and `top_offset: 7.6` the fully-open residual already sat at **0.646 of a period — 71 %
+overlap — instead of 0 %**, and every position downstream inherited that offset. The reserve
+changes how much of the window is *covered*; it says nothing about where the fabric's own printed
+pattern sits, so it never belonged in the phase term. On top of that the sweep rate was hard-coded
+to `slat_count/2`, a number with no physical meaning: how many times a real zebra sweeps
+see-through → blackout → see-through across its travel depends on tube diameter, fabric thickness
+and band pitch, not on how many bands happen to be visible when closed.
+
+**Fix.** New pure helper `rocDayNightShift(raw, start, turns, snap)` returns the front layer's
+offset in pattern periods, driven by `raw` — the min/max-normalized position *before* `top_offset`.
+Three new optional per-blind keys expose it:
+
+- **`shift_turns`** — how many times the overlap sweeps see-through → blackout → see-through across
+  the full travel. Defaults to `slat_count/2`, i.e. the pre-6.1.0 rate, so nothing changes for
+  blinds that never set `top_offset`.
+- **`shift_start`** — phase in periods (0–1) at fully open, for lining the leftover reserve up with
+  what the real blind shows at 0 %.
+- **`shift_snap`** (default `true`) — nudges `shift_turns` so fully closed lands exactly on
+  anti-phase. This replaces the old `pct>=1` special case, which forced the same blackout but as a
+  visible jump inside the last percent; the curve is now continuous all the way to closed.
+
+**`shift_legacy: true`** restores the pre-6.1.0 formula bit-for-bit (phase from the corrected `pct`,
+including the `pct>=1` snap) for anyone who had tuned around the old behaviour.
+
+All four keys are in the GUI editor's blind panel behind `blind_type: day_night`, so the two
+measurements can be dialled in against the live Edit-mode preview instead of by YAML round-trips.
+Defaults stay out of the saved config.
+
+**Verification.** 19 new smoke tests for `rocDayNightShift` (endpoints, linearity, clamping, the
+snap's blackout guarantee and its composition with a non-zero `shift_start`) plus
+`blindToGaugeConfig` passthrough. 14 new render tests, including the editor round-trip and two that
+pin the `shift_legacy` numbers to the exact pre-6.1.0 values. Because jsdom has no layout engine,
+those render tests mock `offsetHeight` on the gauge element and compare `background-position-y`
+numerically. Additionally live-verified in real Chromium against a mounted card: at fully open the
+new path reads offset `0.00` / overlap `0.000` where the legacy path reads `12.81px` / `0.708`, and
+both reach a full blackout when closed.
+
+This unparks the narrow phase question from `ROADMAP.md` — the broader "does the two-layer look
+match real zebra optics" question stays parked.
+
 ## [6.0.0] - 2026-08-08
 
 ### Documentation overhaul + editor UX rebuild milestone

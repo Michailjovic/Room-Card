@@ -554,6 +554,96 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
     !!fillTO&&fillTO.style.height==='60%');
 }
 
+// --- day_night phase calibration (v6.1.0). Pre-6.1.0 the stripe phase was driven
+// by the top_offset-CORRECTED position, so an un-retracted reserve slid the whole
+// phase curve sideways ("celkově posun"): with 17 pairs + top_offset 7.6 the fully
+// OPEN residual already sat at 0.646 of a period instead of 0. The phase now comes
+// from the raw travel, with shift_turns/shift_start/shift_snap to calibrate it.
+// jsdom has no layout engine (offsetHeight is always 0), which would make the
+// `if(_perDN>0)` guard skip the whole block — so offsetHeight is mocked on the
+// gauge element itself BEFORE the .hass=/_update() cycle that reads it. And jsdom
+// re-serializes assigned style strings, so background-position-y is compared
+// numerically via parseFloat, never as a string. ---
+{
+  const mkDN=(extra)=>{
+    const cfg={type:'custom:room-overlay-card',base_image:'/local/x.webp',
+      blinds:[Object.assign({id:'dn',entity:'cover.zebra',attribute:'current_position',
+        top:'0%',left:'0%',width:'50%',height:'50%',blind_type:'day_night',slat_count:17,
+        top_offset:7.6},extra||{})]};
+    const card=mkCard(cfg);
+    const gEl=card.shadowRoot.querySelector('[data-gauge="__bl_dn"]');
+    // 340 / 17 pairs = a 20px period, so every expectation below is a round number
+    Object.defineProperty(gEl,'offsetHeight',{value:340,configurable:true});
+    return {card,fill:gEl.querySelector('.gfill')};
+  };
+  const at=(o,pos)=>{o.card.hass={states:{'cover.zebra':{state:'open',attributes:{current_position:pos}}},
+    callService(){},user:{name:'x'}};o.card._update();return parseFloat(o.fill.style.backgroundPositionY);};
+  const frac=x=>x-Math.floor(x);
+
+  const dnDef=mkDN();
+  t('day_night: fully open has zero phase offset (the reserve no longer shifts it)',
+    Math.abs(at(dnDef,0))<0.001);
+  t('day_night: fully open still shows the top_offset residual coverage',
+    dnDef.fill.style.height==='7.6%');
+  t('day_night: fully closed lands on anti-phase = blackout',
+    Math.abs(frac(Math.abs(at(dnDef,100))/20)-0.5)<0.001);
+  t('day_night: default turns is slat_count/2 (unchanged sweep rate)',
+    Math.abs(Math.abs(at(dnDef,100))-8.5*20)<0.001);
+  t('day_night: phase is linear in the RAW position, not the corrected one',
+    Math.abs(Math.abs(at(dnDef,50))-4.25*20)<0.001);
+
+  const dnTurns=mkDN({shift_turns:3});
+  t('day_night: measured shift_turns is snapped up to land on blackout when closed',
+    Math.abs(Math.abs(at(dnTurns,100))-3.5*20)<0.001);
+  const dnRaw=mkDN({shift_turns:3,shift_snap:false});
+  t('day_night: shift_snap:false keeps the measured turns verbatim',
+    Math.abs(Math.abs(at(dnRaw,100))-3*20)<0.001);
+
+  const dnStart=mkDN({shift_turns:3,shift_start:0.25});
+  t('day_night: shift_start sets the phase at fully open',
+    Math.abs(Math.abs(at(dnStart,0))-0.25*20)<0.001);
+  t('day_night: shift_start still ends on blackout when closed',
+    Math.abs(frac(Math.abs(at(dnStart,100))/20)-0.5)<0.001);
+
+  // legacy escape hatch must reproduce the pre-6.1.0 numbers exactly:
+  // open  -> pct=0.076 -> 0.076*17*(20/2) = 12.92px   (the old sideways slide)
+  // closed-> the hard pct>=1 snap to half a period = 10px
+  const dnLeg=mkDN({shift_legacy:true});
+  t('day_night: shift_legacy reproduces the pre-6.1.0 open-end offset',
+    Math.abs(Math.abs(at(dnLeg,0))-12.92)<0.01);
+  t('day_night: shift_legacy reproduces the pre-6.1.0 pct>=1 snap',
+    Math.abs(Math.abs(at(dnLeg,100))-10)<0.001);
+
+  // Editor round-trip: the new fields must survive setConfig -> _collectConfig,
+  // and the defaults must stay OUT of the saved YAML (no config noise).
+  const edDn=w.document.createElement('room-overlay-card-editor');
+  edDn.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    blinds:[{id:'dn',entity:'cover.zebra',blind_type:'day_night',slat_count:17,
+      shift_turns:6.5,shift_start:0.4,shift_snap:false,shift_legacy:true}]});
+  edDn.hass={states:{},user:{name:'x'}};
+  const bDn=edDn._collectConfig().blinds[0];
+  t('editor round-trips shift_turns / shift_start',bDn.shift_turns===6.5&&bDn.shift_start===0.4);
+  t('editor round-trips shift_snap:false and shift_legacy',bDn.shift_snap===false&&bDn.shift_legacy===true);
+  const edDnBare=w.document.createElement('room-overlay-card-editor');
+  edDnBare.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    blinds:[{id:'dn',entity:'cover.zebra',blind_type:'day_night',slat_count:17}]});
+  edDnBare.hass={states:{},user:{name:'x'}};
+  const bBare=edDnBare._collectConfig().blinds[0];
+  t('editor keeps defaults out of the saved config',
+    bBare.shift_turns===undefined&&bBare.shift_start===undefined
+    &&bBare.shift_snap===undefined&&bBare.shift_legacy===undefined);
+  // switching away from day_night must not leave the phase keys behind
+  const edRoller=w.document.createElement('room-overlay-card-editor');
+  edRoller.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    blinds:[{id:'dn',entity:'cover.zebra',blind_type:'roller',shift_turns:6.5,shift_start:0.4,
+      shift_snap:false,shift_legacy:true}]});
+  edRoller.hass={states:{},user:{name:'x'}};
+  const bRoller=edRoller._collectConfig().blinds[0];
+  t('editor drops stale shift_* keys when the blind is not day_night',
+    bRoller.shift_turns===undefined&&bRoller.shift_start===undefined
+    &&bRoller.shift_snap===undefined&&bRoller.shift_legacy===undefined);
+}
+
 // --- fix: nav thumbnail wrapper filter must NOT apply when nav.live is full/custom — the real
 // mounted mini instance already applies its own brightness_model/filter_conditions internally
 // (same render code path as the main card); a CSS filter on the outer wrapper stacked ON TOP of

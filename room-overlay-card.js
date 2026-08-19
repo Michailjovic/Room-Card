@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.0.0';
+const ROC_VERSION='6.1.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -573,6 +573,37 @@ function rocApplyTopOffset(pct100,offset){
   return o+pct100*(100-o)/100;
 }
 
+// day_night phase engine. The striped look comes from TWO identical gradient
+// layers: one pinned at background-position 0 (the "back" fabric), one scrolled
+// by this function's result (the "front" fabric). What makes the blind read as
+// see-through (layers aligned) or blackout (layers half a period apart) is their
+// RELATIVE offset, and on a real zebra blind that offset changes continuously as
+// the fabric travels — the fabric is one continuous loop running over the tube,
+// so raising/lowering re-aligns the sheer and solid bands against each other.
+//
+//   raw    0..1 position BEFORE top_offset (0 = fully open, 1 = fully closed).
+//          Deliberately NOT the top_offset-corrected pct: an un-retracted reserve
+//          changes how much of the window is COVERED, not where the fabric's own
+//          printed pattern sits, so driving the phase from pct shifts the entire
+//          phase curve sideways by the reserve (the pre-6.1.0 bug).
+//   start  phase in periods at fully open (0 = layers aligned / see-through).
+//   turns  how many times the overlap sweeps aligned -> blackout -> aligned across
+//          the full travel. NOT derivable from slat_count — it depends on tube
+//          diameter, fabric thickness and band pitch, so it has to be measured.
+//          Defaults to slat_count/2, which is what v6.0.0 and earlier hard-coded.
+//   snap   nudge `turns` so fully closed lands exactly on anti-phase (full
+//          blackout). Replaces the old `pct>=1` special case, which forced that
+//          same anti-phase but as a visible jump inside the last percent.
+// Returns the offset in PERIODS; the caller multiplies by the period in px.
+function rocDayNightShift(raw,start,turns,snap){
+  const r=Math.max(0,Math.min(1,Number(raw)||0));
+  const a=Number(start)||0;
+  let b=Number(turns);
+  if(!isFinite(b))b=0;
+  if(snap){b=Math.round(a+b-0.5)+0.5-a;while(b<0)b+=1;}
+  return a+b*r;
+}
+
 function blindToGaugeConfig(b){
   const type=b.blind_type||'roller';
   const sw=b.slat_width??7,sg=b.slat_gap??sw;
@@ -591,7 +622,13 @@ function blindToGaugeConfig(b){
     return[Object.assign({},base,{color:sc})];
   }else if(type==='day_night'){
     const scount=b.slat_count??6;
-    return[Object.assign({},base,{_dayNight:true,background:'transparent',_slat_count:scount,_slat_color:sc})];
+    const dn=Object.assign({},base,{_dayNight:true,background:'transparent',_slat_count:scount,_slat_color:sc});
+    // Phase calibration (see rocDayNightShift) — day_night only.
+    if(b.shift_start!==undefined)dn.shift_start=b.shift_start;
+    if(b.shift_turns!==undefined)dn.shift_turns=b.shift_turns;
+    if(b.shift_snap!==undefined)dn.shift_snap=b.shift_snap;
+    if(b.shift_legacy!==undefined)dn.shift_legacy=b.shift_legacy;
+    return[dn];
   }else if(type==='venetian'){
     const gc=b.gap_color||'rgba(180,160,140,0.35)';
     const grad='repeating-linear-gradient(to bottom,'+sc+' 0px,'+sc+' '+sw+'px,'+gc+' '+sw+'px,'+gc+' '+(sw+sg)+'px)';
@@ -3352,14 +3389,19 @@ class RoomOverlayCard extends HTMLElement{
       let val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
       if(isNaN(val))continue;
       const mn=g.min??0,mx=g.max??100;
-      let pct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+      // rawPct = normalized position with NO top_offset applied. Always 0=open /
+      // 1=closed regardless of the blind's own raw motor direction. Kept around
+      // because day_night's phase must be driven by the real travel, not by the
+      // reserve-corrected coverage (see rocDayNightShift).
+      const rawPct=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
       // top_offset corrects the visual fill only, AFTER min/max normalization —
       // pct here is always 0=open/1=closed regardless of the blind's own raw
       // motor direction (see rocApplyTopOffset). Closed (pct=1) is left exactly
       // as-is; only the open end (pct=0) gets floored to the residual coverage.
-      if(g.top_offset)pct=rocApplyTopOffset(pct*100,g.top_offset)/100;
+      let pct=rawPct;
+      if(g.top_offset)pct=rocApplyTopOffset(rawPct*100,g.top_offset)/100;
       const fill=this._gaugeFills[g.id];
-      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=pct>=1?(_perDN/2):pct*_nDN*(_perDN/2);fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY='-'+_offDN+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
+      if(fill){if(g._dayNight){const _nDN=g._slat_count||6;const _perDN=el.offsetHeight/_nDN;if(_perDN>0){const _swDN=_perDN/2;const _scDN=g._slat_color;const _gradDN='repeating-linear-gradient(to bottom,'+_scDN+' 0px,'+_scDN+' '+_swDN+'px,transparent '+_swDN+'px,transparent '+_perDN+'px)';const _offDN=g.shift_legacy?(pct>=1?(_perDN/2):pct*_nDN*(_perDN/2)):rocDayNightShift(rawPct,g.shift_start,(g.shift_turns!==undefined?g.shift_turns:_nDN/2),g.shift_snap!==false)*_perDN;fill.style.height=(Math.round(pct*1000)/10)+'%';fill.style.backgroundImage=_gradDN+','+_gradDN;fill.style.backgroundPositionY=(-_offDN)+'px,0px';fill.style.backgroundRepeat='repeat';fill.style.backgroundSize='100% '+_perDN+'px';fill.style.backgroundColor='transparent';}}
       else if((g.orientation||'vertical')==='radial'){
         const meta=this._radialMeta[g.id];
         if(meta){
@@ -4421,12 +4463,19 @@ class RoomOverlayCardEditor extends HTMLElement{
       const typeEl=q('[data-bl-type="'+i+'"]');if(typeEl)o.blind_type=typeEl.value;else o.blind_type='roller';
       const scEl=q('[data-bl-slat-color="'+i+'"]');if(scEl&&scEl.value.trim())o.slat_color=scEl.value.trim();else delete o.slat_color;
       const scntEl=q('[data-bl-slat-count="'+i+'"]');if(scntEl&&scntEl.value)o.slat_count=parseInt(scntEl.value,10)||6;else delete o.slat_count;
+      // day_night phase calibration — the fields only exist for blind_type:day_night,
+      // so an absent element means "drop the key" (same pattern as slat_count above),
+      // which keeps stale keys out of the config after switching the blind type.
+      const stuEl=q('[data-bl-shift-turns="'+i+'"]');const _stu=stuEl?parseFloat(stuEl.value):NaN;if(!isNaN(_stu))o.shift_turns=_stu;else delete o.shift_turns;
+      const staEl=q('[data-bl-shift-start="'+i+'"]');const _sta=staEl?parseFloat(staEl.value):NaN;if(!isNaN(_sta)&&_sta!==0)o.shift_start=_sta;else delete o.shift_start;
+      const ssnEl=q('[data-bl-shift-snap="'+i+'"]');if(ssnEl&&!ssnEl.checked)o.shift_snap=false;else delete o.shift_snap;
+      const slgEl=q('[data-bl-shift-legacy="'+i+'"]');if(slgEl&&slgEl.checked)o.shift_legacy=true;else delete o.shift_legacy;
       const swEl=q('[data-bl-slat-w="'+i+'"]');if(swEl&&swEl.value)o.slat_width=parseFloat(swEl.value)||7;else delete o.slat_width;
       const sgEl=q('[data-bl-slat-g="'+i+'"]');if(sgEl&&sgEl.value)o.slat_gap=parseFloat(sgEl.value)||6;else delete o.slat_gap;
       const gcEl=q('[data-bl-gap-color="'+i+'"]');if(gcEl&&gcEl.value.trim())o.gap_color=gcEl.value.trim();else delete o.gap_color;
       const yaR=self._pYaml(q('[data-bl-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group','nav_mini'];
+        const KEEP=['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','shift_turns','shift_start','shift_snap','shift_legacy','slat_width','slat_gap','gap_color','slat_pitch','group','nav_mini'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
@@ -4871,6 +4920,12 @@ class RoomOverlayCardEditor extends HTMLElement{
       h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
       h+='<div><label class="roc-l">Slat count (number of band pairs)</label><input data-bl-slat-count="'+i+'" type="number" min="1" step="1" value="'+this._e(String(b.slat_count??6))+'"'+this._inp('font-size:12px;')+'></div>';
       h+='</div>';
+      h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+      h+='<div><label class="roc-l" title="How many times the two fabric layers sweep aligned (see-through) → offset (blackout) → aligned across the FULL travel. Count it on the real blind: run it from closed to open and count the dark/light cycles. Cannot be derived from slat count — it depends on tube diameter, fabric thickness and band pitch. Empty = slat_count/2 (the pre-6.1.0 hard-coded value).">Shift turns</label><input data-bl-shift-turns="'+i+'" type="number" step="0.25" min="0" placeholder="'+this._e(String((b.slat_count??6)/2))+'" value="'+this._e(b.shift_turns===undefined?'':String(b.shift_turns))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='<div><label class="roc-l" title="Phase of the stripe pattern at fully OPEN, in periods (0–1). 0 = the two layers are aligned (sheer bands let light through). Use this to line the leftover reserve up with what the real blind shows at 0 %.">Shift start (periods)</label><input data-bl-shift-start="'+i+'" type="number" step="0.01" min="0" max="1" placeholder="0" value="'+this._e(b.shift_start===undefined?'':String(b.shift_start))+'"'+this._inp('font-size:12px;')+'></div>';
+      h+='</div>';
+      h+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;"><input data-bl-shift-snap="'+i+'" type="checkbox"'+(b.shift_snap===false?'':' checked')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:12px;cursor:pointer;" title="Nudge Shift turns so fully closed lands exactly on anti-phase, i.e. full blackout. Leave on unless you want the raw measured value.">Snap fully closed to blackout</label></div>';
+      h+='<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;"><input data-bl-shift-legacy="'+i+'" type="checkbox"'+(b.shift_legacy?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:12px;cursor:pointer;" title="Restore the exact pre-6.1.0 phase formula: driven by the top_offset-corrected position, with a hard snap on the last percent. Ignores Shift turns / Shift start.">Legacy phase (pre-6.1.0)</label></div>';
     }else if(type==='venetian'){
       h+='<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">';
       h+='<div><label class="roc-l">Slat width (px)</label><input data-bl-slat-w="'+i+'" type="number" value="'+this._e(String(b.slat_width??7))+'"'+this._inp('font-size:12px;')+'></div>';
@@ -4915,7 +4970,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     }
     h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:2px 0 0;">Tap the blind to reveal the controller. Up / Stop / Down always shown. Name = tooltip only. Use real MDI icons e.g. <code>mdi:roller-shade</code> / <code>mdi:blinds</code> (materialdesignicons.com). Colour: HA name (indigo, amber, blue-grey) or CSS.</p>';
     h+='</div>';
-    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','slat_width','slat_gap','gap_color','slat_pitch','group','control'].forEach(function(k){delete cpBl[k];});
+    const cpBl=Object.assign({},b);['id','top','left','width','height','entity','attribute','min','max','top_offset','z_index','blind_type','slat_color','slat_count','shift_turns','shift_start','shift_snap','shift_legacy','slat_width','slat_gap','gap_color','slat_pitch','group','control'].forEach(function(k){delete cpBl[k];});
     const ysBl=Object.keys(cpBl).length?_yaml.s(cpBl):'';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
@@ -6086,7 +6141,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-top-offset],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-bl-id],[data-bl-top],[data-bl-left],[data-bl-w],[data-bl-h],[data-bl-entity],[data-bl-attr],[data-bl-min],[data-bl-max],[data-bl-top-offset],[data-bl-z],[data-bl-type],[data-bl-slat-color],[data-bl-slat-count],[data-bl-shift-turns],[data-bl-shift-start],[data-bl-shift-snap],[data-bl-shift-legacy],[data-bl-slat-w],[data-bl-slat-g],[data-bl-gap-color],[data-bl-yaml]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-add-ccp]').forEach(function(btn){btn.addEventListener('click',function(){
       const i=parseInt(btn.dataset.addCcp,10);const c=self._collectConfig();const bl=A(c,'blinds')[i];if(!bl)return;
       if(!bl.control||typeof bl.control!=='object')bl.control={display:'popover'};

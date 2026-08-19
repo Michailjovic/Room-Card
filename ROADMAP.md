@@ -197,24 +197,21 @@ already exist.
 
 ## 🅿️ Parked
 
-- **`day_night` blind model** — three failed attempts (v3.0.1–3.0.3); reverted to the
-  v3.0.0 two-layer look. **A fourth attempt (v5.9.8) tried to make the striped-background phase
-  compose with `top_offset`, and was reverted the same day (v5.9.9)** — it broke the fully-closed
-  look (see CHANGELOG [5.9.8]/[5.9.9]). Current rendering (two gradient layers: one fixed at
-  background-position 0, one scrolling with `pct`, snapping to a half-period anti-phase exactly at
-  `pct=1` to force full opacity when closed) is restored and known-good for the closed state.
-  **Structural finding from the v5.9.9 investigation, worth keeping for whoever attempts a fifth
-  redesign:** because the fixed layer's pattern always starts *solid* at position 0, and the fill
-  area is always top-anchored starting at row 0, **the topmost visible row of any `day_night` fill
-  is unconditionally opaque at any phase/`pct`** — so a *purely* transparent residual sliver (what
-  `top_offset` users would want for a "just a sheer gap remains" look) is not achievable by tuning
-  the existing two-fixed/one-scrolling formula at all; it would need a different rendering
-  mechanism entirely. `top_offset` itself still correctly controls **coverage amount** for
-  `day_night` blinds (unaffected by this — that part is v5.1.0/v5.9.7's job, works fine); only the
-  *phase/look* of the residual sliver is the unsolved piece. Do **not** re-attempt the phase piece
-  without a precise description of the real blind's motor-%→visual mapping (ideally side-by-side
-  photos at specific positions) AND a rendering approach that doesn't rely on a permanently-fixed
-  background layer. **Stays parked, not on the near-term development order.**
+- **`day_night` blind model** — the *phase* half of this is **solved in v6.1.0** and no longer
+  parked. Three early attempts failed (v3.0.1–3.0.3) and a fourth (v5.9.8) was reverted the same
+  day (v5.9.9) because it re-anchored the pattern to the bottom rail, which broke the fully-closed
+  look. v6.1.0 kept the existing renderer (two gradient layers: one fixed at background-position 0,
+  one scrolling) and fixed the actual defect: the scrolling layer's phase was driven by `pct`
+  *after* `top_offset`, so an un-retracted reserve slid the whole phase curve sideways. It is now
+  driven by the raw travel via `rocDayNightShift`, with `shift_turns` / `shift_start` /
+  `shift_snap` to calibrate against the real blind and `shift_legacy` as an escape hatch. See
+  CHANGELOG [6.1.0] and `docs/CONFIGURATION.md` → *Calibrating a `day_night` blind*.
+  **Still parked:** whether the two-layer composite matches real zebra optics in every respect —
+  in particular, because the fixed layer's pattern starts *solid* at position 0 and the fill is
+  top-anchored at row 0, **the topmost visible row of any `day_night` fill is unconditionally
+  opaque at any phase**, so a *purely* transparent residual sliver is still not reachable without a
+  different rendering mechanism. Do not attempt that piece without side-by-side photos of the real
+  blind at specific positions. **Not on the near-term development order.**
 
 ## Maintenance (ongoing)
 

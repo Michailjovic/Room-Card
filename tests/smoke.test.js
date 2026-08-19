@@ -88,6 +88,46 @@ t('rocApplyTopOffset undefined offset = identity',g.rocApplyTopOffset(42,undefin
 t('rocApplyTopOffset clamps runaway offset (100-><100 divide-by-zero guard)',isFinite(g.rocApplyTopOffset(0,100)));
 t('rocApplyTopOffset clamps negative offset',g.rocApplyTopOffset(0,-10)===0);
 
+// ---- day_night phase calibration — rocDayNightShift (v6.1.0) -----------------
+// Returned value is in PERIODS. frac()==0 -> layers aligned (see-through),
+// frac()==0.5 -> anti-phase (blackout).
+const _dnFrac=x=>x-Math.floor(x);
+const _dnOverlap=x=>1-Math.abs(2*_dnFrac(x)-1);   // 0 = see-through, 1 = blackout
+t('rocDayNightShift open end = shift_start',g.rocDayNightShift(0,0.25,8.5,false)===0.25);
+t('rocDayNightShift linear in raw',Math.abs(g.rocDayNightShift(0.5,0,8,false)-4)<1e-9);
+t('rocDayNightShift closed end = start+turns',Math.abs(g.rocDayNightShift(1,0.25,8,false)-8.25)<1e-9);
+t('rocDayNightShift clamps raw below 0',g.rocDayNightShift(-3,0,8.5,false)===0);
+t('rocDayNightShift clamps raw above 1',Math.abs(g.rocDayNightShift(7,0,8.5,false)-8.5)<1e-9);
+t('rocDayNightShift undefined turns = no movement',g.rocDayNightShift(1,0.3,undefined,false)===0.3);
+// snap: nudge turns so fully closed lands exactly on anti-phase (full blackout)
+t('rocDayNightShift snap: odd slat_count/2 already lands on blackout',
+  Math.abs(_dnOverlap(g.rocDayNightShift(1,0,8.5,true))-1)<1e-9);
+t('rocDayNightShift snap: even slat_count/2 gets nudged to blackout',
+  Math.abs(_dnOverlap(g.rocDayNightShift(1,0,8,true))-1)<1e-9);
+t('rocDayNightShift snap: nudged value stays within half a period of the measured one',
+  Math.abs(g.rocDayNightShift(1,0,8,true)-8)<=0.5);
+t('rocDayNightShift snap: composes with a non-zero shift_start',
+  Math.abs(_dnOverlap(g.rocDayNightShift(1,0.3,8,true))-1)<1e-9);
+t('rocDayNightShift snap: open end is still exactly shift_start',
+  g.rocDayNightShift(0,0.3,8,true)===0.3);
+t('rocDayNightShift snap: never returns a negative slope',
+  g.rocDayNightShift(1,0.9,0,true)>=g.rocDayNightShift(0,0.9,0,true));
+// the reserve must NOT move the phase — that was the pre-6.1.0 bug. Same raw
+// position => same phase, whatever top_offset is, because the caller feeds rawPct.
+t('rocDayNightShift is independent of top_offset by construction',
+  g.rocDayNightShift(0,0,8.5,true)===0);
+const bgDn=g.blindToGaugeConfig({id:'b5',entity:'cover.x',blind_type:'day_night',
+  slat_count:17,shift_turns:6.5,shift_start:0.4,shift_snap:false,shift_legacy:true});
+t('blind passes shift_turns',bgDn[0].shift_turns===6.5);
+t('blind passes shift_start',bgDn[0].shift_start===0.4);
+t('blind passes shift_snap',bgDn[0].shift_snap===false);
+t('blind passes shift_legacy',bgDn[0].shift_legacy===true);
+const bgDnBare=g.blindToGaugeConfig({id:'b6',entity:'cover.x',blind_type:'day_night',slat_count:17});
+t('blind omits shift_* when unset',bgDnBare[0].shift_turns===undefined&&bgDnBare[0].shift_start===undefined
+  &&bgDnBare[0].shift_snap===undefined&&bgDnBare[0].shift_legacy===undefined);
+t('roller blind never carries shift_* keys',
+  g.blindToGaugeConfig({id:'b7',entity:'cover.x',blind_type:'roller',shift_turns:3})[0].shift_turns===undefined);
+
 // ---- nav.live: full — rocBuildMiniConfig (NAV_LIVE_FULL_PLAN.md §5) ----------
 const _miniBase={
   type:'custom:room-overlay-card',url_sync:true,zoom:{enabled:true},parallax:{strength:5},

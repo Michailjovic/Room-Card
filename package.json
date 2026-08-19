@@ -1,6 +1,6 @@
 {
   "name": "room-overlay-card",
-  "version": "6.0.0",
+  "version": "6.1.0",
   "description": "Home Assistant Lovelace card for room visualization with image overlay layers, conditional transitions, clickable zones, sliders, gauges, weather effects and embedded HA cards.",
   "keywords": [
     "home-assistant",
@@ -20,6 +20,6 @@
   "devDependencies": {
     "@playwright/test": "^1.49.0",
     "jsdom": "^30.0.1",
-    "terser": "^5.37.0"
+    "terser": "^5.50.0"
   }
 }

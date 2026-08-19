@@ -324,12 +324,17 @@ blinds:
     blind_type: day_night         # roller | venetian | day_night
     slat_color: "rgba(0,0,0,0.85)"
     slat_count: 8
+    # day_night phase calibration — see "Calibrating a day_night blind" below
+    shift_turns: 4      # optional, default slat_count/2
+    shift_start: 0      # optional, phase in periods at fully open
+    shift_snap: true    # optional, default true
 ```
 
 - **`roller`** — solid fill that grows from the top as the blind closes.
 - **`venetian`** — horizontal slats with gaps (`slat_width`, `slat_gap`, `gap_color`).
-- **`day_night`** — zebra / dual-layer blind; band pattern cycles `slat_count` times across the
-  travel.
+- **`day_night`** — zebra / dual-layer blind. Two identical striped layers are composited; how
+  far they sit apart decides whether you see through the sheer bands or get a blackout, and that
+  offset sweeps as the blind travels. Calibrate it with `shift_turns` / `shift_start` — see below.
 
 > **Inverted motor direction** — if your cover reports `0` = closed and `100` = open, swap:
 > `min: 100`, `max: 0`.
@@ -344,12 +349,34 @@ blinds:
 > corrects the **visual overlay** on the image — the cover-control widget (rail/presets) keeps
 > showing and sending the motor's raw position, unchanged. Default `0` = no correction.
 >
-> `top_offset` only controls the **coverage amount** (fill height/percentage) — for
-> `blind_type: day_night`, it does **not** control which part of the striped pattern (solid vs.
-> transparent) appears in that residual sliver. That striped-pattern phase is a separate,
-> currently-unsolved problem (see `ROADMAP.md` 🅿️ `day_night` blind model) — there is no
-> `top_offset` value that reliably syncs it, so treat the residual sliver's exact look as
-> approximate for this blind type.
+> `top_offset` only controls the **coverage amount** (fill height/percentage). For
+> `blind_type: day_night` the striped pattern's phase is a separate axis with its own settings —
+> see below. Since 6.1.0 the two no longer interfere: the reserve moves the fill, not the phase.
+
+### Calibrating a `day_night` blind
+
+A zebra blind is one continuous loop of striped fabric running over the roller tube, so raising
+and lowering it also slides the front layer against the back layer. When their sheer bands line
+up you see through; half a band period apart and the solids cover the sheers, giving a blackout.
+The card reproduces that with two gradient layers and sweeps their offset as the cover moves.
+
+| key | default | what it does |
+| --- | --- | --- |
+| `shift_turns` | `slat_count / 2` | How many times the overlap sweeps *see-through → blackout → see-through* across the full travel. Not derivable from `slat_count`: it depends on tube diameter, fabric thickness and band pitch, so it has to be measured. |
+| `shift_start` | `0` | Phase, in periods (`0`–`1`), at fully **open**. `0` = the layers are aligned, so the leftover reserve shows its sheer bands. |
+| `shift_snap` | `true` | Nudge `shift_turns` so fully closed lands exactly on anti-phase, i.e. a real blackout. Set `false` to keep your measured value verbatim. |
+| `shift_legacy` | `false` | Restore the pre-6.1.0 formula exactly (phase driven by the `top_offset`-corrected position, plus a hard snap on the last percent). Ignores the three keys above. |
+
+**How to measure it.** Run the blind from fully closed to fully open and count how many times it
+goes dark → light → dark; that count is `shift_turns`. Then park it at fully open and adjust
+`shift_start` until the leftover reserve on screen matches what you see on the window. Both
+fields are in the GUI editor's blind panel, so you can dial them in against the live preview.
+
+> **Before 6.1.0** the phase was computed from the position *after* `top_offset` was applied, so
+> an un-retracted reserve slid the whole phase curve sideways — with 17 band pairs and
+> `top_offset: 7.6` the fully-open residual sat at 71 % overlap instead of 0 %, and no
+> `top_offset` value could sync it. The phase now comes from the raw travel. If you had tuned
+> around the old behaviour, set `shift_legacy: true`.
 
 ### Cover control (roleta)
 
