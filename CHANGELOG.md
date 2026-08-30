@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.2.1] - 2026-08-30
+
+### Fix: `vacuum_widgets` rest state was nearly invisible over a photo
+
+The at-rest look ("nobody's cleaning") only dimmed the icon itself
+(`opacity:.6`) and never gave the widget its own background — it fell
+through to the shared `.vw-bg` base rule, a barely-there
+`rgba(255,255,255,0.14)` tint. A white icon at reduced opacity on a
+near-transparent white circle, sitting over an arbitrary room photo,
+reads as a faint ghost rather than a dimmed vacuum icon — confirmed live
+against a real room background.
+
+Rest now gets its own dark chip (`rgba(0,0,0,0.5)`), matching the
+`.badge{background:rgba(0,0,0,0.6)}` convention already used elsewhere in
+the card for exactly this reason (legible over any photo), with the icon
+backed off to `.75` opacity instead of `.6` so the glyph stays
+recognisable while still reading as calmer than an active state.
+
 ## [6.2.0] - 2026-08-30
 
 ### New `vacuum_widgets` — a compact, cross-room vacuum status badge (informational only, not a controller)
