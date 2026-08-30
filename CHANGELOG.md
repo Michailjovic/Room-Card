@@ -1,5 +1,26 @@
 # Changelog
 
+## [6.5.3] - 2026-08-30
+
+### Vacuum widget: a purpose-built default icon instead of `mdi:robot-vacuum`
+
+The stock `mdi:robot-vacuum` glyph reads as an odd, hard-to-parse blob at this widget's small
+on-screen size and doesn't look like a vacuum. Unless `icon:` is set, the widget now draws a small
+built-in top-down pictogram instead: a round body, a camera/lidar bump, a cliff-sensor slot, and a
+couple of short cleaning-line marks either side, traced directly from a real robot-vacuum icon
+supplied for this — not a hand-drawn approximation, and not a generic Material Design Icon.
+
+- New `vwIconHtml()` renders this as an inline `<svg class="vw-icon">` (its path data traced with
+  `potrace` from the reference artwork, cropped to just the vacuum illustration so it doesn't
+  duplicate the widget's own circular badge) when `icon:` is unset; set `icon:` to any `mdi:...`
+  name (as before) to keep using a Material Design Icon via `<ha-icon>` instead — both now share a
+  `.vw-icon` class so the existing per-state animations (spin while vacuuming, pulse for a combined
+  vac+mop job, blink on error) apply the same way regardless of which one is showing.
+- No config schema change and no migration needed — this only changes what renders when `icon:` is
+  absent. Existing configs with an explicit `icon:` are unaffected.
+- Editor: the Icon field is now clearly optional ("leave blank for the built-in vacuum icon"), and
+  its preview swatch only appears once you've actually typed a custom icon.
+
 ## [6.5.2] - 2026-08-30
 
 ### Vacuum widget: "Quick position" — fixed corner/edge/centre buttons as a drag alternative

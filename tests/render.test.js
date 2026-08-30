@@ -915,6 +915,21 @@ w.document.body.appendChild(miniEl);
 miniEl._render();
 t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shadowRoot.querySelector('[data-vw]'));
 
+// --- vacuum widget default icon: a built-in svg pictogram instead of mdi:robot-vacuum,
+// which read poorly at this widget's small on-screen size ---
+{
+  const vwDefIconSvg=elVW.shadowRoot.querySelector('[data-vw="vac"] svg[data-vwi="vac"]');
+  t('vacuum widget: no custom icon -> renders the built-in svg glyph',!!vwDefIconSvg&&vwDefIconSvg.classList.contains('vw-icon'));
+  t('vacuum widget: no custom icon -> no <ha-icon> element used',!elVW.shadowRoot.querySelector('[data-vw="vac"] ha-icon'));
+
+  const vwCfgCustomIcon=JSON.parse(JSON.stringify(vwCfg));
+  vwCfgCustomIcon.vacuum_widgets[0].icon='mdi:broom';
+  const elVwCustomIcon=mkVW(vwCfgCustomIcon,{'sensor.a_status':{state:'cleaning'}});
+  const vwCustomIconEl=elVwCustomIcon.shadowRoot.querySelector('[data-vw="vac"] ha-icon[data-vwi="vac"]');
+  t('vacuum widget: an explicit icon: still renders via <ha-icon>, with the shared .vw-icon class for the state animations',
+    !!vwCustomIconEl&&vwCustomIconEl.getAttribute('icon')==='mdi:broom'&&vwCustomIconEl.classList.contains('vw-icon'));
+}
+
 // --- Global (all rooms) editing mode: top-level ROOM_KEYS defaults reachable via the
 // GUI editor's room selector, distinct from any one room's own override ---
 {

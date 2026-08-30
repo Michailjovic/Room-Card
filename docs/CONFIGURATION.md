@@ -578,7 +578,7 @@ vacuum_widgets:
     top: "90%"
     left: "4%"
     size: 44px                      # optional, default 44px; accepts % of card width too
-    icon: mdi:robot-vacuum          # optional, default mdi:robot-vacuum
+    icon: mdi:robot-vacuum          # optional — omit it to use the built-in vacuum icon below
     tap_action:
       action: navigate
       navigation_path: /dashboard-various/vacuum
@@ -597,7 +597,11 @@ vacuum_widgets:
 The widget renders as a frosted-glass disc (blurred glass centre, thin coloured accent ring, drop
 shadow for depth against the room photo) rather than a flat filled circle, with a tap-press
 scale-down for tactile feedback — matching the look already used for badges/hold-indicators
-elsewhere in this card. `size` supports the same per-profile overrides (`portrait`/`landscape`, or
+elsewhere in this card. Unless you set `icon:` to a specific `mdi:...` name, it shows a small
+built-in top-down vacuum pictogram (body, camera/lidar bump, cliff-sensor slot, cleaning-line
+marks), traced from real robot-vacuum icon art rather than a generic mdi icon, sized to stay
+legible at this widget's small on-screen size. Set `icon:` to any `mdi:...` name to use that
+icon instead. `size` supports the same per-profile overrides (`portrait`/`landscape`, or
 legacy `mobile`/`desktop`) as `icons`/`labels`, so a phone-specific size (and position) no longer
 requires a second, separately-configured widget.
 
