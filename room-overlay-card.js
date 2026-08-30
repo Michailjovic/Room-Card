@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.5.1';
+const ROC_VERSION='6.5.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4990,6 +4990,16 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Top</label><input data-vw-top="'+i+'" type="text" value="'+this._e(vw.top||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Left</label><input data-vw-left="'+i+'" type="text" value="'+this._e(vw.left||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
+    h+='<div style="margin-bottom:8px;">';
+    h+='<label class="roc-l">Quick position (fixed — no drag needed)</label>';
+    h+='<div style="display:grid;grid-template-columns:repeat(3,32px);gap:4px;">';
+    [['tl','&#8598;','Top-left'],['tc','&#8593;','Top-centre'],['tr','&#8599;','Top-right'],
+     ['cl','&#8592;','Left-centre'],['cc','&#8226;','Centre'],['cr','&#8594;','Right-centre'],
+     ['bl','&#8601;','Bottom-left'],['bc','&#8595;','Bottom-centre'],['br','&#8600;','Bottom-right']]
+      .forEach(function(p){h+='<button type="button" data-vw-pos="'+i+':'+p[0]+'" title="'+p[2]+'" style="width:32px;height:32px;padding:0;border-radius:6px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:15px;line-height:1;">'+p[1]+'</button>';});
+    h+='</div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Snaps Top/Left to a fixed corner, edge or centre based on the current Size — a reliable alternative if dragging the widget in the preview above misbehaves.</p>';
+    h+='</div>';
     const vacs=vw.vacuums||[];
     h+='<div style="margin-bottom:8px;">';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
@@ -6242,6 +6252,30 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this.querySelectorAll('[data-vw-id],[data-vw-icon],[data-vw-size],[data-vw-z],[data-vw-top],[data-vw-left],[data-vw-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
+    });
+    this.querySelectorAll('[data-vw-pos]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const parts=btn.dataset.vwPos.split(':');
+        const i=parseInt(parts[0]),code=parts[1];
+        const topEl=self.querySelector('[data-vw-top="'+i+'"]');
+        const leftEl=self.querySelector('[data-vw-left="'+i+'"]');
+        const sizeEl=self.querySelector('[data-vw-size="'+i+'"]');
+        if(!topEl||!leftEl)return;
+        const m=((sizeEl&&sizeEl.value)||'').trim().match(/^(\d+(?:\.\d+)?)px$/);
+        const sz=m?parseFloat(m[1]):44;
+        const MARGIN=12;
+        const near=MARGIN+'px';
+        const far='calc(100% - '+(MARGIN+sz)+'px)';
+        const mid='calc(50% - '+(sz/2)+'px)';
+        const V={t:near,c:mid,b:far};
+        const H={l:near,c:mid,r:far};
+        const map={tl:['t','l'],tc:['t','c'],tr:['t','r'],cl:['c','l'],cc:['c','c'],cr:['c','r'],bl:['b','l'],bc:['b','c'],br:['b','r']};
+        const pair=map[code];
+        if(!pair)return;
+        topEl.value=V[pair[0]];
+        leftEl.value=H[pair[1]];
+        const c=self._collectConfig();self._config=c;self._render();self._fire(c);
+      });
     });
     this.querySelectorAll('[data-add-vwv]').forEach(function(btn){
       btn.addEventListener('click',function(){

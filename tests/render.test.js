@@ -764,6 +764,25 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
     t('collectConfig keeps tap_action from the YAML box',!!collectedVw.tap_action&&collectedVw.tap_action.action==='navigate');
     t('collectConfig keeps group from its dedicated field',collectedVw.group==='g1');
 
+    // Quick-position buttons: fixed corner/edge/centre presets, a reliable
+    // alternative to dragging (which does not go through roc-pos-update at all).
+    t('Quick-position buttons rendered for each corner/edge/centre',
+      !!edVw.querySelector('[data-vw-pos="0:tl"]')&&!!edVw.querySelector('[data-vw-pos="0:cc"]')&&!!edVw.querySelector('[data-vw-pos="0:br"]'));
+    edVw.querySelector('[data-vw-pos="0:tl"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Top-left quick position sets a small fixed px margin on both axes',
+      edVw.querySelector('[data-vw-top="0"]').value==='12px'&&edVw.querySelector('[data-vw-left="0"]').value==='12px');
+    edVw.querySelector('[data-vw-pos="0:br"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Bottom-right quick position uses calc(100% - size - margin) on both axes (size is 60px here)',
+      edVw.querySelector('[data-vw-top="0"]').value==='calc(100% - 72px)'&&edVw.querySelector('[data-vw-left="0"]').value==='calc(100% - 72px)');
+    edVw.querySelector('[data-vw-pos="0:cc"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Centre quick position uses calc(50% - half-size) on both axes',
+      edVw.querySelector('[data-vw-top="0"]').value==='calc(50% - 30px)'&&edVw.querySelector('[data-vw-left="0"]').value==='calc(50% - 30px)');
+    let outPos=null;
+    edVw.addEventListener('config-changed',e=>{outPos=e.detail.config;});
+    edVw.querySelector('[data-vw-pos="0:tc"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Quick-position click fires config-changed with the new position (a plain collect+render+fire, not the drag/relay path)',
+      !!outPos&&outPos.vacuum_widgets[0].top==='12px'&&outPos.vacuum_widgets[0].left==='calc(50% - 30px)');
+
     // + Entity / remove-entity row buttons
     const addVwvBtn=edVw.querySelector('[data-add-vwv="0"]');
     t('Add vacuum-entity button present',!!addVwvBtn);

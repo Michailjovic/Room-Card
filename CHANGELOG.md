@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.5.2] - 2026-08-30
+
+### Vacuum widget: "Quick position" — fixed corner/edge/centre buttons as a drag alternative
+
+The v6.5.1 CSS fix for the "widget disappears while dragging in edit mode" report did not
+resolve it in practice, so rather than continue chasing the browser-compositing theory, this
+adds a way to position the widget that never touches the drag/relay code path at all.
+
+- Each vacuum widget's editor panel now has a 3×3 grid of **Quick position** buttons: the four
+  corners, the four edge midpoints, and centre. Clicking one sets Top/Left to a fixed value
+  (small pixel margin for edges, `calc()` centring for the middle row/column) based on the
+  widget's current Size, and applies it through the same plain collect → render → fire cycle
+  used by every other editor field — no `roc-pos-update` relay, no live preview remount, so it
+  is unaffected by the drag issue however that turns out to be caused.
+- This does not replace dragging (still there, still useful for fine positioning when it works
+  on your setup) — it is a reliable fallback for the common case of "just put it in a corner".
+- No config schema change: it only ever writes plain `top`/`left` strings, same as typing into
+  those fields by hand.
+
+The underlying drag-disappears-until-remount behaviour from the v6.5.1 report is still
+unresolved and not otherwise investigated further in this release — if it keeps happening,
+Quick position (or typing Top/Left directly) is the recommended way to place this widget for
+now.
+
 ## [6.5.1] - 2026-08-30
 
 ### Fix: vacuum widget could disappear while dragging it in edit mode

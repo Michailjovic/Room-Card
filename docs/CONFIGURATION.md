@@ -626,12 +626,16 @@ does.
 as `icons`/`badges`/`gauges`. It gives you dedicated fields for id/icon/size/z-index/top/left/group,
 and — with the editor's **Interactive preview** (`test_mode`) turned on — you can drag the widget
 directly on the room image to put it in any corner, exactly like icons and labels; the Top/Left
-fields update automatically. `vacuums` is its own repeatable list — an entity row (with the usual
-entity autocomplete) per vacuum, with a "+ Entity" button to add more, same pattern as a label's
-colour-gradient stops. `tap_action`, `hold_action`, `double_tap_action`, `visible`, `fade`/`slide`
-and the per-profile `portrait:`/`landscape:` overrides live in a single YAML box inside the panel
-rather than as individual fields — that combination is more naturally expressed as YAML than as a
-form.
+fields update automatically. Below Top/Left there's also a **Quick position** grid of nine buttons
+(the four corners, the four edge midpoints, and centre) — click one to snap the widget straight to
+that spot based on its current Size, with no dragging involved. It writes plain `top`/`left` values
+just like typing into those fields by hand, so it's a safe fallback for placing the widget on setups
+where the live drag preview misbehaves. `vacuums` is its own repeatable list — an entity row (with
+the usual entity autocomplete) per vacuum, with a "+ Entity" button to add more, same pattern as a
+label's colour-gradient stops. `tap_action`, `hold_action`, `double_tap_action`, `visible`,
+`fade`/`slide` and the per-profile `portrait:`/`landscape:` overrides live in a single YAML box
+inside the panel rather than as individual fields — that combination is more naturally expressed as
+YAML than as a form.
 
 **Global vs. per-room, in the GUI.** The "global default" behaviour described above (define once,
 every room uses it unless it overrides) only exists when this *one card* manages multiple rooms via
