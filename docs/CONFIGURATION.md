@@ -635,15 +635,29 @@ form.
 
 **Global vs. per-room, in the GUI.** The "global default" behaviour described above (define once,
 every room uses it unless it overrides) only exists when this *one card* manages multiple rooms via
-its own `rooms:` list (see the multi-room section) — top-level `vacuum_widgets` is then the shared
-default and the editor's Room picker in the header switches which room's *override* you're editing.
+its own `rooms:` list (see the multi-room section). When it does, the editor's Room picker in the
+header has a **🌐 Global (all rooms)** entry above the room list — select it and every panel
+(vacuum widgets included) switches to editing the top-level, shared arrays instead of one room's
+override. Every field, the Interactive preview, and drag-to-position all work the same way there as
+they do for a single room; the preview temporarily shows the currently-selected room's own photo but
+with that room's own overrides hidden, so what you see and drag is genuinely the shared default, not
+whatever that one room happens to override it with. Switching the header back to a named room returns
+to editing that room's own override, untouched by whatever you just changed globally.
+
+If a room already has its *own* `vacuum_widgets` (or any other ROOM_KEYS) entry, that entry wins for
+that room regardless of what the global default says — the two don't merge item-by-item, a room's own
+array fully replaces the shared one for that room. If you added a widget through the panel while a
+specific room was selected in an earlier version of the editor (before this Global option existed),
+check that room for a stray override that's now shadowing the real global one, and delete it there if
+you meant it to use the shared default instead.
+
 If you instead run a **separate `room-overlay-card` per room** (one YAML block per room's own card —
-the common pattern, e.g. one card for the bedroom, one for the kitchen), there is no single editor
-session spanning all of them, so no field can be "the global one": each card's panel edits only that
-card's own config. Getting the same vacuum widget on every room's card then means building it once
-in any one card's panel and copying that entry's YAML into the other cards' `vacuum_widgets:` list —
-this card has no mechanism (and Home Assistant has none either) to share config live across separate
-card instances.
+e.g. one card for the bedroom, one for the kitchen, each with no `rooms:` of its own), there is no
+single editor session spanning all of them, the Room picker (and the Global option) never appears,
+and no field can be "the global one": each card's panel edits only that card's own config. Getting the
+same vacuum widget on every room's card then means building it once in any one card's panel and
+copying that entry's YAML into the other cards' `vacuum_widgets:` list — this card has no mechanism
+(and Home Assistant has none either) to share config live across separate card instances.
 
 ---
 

@@ -1,5 +1,36 @@
 # Changelog
 
+## [6.5.0] - 2026-08-30
+
+### GUI editor: "🌐 Global (all rooms)" — edit the shared top-level defaults directly
+
+For a card using its own multi-room `rooms:` feature, every element type (`icons`, `badges`,
+`labels`, `gauges`, `vacuum_widgets`, `zones`, `blinds`, `elements`, `groups`, …) already supported a
+top-level default shared across rooms unless a room overrides it — but the editor's Room picker only
+ever listed actual rooms, so there was no way to reach that shared default through the GUI at all;
+editing while any room was selected always wrote into that room's own override, never the shared one.
+
+- The header's Room selector now has a **🌐 Global (all rooms)** option above the room list. Selecting
+  it switches every panel — including "Vacuum status widgets" — to editing the top-level, shared
+  arrays instead of one room's override.
+- The Interactive preview (`test_mode`) works the same way while Global is selected: it shows the
+  currently-selected room's photo but with that room's own ROOM_KEYS overrides hidden, so what you see
+  (and can drag-to-position) is genuinely the shared default, not whatever that room happens to
+  override it with.
+- Fixed a real correctness risk found while building this: naively hiding a room's overrides for the
+  preview and then relaying a drag's resulting config straight back would have silently wiped that
+  room's real config on every drag. The relay now restores the room's actual data and only takes the
+  top-level change from the drag.
+
+No config or behaviour change for single-room cards, or for anyone who doesn't open the Global option.
+
+### `vacuum_widgets` per-room vs. global — a heads-up
+
+If you added a vacuum widget through the 6.4.0 editor panel while a specific room was selected, that
+room now has its *own* `vacuum_widgets` entry, which fully replaces (not merges with) the shared
+top-level one for that room. Check for a stray, empty-looking override in that room if its widget
+looks different from every other room's — see the updated vacuum-widget docs for details.
+
 ## [6.4.1] - 2026-08-30
 
 ### `vacuums` gets its own entity-row list in the editor panel

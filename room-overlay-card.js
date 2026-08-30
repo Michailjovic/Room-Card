@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.4.1';
+const ROC_VERSION='6.5.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2537,6 +2537,7 @@ class RoomOverlayCard extends HTMLElement{
 
   // Active-room scoped array access for test-mode editing (drag/resize/draw)
   _roomArr(nc,key){
+    if(this._editGlobal){if(!nc[key])nc[key]=[];return nc[key];}
     const t=Array.isArray(nc.rooms)&&nc.rooms.length?nc.rooms[Math.max(0,Math.min(this._roomIdx,nc.rooms.length-1))]:nc;
     if(!t[key])t[key]=[];
     return t[key];
@@ -3928,7 +3929,7 @@ function buildFilterStr(obj){
 }
 
 class RoomOverlayCardEditor extends HTMLElement{
-  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;this._lySub=null;}
+  constructor(){super();this._config=null;this._hass=null;this._rocPosHandler=null;this._rocRoomHandler=null;this._fdT=null;this._openPanels=null;this._hist=[];this._histIdx=-1;this._histMuted=false;this._keysBound=false;this._editRoomIdx=0;this._editGlobal=false;this._roomIdxInit=false;this._prevCard=null;this._showAdv=false;this._filterMode=null;this._dlCache=null;this._lySub=null;}
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
@@ -3944,6 +3945,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   // Active room view for editing (the room whose sections are shown)
   _roomView(){
     const c=this._config||{};
+    if(this._editGlobal)return c;
     if(Array.isArray(c.rooms)&&c.rooms.length){
       this._editRoomIdx=Math.max(0,Math.min(this._editRoomIdx,c.rooms.length-1));
       return c.rooms[this._editRoomIdx];
@@ -4091,8 +4093,21 @@ class RoomOverlayCardEditor extends HTMLElement{
       delete cfg.url_sync; // editor preview must not hijack the dashboard URL
       const _multi=Array.isArray(cfg.rooms)&&cfg.rooms.length>0;
       if(_multi)cfg.follow_mode='manual'; // lock the preview to the room being edited (no presence jumps)
+      if(_multi&&this._editGlobal){
+        // Editing the shared top-level defaults: strip every ROOM_KEYS override
+        // from the previewed room except its visual identity (image/camera), so
+        // the preview falls through to the global values being edited instead
+        // of silently showing that room's own (possibly shadowing) overrides.
+        const _gvIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
+        const _gvRoom=cfg.rooms[_gvIdx];
+        if(_gvRoom){
+          const KEEP_VISUAL=['id','name','area_match','base_image','base_camera','camera_refresh','base_image_conditions'];
+          Object.keys(_gvRoom).forEach(function(k){if(!KEEP_VISUAL.includes(k))delete _gvRoom[k];});
+        }
+      }
       el.setConfig(cfg);
       if(_multi)el._roomIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
+      el._editGlobal=this._editGlobal;
       if(this._hass)el.hass=this._hass;
       host.appendChild(el);
       this._prevCard=el;
@@ -4174,7 +4189,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     // Multi-room: sections write into the room being edited; shared keys stay top-level
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
     if(hasRooms)c.rooms=c.rooms.map(function(r){return Object.assign({},r);});
-    const tgt=hasRooms?c.rooms[Math.max(0,Math.min(this._editRoomIdx,c.rooms.length-1))]:c;
+    const tgt=(hasRooms&&!this._editGlobal)?c.rooms[Math.max(0,Math.min(this._editRoomIdx,c.rooms.length-1))]:c;
     // Background mode (image vs camera) — mutually exclusive at save time, not just
     // hidden in the UI: whichever isn't the active mode is cleared, so a stale value
     // in the other field can never silently win at render time (camera always wins
@@ -5331,12 +5346,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(hasRooms){
       const er=cR;
       roomsInner+='<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">';
-      roomsInner+='<span style="font-size:12px;color:var(--secondary-text-color);">Editing <b>'+self._e(er.name||er.id||('room_'+(self._editRoomIdx+1)))+'</b> — pick the room in the header above.</span>';
+      roomsInner+=self._editGlobal
+        ?'<span style="font-size:12px;color:var(--secondary-text-color);">Editing <b>🌐 Global defaults</b> — shared by every room unless a room overrides it. Pick a room in the header above to edit that room instead.</span>'
+        :'<span style="font-size:12px;color:var(--secondary-text-color);">Editing <b>'+self._e(er.name||er.id||('room_'+(self._editRoomIdx+1)))+'</b> — pick the room in the header above.</span>';
       const _rcnt=c.rooms.length,_ri=self._editRoomIdx;
       const _navBtn='padding:6px 10px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:13px;line-height:1;';
       roomsInner+='<span style="display:flex;gap:8px;flex:none;align-items:center;">';
-      roomsInner+='<button id="room-up" title="Move room earlier"'+(_ri<=0?' disabled':'')+' style="'+_navBtn+(_ri<=0?'opacity:0.4;cursor:default;':'')+'">&#9650;</button>';
-      roomsInner+='<button id="room-down" title="Move room later"'+(_ri>=_rcnt-1?' disabled':'')+' style="'+_navBtn+(_ri>=_rcnt-1?'opacity:0.4;cursor:default;':'')+'">&#9660;</button>';
+      roomsInner+='<button id="room-up" title="Move room earlier"'+(self._editGlobal||_ri<=0?' disabled':'')+' style="'+_navBtn+(self._editGlobal||_ri<=0?'opacity:0.4;cursor:default;':'')+'">&#9650;</button>';
+      roomsInner+='<button id="room-down" title="Move room later"'+(self._editGlobal||_ri>=_rcnt-1?' disabled':'')+' style="'+_navBtn+(self._editGlobal||_ri>=_rcnt-1?'opacity:0.4;cursor:default;':'')+'">&#9660;</button>';
       roomsInner+='<button id="add-room" style="'+btnStyle+'">+ Room</button>';
       roomsInner+='<button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button>';
       roomsInner+='</span>';
@@ -5623,7 +5640,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
       +'</span></div>'
       +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
-      +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);"><ha-icon icon="mdi:door" style="--mdc-icon-size:16px;"></ha-icon>Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;">'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
+      +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);"><ha-icon icon="mdi:door" style="--mdc-icon-size:16px;"></ha-icon>Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;"><option value="global"'+(self._editGlobal?' selected':'')+'>🌐 Global (all rooms)</option>'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx&&!self._editGlobal?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
       +'<label title="Puts the card into a safe interactive editing state: real tap/hold actions are suppressed, elements can be dragged directly, and an orientation-flip test button appears. Shows a live, draggable copy of the card right here below, and — since this is saved to your config — the same behaviour on your dashboard card too, until switched off." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:cursor-move" style="--mdc-icon-size:16px;"></ha-icon>Edit mode</label>'
       +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:vibrate" style="--mdc-icon-size:16px;"></ha-icon>Haptics</label>'
       +'</div>'
@@ -5784,6 +5801,14 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(!self._config.test_mode)delete nc.test_mode;
         if(self._config.url_sync!==undefined)nc.url_sync=self._config.url_sync;else delete nc.url_sync;
         if(self._config.follow_mode!==undefined)nc.follow_mode=self._config.follow_mode;else delete nc.follow_mode;
+        // Global-defaults editing strips the previewed room's own ROOM_KEYS
+        // overrides so the preview falls through to the shared defaults (see
+        // _mountPreview) — restore that room's real data here, otherwise this
+        // relay would silently wipe it from the saved config on every drag.
+        if(self._editGlobal&&Array.isArray(self._config.rooms)&&Array.isArray(nc.rooms)){
+          const _gvIdx=Math.max(0,Math.min(self._editRoomIdx,self._config.rooms.length-1));
+          if(nc.rooms[_gvIdx]&&self._config.rooms[_gvIdx])nc.rooms[_gvIdx]=rocClone(self._config.rooms[_gvIdx]);
+        }
       }
       self._config=nc;
       self._render(); // refresh position inputs, otherwise the next edit reverts the drag
@@ -5854,11 +5879,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const fire=function(){self._fire(self._collectConfig());};
     // Room-scoped access for add/remove/duplicate/move handlers
-    const T=function(c){return Array.isArray(c.rooms)&&c.rooms.length?c.rooms[Math.max(0,Math.min(self._editRoomIdx,c.rooms.length-1))]:c;};
+    const T=function(c){return(Array.isArray(c.rooms)&&c.rooms.length&&!self._editGlobal)?c.rooms[Math.max(0,Math.min(self._editRoomIdx,c.rooms.length-1))]:c;};
     const A=function(c,key){const t=T(c);if(!t[key])t[key]=[];return t[key];};
     // Rooms section
     const roomSel=this.querySelector('#room-select');
-    if(roomSel)roomSel.addEventListener('change',function(){self._editRoomIdx=parseInt(roomSel.value)||0;self._render();self._writeEditHash(self._config);});
+    if(roomSel)roomSel.addEventListener('change',function(){
+      if(roomSel.value==='global'){self._editGlobal=true;}
+      else{self._editGlobal=false;self._editRoomIdx=parseInt(roomSel.value)||0;}
+      self._render();self._writeEditHash(self._config);
+    });
     const addRoom=this.querySelector('#add-room');
     if(addRoom)addRoom.addEventListener('click',function(){
       const c=self._collectConfig();

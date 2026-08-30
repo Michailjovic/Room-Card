@@ -896,6 +896,77 @@ w.document.body.appendChild(miniEl);
 miniEl._render();
 t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shadowRoot.querySelector('[data-vw]'));
 
+// --- Global (all rooms) editing mode: top-level ROOM_KEYS defaults reachable via the
+// GUI editor's room selector, distinct from any one room's own override ---
+{
+  const globalCfg={type:'custom:room-overlay-card',
+    vacuum_widgets:[{id:'global_vac',top:'90%',left:'4%',vacuums:[{entity:'sensor.global_status'}]}],
+    rooms:[
+      {id:'bedroom',name:'Bedroom',base_image:'/local/bed.webp',vacuum_widgets:[{id:'bed_vac',top:'10%',left:'10%',vacuums:[]}]},
+      {id:'kitchen',name:'Kitchen',base_image:'/local/kit.webp'}
+    ]};
+  const edG=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(edG);
+  edG.setConfig(globalCfg);
+  edG.hass={states:{},user:{name:'x'}};
+  edG._render();
+
+  t('Global option present in room selector',!!edG.querySelector('#room-select').querySelector('option[value="global"]'));
+  t('editor opens on a real room by default, not Global',!edG._editGlobal);
+  t('bedroom room panel shows its own override (bed_vac), not the global one',edG.querySelector('[data-vw-id="0"]').value==='bed_vac');
+
+  const roomSelG=edG.querySelector('#room-select');
+  roomSelG.value='global';
+  roomSelG.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('selecting Global sets _editGlobal',edG._editGlobal===true);
+  t('Global panel shows the shared top-level widget, not a room override',edG.querySelector('[data-vw-id="0"]').value==='global_vac');
+
+  edG.querySelector('[data-vw-size="0"]').value='77px';
+  const collectedGlobal=edG._collectConfig();
+  t('collectConfig writes the edit to the TOP-LEVEL vacuum_widgets array',collectedGlobal.vacuum_widgets[0].size==='77px');
+  t("collectConfig leaves the bedroom room's own override untouched",
+    collectedGlobal.rooms[0].vacuum_widgets[0].id==='bed_vac'&&collectedGlobal.rooms[0].vacuum_widgets[0].size===undefined);
+
+  roomSelG.value='0';
+  roomSelG.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('switching back to a room clears _editGlobal',edG._editGlobal===false);
+  t('back on bedroom, panel shows its own override again',edG.querySelector('[data-vw-id="0"]').value==='bed_vac');
+}
+
+// --- Global editing mode: the interactive preview shows the shared defaults (not a
+// shadowing per-room override), and dragging in it relays back to the top level
+// without wiping the previewed room's other config ---
+{
+  const globalCfg2={type:'custom:room-overlay-card',test_mode:true,
+    vacuum_widgets:[{id:'global_vac2',top:'50%',left:'50%',vacuums:[]}],
+    rooms:[{id:'bedroom',name:'Bedroom',base_image:'/local/bed.webp',
+      zones:[{id:'keepme',top:'1%',left:'1%',width:'5%',height:'5%'}],
+      vacuum_widgets:[{id:'shadow_vac',top:'1%',left:'1%',vacuums:[]}]}]};
+  const edG2=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(edG2);
+  edG2.setConfig(globalCfg2);
+  edG2.hass={states:{},user:{name:'x'}};
+  edG2._render();
+  const roomSelG2=edG2.querySelector('#room-select');
+  roomSelG2.value='global';
+  roomSelG2.dispatchEvent(new w.Event('change',{bubbles:true}));
+  const prevG=edG2._prevCard;
+  t('preview mounts while editing Global',!!prevG);
+  t("preview strips the bedroom room's own shadowing vacuum_widgets override",!prevG._config.rooms[0].vacuum_widgets);
+  t('preview renders the shared global widget, not the shadowed per-room one',
+    !!prevG.shadowRoot.querySelector('[data-vw="global_vac2"]')&&!prevG.shadowRoot.querySelector('[data-vw="shadow_vac"]'));
+
+  const draggedGlobalCfg=JSON.parse(JSON.stringify(prevG._config));
+  draggedGlobalCfg.vacuum_widgets[0].top='23.0%';draggedGlobalCfg.vacuum_widgets[0].left='45.0%';
+  w.dispatchEvent(new w.CustomEvent('roc-pos-update',{detail:{config:draggedGlobalCfg}}));
+  t('dragging while Global relays the new position into the top-level vacuum_widgets',
+    edG2._config.vacuum_widgets[0].top==='23.0%'&&edG2._config.vacuum_widgets[0].left==='45.0%');
+  t("the relay does not wipe the bedroom room's other config (zones) even though the preview had stripped it",
+    Array.isArray(edG2._config.rooms[0].zones)&&edG2._config.rooms[0].zones[0].id==='keepme');
+  t("the relay restores the bedroom room's own vacuum_widgets override (untouched by the global-scoped drag)",
+    Array.isArray(edG2._config.rooms[0].vacuum_widgets)&&edG2._config.rooms[0].vacuum_widgets[0].id==='shadow_vac');
+}
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();
