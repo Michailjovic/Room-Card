@@ -736,6 +736,63 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
   const _lyAfter=JSON.stringify((edLive._prevCard._config.layout||{}).landscape);
   t('...and the debounced update reaches _prevCard.setConfig() with the new rows',_lyBefore!==_lyAfter&&/20/.test(_lyAfter));
 
+
+// --- vacuum status widget: classification, aggregation, mini exclusion ---
+const mkVW=(cfg,states)=>{
+  const el=w.document.createElement('room-overlay-card');
+  el.setConfig(cfg);
+  el._hass={states:states||{},callService(){},user:{name:'x'}};
+  w.document.body.appendChild(el);
+  el._render();
+  el._hass={states:states||{}};
+  el._update();
+  return el;
+};
+const vwCfg={base_image:'/local/x.webp',vacuum_widgets:[{id:'vac',top:'90%',left:'4%',
+  tap_action:{action:'navigate',navigation_path:'/dashboard-various/vacuum'},
+  vacuums:[{entity:'sensor.a_status'},{entity:'sensor.b_status'},{entity:'sensor.c_status'}]}]};
+
+let elVW=mkVW(vwCfg,{'sensor.a_status':{state:'idle'},'sensor.b_status':{state:'charging'},'sensor.c_status':{state:'charging_complete'}});
+let vwDiv=elVW.shadowRoot.querySelector('[data-vw="vac"]');
+t('vacuum widget: all idle/charging -> vw-rest',!!vwDiv&&vwDiv.classList.contains('vw-rest'));
+t('vacuum widget: count badge hidden at rest',elVW.shadowRoot.querySelector('[data-vwc="vac"]').style.display==='none');
+
+elVW=mkVW(vwCfg,{'sensor.a_status':{state:'cleaning'},'sensor.b_status':{state:'idle'},'sensor.c_status':{state:'idle'}});
+t('vacuum widget: one vacuuming -> vw-dry',elVW.shadowRoot.querySelector('[data-vw="vac"]').classList.contains('vw-dry'));
+t('vacuum widget: count hidden with only 1 active',elVW.shadowRoot.querySelector('[data-vwc="vac"]').style.display==='none');
+
+elVW=mkVW(vwCfg,{'sensor.a_status':{state:'cleaning'},'sensor.b_status':{state:'segment_mopping'},'sensor.c_status':{state:'idle'}});
+vwDiv=elVW.shadowRoot.querySelector('[data-vw="vac"]');
+t('vacuum widget: dry+wet on different robots at once -> vw-both',vwDiv.classList.contains('vw-both'));
+const vwCount=elVW.shadowRoot.querySelector('[data-vwc="vac"]');
+t('vacuum widget: count badge shows 2',vwCount.style.display==='inline-flex'&&vwCount.textContent==='2');
+
+elVW=mkVW(vwCfg,{'sensor.a_status':{state:'idle'},'sensor.b_status':{state:'clean_mop_mopping'},'sensor.c_status':{state:'idle'}});
+t('vacuum widget: single combined vac+mop job -> vw-both',elVW.shadowRoot.querySelector('[data-vw="vac"]').classList.contains('vw-both'));
+
+elVW=mkVW(vwCfg,{'sensor.a_status':{state:'cleaning'},'sensor.b_status':{state:'error'},'sensor.c_status':{state:'idle'}});
+t('vacuum widget: error overrides an otherwise-active fleet -> vw-error',elVW.shadowRoot.querySelector('[data-vw="vac"]').classList.contains('vw-error'));
+
+elVW=mkVW(vwCfg,{'sensor.a_status':{state:'idle'},'sensor.b_status':{state:'washing_the_mop'},'sensor.c_status':{state:'idle'}});
+vwDiv=elVW.shadowRoot.querySelector('[data-vw="vac"]');
+t('vacuum widget: dock mop-washing maintenance is generic active, NOT wet',vwDiv.classList.contains('vw-active')&&!vwDiv.classList.contains('vw-wet'));
+
+elVW=mkVW(vwCfg,{'sensor.a_status':{state:'cleaning'}});
+const vwTapEl=elVW.shadowRoot.querySelector('[data-vw="vac"]');
+let _vwNavPath=null;
+const _origPushState=w.history.pushState.bind(w.history);
+w.history.pushState=(_s,_t,p)=>{_vwNavPath=p;};
+vwTapEl.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+w.history.pushState=_origPushState;
+t('vacuum widget: tap navigates via the standard navigate action',_vwNavPath==='/dashboard-various/vacuum');
+
+const miniEl=w.document.createElement('room-overlay-card');
+miniEl.setConfig(Object.assign({},vwCfg,{_roc_mini:true}));
+miniEl._hass={states:{'sensor.a_status':{state:'cleaning'}},callService(){}};
+w.document.body.appendChild(miniEl);
+miniEl._render();
+t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shadowRoot.querySelector('[data-vw]'));
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();

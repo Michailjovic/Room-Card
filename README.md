@@ -26,6 +26,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Clickable zones** | Invisible hit areas — navigate, more-info, toggle, call-service, browser-mod popup |
 | **Slider zones** | Drag across a zone to dim lights, move covers, set volume/temperature |
 | **Status badges** | Floating chips in any corner — MDI icon, conditional color, conditional label |
+| **Vacuum status widget** | Compact cross-room/global badge summarising multiple vacuums (dry/wet/both/error) — informational only, taps through to your own dashboard |
 | **Icons & labels** | State-aware MDI icons and entity/template text values placed anywhere |
 | **Embedded HA cards** | Any card (tile, mini-graph, button…) placed at absolute coordinates |
 | **Companion cards** | Full HA cards stacked above / below the image (great for mobile) |

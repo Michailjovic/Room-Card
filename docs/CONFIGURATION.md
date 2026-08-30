@@ -564,6 +564,54 @@ labels:
 
 ---
 
+## Vacuum status widget
+
+A compact, cross-room informational badge for a multi-vacuum home — **not** a controller. Tap
+fires a normal `tap_action` (typically `navigate` to wherever your real vacuum dashboard lives);
+there's no start/stop/dock built in on purpose. Like `badges`/`icons`/`gauges`, `vacuum_widgets` is
+a `ROOM_KEYS` entry: define it once at the top level to apply it to every room, or inside a specific
+room to override/replace it just there.
+
+```yaml
+vacuum_widgets:
+  - id: vac_status
+    top: "90%"
+    left: "4%"
+    size: 32px                      # optional, default 32px
+    icon: mdi:robot-vacuum          # optional, default mdi:robot-vacuum
+    tap_action:
+      action: navigate
+      navigation_path: /dashboard-various/vacuum
+    vacuums:
+      - entity: sensor.s6_kitchen_status
+      - entity: sensor.s7_maxv_status
+      - entity: sensor.s8_maxv_ultra_status
+```
+
+Each entry under `vacuums` needs a **status sensor** (`device_class: enum` — the `sensor.*_status`
+kind some Roborock/Xiaomi integrations expose, with values like `cleaning`, `segment_mopping`,
+`clean_mop_mopping`, `error`…), not the `vacuum.*` domain entity itself. The real-time status string
+is classified per vacuum, then combined across the whole list into one result:
+
+| Result | When | Look |
+|---|---|---|
+| rest | every vacuum idle/charging/docked | dim icon, no animation |
+| error | any vacuum reports `error`/`charging_problem` | red, blinking — overrides everything else |
+| dry | vacuum(s) actively vacuuming, none mopping | amber, spinning icon |
+| wet | vacuum(s) actively mopping, none vacuuming | blue, expanding ripple |
+| both | a combined vac+mop job, *or* different vacuums doing dry and wet at once | split amber/blue background |
+| active | something's happening with no confident dry/wet claim (docking, mapping, manual driving, the mop's own dock-side wash/dry cycle, …) | neutral glow |
+
+When 2+ configured vacuums are active at once, a small numeral badge appears in the icon's corner.
+An unrecognised future status string is treated as `active`, never silently as `rest`.
+
+This widget is intentionally left out of `nav.live: full`/`custom` mini thumbnails — it summarises
+*multiple* vacuums at once, which doesn't reduce to thumbnail scale the way a single-entity badge
+does. There's no dedicated GUI editor panel yet; configure it via YAML (it survives opening/saving
+the visual editor like any other config key).
+
+---
+
 ## Embedded HA cards
 
 Place any Lovelace card at absolute coordinates over the room image.

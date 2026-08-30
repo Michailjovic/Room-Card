@@ -1,5 +1,85 @@
 # Changelog
 
+## [6.2.0] - 2026-08-30
+
+### New `vacuum_widgets` — a compact, cross-room vacuum status badge (informational only, not a controller)
+
+Requested use case: a single glance-level indicator for a multi-vacuum home, reusable across every
+room via `ROOM_KEYS`'s existing global-default/per-room-override merge (top-level `vacuum_widgets`
+applies to all rooms; a room's own `vacuum_widgets` key replaces it just for that room — same
+mechanism `badges`/`icons`/`gauges` already use, nothing new to learn). It deliberately does **not**
+control anything — tap only fires a normal `tap_action` (typically `navigate` to wherever the
+user's real vacuum dashboard lives); start/stop/dock actions are out of scope on purpose.
+
+**Config:**
+
+```yaml
+vacuum_widgets:
+  - id: vac_status
+    top: '90%'
+    left: '4%'
+    size: 32px                     # optional, default 32px
+    icon: mdi:robot-vacuum          # optional, default mdi:robot-vacuum
+    tap_action:
+      action: navigate
+      navigation_path: /dashboard-various/vacuum
+    vacuums:
+      - entity: sensor.s6_kitchen_status
+      - entity: sensor.s7_maxv_status
+      - entity: sensor.s8_maxv_ultra_status
+```
+
+Each item under `vacuums` needs a status **sensor** entity (`device_class: enum`, the
+`sensor.*_status` kind some Roborock/Xiaomi integrations expose) — not the `vacuum.*` domain entity
+and not a `select.*_cleaning_mode` helper. The `select` was tried first and rejected: it reflects a
+*configured* mode, not what's happening right now, and its `custom`/`smart_mode` values are
+meaningless without knowing the user's own routine. The status sensor's real-time enum is both
+simpler (one entity per robot, no per-robot special-casing) and actually correct.
+
+**States.** Each configured vacuum's status string is classified into one of six categories, then
+combined across every vacuum in the list into a single result for the icon:
+
+- **rest** — `idle`, `charging`, `charging_complete`, `charger_disconnected`, `device_offline`,
+  `locked`, `shutting_down`, `unavailable`, `unknown`. Dim icon, no animation, no count badge.
+- **error** — `error`, `charging_problem`. Overrides every other state (red, blinking) — this is the
+  one thing worth interrupting the glance for.
+- **dry** — actively vacuuming the floor right now (`cleaning`, `segment_cleaning`,
+  `zoned_cleaning`, `spot_cleaning`). Amber background, spinning icon.
+- **wet** — actively mopping the floor right now (`segment_mopping`, `zoned_mopping`,
+  `robot_status_mopping`). Blue background, expanding ripple ring.
+- **both** — a combined vacuum+mop job. Covers two situations the same way: one robot running
+  `clean_mop_cleaning`/`clean_mop_mopping`/`segment_clean_mop_*`/`zoned_clean_mop_*` (the sub-state
+  just says which phase it's in *right now* — the job as a whole does both), or two different
+  robots doing dry and wet at the same moment. Both read as "dry and wet cleaning is happening in my
+  home right now", which is the useful fact — the icon shows a split amber/blue background rather
+  than trying to enumerate which robot is doing what.
+- **active** — something's happening with no confident dry/wet claim: starting, returning to dock,
+  manual/remote-control driving, paused, mapping, patrolling, and — deliberately — the mop's own
+  dock-side maintenance (`washing_the_mop`, `attaching_the_mop`, `air_drying_stopping`,
+  `back_to_dock_washing_duster`, …). A robot laundering its own mop pad at the dock is not mopping
+  the user's floor, so it does *not* light up as "wet" — that would misreport "still cleaning" well
+  after cleaning actually finished.
+
+An unrecognised future status string falls through to **active**, not **rest** — a false "something's
+happening" is a far safer failure mode than silently hiding real activity behind "all clear".
+
+When 2 or more configured vacuums are active at once (any category except rest), a small numeral
+badge appears in the icon's corner — deliberately just a count, not one icon per robot, to keep the
+whole thing compact.
+
+**Excluded from nav thumbnails.** Unlike every other visual primitive (`badges`, `icons`, `gauges`,
+…), `vacuum_widgets` never renders inside a `nav.live: full`/`custom` mini thumbnail instance, with
+no opt-in to turn it back on. Reasoning: it aggregates *multiple* vacuums into one glance-level icon
+by design — that doesn't reduce sensibly to thumbnail scale the way a single-entity badge does, and
+duplicating a whole-home indicator into every room's mini-preview would just be noise.
+
+**Not yet in the GUI editor** — this ships as a YAML-only option for now (same posture that other
+now-editor-backed features, like `blinds[].control`, originally shipped with). `roomMerge`/the
+single-room→multi-room migration already treat it as a normal `ROOM_KEYS` entry, and the editor's
+`config-changed` save round-trips the whole config object, so a `vacuum_widgets` block written by
+hand survives opening and saving the visual editor untouched — it just has no dedicated panel to
+edit it with yet.
+
 ## [6.1.0] - 2026-08-19
 
 ### `day_night` blind — the striped pattern's phase is now calibratable, and the reserve no longer shifts it
