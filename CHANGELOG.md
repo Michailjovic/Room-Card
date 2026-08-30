@@ -1,5 +1,20 @@
 # Changelog
 
+## [6.4.1] - 2026-08-30
+
+### `vacuums` gets its own entity-row list in the editor panel
+
+Follow-up to 6.4.0's editor panel: `vacuums` was still edited as YAML text inside the panel's YAML
+box. It's now a dedicated repeatable list — one entity row (with the usual entity autocomplete) per
+vacuum, plus a "+ Entity" button, matching the row-list pattern a label's colour-gradient stops
+already use. `tap_action`/`hold_action`/`double_tap_action`/`visible`/`fade`/`slide`/per-profile
+overrides remain in the panel's YAML box.
+
+Also documented how "global vs. per-room" actually maps onto the GUI editor: a shared top-level
+default is a real, editable thing only when one card manages multiple rooms via its own `rooms:`
+list; with separate per-room card instances (one YAML block per room, each its own card) there is no
+GUI field that can span across them — each card's panel edits only that card's own config.
+
 ## [6.4.0] - 2026-08-30
 
 ### `vacuum_widgets` GUI editor panel + drag-to-position

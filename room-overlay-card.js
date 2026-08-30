@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.4.0';
+const ROC_VERSION='6.4.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4501,10 +4501,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       const vwGrpEl=q('[data-vw-grp="'+i+'"]');if(vwGrpEl&&vwGrpEl.value.trim())o.group=vwGrpEl.value.trim();else delete o.group;
       const yaR=self._pYaml(q('[data-vw-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','icon','size','z_index','top','left','group'];
+        const KEEP=['id','icon','size','z_index','top','left','group','vacuums'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
+      const vwVacs=[];
+      self.querySelectorAll('[data-vw-vac^="'+i+'-"]').forEach(function(inp){
+        const ent=inp.value.trim();if(ent)vwVacs.push({entity:ent});
+      });
+      if(vwVacs.length)o.vacuums=vwVacs;else delete o.vacuums;
       return o;
     });
 
@@ -4953,7 +4958,7 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _vwItem(vw,i){
     const cp=Object.assign({},vw);
-    delete cp.id;delete cp.top;delete cp.left;delete cp.icon;delete cp.size;delete cp.z_index;delete cp.group;
+    delete cp.id;delete cp.top;delete cp.left;delete cp.icon;delete cp.size;delete cp.z_index;delete cp.group;delete cp.vacuums;
     const ys=Object.keys(cp).length?_yaml.s(cp):'';
     const op=this._openPanels&&this._openPanels.has('vw-'+i);
     let h='<details style="margin-bottom:6px;" data-panel="vw-'+i+'"'+(op?' open':'')+' >';
@@ -4970,8 +4975,22 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Top</label><input data-vw-top="'+i+'" type="text" value="'+this._e(vw.top||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Left</label><input data-vw-left="'+i+'" type="text" value="'+this._e(vw.left||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
-    h+='<div><label class="roc-l">vacuums / tap_action / hold_action / double_tap_action / visible / fade / slide / portrait / landscape overrides (YAML)</label><textarea data-vw-yaml="'+i+'" rows="8"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
-    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Example: <code>vacuums:</code> list of <code>- entity: sensor.xyz_status</code>, plus <code>tap_action: {action: navigate, navigation_path: /...}</code>. Add a <code>portrait:</code> (or <code>landscape:</code>) block with its own size/top/left to override this widget on the phone layout.</p>';
+    const vacs=vw.vacuums||[];
+    h+='<div style="margin-bottom:8px;">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+    h+='<label style="font-size:12px;font-weight:500;">Vacuums — status sensors (<code>sensor.*_status</code>, not <code>vacuum.*</code>)</label>';
+    h+='<button data-add-vwv="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Entity</button>';
+    h+='</div>';
+    for(let j=0;j<vacs.length;j++){
+      h+='<div style="display:grid;grid-template-columns:1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';
+      h+='<input type="text" list="roc-entities" data-vw-vac="'+i+'-'+j+'" placeholder="sensor.xyz_status" value="'+this._e(vacs[j].entity||'')+'"'+this._inp('')+'>';
+      h+='<button data-rm-vwv="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
+      h+='</div>';
+    }
+    if(!vacs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No vacuums yet — add each vacuum\'s status sensor (device_class: enum — values like cleaning/segment_mopping/error…).</p>';
+    h+='</div>';
+    h+='<div><label class="roc-l">tap_action / hold_action / double_tap_action / visible / fade / slide / portrait / landscape overrides (YAML)</label><textarea data-vw-yaml="'+i+'" rows="7"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Example: <code>tap_action: {action: navigate, navigation_path: /...}</code>. Add a <code>portrait:</code> (or <code>landscape:</code>) block with its own size/top/left to override this widget on the phone layout.</p>';
     h+='<div style="margin-top:8px;"><label class="roc-l">Group (optional)</label><input data-vw-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(vw.group||'')+'"'+this._inp('')+'></div>';
     h+=this._mvBtns('vw',i);
     h+='<button data-dup-vw="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
@@ -6194,6 +6213,33 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this.querySelectorAll('[data-vw-id],[data-vw-icon],[data-vw-size],[data-vw-z],[data-vw-top],[data-vw-left],[data-vw-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
+    });
+    this.querySelectorAll('[data-add-vwv]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.addVwv);
+        const c=self._collectConfig();
+        const vwArr=A(c,'vacuum_widgets');
+        if(!vwArr[i])return;
+        if(!vwArr[i].vacuums)vwArr[i].vacuums=[];
+        vwArr[i].vacuums.push({entity:''});
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-rm-vwv]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const parts=btn.dataset.rmVwv.split('-');
+        const i=parseInt(parts[0]),j=parseInt(parts[1]);
+        const c=self._collectConfig();
+        const vwArr=A(c,'vacuum_widgets');
+        if(vwArr[i]&&vwArr[i].vacuums){
+          vwArr[i].vacuums.splice(j,1);
+          if(!vwArr[i].vacuums.length)delete vwArr[i].vacuums;
+        }
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-vw-vac]').forEach(function(el){
+      el.addEventListener('change',fire);el.addEventListener('input',function(){self._fireDebounced();});
     });
 
     // Labels

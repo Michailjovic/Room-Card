@@ -752,15 +752,31 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
     t('editor vacuum widget size field prefilled',edVw.querySelector('[data-vw-size="0"]').value==='50px');
     t('editor vacuum widget top/left fields prefilled',edVw.querySelector('[data-vw-top="0"]').value==='80%'&&edVw.querySelector('[data-vw-left="0"]').value==='5%');
     const vwYamlBox=edVw.querySelector('[data-vw-yaml="0"]');
-    t('editor vacuum widget YAML box carries vacuums/tap_action, not the dedicated fields',/vacuums:/.test(vwYamlBox.value)&&/tap_action:/.test(vwYamlBox.value)&&!/^id:/m.test(vwYamlBox.value));
+    t('editor vacuum widget YAML box carries tap_action but not vacuums/id (those have dedicated fields)',/tap_action:/.test(vwYamlBox.value)&&!/vacuums:/.test(vwYamlBox.value)&&!/^id:/m.test(vwYamlBox.value));
+    t('editor renders a dedicated entity row for the configured vacuum',!!edVw.querySelector('[data-vw-vac="0-0"]')&&edVw.querySelector('[data-vw-vac="0-0"]').value==='sensor.a_status');
 
-    // round-trip through _collectConfig(): dedicated fields + YAML box together
+    // round-trip through _collectConfig(): dedicated fields + entity rows + YAML box together
     edVw.querySelector('[data-vw-id="0"]').value='vac_renamed';
     edVw.querySelector('[data-vw-size="0"]').value='60px';
     const collectedVw=edVw._collectConfig().vacuum_widgets[0];
     t('collectConfig round-trips renamed id + edited size',collectedVw.id==='vac_renamed'&&collectedVw.size==='60px');
-    t('collectConfig keeps vacuums/tap_action from the YAML box',Array.isArray(collectedVw.vacuums)&&collectedVw.vacuums[0].entity==='sensor.a_status'&&!!collectedVw.tap_action&&collectedVw.tap_action.action==='navigate');
+    t('collectConfig keeps vacuums from the dedicated entity rows',Array.isArray(collectedVw.vacuums)&&collectedVw.vacuums[0].entity==='sensor.a_status');
+    t('collectConfig keeps tap_action from the YAML box',!!collectedVw.tap_action&&collectedVw.tap_action.action==='navigate');
     t('collectConfig keeps group from its dedicated field',collectedVw.group==='g1');
+
+    // + Entity / remove-entity row buttons
+    const addVwvBtn=edVw.querySelector('[data-add-vwv="0"]');
+    t('Add vacuum-entity button present',!!addVwvBtn);
+    let outAddVwv=null;
+    edVw.addEventListener('config-changed',e=>{outAddVwv=e.detail.config;});
+    addVwvBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Add vacuum-entity appends a second (empty) entity row',!!outAddVwv&&outAddVwv.vacuum_widgets[0].vacuums.length===2);
+    const rmVwvBtn=edVw.querySelector('[data-rm-vwv="0-1"]');
+    t('Remove vacuum-entity button present for the new row',!!rmVwvBtn);
+    let outRmVwv=null;
+    edVw.addEventListener('config-changed',e=>{outRmVwv=e.detail.config;});
+    rmVwvBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Remove vacuum-entity restores the list to one entity',!!outRmVwv&&outRmVwv.vacuum_widgets[0].vacuums.length===1);
 
     // Add button creates a new, uniquely-defaulted entry
     let outAddVw=null;

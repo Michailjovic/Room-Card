@@ -626,10 +626,24 @@ does.
 as `icons`/`badges`/`gauges`. It gives you dedicated fields for id/icon/size/z-index/top/left/group,
 and — with the editor's **Interactive preview** (`test_mode`) turned on — you can drag the widget
 directly on the room image to put it in any corner, exactly like icons and labels; the Top/Left
-fields update automatically. `vacuums`, `tap_action`, `hold_action`, `double_tap_action`, `visible`,
-`fade`/`slide` and the per-profile `portrait:`/`landscape:` overrides live in a single YAML box
-inside the panel rather than as individual fields — that combination is more naturally expressed as
-YAML than as a form.
+fields update automatically. `vacuums` is its own repeatable list — an entity row (with the usual
+entity autocomplete) per vacuum, with a "+ Entity" button to add more, same pattern as a label's
+colour-gradient stops. `tap_action`, `hold_action`, `double_tap_action`, `visible`, `fade`/`slide`
+and the per-profile `portrait:`/`landscape:` overrides live in a single YAML box inside the panel
+rather than as individual fields — that combination is more naturally expressed as YAML than as a
+form.
+
+**Global vs. per-room, in the GUI.** The "global default" behaviour described above (define once,
+every room uses it unless it overrides) only exists when this *one card* manages multiple rooms via
+its own `rooms:` list (see the multi-room section) — top-level `vacuum_widgets` is then the shared
+default and the editor's Room picker in the header switches which room's *override* you're editing.
+If you instead run a **separate `room-overlay-card` per room** (one YAML block per room's own card —
+the common pattern, e.g. one card for the bedroom, one for the kitchen), there is no single editor
+session spanning all of them, so no field can be "the global one": each card's panel edits only that
+card's own config. Getting the same vacuum widget on every room's card then means building it once
+in any one card's panel and copying that entry's YAML into the other cards' `vacuum_widgets:` list —
+this card has no mechanism (and Home Assistant has none either) to share config live across separate
+card instances.
 
 ---
 
