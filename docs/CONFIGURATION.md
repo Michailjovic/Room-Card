@@ -620,8 +620,16 @@ An unrecognised future status string is treated as `active`, never silently as `
 
 This widget is intentionally left out of `nav.live: full`/`custom` mini thumbnails — it summarises
 *multiple* vacuums at once, which doesn't reduce to thumbnail scale the way a single-entity badge
-does. There's no dedicated GUI editor panel yet; configure it via YAML (it survives opening/saving
-the visual editor like any other config key).
+does.
+
+**GUI editor.** `vacuum_widgets` has its own panel (Elements tab → "Vacuum status widgets"), same
+as `icons`/`badges`/`gauges`. It gives you dedicated fields for id/icon/size/z-index/top/left/group,
+and — with the editor's **Interactive preview** (`test_mode`) turned on — you can drag the widget
+directly on the room image to put it in any corner, exactly like icons and labels; the Top/Left
+fields update automatically. `vacuums`, `tap_action`, `hold_action`, `double_tap_action`, `visible`,
+`fade`/`slide` and the per-profile `portrait:`/`landscape:` overrides live in a single YAML box
+inside the panel rather than as individual fields — that combination is more naturally expressed as
+YAML than as a form.
 
 ---
 

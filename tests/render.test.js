@@ -736,6 +736,93 @@ t('rocRowEnd parses spans',w.eval('rocRowEnd("3/6")')===6&&w.eval('rocRowEnd(2)'
   const _lyAfter=JSON.stringify((edLive._prevCard._config.layout||{}).landscape);
   t('...and the debounced update reaches _prevCard.setConfig() with the new rows',_lyBefore!==_lyAfter&&/20/.test(_lyAfter));
 
+  // --- vacuum widget: GUI editor (add/remove/duplicate, field round-trip, drag wiring) ---
+  {
+    const vwEdCfg={type:'custom:room-overlay-card',base_image:'/local/x.webp',test_mode:true,
+      vacuum_widgets:[{id:'vac1',icon:'mdi:robot-vacuum',size:'50px',top:'80%',left:'5%',z_index:9,group:'g1',
+        vacuums:[{entity:'sensor.a_status'}],
+        tap_action:{action:'navigate',navigation_path:'/dashboard-various/vacuum'}}]};
+    const edVw=w.document.createElement('room-overlay-card-editor');
+    w.document.body.appendChild(edVw);
+    edVw.setConfig(vwEdCfg);
+    edVw.hass={states:{},user:{name:'x'}};
+    edVw._render();
+    t('editor renders a vacuum widget panel',!!edVw.querySelector('[data-vw-id="0"]'));
+    t('editor vacuum widget id field prefilled',edVw.querySelector('[data-vw-id="0"]').value==='vac1');
+    t('editor vacuum widget size field prefilled',edVw.querySelector('[data-vw-size="0"]').value==='50px');
+    t('editor vacuum widget top/left fields prefilled',edVw.querySelector('[data-vw-top="0"]').value==='80%'&&edVw.querySelector('[data-vw-left="0"]').value==='5%');
+    const vwYamlBox=edVw.querySelector('[data-vw-yaml="0"]');
+    t('editor vacuum widget YAML box carries vacuums/tap_action, not the dedicated fields',/vacuums:/.test(vwYamlBox.value)&&/tap_action:/.test(vwYamlBox.value)&&!/^id:/m.test(vwYamlBox.value));
+
+    // round-trip through _collectConfig(): dedicated fields + YAML box together
+    edVw.querySelector('[data-vw-id="0"]').value='vac_renamed';
+    edVw.querySelector('[data-vw-size="0"]').value='60px';
+    const collectedVw=edVw._collectConfig().vacuum_widgets[0];
+    t('collectConfig round-trips renamed id + edited size',collectedVw.id==='vac_renamed'&&collectedVw.size==='60px');
+    t('collectConfig keeps vacuums/tap_action from the YAML box',Array.isArray(collectedVw.vacuums)&&collectedVw.vacuums[0].entity==='sensor.a_status'&&!!collectedVw.tap_action&&collectedVw.tap_action.action==='navigate');
+    t('collectConfig keeps group from its dedicated field',collectedVw.group==='g1');
+
+    // Add button creates a new, uniquely-defaulted entry
+    let outAddVw=null;
+    edVw.addEventListener('config-changed',e=>{outAddVw=e.detail.config;});
+    const addVwBtn=edVw.querySelector('#add-vw');
+    t('Add vacuum widget button present',!!addVwBtn);
+    addVwBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Add vacuum widget appends a second entry',!!outAddVw&&outAddVw.vacuum_widgets.length===2);
+
+    // Remove button removes the targeted entry (handler re-renders internally)
+    const rmVwBtn=edVw.querySelector('[data-rm-vw="1"]');
+    t('Remove vacuum widget button present for the new entry',!!rmVwBtn);
+    let outRmVw=null;
+    edVw.addEventListener('config-changed',e=>{outRmVw=e.detail.config;});
+    rmVwBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Remove vacuum widget restores the list to one entry',!!outRmVw&&outRmVw.vacuum_widgets.length===1);
+
+    // Duplicate button clones with an offset position and an _2 id suffix
+    const dupVwBtn=edVw.querySelector('[data-dup-vw="0"]');
+    t('Duplicate vacuum widget button present',!!dupVwBtn);
+    let outDupVw=null;
+    edVw.addEventListener('config-changed',e=>{outDupVw=e.detail.config;});
+    dupVwBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Duplicate vacuum widget appends a clone with _2 suffix',!!outDupVw&&outDupVw.vacuum_widgets.length===2&&outDupVw.vacuum_widgets[1].id.endsWith('_2'));
+  }
+
+  // --- vacuum widget: draggable in the editor's live (test_mode) preview, and the
+  // roc-pos-update relay updates the real config exactly like icons/labels/zones ---
+  {
+    const edVwDrag=w.document.createElement('room-overlay-card-editor');
+    w.document.body.appendChild(edVwDrag);
+    edVwDrag.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',test_mode:true,
+      vacuum_widgets:[{id:'vacd',top:'50%',left:'50%',vacuums:[]}]});
+    edVwDrag.hass={states:{},user:{name:'x'}};
+    edVwDrag._render();
+    const prevCard=edVwDrag._prevCard;
+    t('editor test-mode preview mounts a draggable vacuum widget element',
+      !!prevCard&&!!prevCard._vwEls&&!!prevCard._vwEls['vacd']&&prevCard._vwEls['vacd'].style.cursor==='grab');
+    const draggedCfg=JSON.parse(JSON.stringify(prevCard._config));
+    draggedCfg.vacuum_widgets[0].top='12.0%';draggedCfg.vacuum_widgets[0].left='34.0%';
+    w.dispatchEvent(new w.CustomEvent('roc-pos-update',{detail:{config:draggedCfg}}));
+    t('dragging the vacuum widget in the preview relays the new position into the real config',
+      edVwDrag._config.vacuum_widgets[0].top==='12.0%'&&edVwDrag._config.vacuum_widgets[0].left==='34.0%');
+  }
+
+  // --- editor setConfig() "same" fast-path must not ignore vacuum_widgets count changes
+  // (would otherwise leave the panel showing a stale item count/list after an
+  // external YAML edit that only touches vacuum_widgets) ---
+  {
+    const edVwSame=w.document.createElement('room-overlay-card-editor');
+    w.document.body.appendChild(edVwSame);
+    const baseVwCfg={type:'custom:room-overlay-card',base_image:'/local/x.webp',vacuum_widgets:[{id:'only',vacuums:[]}]};
+    edVwSame.setConfig(baseVwCfg);
+    edVwSame.hass={states:{},user:{name:'x'}};
+    edVwSame._render();
+    const grownVwCfg=JSON.parse(JSON.stringify(baseVwCfg));
+    grownVwCfg.vacuum_widgets.push({id:'second',vacuums:[]});
+    edVwSame.setConfig(grownVwCfg);
+    t('setConfig refreshes the panel when only vacuum_widgets grew (same-check is not blind to it)',
+      !!edVwSame.querySelector('[data-vw-id="1"]'));
+  }
+
 
 // --- vacuum status widget: classification, aggregation, mini exclusion ---
 const mkVW=(cfg,states)=>{

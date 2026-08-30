@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.4.0] - 2026-08-30
+
+### `vacuum_widgets` GUI editor panel + drag-to-position
+
+`vacuum_widgets` gets a proper editor panel, closing the last gap between it and the other visual
+primitives (`icons`/`badges`/`gauges`/`labels`):
+
+- New "Vacuum status widgets" section in the editor's Elements tab, with fields for id, icon
+  (with live preview), size, z-index, top/left, and group.
+- With the editor's Interactive preview (`test_mode`) on, the widget can be dragged directly on the
+  room image to place it anywhere — including any corner — the same way icons/labels/zones already
+  work; the panel's Top/Left fields update to match.
+- Add / duplicate / remove / reorder (▲▼) buttons, matching every other element list.
+- `vacuums`, `tap_action`, `hold_action`, `double_tap_action`, `visible`, `fade`/`slide` and the
+  per-profile `portrait:`/`landscape:` overrides (added in 6.3.0) are edited as one YAML block
+  inside the panel — that combination doesn't reduce to a clean form the way a handful of scalar
+  fields does, and the project's HA-power-user audience is already comfortable with the YAML side.
+- Fixed a latent bug found while wiring this up: the editor's `setConfig()` fast-path (which skips
+  a full re-render when nothing "elementful" changed) never counted `vacuum_widgets` — an external
+  YAML edit that only added/removed a vacuum widget could leave the open panel showing a stale
+  count/list until some other array also changed size.
+
+No behaviour change for existing YAML-only configs — this is purely an additive editor surface.
+
 ## [6.3.0] - 2026-08-30
 
 ### Redesigned `vacuum_widgets` look, and per-profile sizing

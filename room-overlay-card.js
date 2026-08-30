@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.3.0';
+const ROC_VERSION='6.4.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -206,7 +206,7 @@ function tintFilter(rgb){
 // ---- v3 → v4 auto-migration ---------------------------------------------------
 // Configs without a layout: block are converted in memory on load (clean cut —
 // the 4-tier engine is gone). The editor offers saving the migrated config.
-const ROC_ELEMENT_KEYS=['overlays','zones','badges','elements','icons','labels','gauges','blinds','groups'];
+const ROC_ELEMENT_KEYS=['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','blinds','groups'];
 function rocMigScalar(v){
   if(v==null||typeof v!=='object'||Array.isArray(v))return v;
   if(v.portrait!=null||v.landscape!=null)return v;
@@ -826,7 +826,7 @@ class RoomOverlayCard extends HTMLElement{
     const _badId=/[^A-Za-z0-9_-]/;
     outer:for(const r of(hasRooms?cfg.rooms:[cfg])){
       if(!r)continue;
-      for(const k of['overlays','zones','badges','icons','labels','gauges','blinds','elements','groups']){
+      for(const k of['overlays','zones','badges','icons','labels','gauges','vacuum_widgets','blinds','elements','groups']){
         for(const it of(r[k]||[])){
           if(it&&it.id!=null&&_badId.test(String(it.id))){
             console.warn('[room-overlay-card] element id "'+it.id+'" contains characters outside A-Za-z0-9_- — rendering/selection may misbehave');
@@ -2267,6 +2267,15 @@ class RoomOverlayCard extends HTMLElement{
           _dpFire(nc);this._update();
         });
       }
+      for(const vw of(c.vacuum_widgets||[])){
+        const el=this._vwEls[vw.id];if(!el)continue;
+        el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=rocClone(this._config);
+          const vc=this._roomArr(nc,'vacuum_widgets').find(x=>x.id===vw.id);if(vc){vc.top=top;vc.left=left;}
+          _dpFire(nc);this._update();
+        });
+      }
       for(const lbl of(c.labels||[])){
         const el=this._lblEls[lbl.id];if(!el)continue;
         el.style.pointerEvents='auto';el.style.cursor='grab';
@@ -2329,7 +2338,7 @@ class RoomOverlayCard extends HTMLElement{
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
           const nc=rocClone(this._config);
-          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):null;
+          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):type==='vacuum_widget'?this._roomArr(nc,'vacuum_widgets'):null;
           const item=(arr||[]).find(x=>x.id===id);
           if(item){item.top=el.style.top;item.left=el.style.left;}
           _dpFire(nc);
@@ -2345,6 +2354,10 @@ class RoomOverlayCard extends HTMLElement{
       for(const ico of(c.icons||[])){
         const el=this._icoEls[ico.id];if(!el)continue;
         el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'icon',ico.id);},true);
+      }
+      for(const vw of(c.vacuum_widgets||[])){
+        const el=this._vwEls[vw.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'vacuum_widget',vw.id);},true);
       }
       for(const lbl of(c.labels||[])){
         const el=this._lblEls[lbl.id];if(!el)continue;
@@ -2468,7 +2481,7 @@ class RoomOverlayCard extends HTMLElement{
     this._hlHandler=function(e){
       const d=e.detail||{};
       if(d.key!==cfgKey(hlSelf._config))return;
-      const pre={zone:'[data-z="',icon:'[data-ico="',label:'[data-lbl="',gauge:'[data-gauge="',badge:'[data-b="',element:'[data-el="',overlay:'[data-ov="'}[d.kind];
+      const pre={zone:'[data-z="',icon:'[data-ico="',label:'[data-lbl="',gauge:'[data-gauge="',badge:'[data-b="',element:'[data-el="',overlay:'[data-ov="',vacuum_widget:'[data-vw="'}[d.kind];
       if(!pre)return;
       const el=hlSelf.shadowRoot.querySelector(pre+escSel(d.id)+'"]');
       if(!el)return;
@@ -2496,7 +2509,7 @@ class RoomOverlayCard extends HTMLElement{
 
   _snapCandidates(){
     const c=this._config,tops=[],lefts=[];
-    ['zones','icons','labels','gauges','blinds','elements'].forEach(function(k){
+    ['zones','icons','labels','gauges','vacuum_widgets','blinds','elements'].forEach(function(k){
       (c[k]||[]).forEach(function(it){
         const t=parseFloat(it.top),l=parseFloat(it.left);
         if(!isNaN(t))tops.push(t);
@@ -4046,6 +4059,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         (pR.filter_conditions||[]).length===(cR.filter_conditions||[]).length&&
         (pR.labels||[]).length===(cR.labels||[]).length&&
         (pR.gauges||[]).length===(cR.gauges||[]).length&&
+        (pR.vacuum_widgets||[]).length===(cR.vacuum_widgets||[]).length&&
         (pR.blinds||[]).length===(cR.blinds||[]).length&&
         ((pR.brightness_model?.source||[]).length===(cR.brightness_model?.source||[]).length)&&
         ((pR.brightness_model?.filter_gradient||[]).length===(cR.brightness_model?.filter_gradient||[]).length)&&
@@ -4476,6 +4490,25 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
 
 
+    tgt.vacuum_widgets=(tgt.vacuum_widgets||[]).map(function(vw,i){
+      const o=Object.assign({},vw);
+      const idEl=q('[data-vw-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const iconEl=q('[data-vw-icon="'+i+'"]');if(iconEl){if(iconEl.value.trim())o.icon=iconEl.value.trim();else delete o.icon;}
+      const sizeEl=q('[data-vw-size="'+i+'"]');if(sizeEl){const _sz=sizeEl.value.trim();if(_sz&&_sz!=='44px')o.size=_sz;else delete o.size;}
+      const zEl=q('[data-vw-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value);
+      const topEl=q('[data-vw-top="'+i+'"]');if(topEl)o.top=topEl.value;
+      const lefEl=q('[data-vw-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
+      const vwGrpEl=q('[data-vw-grp="'+i+'"]');if(vwGrpEl&&vwGrpEl.value.trim())o.group=vwGrpEl.value.trim();else delete o.group;
+      const yaR=self._pYaml(q('[data-vw-yaml="'+i+'"]'));
+      if(yaR.ok){
+        const KEEP=['id','icon','size','z_index','top','left','group'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
+      return o;
+    });
+
+
     tgt.labels=(tgt.labels||[]).map(function(lbl,i){
       const o=Object.assign({},lbl);
       const idEl=q('[data-lbl-id="'+i+'"]');if(idEl)o.id=idEl.value;
@@ -4660,7 +4693,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     }
 
     // Prune empty per-room arrays — keeps saved YAML minimal
-    ['overlays','zones','badges','elements','icons','labels','gauges','blinds','groups','filter_conditions'].forEach(function(k){
+    ['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','blinds','groups','filter_conditions'].forEach(function(k){
       if(Array.isArray(tgt[k])&&!tgt[k].length)delete tgt[k];
     });
 
@@ -4914,6 +4947,35 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+=this._mvBtns('ico',i);
     h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
+    h+='</div></details>';
+    return h;
+  }
+
+  _vwItem(vw,i){
+    const cp=Object.assign({},vw);
+    delete cp.id;delete cp.top;delete cp.left;delete cp.icon;delete cp.size;delete cp.z_index;delete cp.group;
+    const ys=Object.keys(cp).length?_yaml.s(cp):'';
+    const op=this._openPanels&&this._openPanels.has('vw-'+i);
+    let h='<details style="margin-bottom:6px;" data-panel="vw-'+i+'"'+(op?' open':'')+' >';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Vacuum widget: '+this._e(vw.id||'vac_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">Informational only — tap runs tap_action below, it does not control the vacuum. Drag the widget on the preview above to place it in any corner; Top/Left update automatically.</p>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">ID</label><input data-vw-id="'+i+'" type="text" value="'+this._e(vw.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon (mdi:...)</label><div style="display:flex;gap:6px;align-items:center;"><ha-icon data-roc-prev icon="'+this._e(vw.icon||'mdi:robot-vacuum')+'" style="--mdc-icon-size:20px;flex:none;color:var(--primary-text-color);"></ha-icon><input data-vw-icon="'+i+'" type="text" placeholder="mdi:robot-vacuum" value="'+this._e(vw.icon||'')+'"'+this._inp('')+'></div></div>';
+    h+='<div><label class="roc-l">Size (px or %)</label><input data-vw-size="'+i+'" type="text" placeholder="44px" value="'+this._e(vw.size||'44px')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">z-index</label><input data-vw-z="'+i+'" type="number" value="'+this._e(String(vw.z_index||7))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Top</label><input data-vw-top="'+i+'" type="text" value="'+this._e(vw.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Left</label><input data-vw-left="'+i+'" type="text" value="'+this._e(vw.left||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div><label class="roc-l">vacuums / tap_action / hold_action / double_tap_action / visible / fade / slide / portrait / landscape overrides (YAML)</label><textarea data-vw-yaml="'+i+'" rows="8"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Example: <code>vacuums:</code> list of <code>- entity: sensor.xyz_status</code>, plus <code>tap_action: {action: navigate, navigation_path: /...}</code>. Add a <code>portrait:</code> (or <code>landscape:</code>) block with its own size/top/left to override this widget on the phone layout.</p>';
+    h+='<div style="margin-top:8px;"><label class="roc-l">Group (optional)</label><input data-vw-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(vw.group||'')+'"'+this._inp('')+'></div>';
+    h+=this._mvBtns('vw',i);
+    h+='<button data-dup-vw="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
+    h+='<button data-rm-vw="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove widget</button>';
     h+='</div></details>';
     return h;
   }
@@ -5225,6 +5287,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     (cR.icons||[]).forEach(function(ico,i){icoInner+=self._icoItem(ico,i);});
     icoInner+='</div><button id="add-ico" style="'+btnStyle+'margin-top:4px;">+ Add icon</button>';
 
+    let vwInner='<div id="vw-list">';
+    (cR.vacuum_widgets||[]).forEach(function(vw,i){vwInner+=self._vwItem(vw,i);});
+    vwInner+='</div><button id="add-vw" style="'+btnStyle+'margin-top:4px;">+ Add vacuum widget</button>';
+
     let lblInner='<div id="lbl-list">';
     (cR.labels||[]).forEach(function(lbl,i){lblInner+=self._lblItem(lbl,i);});
     lblInner+='</div><button id="add-lbl" style="'+btnStyle+'margin-top:4px;">+ Add label</button>';
@@ -5356,7 +5422,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     // ---- First-run onboarding + tabbed editor (v1.14.1) ---------------------
     const _nArr=function(k){return Array.isArray(cR[k])?cR[k].length:0;};
     const _realImg=cR.base_image&&cR.base_image!=='/local/room.webp';
-    const _isEmpty=!hasRooms&&!_realImg&&!cR.base_camera&&(_nArr('zones')+_nArr('icons')+_nArr('labels')+_nArr('badges')+_nArr('gauges')+_nArr('blinds')+_nArr('elements')+_nArr('overlays'))===0;
+    const _isEmpty=!hasRooms&&!_realImg&&!cR.base_camera&&(_nArr('zones')+_nArr('icons')+_nArr('labels')+_nArr('badges')+_nArr('gauges')+_nArr('blinds')+_nArr('elements')+_nArr('overlays')+_nArr('vacuum_widgets'))===0;
     const _onboardHtml=
       '<div style="padding:18px 14px;border:1px dashed var(--divider-color);border-radius:10px;text-align:center;">'
       +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">Build your room card</div>'
@@ -5522,6 +5588,7 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner,'mdi:format-text')
          +sec('lights','Light &amp; switch controls — sliders / toggles',_lcEnts.length,lcInner,'mdi:tune-vertical')
          +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner,'mdi:layers-outline')
+         +sec('vacuum_widgets','Vacuum status widgets — cross-room informational badge',(cR.vacuum_widgets||[]).length,vwInner,'mdi:robot-vacuum')
          +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner,'mdi:gesture-tap'))
       +_panel('responsive',respInner)
       +_panel('rooms',roomsInner);
@@ -5845,14 +5912,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     const redoBtn=this.querySelector('#roc-redo');
     if(redoBtn)redoBtn.addEventListener('click',function(){self._redo();});
     // Live icon previews
-    this.querySelectorAll('[data-ico-icon],[data-b-icon]').forEach(function(inp){
+    this.querySelectorAll('[data-ico-icon],[data-b-icon],[data-vw-icon]').forEach(function(inp){
       inp.addEventListener('input',function(){
         const prev=inp.parentElement&&inp.parentElement.querySelector('ha-icon[data-roc-prev]');
         if(prev)prev.setAttribute('icon',inp.value.trim());
       });
     });
     // Reorder (▲▼) — one generic handler for all item lists
-    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds'};
+    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds',vw:'vacuum_widgets'};
     this.querySelectorAll('[data-mv]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const p=btn.dataset.mv.split(':');
@@ -5873,11 +5940,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     // Editor → card highlight: opening an item panel flashes the element in the preview
-    const _hlKinds={ov:['overlays','overlay'],z:['zones','zone'],b:['badges','badge'],el:['elements','element'],ico:['icons','icon'],lbl:['labels','label'],g:['gauges','gauge'],bl:['blinds','gauge']};
+    const _hlKinds={ov:['overlays','overlay'],z:['zones','zone'],b:['badges','badge'],el:['elements','element'],ico:['icons','icon'],lbl:['labels','label'],g:['gauges','gauge'],bl:['blinds','gauge'],vw:['vacuum_widgets','vacuum_widget']};
     this.querySelectorAll('details[data-panel]').forEach(function(d){
       d.addEventListener('toggle',function(){
         if(!d.open)return;
-        const m=d.dataset.panel.match(/^(ov|z|b|el|ico|lbl|g|bl)-(\d+)$/);
+        const m=d.dataset.panel.match(/^(ov|z|b|el|ico|lbl|g|bl|vw)-(\d+)$/);
         if(!m)return;
         const k=_hlKinds[m[1]];
         const item=(self._roomView()[k[0]]||[])[parseInt(m[2])];
@@ -6101,6 +6168,34 @@ class RoomOverlayCardEditor extends HTMLElement{
       el.addEventListener('change',fire);
     });
 
+    // Vacuum widgets
+    const addVw=this.querySelector('#add-vw');
+    if(addVw)addVw.addEventListener('click',function(){
+      const c=self._collectConfig();
+      const vwA=A(c,'vacuum_widgets');
+      vwA.push({id:'vac_'+(vwA.length+1),icon:'mdi:robot-vacuum',top:'90%',left:'4%',size:'44px',vacuums:[]});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-vw]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmVw);
+        const c=self._collectConfig();
+        A(c,'vacuum_widgets').splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-dup-vw]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.dupVw),c=self._collectConfig();
+        const dA=A(c,'vacuum_widgets');if(!dA[i])return;
+        const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);
+        dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-vw-id],[data-vw-icon],[data-vw-size],[data-vw-z],[data-vw-top],[data-vw-left],[data-vw-yaml]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
     // Labels
     const addLbl=this.querySelector('#add-lbl');
     if(addLbl)addLbl.addEventListener('click',function(){
@@ -6259,7 +6354,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.querySelectorAll('[data-dup-z]').forEach(function(btn){btn.addEventListener('click',function(){const i=parseInt(btn.dataset.dupZ),c=self._collectConfig();const dA=A(c,'zones');if(!dA[i])return;const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);});});
 
     // Group fields on elements
-    this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-ico-grp],[data-lbl-grp],[data-g-grp],[data-bl-grp],[data-el-grp],[data-vw-grp]').forEach(function(el){el.addEventListener('change',fire);});
     // nav.live:custom "Show in mini" checkboxes (NAV_LIVE_FULL_PLAN.md §13) —
     // one shared list across every element type that has one, same pattern
     // as the Group fields just above.
