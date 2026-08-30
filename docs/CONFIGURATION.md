@@ -577,7 +577,7 @@ vacuum_widgets:
   - id: vac_status
     top: "90%"
     left: "4%"
-    size: 32px                      # optional, default 32px
+    size: 44px                      # optional, default 44px; accepts % of card width too
     icon: mdi:robot-vacuum          # optional, default mdi:robot-vacuum
     tap_action:
       action: navigate
@@ -586,7 +586,20 @@ vacuum_widgets:
       - entity: sensor.s6_kitchen_status
       - entity: sensor.s7_maxv_status
       - entity: sensor.s8_maxv_ultra_status
+    # Per-profile overrides (same mechanism as icons/labels/zones) — handy for
+    # bumping the widget up on the phone layout without touching the desktop one:
+    portrait:
+      size: 56px
+      top: "92%"
+      left: "6%"
 ```
+
+The widget renders as a frosted-glass disc (blurred glass centre, thin coloured accent ring, drop
+shadow for depth against the room photo) rather than a flat filled circle, with a tap-press
+scale-down for tactile feedback — matching the look already used for badges/hold-indicators
+elsewhere in this card. `size` supports the same per-profile overrides (`portrait`/`landscape`, or
+legacy `mobile`/`desktop`) as `icons`/`labels`, so a phone-specific size (and position) no longer
+requires a second, separately-configured widget.
 
 Each entry under `vacuums` needs a **status sensor** (`device_class: enum` — the `sensor.*_status`
 kind some Roborock/Xiaomi integrations expose, with values like `cleaning`, `segment_mopping`,
@@ -599,7 +612,7 @@ is classified per vacuum, then combined across the whole list into one result:
 | error | any vacuum reports `error`/`charging_problem` | red, blinking — overrides everything else |
 | dry | vacuum(s) actively vacuuming, none mopping | amber, spinning icon |
 | wet | vacuum(s) actively mopping, none vacuuming | blue, expanding ripple |
-| both | a combined vac+mop job, *or* different vacuums doing dry and wet at once | split amber/blue background |
+| both | a combined vac+mop job, *or* different vacuums doing dry and wet at once | split amber/blue accent ring |
 | active | something's happening with no confident dry/wet claim (docking, mapping, manual driving, the mop's own dock-side wash/dry cycle, …) | neutral glow |
 
 When 2+ configured vacuums are active at once, a small numeral badge appears in the icon's corner.

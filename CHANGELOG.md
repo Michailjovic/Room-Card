@@ -1,5 +1,30 @@
 # Changelog
 
+## [6.3.0] - 2026-08-30
+
+### Redesigned `vacuum_widgets` look, and per-profile sizing
+
+The widget was a flat filled circle, sized with a single fixed pixel value — too small on phones,
+and visually flat next to the room photo. Two changes:
+
+- **Per-profile overrides.** `vacuum_widgets` entries now go through the same `tApply()` mechanism
+  as `icons`/`labels`/`zones`, so `top`/`left`/`size` (or any other field) can be overridden per
+  layout profile (`portrait`/`landscape`, legacy `mobile`/`desktop`). This is the direct fix for the
+  widget reading too small on a phone: give it a bigger `size` (and adjusted position) under a
+  `portrait:` block without needing a second widget or a global size bump that then oversizes it on
+  desktop.
+- **New visual treatment.** The widget is now a frosted-glass disc — blurred glass centre, a thin
+  coloured accent ring for the active state (instead of a full solid fill), a drop shadow for depth
+  against the room photo, and a `:active` press-scale for tap feedback — matching the frosted-glass
+  chip look and hold-indicator depth-shadow already used elsewhere in this card (`badges`,
+  `roc-hold`). The "both" (simultaneous dry+wet) state is now a split amber/blue ring rather than a
+  split-fill background. Default `size` is bumped from `32px` to `44px`.
+- `size` now also accepts a `%` value (resolved against card width), same as `icons`/`labels`, and
+  responds live to card width changes without a full re-render.
+
+No config keys were renamed or removed — existing `vacuum_widgets` entries keep working unchanged
+and simply render with the new look at the new default size.
+
 ## [6.2.1] - 2026-08-30
 
 ### Fix: `vacuum_widgets` rest state was nearly invisible over a photo
