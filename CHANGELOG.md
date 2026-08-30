@@ -1,5 +1,38 @@
 # Changelog
 
+## [6.5.1] - 2026-08-30
+
+### Fix: vacuum widget could disappear while dragging it in edit mode
+
+Reported symptom: dragging the vacuum status widget while the card editor's Interactive preview
+(test mode) was open made the widget vanish; it only came back after toggling test mode off, on,
+and off again — i.e. after a full re-mount of the card.
+
+Root cause is almost certainly a browser GPU-compositing issue, not a logic bug: `.vw-bg::before`
+uses `backdrop-filter: blur(...)`, and its ancestor `.vw` also had `filter: drop-shadow(...)`.
+Stacking `backdrop-filter` under an ancestor `filter` is a known problematic combination for some
+browser engines' compositing — a JS-driven position change can leave the backdrop-filtered layer
+un-repainted until something forces a new compositing pass (which is exactly what toggling test
+mode does, by re-mounting the element). This would be most visible on constrained/embedded browser
+engines such as the WebView used by tablet-mounted Home Assistant dashboards.
+
+Applied fix:
+- Removed `filter: drop-shadow(...)` from `.vw`; its depth shadow is now `box-shadow` on `.vw-bg`
+  instead (`box-shadow` does not interact with `backdrop-filter` compositing the same way).
+- Added `transform: translateZ(0)` to `.vw` and to `.vw-bg::before` to force both onto their own,
+  stable compositing layer — the same technique this codebase already uses on `.layer.base`.
+- No visual change is intended; every per-state glow (`vw-dry`/`vw-wet`/`vw-both`/`vw-active`/
+  `vw-error`) keeps its color and glow, just combined with the depth shadow via `box-shadow` instead
+  of `filter`.
+
+Verified: reproduced the exact drag → relay → preview-remount code path directly (not just via the
+automated test suite) and confirmed no JS/DOM-level bug in the position-update logic itself — the
+new preview instance always receives and renders the correct position. I could not reproduce the
+disappearing behaviour itself outside a real browser (headless test DOM does not paint or composite
+CSS), so this fix is based on a well-known class of browser rendering bug that matches the reported
+symptoms, not a directly confirmed root cause. Please test on your actual dashboard/tablet and report
+back if the widget still disappears while dragging.
+
 ## [6.5.0] - 2026-08-30
 
 ### GUI editor: "🌐 Global (all rooms)" — edit the shared top-level defaults directly
