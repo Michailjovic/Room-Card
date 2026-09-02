@@ -1,5 +1,27 @@
 # Changelog
 
+## [6.5.5] - 2026-08-30
+
+### Vacuum widget: distinct motion for "wet" and "both", not just colour
+
+Following up on v6.5.4's dry-state fix: "wet" (mopping) had no icon motion at all, just a static
+blue disc plus a ripple-ring border, and "both" (vacuuming and mopping at once) had its disc-colour
+pulse but a static icon — user asked for the three states (dry / wet / both) to be clearly
+distinguishable at a glance, not just by colour.
+
+- **wet**: the icon now does a slow, smooth side-to-side glide (`roc-vac-mop`, 1.8s, no rotation) —
+  a deliberately different motion signature from dry's brisker wobble-scoot, reading as *mopping*
+  rather than *driving*. The existing ripple-ring cue on the disc is unchanged.
+- **both**: the icon now animates too (`roc-vac-duo-icon`, 2.4s), timed to the same amber/blue cycle
+  as the disc: it does the dry-style wobble during the amber phase and the wet-style glide during
+  the blue phase, so "both" visibly reads as dry-motion-then-wet-motion rather than a static third
+  state.
+- Verified the same way as v6.5.3/v6.5.4: a real headless-Chromium render of the actual production
+  CSS, with each element's Web Animations API paused and sampled across a full cycle to check the
+  motion (not just the keyframe CSS) before shipping.
+
+No config changes — animation-only, same as v6.5.4.
+
 ## [6.5.4] - 2026-08-30
 
 ### Vacuum widget: better motion cues for "dry" and "both" states
