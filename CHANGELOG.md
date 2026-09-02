@@ -1,5 +1,28 @@
 # Changelog
 
+## [6.5.4] - 2026-08-30
+
+### Vacuum widget: better motion cues for "dry" and "both" states
+
+Feedback on the v6.5.3 icon: the full 360° spin used for the "actively vacuuming" (dry) state
+suited the old, roughly circular mdi glyph, but on the new (non-circular) traced icon a full spin
+passes through an odd "coin-edge" look mid-rotation. Separately, the "both" state (vacuuming and
+mopping at once) used a static half-amber/half-blue split disc that wasn't easy to read as "both"
+at this widget's small size.
+
+- **dry**: replaced the spin with a quick side-to-side scoot — a small `translateX` + slight
+  rotation wobble (`roc-vac-drive`, 1.1s) — reading as *driving around* rather than *spinning in
+  place*, which fits a robot vacuum's actual motion better.
+- **both**: replaced the static conic-gradient split with an alternating amber/blue pulse
+  (`roc-vac-duo`, 2.4s: hold amber, quick crossfade, hold blue, quick crossfade back) on the disc
+  itself, so "both dry and wet are happening" reads clearly as a color the eye can follow instead of
+  a subtle static split. Dropped the separate icon-opacity pulse that no longer added anything once
+  the disc itself was animating.
+- Verified with the same real-Chromium screenshot approach as v6.5.3 (actual widget CSS, paused
+  Web Animations API to sample specific points in each cycle) rather than eyeballing the CSS alone.
+
+No config changes — this is animation-only.
+
 ## [6.5.3] - 2026-08-30
 
 ### Vacuum widget: a purpose-built default icon instead of `mdi:robot-vacuum`
