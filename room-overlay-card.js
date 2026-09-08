@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.6.1';
+const ROC_VERSION='6.7.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -272,6 +272,76 @@ function glowBg(g,rgb){
     return'radial-gradient(ellipse farthest-side at '+x+'% '+y+'%,'+stops+')';
   }
   return'radial-gradient('+(g.shape==='ellipse'?'ellipse':'circle')+' closest-side,'+stops+')';
+}
+// ---- Overlay transform engine (v6.7.0) ----------------------------------
+// Maps an entity onto a CSS transform, so an overlay PNG can swing, slide, tilt
+// or spin instead of only fading. One declarative block for every moving part
+// (door, window, garage, drawer, oven flap, fan) instead of a hand-written
+// renderer per thing, which is how blinds, the vacuum icon and glow each ended
+// up with their own animation code.
+const TF_SPIN_AXIS={z:'roc-tf-spin',x:'roc-tf-spin-x',y:'roc-tf-spin-y'};
+// 'perspective(800px) rotateY(-72deg)' -> [{fn:'perspective',args:['800px']},…]
+function tfSplit(str){
+  const out=[],re=/([a-zA-Z]+)\(([^)]*)\)/g;let m;
+  while((m=re.exec(String(str==null?'':str))))out.push({fn:m[1],args:m[2].split(',').map(function(a){return a.trim();})});
+  return out;
+}
+function tfLerpArg(a,b,t){
+  const ra=/^(-?[\d.]+)(.*)$/.exec(a||''),rb=/^(-?[\d.]+)(.*)$/.exec(b||'');
+  if(!ra||!rb)return t<0.5?a:b;
+  const unit=ra[2]||rb[2]||'';
+  const v=parseFloat(ra[1])+(parseFloat(rb[1])-parseFloat(ra[1]))*t;
+  return v.toFixed(3).replace(/\.?0+$/,'')+unit;
+}
+// Interpolates two transform strings argument by argument. Both sides must list
+// the same functions in the same order (rotateY→rotateY); anything else snaps
+// at the midpoint rather than producing a nonsense transform.
+function tfLerp(from,to,t){
+  const fa=tfSplit(from),ta=tfSplit(to);
+  if(!fa.length)return to;
+  if(!ta.length)return from;
+  if(fa.length!==ta.length)return t<0.5?from:to;
+  const out=[];
+  for(let i=0;i<fa.length;i++){
+    if(fa[i].fn!==ta[i].fn)return t<0.5?from:to;
+    const args=[],len=Math.max(fa[i].args.length,ta[i].args.length);
+    for(let j=0;j<len;j++)args.push(tfLerpArg(fa[i].args[j]===undefined?'0':fa[i].args[j],ta[i].args[j]===undefined?'0':ta[i].args[j],t));
+    out.push(fa[i].fn+'('+args.join(', ')+')');
+  }
+  return out.join(' ');
+}
+// -> {transform, animation} ('animation' is null unless this is a spin block,
+// so the overlay's own pulse/blink keeps its animation slot).
+function tfResolve(tf,st){
+  if(!tf)return null;
+  const persp=tf.perspective?('perspective('+tf.perspective+') '):'';
+  const off=!st||st.state==='off'||st.state==='unavailable'||st.state==='unknown';
+  const raw=st?(tf.attribute?(st.attributes?st.attributes[tf.attribute]:undefined):st.state):undefined;
+  if(tf.spin){
+    // The value drives SPEED, not a position: full scale = min_duration.
+    const sp=(tf.spin===true)?{}:tf.spin;
+    const num=Number(raw);
+    const lo=sp.min_value==null?0:Number(sp.min_value),hi=sp.max_value==null?100:Number(sp.max_value);
+    const frac=isNaN(num)?1:Math.max(0,Math.min(1,(num-lo)/((hi-lo)||1)));
+    const dmin=parseFloat(sp.min_duration==null?'0.35s':sp.min_duration)||0.35;
+    const dmax=parseFloat(sp.max_duration==null?'2.5s':sp.max_duration)||2.5;
+    const dur=dmax-(dmax-dmin)*frac;
+    const name=TF_SPIN_AXIS[sp.axis||'z']||TF_SPIN_AXIS.z;
+    return{transform:'',animation:(off||(!isNaN(num)&&frac<=0))?'none':(name+' '+dur.toFixed(2)+'s linear infinite'+(sp.reverse?' reverse':''))};
+  }
+  if(tf.from&&tf.to){
+    const num=Number(raw);
+    const v0=Number(tf.from.value==null?0:tf.from.value),v1=Number(tf.to.value==null?100:tf.to.value);
+    let t=isNaN(num)?0:(num-v0)/((v1-v0)||1);
+    t=Math.max(0,Math.min(1,t));
+    return{transform:persp+tfLerp(tf.from.transform||'none',tf.to.transform||'none',t),animation:null};
+  }
+  if(tf.map){
+    const key=raw==null?'':String(raw);
+    const val=(tf.map[key]!==undefined)?tf.map[key]:tf.map['*'];
+    return{transform:val?(persp+val):'none',animation:null};
+  }
+  return null;
 }
 // ---- v3 → v4 auto-migration ---------------------------------------------------
 // Configs without a layout: block are converted in memory on load (clean cut —
@@ -1744,7 +1814,15 @@ class RoomOverlayCard extends HTMLElement{
       window.addEventListener('hashchange',this._hashHandler);
     }
 
-    const ovHtml=(c.overlays||[]).map((ov,i)=>`<div class="layer ov" data-ov="${escA(ov.id)}" style="z-index:${ov.z_index??i+1};opacity:0;transition:opacity ${ov.transition??'2s ease'},filter ${ov.transition??'2s ease'};"></div>`).join('');
+    const ovHtml=(c.overlays||[]).map((ov,i)=>{
+      // transform-origin is where the hinge / axle sits ON THE IMAGE (the layer
+      // covers the whole stage, so it is a % of the photo, not of the PNG's
+      // visible pixels) — static config, so it belongs in the markup.
+      const _tf=ov.transform;
+      const _tfSt=_tf?('transform-origin:'+(_tf.origin||'50% 50%')+';will-change:transform;'+(_tf.perspective?'transform-style:preserve-3d;':'')):'';
+      const _tfTr=_tf?(',transform '+(_tf.transition||'0.8s ease')):'';
+      return'<div class="layer ov" data-ov="'+escA(ov.id)+'" style="z-index:'+(ov.z_index??i+1)+';opacity:0;'+_tfSt+'transition:opacity '+(ov.transition??'2s ease')+',filter '+(ov.transition??'2s ease')+_tfTr+';"></div>';
+    }).join('');
     const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+escA(b.id)+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
@@ -1889,7 +1967,7 @@ class RoomOverlayCard extends HTMLElement{
     // (NAV_LIVE_FULL_PLAN.md §6), same mechanism natural-portrait already uses.
     const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini||c._roc_preview)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -3547,6 +3625,15 @@ class RoomOverlayCard extends HTMLElement{
         }
       }
       setSt(el,'filter',_ovF);
+      if(ov.transform){
+        const _tfr=tfResolve(ov.transform,ov.transform.entity?s[ov.transform.entity]:null);
+        if(_tfr){
+          setSt(el,'transform',_tfr.transform||'');
+          // Only a spin block owns the animation slot; map/range modes leave the
+          // overlay's own pulse/blink alone.
+          if(ov.transform.spin)setSt(el,'animation',_tfr.animation==='none'?'none':_tfr.animation);
+        }
+      }
     }
     // Light glow -- colour from the light itself, strength from its brightness
     for(const g0 of(c.glows||[])){
@@ -4621,6 +4708,42 @@ class RoomOverlayCardEditor extends HTMLElement{
       const imgEl=q('[data-ov-img="'+i+'"]');if(imgEl){if(imgEl.value)o.image=imgEl.value;else delete o.image;}
       const trEl=q('[data-ov-tr="'+i+'"]');if(trEl)o.transition=trEl.value;const animOvEl=q('[data-ov-anim="'+i+'"]');if(animOvEl&&animOvEl.value)o.animation=animOvEl.value;else delete o.animation;
       const grpEl=q('[data-ov-grp="'+i+'"]');if(grpEl&&grpEl.value.trim())o.group=grpEl.value.trim();else delete o.group;
+      const tfModeEl=q('[data-ov-tf-mode="'+i+'"]');
+      if(tfModeEl){
+        const tfMode=tfModeEl.value;
+        if(!tfMode)delete o.transform;
+        else{
+          const gv=function(k){const e=q('[data-ov-tf-'+k+'="'+i+'"]');return e?String(e.value).trim():'';};
+          const tf={};
+          const _e1=gv('ent');if(_e1)tf.entity=_e1;
+          const _a1=gv('attr');if(_a1)tf.attribute=_a1;
+          const _o1=gv('origin');if(_o1)tf.origin=_o1;
+          const _t1=gv('tr');if(_t1)tf.transition=_t1;
+          const _p1=gv('persp');if(_p1)tf.perspective=_p1;
+          if(tfMode==='states'){
+            const mp={};
+            self.querySelectorAll('[data-ov-tfk]').forEach(function(kEl){
+              const parts=String(kEl.dataset.ovTfk).split('-');
+              if(parts[0]!==String(i))return;
+              const vEl=self.querySelector('[data-ov-tfv="'+kEl.dataset.ovTfk+'"]');
+              const k=kEl.value.trim();
+              if(k&&vEl&&vEl.value.trim())mp[k]=vEl.value.trim();
+            });
+            if(Object.keys(mp).length)tf.map=mp;
+          }else if(tfMode==='range'){
+            tf.from={value:Number(gv('fv')||0),transform:gv('ft')||'none'};
+            tf.to={value:Number(gv('tv')||100),transform:gv('tt')||'none'};
+          }else if(tfMode==='spin'){
+            const sp={};
+            const _s1=gv('smin');if(_s1)sp.min_duration=_s1;
+            const _s2=gv('smax');if(_s2)sp.max_duration=_s2;
+            const _s3=gv('saxis');if(_s3&&_s3!=='z')sp.axis=_s3;
+            const _s4=q('[data-ov-tf-srev="'+i+'"]');if(_s4&&_s4.checked)sp.reverse=true;
+            tf.spin=sp;
+          }
+          o.transform=tf;
+        }
+      }
       const yaR=self._pYaml(q('[data-ov-yaml="'+i+'"]'));
       if(yaR.ok){
         const p=yaR.val;
@@ -5057,9 +5180,73 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</select></div></div>';
     h+='<div><label class="roc-l">Conditions YAML (opacity / filter / state_images)</label>';
     h+='<textarea data-ov-yaml="'+i+'" rows="5"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(condYaml)+'</textarea></div>';
+    h+=this._ovTransform(ov,i);
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-ov-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ov.group||'')+'"'+this._inp('')+'></div>';
     h+=this._mvBtns('ov',i);
     h+='<button data-rm-ov="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove overlay</button>';
+    h+='</div></details>';
+    return h;
+  }
+
+  // Transform block inside an overlay panel — the movement engine's GUI.
+  _ovTransform(ov,i){
+    const tf=ov.transform||{};
+    const mode=ov.transform?(tf.spin?'spin':((tf.from&&tf.to)?'range':(tf.map?'states':''))):'';
+    const open=this._openPanels&&this._openPanels.has('ovtf-'+i);
+    const pane=function(m){return'style="'+(mode===m?'':'display:none;')+'"';};
+    let h='<details style="margin:8px 0;" data-panel="ovtf-'+i+'"'+(open?' open':'')+'>';
+    h+='<summary style="cursor:pointer;padding:6px 8px;background:var(--secondary-background-color);border-radius:6px;font-size:12px;font-weight:500;list-style:none;">&#9654; Transform &mdash; make this layer move'+(mode?' <span style="opacity:0.7;">('+mode+')</span>':'')+'</summary>';
+    h+='<div style="padding:8px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">Moves this overlay by an entity\'s state instead of only fading it &mdash; a door swinging on its hinge, a garage door sliding up, a fan spinning. Needs a PNG of just the moving part.</p>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Mode</label><select data-ov-tf-mode="'+i+'"'+this._inp('')+'>';
+    [['','none'],['states','states → transform'],['range','numeric range'],['spin','continuous spin']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+(mode===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Entity</label><input data-ov-tf-ent="'+i+'" type="text" list="roc-entities" placeholder="cover.garage" value="'+this._e(tf.entity||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Attribute (blank = state)</label><input data-ov-tf-attr="'+i+'" type="text" placeholder="current_position" value="'+this._e(tf.attribute||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Origin — hinge/axle on the photo</label><input data-ov-tf-origin="'+i+'" type="text" placeholder="50% 50%" value="'+this._e(tf.origin||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div data-ov-tfpane="'+i+'-states" '+pane('states')+'>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+    h+='<label style="font-size:12px;font-weight:500;">State &rarr; transform</label>';
+    h+='<button type="button" data-add-tfm="'+i+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ State</button>';
+    h+='</div>';
+    const keys=Object.keys(tf.map||{});
+    keys.forEach(function(k,j){
+      h+='<div style="display:grid;grid-template-columns:130px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';
+      h+='<input type="text" data-ov-tfk="'+i+'-'+j+'" placeholder="on / * " value="'+escA(k)+'" class="roc-in">';
+      h+='<input type="text" data-ov-tfv="'+i+'-'+j+'" placeholder="rotateY(-72deg)" value="'+escA(tf.map[k])+'" class="roc-in">';
+      h+='<button type="button" data-rm-tfm="'+i+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
+      h+='</div>';
+    });
+    if(!keys.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">No states yet. <code>*</code> matches anything not listed.</p>';
+    h+='</div>';
+    const fr=tf.from||{},to=tf.to||{};
+    h+='<div data-ov-tfpane="'+i+'-range" '+pane('range')+'>';
+    h+='<div style="display:grid;grid-template-columns:80px 1fr;gap:8px;margin-bottom:6px;align-items:end;">';
+    h+='<div><label class="roc-l">From value</label><input data-ov-tf-fv="'+i+'" type="number" placeholder="0" value="'+this._e(fr.value==null?'':String(fr.value))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">… transform</label><input data-ov-tf-ft="'+i+'" type="text" placeholder="translateY(0%)" value="'+this._e(fr.transform||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">To value</label><input data-ov-tf-tv="'+i+'" type="number" placeholder="100" value="'+this._e(to.value==null?'':String(to.value))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">… transform</label><input data-ov-tf-tt="'+i+'" type="text" placeholder="translateY(-92%)" value="'+this._e(to.transform||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">Both sides must use the same functions in the same order &mdash; the numbers in between are interpolated.</p>';
+    h+='</div>';
+    const sp=(tf.spin===true?{}:(tf.spin||{}));
+    h+='<div data-ov-tfpane="'+i+'-spin" '+pane('spin')+'>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';
+    h+='<div><label class="roc-l">Fastest (at max)</label><input data-ov-tf-smin="'+i+'" type="text" placeholder="0.35s" value="'+this._e(sp.min_duration||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Slowest (just on)</label><input data-ov-tf-smax="'+i+'" type="text" placeholder="2.5s" value="'+this._e(sp.max_duration||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Axis</label><select data-ov-tf-saxis="'+i+'"'+this._inp('')+'>';
+    [['z','flat (seen from the front)'],['x','tilted — X'],['y','tilted — Y']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+((sp.axis||'z')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Direction</label><label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:6px;"><input type="checkbox" data-ov-tf-srev="'+i+'"'+(sp.reverse?' checked':'')+' style="width:15px;height:15px;">reverse</label></div>';
+    h+='</div></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">';
+    h+='<div><label class="roc-l">Movement transition</label><input data-ov-tf-tr="'+i+'" type="text" placeholder="0.8s ease" value="'+this._e(tf.transition||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Perspective (3D depth)</label><input data-ov-tf-persp="'+i+'" type="text" placeholder="900px — for rotateX/Y" value="'+this._e(tf.perspective||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
     h+='</div></details>';
     return h;
   }
@@ -6553,6 +6740,46 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
       el.addEventListener('change',fire);
+    });
+
+    // Overlay transform engine
+    this.querySelectorAll('[data-ov-tf-mode]').forEach(function(sel){
+      sel.addEventListener('change',function(){
+        const i=sel.dataset.ovTfMode;
+        ['states','range','spin'].forEach(function(m){
+          const p=self.querySelector('[data-ov-tfpane="'+i+'-'+m+'"]');
+          if(p)p.style.display=(sel.value===m)?'':'none';
+        });
+        fire();
+      });
+    });
+    this.querySelectorAll('[data-ov-tf-ent],[data-ov-tf-attr],[data-ov-tf-origin],[data-ov-tf-tr],[data-ov-tf-persp],[data-ov-tf-fv],[data-ov-tf-ft],[data-ov-tf-tv],[data-ov-tf-tt],[data-ov-tf-smin],[data-ov-tf-smax],[data-ov-tf-saxis],[data-ov-tf-srev],[data-ov-tfk],[data-ov-tfv]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+    this.querySelectorAll('[data-add-tfm]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.addTfm);
+        const c=self._collectConfig();
+        const arr=A(c,'overlays');if(!arr[i])return;
+        const tf=arr[i].transform||(arr[i].transform={});
+        const mp=tf.map||(tf.map={});
+        let k='state',nx=2;while(mp[k]!==undefined)k='state_'+(nx++);
+        mp[k]='none';
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-rm-tfm]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=String(btn.dataset.rmTfm).split('-');
+        const i=parseInt(p[0]),j=parseInt(p[1]);
+        const c=self._collectConfig();
+        const arr=A(c,'overlays');
+        const tf=arr[i]&&arr[i].transform;if(!tf||!tf.map)return;
+        const k=Object.keys(tf.map)[j];if(k===undefined)return;
+        delete tf.map[k];
+        if(!Object.keys(tf.map).length)delete tf.map;
+        self._config=c;self._render();self._fire(c);
+      });
     });
 
     // Light glow

@@ -441,6 +441,59 @@ t('every falloff starts at the centre and fades to fully transparent',
     return /rgba\(1,2,3,[\d.]+\) 0%/.test(bg)&&/rgba\(1,2,3,0\) \d+%\)$/.test(bg);
   }));
 
+// ---- v6.7.0: overlay transform engine (tfSplit / tfLerp / tfResolve) --------
+t('tfSplit parses a transform chain',
+  JSON.stringify(g.tfSplit('perspective(800px) rotateY(-72deg)'))==='[{"fn":"perspective","args":["800px"]},{"fn":"rotateY","args":["-72deg"]}]');
+t('tfSplit of an empty/none value is empty',g.tfSplit('').length===0&&g.tfSplit(null).length===0);
+t('tfLerp interpolates the numbers and keeps the unit',
+  g.tfLerp('translateY(0%)','translateY(-92%)',0.5)==='translateY(-46%)');
+t('tfLerp at the ends returns the ends',
+  g.tfLerp('rotateY(0deg)','rotateY(-72deg)',0)==='rotateY(0deg)'&&
+  g.tfLerp('rotateY(0deg)','rotateY(-72deg)',1)==='rotateY(-72deg)');
+t('tfLerp handles multi-argument functions',
+  g.tfLerp('translate(0px, 0px)','translate(10px, 20px)',0.5)==='translate(5px, 10px)');
+t('tfLerp snaps at the midpoint when the two sides are not the same functions',
+  g.tfLerp('rotateY(0deg)','translateY(9%)',0.4)==='rotateY(0deg)'&&
+  g.tfLerp('rotateY(0deg)','translateY(9%)',0.6)==='translateY(9%)');
+t('tfResolve state map picks the matching state',
+  g.tfResolve({map:{'off':'rotateY(0deg)','on':'rotateY(-72deg)'}},{state:'on',attributes:{}}).transform==='rotateY(-72deg)');
+t('tfResolve state map falls back to the * entry',
+  g.tfResolve({map:{'on':'rotateY(-72deg)','*':'none'}},{state:'weird',attributes:{}}).transform==='none');
+t('tfResolve state map with no match and no * is none',
+  g.tfResolve({map:{'on':'rotateY(-72deg)'}},{state:'off',attributes:{}}).transform==='none');
+t('tfResolve prepends perspective',
+  /^perspective\(900px\) rotateY/.test(g.tfResolve({perspective:'900px',map:{'on':'rotateY(-72deg)'}},{state:'on',attributes:{}}).transform));
+t('tfResolve range interpolates a numeric attribute',
+  g.tfResolve({attribute:'current_position',from:{value:0,transform:'translateY(0%)'},to:{value:100,transform:'translateY(-92%)'}},
+    {state:'open',attributes:{current_position:50}}).transform==='translateY(-46%)');
+t('tfResolve range clamps outside its own value window',
+  g.tfResolve({attribute:'p',from:{value:0,transform:'translateY(0%)'},to:{value:100,transform:'translateY(-92%)'}},
+    {state:'x',attributes:{p:180}}).transform==='translateY(-92%)');
+t('tfResolve range with a missing attribute stays at "from"',
+  g.tfResolve({attribute:'nope',from:{value:0,transform:'translateY(0%)'},to:{value:100,transform:'translateY(-92%)'}},
+    {state:'x',attributes:{}}).transform==='translateY(0%)');
+t('map/range modes leave the overlay animation slot alone (null, not "none")',
+  g.tfResolve({map:{'on':'none'}},{state:'on',attributes:{}}).animation===null);
+t('tfResolve spin: full scale spins at min_duration',
+  /roc-tf-spin 0\.35s linear infinite/.test(g.tfResolve({attribute:'percentage',spin:{min_duration:'0.35s',max_duration:'2.5s'}},
+    {state:'on',attributes:{percentage:100}}).animation));
+t('tfResolve spin: half scale lands between the two durations',
+  (function(){const a=g.tfResolve({attribute:'percentage',spin:{min_duration:'0.4s',max_duration:'2.4s'}},
+    {state:'on',attributes:{percentage:50}}).animation;const d=parseFloat(/([\d.]+)s/.exec(a)[1]);return d>1.3&&d<1.5;})());
+t('tfResolve spin stops when the entity is off or unavailable',
+  g.tfResolve({spin:{}},{state:'off',attributes:{}}).animation==='none'&&
+  g.tfResolve({spin:{}},{state:'unavailable',attributes:{}}).animation==='none'&&
+  g.tfResolve({spin:{}},null).animation==='none');
+t('tfResolve spin at 0 % is stopped even though the entity is on',
+  g.tfResolve({attribute:'percentage',spin:{}},{state:'on',attributes:{percentage:0}}).animation==='none');
+t('tfResolve spin on a plain on/off entity runs at full speed',
+  /roc-tf-spin 0\.35s/.test(g.tfResolve({spin:{min_duration:'0.35s'}},{state:'on',attributes:{}}).animation));
+t('tfResolve spin picks the axis keyframes and reverse',
+  /roc-tf-spin-y .* reverse$/.test(g.tfResolve({spin:{axis:'y',reverse:true}},{state:'on',attributes:{}}).animation));
+t('tfResolve spin owns the transform slot (empty, the keyframes drive it)',
+  g.tfResolve({spin:{}},{state:'on',attributes:{}}).transform==='');
+t('tfResolve of a missing block is null',g.tfResolve(null,{state:'on'})===null&&g.tfResolve({},{state:'on'})===null);
+
 // ---- version single-source check (v5.0 C5) --------------------------------
 // ROC_VERSION in the card source must match package.json — the two used to be
 // bumped by hand independently and could drift.

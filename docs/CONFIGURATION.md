@@ -236,6 +236,77 @@ overlays:
     color_from: light.tv_strip   # follows rgb_color / color_temp
 ```
 
+### Moving an overlay — `transform`
+
+An overlay can also **move** with its entity instead of only fading: a door swinging on its hinge,
+a garage door sliding up, a drawer pulling out, a fan spinning. Add a `transform:` block and the
+layer's CSS transform follows the entity.
+
+This needs a PNG of **just the moving part** (the door leaf without its frame), with the rest of the
+scene in the base image or another overlay.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `entity` | string | — | Entity that drives the movement |
+| `attribute` | string | — | Numeric attribute to read; omitted = the entity's state |
+| `origin` | string | `50% 50%` | The hinge / axle, **in % of the photo** (the layer covers the whole stage) |
+| `transition` | string | `0.8s ease` | How the movement eases |
+| `perspective` | string | — | e.g. `900px` — makes `rotateX`/`rotateY` read as depth instead of a squash |
+| `map` | object | — | **states mode**: `state: transform` pairs; `*` catches anything unlisted |
+| `from` / `to` | object | — | **range mode**: `{value, transform}` at each end, interpolated in between |
+| `spin` | object | — | **spin mode**: `{min_duration, max_duration, axis, reverse, min_value, max_value}` |
+
+**States** — one transform per state:
+
+```yaml
+overlays:
+  - id: door_leaf
+    image: /local/door_leaf.png
+    conditions: { opacity: [{ value: 1 }] }
+    transform:
+      entity: binary_sensor.front_door
+      origin: 22% 55%          # where the hinge sits on the photo
+      perspective: 1100px
+      transition: 0.9s ease
+      map:
+        "off": rotateY(0deg)
+        "on": rotateY(-68deg)
+```
+
+**Range** — a numeric attribute interpolated between two transforms:
+
+```yaml
+    transform:
+      entity: cover.garage
+      attribute: current_position
+      from: { value: 0, transform: "translateY(0%)" }
+      to:   { value: 100, transform: "translateY(-92%)" }
+```
+
+Both sides must list the **same transform functions in the same order** (`translateY` → `translateY`);
+only the numbers are interpolated, and each keeps its own unit. Mismatched sides snap at the
+midpoint rather than producing a nonsense transform.
+
+**Spin** — the value drives the *speed*, not a position:
+
+```yaml
+    transform:
+      entity: fan.living_room
+      attribute: percentage
+      origin: 76% 43%
+      spin:
+        min_duration: 0.4s     # at 100 %
+        max_duration: 2.5s     # just barely on
+        axis: z                # z (flat) | x | y
+        reverse: false
+```
+
+A spin stops when the entity is `off`, `unavailable` or at 0 %. An entity with no numeric attribute
+(a plain switch) spins at `min_duration`. Spin mode takes over the overlay's `animation:` slot, so
+it cannot be combined with `pulse`/`blink`; `map` and `range` modes leave that animation alone.
+
+In the GUI this is the **Transform — make this layer move** panel inside each overlay.
+
 ---
 
 ## Gauges

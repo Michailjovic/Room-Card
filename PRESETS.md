@@ -312,3 +312,52 @@ glows:
     animation_speed: 2.6s
 ```
 
+---
+
+## Things that move (v6.7.0)
+
+Each of these needs a PNG of **just the moving part**, sitting over a base image where the rest of
+the scene (frame, opening, wall) is already drawn.
+
+```yaml
+overlays:
+  # A door that swings on its hinge
+  - id: door_leaf
+    image: /local/dvere_kridlo.png
+    z_index: 2
+    conditions: { opacity: [{ value: 1 }] }
+    transform:
+      entity: binary_sensor.vchodove_dvere
+      origin: 22% 55%              # the hinge, in % of the photo
+      perspective: 1100px
+      transition: 0.9s ease
+      map:
+        "off": rotateY(0deg)
+        "on": rotateY(-68deg)
+
+  # A garage door that slides up with its position
+  - id: garage_door
+    image: /local/vrata.png
+    z_index: 2
+    conditions: { opacity: [{ value: 1 }] }
+    transform:
+      entity: cover.garaz
+      attribute: current_position
+      transition: 1.4s ease
+      from: { value: 0, transform: "translateY(0%)" }
+      to:   { value: 100, transform: "translateY(-92%)" }
+
+  # A ceiling fan whose blades follow its speed
+  - id: fan_blades
+    image: /local/lopatky.png
+    z_index: 3
+    conditions: { opacity: [{ value: 1 }] }
+    transform:
+      entity: fan.obyvak
+      attribute: percentage
+      origin: 76% 43%              # the axle
+      spin: { min_duration: 0.4s, max_duration: 2.5s }
+```
+
+A drawer or an oven flap is the same `from`/`to` recipe with `translateX(...)` or `rotateX(...)`.
+

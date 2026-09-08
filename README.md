@@ -21,6 +21,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **CSS filter engine** | Brightness, saturation, sepia, blur… driven by entity states with smooth transitions |
 | **Brightness model** | Multi-stop filter interpolation: define stops (day / night / cinema…) and blend automatically |
 | **Overlay layers** | Transparent PNG layers with conditional opacity/filter; state-driven image switching |
+| **Transform engine** | Any overlay can move with its entity — a door swinging on its hinge, a garage door sliding up, a fan whose spin speed follows its percentage |
 | **Gauges** | Animated progress bars in 6 fill directions, color gradients, per-gauge visibility |
 | **Blinds** | Roller, venetian slat, and day/night (zebra) blind animations driven by cover entities, plus an icon-only cover controller |
 | **Clickable zones** | Invisible hit areas — navigate, more-info, toggle, call-service, browser-mod popup |

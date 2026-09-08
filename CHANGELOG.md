@@ -1,5 +1,59 @@
 # Changelog
 
+## [6.7.0] - 2026-09-08
+
+### Transform engine — an overlay can move, not just fade
+
+Until now an overlay layer could do four things: appear, change opacity, swap its image and take a
+CSS filter. Nothing that **moves**. Everything on the card that moves had its own hand-written
+renderer — blinds have three, the vacuum icon has its own keyframes, the light glow another set —
+so every new moving thing meant new bespoke code.
+
+New `transform:` block on any overlay. It maps an entity onto the layer's CSS transform, in three
+modes:
+
+```yaml
+overlays:
+  - id: door_leaf
+    image: /local/door_leaf.png          # just the leaf, no frame
+    conditions: { opacity: [{ value: 1 }] }
+    transform:
+      entity: binary_sensor.front_door
+      origin: 22% 55%                    # the hinge, in % of the photo
+      perspective: 1100px
+      map:
+        "off": rotateY(0deg)
+        "on": rotateY(-68deg)
+```
+
+- **`map`** — one transform per state. `*` catches anything unlisted.
+- **`from` / `to`** — a numeric attribute interpolated between two transforms
+  (`{value: 0, transform: translateY(0%)}` → `{value: 100, transform: translateY(-92%)}`), which
+  covers a garage door, a drawer, an oven flap, a sliding door, a window on a vent latch.
+  Interpolation is argument-by-argument and unit-preserving; both sides must list the same
+  functions in the same order, and mismatched sides snap at the midpoint rather than emitting a
+  nonsense transform.
+- **`spin`** — the value drives the *speed*: `min_duration` at full scale, `max_duration` just
+  above zero, `axis: z|x|y`, `reverse`. A fan's `percentage` becomes its rotation rate. Stops at
+  `off`, `unavailable` or 0 %; a plain switch spins at `min_duration`.
+
+Details worth knowing:
+
+- **`origin` is in % of the photo, not of the PNG's visible pixels.** An overlay layer covers the
+  whole stage, so `origin: 22% 55%` means "the hinge is at that point on the room photo".
+- **`perspective:`** is prepended to the transform, so `rotateY` reads as a door swinging into the
+  room instead of a horizontal squash.
+- Only a **`spin`** block claims the overlay's `animation:` slot; `map` and `range` modes leave an
+  existing `pulse`/`blink` running.
+- The layer's transition list now includes `transform` (default `0.8s ease`), so state changes ease
+  instead of jumping.
+
+Editor: a **Transform — make this layer move** panel inside every overlay, with a mode select that
+reveals only the relevant fields, repeatable state → transform rows, and fields for entity,
+attribute, origin, transition and perspective.
+
+No migration: an overlay without a `transform:` block renders exactly as before.
+
 ## [6.6.1] - 2026-09-08
 
 ### Light glow: colour picker, intensity slider, and resize handles in Edit mode

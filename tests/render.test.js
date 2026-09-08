@@ -1146,6 +1146,112 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     t('Remove light glow drops the targeted entry',!!gwRm&&gwRm.glows.length===2);
   }
 
+  // --- v6.7.0 overlay transform engine: render, state/range/spin, editor ---
+  {
+    const tfCfg={type:'custom:room-overlay-card',base_image:'/local/x.webp',
+      overlays:[
+        {id:'door',image:'/local/door.png',
+         transform:{entity:'binary_sensor.door',origin:'34% 62%',perspective:'900px',transition:'0.8s ease',
+                    map:{'off':'rotateY(0deg)','on':'rotateY(-72deg)'}}},
+        {id:'garage',image:'/local/garage.png',
+         transform:{entity:'cover.garage',attribute:'current_position',
+                    from:{value:0,transform:'translateY(0%)'},to:{value:100,transform:'translateY(-92%)'}}},
+        {id:'fan',image:'/local/blades.png',
+         transform:{entity:'fan.living',attribute:'percentage',spin:{min_duration:'0.35s',max_duration:'2.5s'}}}
+      ]};
+    const tfCard=mkCard(tfCfg);
+    const dEl=tfCard.shadowRoot.querySelector('[data-ov="door"]');
+    const gEl2=tfCard.shadowRoot.querySelector('[data-ov="garage"]');
+    const fEl=tfCard.shadowRoot.querySelector('[data-ov="fan"]');
+    t('transform-origin is baked into the layer markup (it is static config)',
+      /transform-origin:\s*34% 62%/.test(dEl.getAttribute('style')));
+    t('the layer transitions transform as well as opacity and filter',
+      /transition:[^;]*transform 0\.8s ease/.test(dEl.getAttribute('style')));
+    t('an overlay without a transform block gets no transform-origin',
+      (function(){const plain=mkCard({base_image:'/local/x.webp',overlays:[{id:'p',image:'/local/p.png'}]});
+        return!/transform-origin/.test(plain.shadowRoot.querySelector('[data-ov="p"]').getAttribute('style'));})());
+
+    const settleTf=()=>new Promise(r=>setTimeout(r,30));
+    const tfHass=(st)=>{tfCard.hass={states:st,callService(){},user:{name:'x'}};return settleTf();};
+    await tfHass({'binary_sensor.door':{state:'off',attributes:{}},
+                  'cover.garage':{state:'closed',attributes:{current_position:0}},
+                  'fan.living':{state:'off',attributes:{percentage:0}}});
+    t('closed door sits at its "off" transform',/rotateY\(0deg\)/.test(dEl.style.transform));
+    t('the perspective is applied so rotateY reads as depth, not a squash',/perspective\(900px\)/.test(dEl.style.transform));
+    t('closed garage sits at the "from" end',/translateY\(0%\)/.test(gEl2.style.transform));
+    t('a stopped fan has no spin animation',fEl.style.animation==='none'||fEl.style.animation==='');
+
+    await tfHass({'binary_sensor.door':{state:'on',attributes:{}},
+                  'cover.garage':{state:'open',attributes:{current_position:50}},
+                  'fan.living':{state:'on',attributes:{percentage:100}}});
+    t('open door swings to its "on" transform',/rotateY\(-72deg\)/.test(dEl.style.transform));
+    t('a half-open garage lands halfway between from and to',/translateY\(-46%\)/.test(gEl2.style.transform));
+    t('a fan at 100 % spins at min_duration',/roc-tf-spin/.test(fEl.style.animation)&&/0\.35s/.test(fEl.style.animation));
+    await tfHass({'fan.living':{state:'on',attributes:{percentage:25}}});
+    t('a slower fan spins slower',
+      (function(){const d=parseFloat(/([\d.]+)s/.exec(fEl.style.animation)[1]);return d>1.7&&d<2.3;})());
+
+    // the transform block never steals an overlay's own pulse/blink animation
+    const tfAnim=mkCard({base_image:'/local/x.webp',
+      overlays:[{id:'d2',image:'/local/d.png',animation:'pulse',
+        conditions:{opacity:[{condition:{entity:'light.x',state:'on'},value:1},{value:1}]},
+        transform:{entity:'light.x',map:{'on':'scale(1.1)','off':'scale(1)'}}}]});
+    tfAnim.hass={states:{'light.x':{state:'on',attributes:{}}},callService(){},user:{name:'x'}};
+    await settleTf();
+    const d2=tfAnim.shadowRoot.querySelector('[data-ov="d2"]');
+    t('a map-mode transform leaves the overlay pulse animation running',
+      /roc-pulse/.test(d2.style.animation)&&/scale\(1\.1\)/.test(d2.style.transform));
+
+    // --- GUI editor ---
+    const edTf=w.document.createElement('room-overlay-card-editor');
+    w.document.body.appendChild(edTf);
+    edTf.setConfig(tfCfg);
+    edTf.hass={states:{},user:{name:'x'}};
+    edTf._render();
+    t('overlay panel carries a Transform sub-panel',!!edTf.querySelector('[data-ov-tf-mode="0"]'));
+    t('mode is detected from the config shape',
+      edTf.querySelector('[data-ov-tf-mode="0"]').value==='states'&&
+      edTf.querySelector('[data-ov-tf-mode="1"]').value==='range'&&
+      edTf.querySelector('[data-ov-tf-mode="2"]').value==='spin');
+    t('only the active mode pane is visible',
+      edTf.querySelector('[data-ov-tfpane="0-states"]').getAttribute('style').indexOf('display:none')<0&&
+      edTf.querySelector('[data-ov-tfpane="0-range"]').getAttribute('style').indexOf('display:none')>=0);
+    t('state rows are prefilled from the map',
+      edTf.querySelector('[data-ov-tfk="0-0"]').value==='off'&&
+      edTf.querySelector('[data-ov-tfv="0-1"]').value==='rotateY(-72deg)');
+    t('range fields are prefilled',
+      edTf.querySelector('[data-ov-tf-tv="1"]').value==='100'&&
+      edTf.querySelector('[data-ov-tf-tt="1"]').value==='translateY(-92%)');
+    t('spin fields are prefilled',edTf.querySelector('[data-ov-tf-smin="2"]').value==='0.35s');
+    edTf.querySelector('[data-ov-tfv="0-1"]').value='rotateY(-90deg)';
+    edTf.querySelector('[data-ov-tf-origin="0"]').value='30% 60%';
+    const tfOut=edTf._collectConfig().overlays;
+    t('collectConfig round-trips the state map and origin',
+      tfOut[0].transform.map.on==='rotateY(-90deg)'&&tfOut[0].transform.origin==='30% 60%'&&tfOut[0].transform.map.off==='rotateY(0deg)');
+    t('collectConfig round-trips the numeric range',
+      tfOut[1].transform.from.value===0&&tfOut[1].transform.to.transform==='translateY(-92%)'&&tfOut[1].transform.attribute==='current_position');
+    t('collectConfig round-trips the spin block',
+      tfOut[2].transform.spin.min_duration==='0.35s'&&tfOut[2].transform.spin.max_duration==='2.5s');
+    edTf.querySelector('[data-ov-tf-srev="2"]').checked=true;
+    edTf.querySelector('[data-ov-tf-saxis="2"]').value='y';
+    const tfOut2=edTf._collectConfig().overlays[2].transform.spin;
+    t('reverse and axis reach the config only when they differ from the default',
+      tfOut2.reverse===true&&tfOut2.axis==='y');
+    let tfAdd=null;
+    edTf.addEventListener('config-changed',e=>{tfAdd=e.detail.config;});
+    edTf.querySelector('[data-add-tfm="0"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('+ State appends a placeholder row',!!tfAdd&&Object.keys(tfAdd.overlays[0].transform.map).length===3);
+    let tfRm=null;
+    edTf.addEventListener('config-changed',e=>{tfRm=e.detail.config;});
+    edTf.querySelector('[data-rm-tfm="0-2"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('the × button removes that state row',!!tfRm&&Object.keys(tfRm.overlays[0].transform.map).length===2);
+    let tfNone=null;
+    edTf.addEventListener('config-changed',e=>{tfNone=e.detail.config;});
+    const modeSel=edTf.querySelector('[data-ov-tf-mode="0"]');
+    modeSel.value='';modeSel.dispatchEvent(new w.Event('change',{bubbles:true}));
+    t('setting the mode to none drops the whole transform block',!!tfNone&&tfNone.overlays[0].transform===undefined);
+  }
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();
