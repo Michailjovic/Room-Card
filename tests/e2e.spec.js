@@ -43,7 +43,10 @@ test('short window: image letterboxes (aspect kept, centred), badge stays visibl
 
 test('light glow: real blended layer, centred on its point, no filter over it',async({page})=>{
   const g=await page.evaluate(()=>{
-    const card=document.querySelector('room-overlay-card');
+    // The card lives inside hui-panel-view's shadow root in this harness, so it
+    // is NOT reachable from document.querySelector — use the handle the harness
+    // exposes, like every other test here does through geo().
+    const card=window.__harness.card;
     const el=card.shadowRoot.querySelector('[data-glow="lamp"]');
     if(!el)return null;
     const fx=el.querySelector('.glow-fx');

@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.7.1] - 2026-09-08
+
+### Fix: the e2e job was red — the glow geometry test looked for the card in the wrong DOM
+
+No change to the card itself. The Playwright geometry test added in v6.6.0 reached for the card
+with `document.querySelector('room-overlay-card')`, but in `tests/harness/ha-shell.html` the card
+is mounted **inside `hui-panel-view`'s shadow root** (deliberately — that is what makes the harness
+reproduce HA's real edit-mode DOM moves). `querySelector` therefore returned `null` and the test
+threw `Cannot read properties of null (reading 'shadowRoot')`, failing the `e2e` job on every push
+since v6.6.0 while `smoke` and `hacs` stayed green.
+
+It now uses `window.__harness.card`, the handle the harness exposes and that every other test in
+the file already goes through via `geo()`.
+
 ## [6.7.0] - 2026-09-08
 
 ### Transform engine — an overlay can move, not just fade
