@@ -31,6 +31,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Embedded HA cards** | Any card (tile, mini-graph, button…) placed at absolute coordinates |
 | **Companion cards** | Full HA cards stacked above / below the image (great for mobile) |
 | **Light controls** | A slider strip per light/switch, border colour tracking a lux sensor |
+| **Light glow** | Soft pools of light blended onto the photo — colour from the light, strength from its brightness; circle / ellipse / directional wash, optional flicker |
 | **Camera & weather** | Live camera snapshot as the base layer; animated rain/snow overlay |
 | **Multi-room** | One card for the whole home — define rooms, swipe & presence-follow |
 | **Auto navigation menu** | The room switcher (thumbnails / tabs / dots) is generated automatically from your rooms — you never build the menu by hand |

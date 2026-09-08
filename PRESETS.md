@@ -255,3 +255,60 @@ elements:
     height: 14%
     card: { type: tile, entity: light.bedroom }
 ```
+
+---
+
+## Lamps that actually light the room (v6.6.0)
+
+Three glows on one photo: a warm bedside lamp, a cyan LED strip behind the TV, and an
+under-cabinet wash. Each follows its own light's colour and brightness.
+
+```yaml
+glows:
+  - id: bedside
+    entity: light.bedside_lamp
+    top: 46%
+    left: 14%
+    size: 24%
+    intensity: 0.8            # colour + brightness come from the lamp itself
+
+  - id: tv_bias
+    entity: light.tv_backlight
+    shape: ellipse
+    top: 38%
+    left: 62%
+    width: 30%
+    height: 12%
+    falloff: tight
+    intensity: 0.7
+
+  - id: kitchen_under_cabinet
+    entity: light.under_cabinet
+    shape: wash
+    anchor: corner
+    top: 30%
+    left: 55%
+    width: 38%
+    height: 30%
+    angle: 180deg             # spills downward from the cabinet
+    falloff: wide
+    color: 3000K
+    intensity: 0.65
+```
+
+## A fireplace that flickers
+
+```yaml
+glows:
+  - id: fireplace
+    entity: switch.fireplace
+    top: 72%
+    left: 50%
+    size: 30%
+    color: "#ff8a3c"
+    falloff: soft
+    intensity: 0.85
+    animation: flicker
+    animation_speed: 2.6s
+```
+

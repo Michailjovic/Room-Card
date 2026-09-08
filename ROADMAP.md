@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.0.0** (2026-08-08, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.6.0** (2026-09-08, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -67,6 +67,15 @@ intrinsic image budget-fit (letterbox, never crop), the edit-mode "breathing" lo
 and finally fully event-driven transitions (MutationObserver on HA's own DOM, no rAF,
 no timers). v4.6.3 also hardened the release pipeline itself after a silent asset-upload
 failure broke HACS installs.
+
+### v6.1 – v6.6 — calibration, vacuum widget, light glow — ✅ SHIPPED
+
+| Version | Highlights |
+|---|---|
+| **v6.1.0** | `day_night` blind **phase calibration** (`shift_turns` / `shift_start` / `shift_snap`) — the reserve no longer slides the stripe phase |
+| **v6.2.0–6.2.1** | **`vacuum_widgets`** — cross-room informational status badge (dry/wet/both/error), plus a proper dark rest-state chip |
+| **v6.3.0–6.5.5** | Vacuum widget: per-profile sizing + frosted glass, GUI editor panel with drag-to-position, dedicated vacuum entity rows, **Global (all rooms)** editor scope, Quick-position buttons, a purpose-built built-in icon, and distinct dry/wet/both motion |
+| **v6.6.0** | **`glows`** — light-spill layers blended onto the photo: colour from the light's own `rgb_color`/colour temperature, strength from its brightness, circle / ellipse / directional wash, optional flicker, GUI editor section with live falloff preview |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

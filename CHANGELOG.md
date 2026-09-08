@@ -1,5 +1,62 @@
 # Changelog
 
+## [6.6.0] - 2026-09-08
+
+### Light glow — the lamps in the photo actually light up
+
+Until now a light could only change the *whole* picture: `filter_conditions` and
+`brightness_model` dim or lift the entire base image, and anything more local meant preparing a
+transparent PNG per lamp and switching it with an overlay condition. Neither shows what a lit lamp
+really does to a room photo — a pool of light around itself, in its own colour.
+
+New top-level `glows:` list. Each entry is a soft light-spill layer blended onto the photo with
+`mix-blend-mode: screen`:
+
+```yaml
+glows:
+  - id: reading_lamp
+    entity: light.bedroom_lamp
+    top: 42%            # the CENTRE of the glow
+    left: 18%
+    size: 26%
+    intensity: 0.75
+    falloff: soft
+    color: auto         # follows the light's rgb_color / colour temperature
+```
+
+- **Colour follows the light**: `rgb_color` first, then `color_temp_kelvin` (or legacy mired
+  `color_temp`), falling back to a warm bulb — so a plain `switch` glows warm. A fixed
+  `color:` (`#ffb46e`, `255,180,110`, `2700K`) overrides it.
+- **Strength follows brightness**: opacity is `intensity × brightness / 255`, with an optional
+  `min_brightness` floor. Lights without a brightness attribute use the full `intensity`.
+- **Three shapes**: `circle` (lamp), `ellipse` (LED strip, window, TV), and `wash` — a directional
+  spill anchored on the edge the light comes *from* (`angle`, default `180deg` = downward), which
+  fades on every side rather than ending in the straight seams a plain linear gradient would leave.
+- **`animation: flicker | pulse`** for candles, fireplaces and bias lighting. The animation runs on
+  an inner element so it multiplies with the state-driven opacity instead of overriding it.
+- **`top`/`left` is the centre**, not the corner (`anchor: corner` to opt out) — a lamp is a point,
+  so you drag the glow onto it. Dragging, arrow-key nudging and snapping work exactly as on icons
+  and labels because the centring is a `transform`, invisible to the position maths.
+- **`z_index: 2`** by default: above the photo, below overlay PNGs, so a foreground curtain still
+  covers the light. Raise it to let the light spill over them.
+- Editor: a new **Light glow** section in the Elements tab with a live falloff preview, entity
+  datalist, shape/falloff/blend/animation selects and a colour swatch. In Edit mode every glow
+  stays visible (minimum 25 % opacity) and outlined even when its light is off, so it can be placed
+  at any time of day.
+
+Deliberately **no `filter: blur()`** anywhere in this feature — the soft edge is made from gradient
+stops alone. Stacking a `filter` over a blended layer is the compositing combination behind the
+v6.5.1 vacuum-widget repaint bug on tablet WebViews, and there is no reason to invite it back into
+a layer that covers the whole photo.
+
+Verified in real Chromium as well as jsdom: a Playwright geometry test asserts the computed
+`mix-blend-mode`, the circle's derived height, the centre anchoring in real pixels, that no
+`filter` is present on either element, and that the glow shares the photo's stacking context (it
+would silently stop blending otherwise).
+
+No migration and no behaviour change for existing configs — a card without `glows:` renders
+exactly as before.
+
 ## [6.5.5] - 2026-08-30
 
 ### Vacuum widget: distinct motion for "wet" and "both", not just colour

@@ -402,6 +402,45 @@ t('ccHtml dock always visible',(function(){const h=g.coverCtlHtml(_ccP,false,'do
 t('ccHtml float tap-reveal hidden',(function(){const h=g.coverCtlHtml(_ccL,false,'float');return h.indexOf('display:none')>=0&&h.indexOf('data-cc-mode="float"')>=0;})());
 t('coverCtlHtml no rail when slider off',g.coverCtlHtml(g.coverControlNorm({id:'r',entity:'cover.x',control:{display:'dock',slider:false}})).indexOf('data-cc-rail')<0);
 
+// ---- v6.6.0: light glow (glowParseColor / glowRgb / glowBg) -----------------
+t('glowParseColor #rrggbb',JSON.stringify(g.glowParseColor('#ffb46e'))==='[255,180,110]');
+t('glowParseColor #rgb',JSON.stringify(g.glowParseColor('#fb7'))==='[255,187,119]');
+t('glowParseColor rgb()',JSON.stringify(g.glowParseColor('rgb(10, 20, 30)'))==='[10,20,30]');
+t('glowParseColor bare triplet',JSON.stringify(g.glowParseColor('1,2,3'))==='[1,2,3]');
+t('glowParseColor kelvin',(function(){const k=g.glowParseColor('2700K');return!!k&&k.length===3&&k[0]>k[2];})());
+t('glowParseColor auto → null (derive from the entity)',g.glowParseColor('auto')===null&&g.glowParseColor('')===null&&g.glowParseColor(null)===null);
+t('glowParseColor rejects nonsense',g.glowParseColor('not-a-colour')===null);
+t('glowRgb prefers an explicit colour over the entity',
+  JSON.stringify(g.glowRgb({color:'#010203'},{attributes:{rgb_color:[9,9,9]}}))==='[1,2,3]');
+t('glowRgb takes rgb_color from the light',
+  JSON.stringify(g.glowRgb({},{attributes:{rgb_color:[9,8,7]}}))==='[9,8,7]');
+t('glowRgb falls back to colour temperature (kelvin)',
+  (function(){const c=g.glowRgb({},{attributes:{color_temp_kelvin:2700}});return c[0]===255&&c[2]<200;})());
+t('glowRgb converts legacy mired color_temp',
+  (function(){const c=g.glowRgb({},{attributes:{color_temp:370}});return c[0]===255&&c[2]<200;})());
+// (GLOW_STOPS / GLOW_DEFAULT_RGB are `const` — not reachable as sandbox globals,
+// unlike function declarations — so these assert on the values they produce.)
+t('glowRgb default is a warm bulb when the light says nothing',
+  JSON.stringify(g.glowRgb({},{attributes:{}}))==='[255,180,110]');
+t('glowBg circle by default',/^radial-gradient\(circle closest-side,/.test(g.glowBg({},[1,2,3])));
+t('glowBg ellipse shape',/^radial-gradient\(ellipse closest-side,/.test(g.glowBg({shape:'ellipse'},[1,2,3])));
+t('glowBg wash spills from the top edge by default (180deg = downward)',
+  /^radial-gradient\(ellipse farthest-side at 50% 0%,/.test(g.glowBg({shape:'wash'},[1,2,3])));
+t('glowBg wash anchors on the edge the light comes from (90deg = from the left, rightward)',
+  /at 0% 50%,/.test(g.glowBg({shape:'wash',angle:90},[1,2,3])));
+t('glowBg wash accepts an angle string',
+  g.glowBg({shape:'wash',angle:'0deg'},[1,2,3])===g.glowBg({shape:'wash',angle:0},[1,2,3])&&
+  /at 50% 100%,/.test(g.glowBg({shape:'wash',angle:0},[1,2,3])));
+t('glowBg wash has no hard edges (never a linear-gradient)',!/linear-gradient/.test(g.glowBg({shape:'wash',angle:20},[1,2,3])));
+t('glowBg carries the rgb through every stop',(g.glowBg({},[4,5,6]).match(/rgba\(4,5,6,/g)||[]).length===3);
+t('glowBg falloff presets differ',g.glowBg({falloff:'tight'},[1,2,3])!==g.glowBg({falloff:'wide'},[1,2,3]));
+t('glowBg unknown falloff falls back to soft',g.glowBg({falloff:'nope'},[1,2,3])===g.glowBg({falloff:'soft'},[1,2,3]));
+t('every falloff starts at the centre and fades to fully transparent',
+  ['soft','tight','wide'].every(function(f){
+    const bg=g.glowBg({falloff:f},[1,2,3]);
+    return /rgba\(1,2,3,[\d.]+\) 0%/.test(bg)&&/rgba\(1,2,3,0\) \d+%\)$/.test(bg);
+  }));
+
 // ---- version single-source check (v5.0 C5) --------------------------------
 // ROC_VERSION in the card source must match package.json — the two used to be
 // bumped by hand independently and could drift.

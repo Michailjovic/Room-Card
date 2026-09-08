@@ -41,6 +41,32 @@ test('short window: image letterboxes (aspect kept, centred), badge stays visibl
   expect(g.badge.b).toBeLessThanOrEqual(g.innerH);
 });
 
+test('light glow: real blended layer, centred on its point, no filter over it',async({page})=>{
+  const g=await page.evaluate(()=>{
+    const card=document.querySelector('room-overlay-card');
+    const el=card.shadowRoot.querySelector('[data-glow="lamp"]');
+    if(!el)return null;
+    const fx=el.querySelector('.glow-fx');
+    const cs=getComputedStyle(el),fcs=getComputedStyle(fx);
+    const r=el.getBoundingClientRect();
+    const wr=card.shadowRoot.querySelector('.wrap').getBoundingClientRect();
+    return{blend:cs.mixBlendMode,opacity:parseFloat(cs.opacity),w:r.width,h:r.height,
+      cx:((r.left+r.right)/2-wr.left)/wr.width,cy:((r.top+r.bottom)/2-wr.top)/wr.height,
+      bg:fcs.backgroundImage,filters:cs.filter+'|'+fcs.filter,
+      inWrap:card.shadowRoot.querySelector('.content').contains(el)};
+  });
+  expect(g).not.toBeNull();
+  expect(g.blend).toBe('screen');            // really blending in Chromium, not just declared
+  expect(g.opacity).toBeGreaterThan(0.8);    // light on at full brightness → intensity 0.85
+  expect(g.w).toBeGreaterThan(10);
+  expect(Math.abs(g.w-g.h)).toBeLessThanOrEqual(1);   // circle, height derived from width
+  expect(Math.abs(g.cx-0.30)).toBeLessThan(0.01);     // top/left is the CENTRE of the glow
+  expect(Math.abs(g.cy-0.45)).toBeLessThan(0.01);
+  expect(g.bg).toContain('radial-gradient');
+  expect(g.filters).toBe('none|none');       // never a filter over a blended layer (v6.5.1)
+  expect(g.inWrap).toBe(true);               // same stacking context as the photo it blends with
+});
+
 test('edit enter: actions bar fully visible without scrolling',async({page})=>{
   await page.evaluate(()=>window.__harness.toggle());
   await settle(page,600);

@@ -41,7 +41,7 @@ mock-up.*
   filters, the brightness model, filter transition and zoom. Also the **companion cards** (above
   / below the image) and **light controls**.
 - **Elements** — everything you place on the image: zones, icons, labels, badges, gauges,
-  blinds, embedded cards, overlays, and groups. Each type is a collapsible section with a count,
+  blinds, embedded cards, overlays, light glows, and groups. Each type is a collapsible section with a count,
   listed alphabetically (icons next to each label make it scannable without needing to reorder
   by intent).
 

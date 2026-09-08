@@ -1001,6 +1001,99 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     Array.isArray(edG2._config.rooms[0].vacuum_widgets)&&edG2._config.rooms[0].vacuum_widgets[0].id==='shadow_vac');
 }
 
+  // --- v6.6.0 light glow: render, state-driven strength/colour, editor round-trip ---
+  {
+    const gwCfg={type:'custom:room-overlay-card',base_image:'/local/x.webp',
+      glows:[{id:'lamp',entity:'light.lamp',top:'40%',left:'30%',size:'20%',intensity:0.8},
+             {id:'strip',entity:'light.strip',shape:'wash',angle:20,top:'10%',left:'10%',width:'40%',height:'15%',color:'#ff0000',animation:'flicker'}]};
+    const gwCard=mkCard(gwCfg);
+    const gEl=gwCard.shadowRoot.querySelector('[data-glow="lamp"]');
+    const gFx=gwCard.shadowRoot.querySelector('[data-glowfx="lamp"]');
+    t('glow layer rendered with its fx child',!!gEl&&!!gFx);
+    t('glow blends with the photo (mix-blend-mode: screen by default)',/mix-blend-mode:\s*screen/.test(gEl.getAttribute('style')));
+    t('glow defaults under the overlay PNGs (z-index 2)',/z-index:\s*2/.test(gEl.getAttribute('style')));
+    t('glow top/left is the centre (translate -50%,-50%)',/translate\(-50%,\s*-50%\)/.test(gEl.getAttribute('style')));
+    t('circle glow is round',/border-radius:\s*50%/.test(gFx.getAttribute('style')));
+    t('glow never uses filter: blur() (blur over a blended layer is the v6.5.1 compositing trap)',
+      !/filter:\s*blur/.test(gEl.getAttribute('style')||'')&&!/filter:\s*blur/.test(gFx.getAttribute('style')||''));
+    t('glow starts hidden until a state says otherwise',parseFloat(gEl.style.opacity||'0')===0);
+    const gwFx2=gwCard.shadowRoot.querySelector('[data-glowfx="strip"]');
+    t('wash glow is not rounded and carries its animation',
+      !/border-radius/.test(gwFx2.getAttribute('style'))&&/roc-gw-flicker/.test(gwFx2.getAttribute('style')));
+
+    // strength follows brightness, colour follows the light
+    // (set hass() defers _update through the idle callback, hence the awaits)
+    const settle=()=>new Promise(r=>setTimeout(r,30));
+    const gwHass=(st)=>{gwCard.hass={states:st,callService(){},user:{name:'x'}};return settle();};
+    await gwHass({'light.lamp':{state:'on',attributes:{brightness:128,rgb_color:[10,20,30]}},
+                  'light.strip':{state:'on',attributes:{rgb_color:[0,255,0]}}});
+    t('opacity = intensity × brightness/255',Math.abs(parseFloat(gEl.style.opacity)-0.8*128/255)<0.005);
+    // (jsdom re-serialises background-image with spaces after each comma)
+    const rgbaIn=(el,r,g2,b)=>new RegExp('rgba\\('+r+',\\s*'+g2+',\\s*'+b+',').test(el.style.backgroundImage||'');
+    t('gradient takes the colour from the light itself',rgbaIn(gFx,10,20,30));
+    t('a fixed colour: wins over the light\'s own rgb_color',
+      rgbaIn(gwFx2,255,0,0)&&!rgbaIn(gwFx2,0,255,0));
+    await gwHass({'light.lamp':{state:'on',attributes:{brightness:255,rgb_color:[10,20,30]}}});
+    t('full brightness reaches the configured intensity',Math.abs(parseFloat(gEl.style.opacity)-0.8)<0.005);
+    await gwHass({'light.lamp':{state:'off',attributes:{}}});
+    t('glow goes dark when the light is off',parseFloat(gEl.style.opacity)===0);
+    await gwHass({'light.lamp':{state:'unavailable',attributes:{}}});
+    t('an unavailable light does not light the room',parseFloat(gEl.style.opacity)===0);
+    await gwHass({'light.lamp':{state:'on',attributes:{}}});
+    t('a brightness-less light (switch) uses the full intensity',Math.abs(parseFloat(gEl.style.opacity)-0.8)<0.005);
+    await gwHass({'light.lamp':{state:'on',attributes:{brightness:5}}});
+    t('min_brightness is not set here, so a dim light still glows',parseFloat(gEl.style.opacity)>0);
+
+    // edit mode keeps every glow visible/grabbable even with its light off
+    const gwTm=mkCard(Object.assign({},gwCfg,{test_mode:true}));
+    gwTm.hass={states:{'light.lamp':{state:'off',attributes:{}}},callService(){},user:{name:'x'}};
+    await settle();
+    const gTmEl=gwTm.shadowRoot.querySelector('[data-glow="lamp"]');
+    t('edit mode keeps an off glow visible enough to grab',parseFloat(gTmEl.style.opacity)>=0.25);
+    t('edit mode outlines the glow like other draggable elements',/outline:/.test(gTmEl.getAttribute('style')));
+    t('edit mode makes the glow grabbable (pointer-events + grab cursor)',gTmEl.style.cursor==='grab'&&gTmEl.style.pointerEvents==='auto');
+
+    // GUI editor
+    const edGw=w.document.createElement('room-overlay-card-editor');
+    w.document.body.appendChild(edGw);
+    edGw.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',
+      glows:[{id:'lamp',entity:'light.lamp',top:'40%',left:'30%',size:'20%',intensity:0.8,falloff:'tight',color:'2700K',min_brightness:12}]});
+    edGw.hass={states:{},user:{name:'x'}};
+    edGw._render();
+    t('editor renders a light glow panel',!!edGw.querySelector('[data-gw-id="0"]'));
+    t('editor glow fields prefilled',
+      edGw.querySelector('[data-gw-ent="0"]').value==='light.lamp'&&
+      edGw.querySelector('[data-gw-size="0"]').value==='20%'&&
+      edGw.querySelector('[data-gw-int="0"]').value==='0.8'&&
+      edGw.querySelector('[data-gw-fall="0"]').value==='tight'&&
+      edGw.querySelector('[data-gw-color="0"]').value==='2700K');
+    const gwYaml=edGw.querySelector('[data-gw-yaml="0"]');
+    t('editor glow YAML box carries only the keys without a dedicated field',
+      /min_brightness:/.test(gwYaml.value)&&!/^id:/m.test(gwYaml.value)&&!/falloff:/.test(gwYaml.value));
+    edGw.querySelector('[data-gw-id="0"]').value='lamp_renamed';
+    edGw.querySelector('[data-gw-int="0"]').value='0.45';
+    edGw.querySelector('[data-gw-shape="0"]').value='ellipse';
+    const gwOut=edGw._collectConfig().glows[0];
+    t('collectConfig round-trips the glow fields',
+      gwOut.id==='lamp_renamed'&&gwOut.intensity===0.45&&gwOut.shape==='ellipse'&&gwOut.entity==='light.lamp');
+    t('collectConfig keeps min_brightness from the YAML box',gwOut.min_brightness===12);
+    t('collectConfig omits defaults (shape circle / blend screen / falloff soft) it did not set',
+      (function(){edGw.querySelector('[data-gw-shape="0"]').value='circle';
+        const o=edGw._collectConfig().glows[0];return o.shape===undefined&&o.blend===undefined;})());
+    let gwAdd=null;
+    edGw.addEventListener('config-changed',e=>{gwAdd=e.detail.config;});
+    edGw.querySelector('#add-gw').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Add light glow appends a second entry',!!gwAdd&&gwAdd.glows.length===2);
+    let gwDup=null;
+    edGw.addEventListener('config-changed',e=>{gwDup=e.detail.config;});
+    edGw.querySelector('[data-dup-gw="0"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Duplicate light glow clones with an _2 suffix',!!gwDup&&gwDup.glows[1].id.endsWith('_2'));
+    let gwRm=null;
+    edGw.addEventListener('config-changed',e=>{gwRm=e.detail.config;});
+    edGw.querySelector('[data-rm-gw="1"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Remove light glow drops the targeted entry',!!gwRm&&gwRm.glows.length===2);
+  }
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();

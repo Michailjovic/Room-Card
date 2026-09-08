@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.5.5';
+const ROC_VERSION='6.6.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -214,10 +214,69 @@ function tintFilter(rgb){
   }
   return'sepia(1) saturate('+Math.max(0.2,sat*3).toFixed(2)+') hue-rotate('+Math.round(h-38)+'deg) brightness('+(0.6+l*0.9).toFixed(2)+')';
 }
+// ---- Light glow (v6.6.0) ------------------------------------------------
+// A light-spill layer painted over the photo with mix-blend-mode: the colour
+// comes from the light's own rgb_color / colour temperature, the strength from
+// its brightness. Deliberately gradient-only -- no filter: blur(). Stacking a
+// filter on a blended layer is the compositing combination that caused the
+// v6.5.1 vacuum-widget repaint bug on tablet WebViews; the soft edge is made
+// with gradient stops instead, which composites cleanly everywhere.
+const GLOW_STOPS={
+  soft:[[0,0.85],[40,0.35],[72,0]],
+  tight:[[0,1],[22,0.5],[55,0]],
+  wide:[[0,0.6],[55,0.22],[100,0]]
+};
+const GLOW_DEFAULT_RGB=[255,180,110];
+// Accepts #rgb / #rrggbb / rgb(...) / "r,g,b" / "2700K"; null = derive from the entity
+function glowParseColor(v){
+  if(v==null)return null;
+  if(Array.isArray(v)&&v.length>=3)return[+v[0],+v[1],+v[2]];
+  const t=String(v).trim();
+  if(!t||t==='auto')return null;
+  let m=t.match(/^#?([0-9a-f]{6})$/i);
+  if(m)return[parseInt(m[1].slice(0,2),16),parseInt(m[1].slice(2,4),16),parseInt(m[1].slice(4,6),16)];
+  m=t.match(/^#?([0-9a-f]{3})$/i);
+  if(m)return[parseInt(m[1][0]+m[1][0],16),parseInt(m[1][1]+m[1][1],16),parseInt(m[1][2]+m[1][2],16)];
+  m=t.match(/^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i);
+  if(m)return[Math.round(+m[1]),Math.round(+m[2]),Math.round(+m[3])];
+  m=t.match(/^(\d+)\s*,\s*(\d+)\s*,\s*(\d+)$/);
+  if(m)return[+m[1],+m[2],+m[3]];
+  m=t.match(/^(\d{3,5})\s*k$/i);
+  if(m)return kelvinToRgb(parseInt(m[1],10));
+  return null;
+}
+function glowRgb(g,st){
+  const fixed=glowParseColor(g.color);
+  if(fixed)return fixed;
+  const a=st&&st.attributes;
+  if(a){
+    if(Array.isArray(a.rgb_color)&&a.rgb_color.length>=3)return a.rgb_color;
+    if(a.color_temp_kelvin)return kelvinToRgb(a.color_temp_kelvin);
+    if(a.color_temp)return kelvinToRgb(Math.round(1e6/a.color_temp));
+  }
+  return glowParseColor(g.fallback_color)||GLOW_DEFAULT_RGB;
+}
+function glowBg(g,rgb){
+  const c=rgb[0]+','+rgb[1]+','+rgb[2];
+  const stops=(GLOW_STOPS[g.falloff]||GLOW_STOPS.soft).map(function(p){
+    return'rgba('+c+','+p[1]+') '+p[0]+'%';
+  }).join(',');
+  if(g.shape==='wash'){
+    // Directional spill: an ellipse anchored on the edge the light comes FROM,
+    // so it fades on every side. A plain linear-gradient would leave hard
+    // vertical seams down the box -- light does not have straight edges.
+    let a=g.angle==null?180:(typeof g.angle==='number'?g.angle:parseFloat(g.angle));
+    if(isNaN(a))a=180;
+    const rad=a*Math.PI/180;
+    const x=Math.round(50-50*Math.sin(rad)),y=Math.round(50+50*Math.cos(rad));
+    return'radial-gradient(ellipse farthest-side at '+x+'% '+y+'%,'+stops+')';
+  }
+  return'radial-gradient('+(g.shape==='ellipse'?'ellipse':'circle')+' closest-side,'+stops+')';
+}
 // ---- v3 → v4 auto-migration ---------------------------------------------------
 // Configs without a layout: block are converted in memory on load (clean cut —
 // the 4-tier engine is gone). The editor offers saving the migrated config.
-const ROC_ELEMENT_KEYS=['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','blinds','groups'];
+const ROC_ELEMENT_KEYS=['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','glows','blinds','groups'];
 function rocMigScalar(v){
   if(v==null||typeof v!=='object'||Array.isArray(v))return v;
   if(v.portrait!=null||v.landscape!=null)return v;
@@ -316,7 +375,7 @@ function rocMigrateLayout(cfg){
 }
 // ----- Multi-room helpers -----------------------------------------------------
 // Keys that live per-room; top-level values act as shared defaults for all rooms
-const ROOM_KEYS=['base_image','base_camera','camera_refresh','base_image_conditions','weather_overlay','filter_conditions','brightness_model','overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','blinds','groups','tap_action','cards_above','cards_below','light_controls'];
+const ROOM_KEYS=['base_image','base_camera','camera_refresh','base_image_conditions','weather_overlay','filter_conditions','brightness_model','overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','glows','blinds','groups','tap_action','cards_above','cards_below','light_controls'];
 // Vacuum status widget -- cross-room/global informational badge (NOT a
 // controller; tap only navigates elsewhere). Classifies each configured
 // vacuum's status-sensor string (device_class: enum) into
@@ -837,7 +896,7 @@ class RoomOverlayCard extends HTMLElement{
     const _badId=/[^A-Za-z0-9_-]/;
     outer:for(const r of(hasRooms?cfg.rooms:[cfg])){
       if(!r)continue;
-      for(const k of['overlays','zones','badges','icons','labels','gauges','vacuum_widgets','blinds','elements','groups']){
+      for(const k of['overlays','zones','badges','icons','labels','gauges','vacuum_widgets','glows','blinds','elements','groups']){
         for(const it of(r[k]||[])){
           if(it&&it.id!=null&&_badId.test(String(it.id))){
             console.warn('[room-overlay-card] element id "'+it.id+'" contains characters outside A-Za-z0-9_- — rendering/selection may misbehave');
@@ -1697,6 +1756,20 @@ class RoomOverlayCard extends HTMLElement{
       const a11y=vw.tap_action?' tabindex="0" role="button" aria-label="'+escA(vw.id)+'"':'';
       return'<div class="vw vw-rest" data-vw="'+escA(vw.id)+'"'+a11y+' style="position:absolute;top:'+vw.top+';left:'+vw.left+';width:'+vwSz+';height:'+vwSz+';z-index:'+(vw.z_index??7)+';cursor:'+(vw.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;"><div class="vw-bg" data-vwbg="'+escA(vw.id)+'"></div>'+vwIconHtml(vw)+'<span class="vw-count" data-vwc="'+escA(vw.id)+'" style="display:none;"></span></div>';
     }).join('');
+    const glowHtml=(c.glows||[]).map(g0=>{
+      const g=tApply(g0,_tier);
+      const _gw=resolveSize(g.width||g.size||'25%',_cardW);
+      const _gh=resolveSize(g.height||g.width||g.size||'25%',_cardW);
+      let _fx='position:absolute;inset:0;';
+      if(g.shape!=='wash')_fx+='border-radius:50%;';
+      else if(g.border_radius)_fx+='border-radius:'+g.border_radius+';';
+      if(g.animation==='flicker')_fx+='animation:roc-gw-flicker '+(g.animation_speed||'3.1s')+' ease-in-out infinite;';
+      else if(g.animation==='pulse')_fx+='animation:roc-gw-pulse '+(g.animation_speed||'4s')+' ease-in-out infinite;';
+      // top/left is the CENTRE of the glow (a lamp is a point, not a box), done
+      // with a transform so _makeDraggable/_snapPos keep working on top/left %.
+      const _anchor=g.anchor==='corner'?'':'transform:translate(-50%,-50%);';
+      return'<div class="glow" data-glow="'+escA(g0.id)+'" style="position:absolute;top:'+(g.top??'50%')+';left:'+(g.left??'50%')+';width:'+_gw+';height:'+_gh+';'+_anchor+'z-index:'+(g.z_index??2)+';opacity:0;mix-blend-mode:'+(g.blend||'screen')+';transition:opacity '+(g.transition||'0.6s ease')+';'+(tm?'outline:1px dashed rgba(255,214,120,0.85);':'')+'"><div class="glow-fx" data-glowfx="'+escA(g0.id)+'" style="'+_fx+'"></div></div>';
+    }).join('');
     const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=tApply(lbl0,_tier);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+escA(lbl.id)+'" style="'+st+'"></div>';}).join('');
     const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+escA(g.id)+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;transition:opacity .25s ease,visibility .25s ease;visibility:'+(vis?'visible':'hidden')+';opacity:'+(vis?'1':'0')+';"></div>';}).join('');
     const _wx=c.weather_overlay?(typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay):null;
@@ -1799,7 +1872,7 @@ class RoomOverlayCard extends HTMLElement{
     // (NAV_LIVE_FULL_PLAN.md §6), same mechanism natural-portrait already uses.
     const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini||c._roc_preview)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -2059,6 +2132,13 @@ class RoomOverlayCard extends HTMLElement{
     if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
     for(const ov of(c.overlays||[])){this._ovEls[ov.id]=this.shadowRoot.querySelector('[data-ov="'+escSel(ov.id)+'"]');}
+    this._glowEls={};this._glowFxEls={};
+    for(const g of(c.glows||[])){
+      const gel=this.shadowRoot.querySelector('[data-glow="'+escSel(g.id)+'"]');
+      if(!gel)continue;
+      this._glowEls[g.id]=gel;
+      this._glowFxEls[g.id]=gel.querySelector('.glow-fx');
+    }
     this._grpPanelEls={};
     for(const g of(c.groups||[])){if(g.style)this._grpPanelEls[g.id]=this.shadowRoot.querySelector('[data-grp-panel="'+escSel(g.id)+'"]');}
     this._zoneEls={};
@@ -2287,6 +2367,15 @@ class RoomOverlayCard extends HTMLElement{
           _dpFire(nc);this._update();
         });
       }
+      for(const g of(c.glows||[])){
+        const el=this._glowEls[g.id];if(!el)continue;
+        el.style.pointerEvents='auto';el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=rocClone(this._config);
+          const gc=this._roomArr(nc,'glows').find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;}
+          _dpFire(nc);this._update();
+        });
+      }
       for(const lbl of(c.labels||[])){
         const el=this._lblEls[lbl.id];if(!el)continue;
         el.style.pointerEvents='auto';el.style.cursor='grab';
@@ -2349,7 +2438,7 @@ class RoomOverlayCard extends HTMLElement{
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
           const nc=rocClone(this._config);
-          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):type==='vacuum_widget'?this._roomArr(nc,'vacuum_widgets'):null;
+          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):type==='vacuum_widget'?this._roomArr(nc,'vacuum_widgets'):type==='glow'?this._roomArr(nc,'glows'):null;
           const item=(arr||[]).find(x=>x.id===id);
           if(item){item.top=el.style.top;item.left=el.style.left;}
           _dpFire(nc);
@@ -2369,6 +2458,10 @@ class RoomOverlayCard extends HTMLElement{
       for(const vw of(c.vacuum_widgets||[])){
         const el=this._vwEls[vw.id];if(!el)continue;
         el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'vacuum_widget',vw.id);},true);
+      }
+      for(const g of(c.glows||[])){
+        const el=this._glowEls[g.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'glow',g.id);},true);
       }
       for(const lbl of(c.labels||[])){
         const el=this._lblEls[lbl.id];if(!el)continue;
@@ -2511,7 +2604,7 @@ class RoomOverlayCard extends HTMLElement{
     this._wireRelTimer();
     // Geometry-dependency flags, computed once per render so the hot paths
     // (_update / _applyResizeStyles) can skip forced layout reads entirely.
-    this._needsCardWidth=rocNeedsPctWidth(c.icons,'size')||rocNeedsPctWidth(c.labels,'font_size')||rocNeedsPctWidth(c.vacuum_widgets,'size');
+    this._needsCardWidth=rocNeedsPctWidth(c.icons,'size')||rocNeedsPctWidth(c.labels,'font_size')||rocNeedsPctWidth(c.vacuum_widgets,'size')||rocNeedsPctWidth(c.glows,'size')||rocNeedsPctWidth(c.glows,'width')||rocNeedsPctWidth(c.glows,'height');
     this._hasDayNightGauge=(this._blindGaugeCfgs||[]).some(function(g){return g&&g._dayNight;});
     this._update();
     this._syncRoomState();
@@ -2520,7 +2613,7 @@ class RoomOverlayCard extends HTMLElement{
 
   _snapCandidates(){
     const c=this._config,tops=[],lefts=[];
-    ['zones','icons','labels','gauges','vacuum_widgets','blinds','elements'].forEach(function(k){
+    ['zones','icons','labels','gauges','vacuum_widgets','glows','blinds','elements'].forEach(function(k){
       (c[k]||[]).forEach(function(it){
         const t=parseFloat(it.top),l=parseFloat(it.left);
         if(!isNaN(t))tops.push(t);
@@ -2816,6 +2909,7 @@ class RoomOverlayCard extends HTMLElement{
     for(const ico of(c.icons||[]))vis('i:'+ico.id,ico.visible_template,this._icoEls[ico.id],'flex',ico);
     for(const b of(c.badges||[]))vis('b:'+b.id,b.visible_template,this._bcontEls[b.id],'flex',b);
     for(const ov of(c.overlays||[]))vis('o:'+ov.id,ov.visible_template,this._ovEls[ov.id],'',null);
+    for(const gw of(c.glows||[]))vis('gw:'+gw.id,gw.visible_template,this._glowEls[gw.id],'',gw);
     for(const e of(c.elements||[]))vis('e:'+e.id,e.visible_template,this._contEls[e.id],'block',e);
     for(const g of[...(c.gauges||[]),...(this._blindGaugeCfgs||[])])vis('g:'+g.id,g.visible_template,this._gaugeEls[g.id],'',g);
   }
@@ -3288,6 +3382,14 @@ class RoomOverlayCard extends HTMLElement{
       const vsz=resolveSize(tApply(vw,this._tier).size||vw.size||'44px',w);
       if(vsz&&vel.style.width!==vsz){vel.style.width=vsz;vel.style.height=vsz;}
     }
+    for(const g0 of(c.glows||[])){
+      const gel=this._glowEls[g0.id];if(!gel)continue;
+      const g=tApply(g0,this._tier);
+      const gw=resolveSize(g.width||g.size||'25%',w);
+      const gh=resolveSize(g.height||g.width||g.size||'25%',w);
+      if(gw)setSt(gel,'width',gw);
+      if(gh)setSt(gel,'height',gh);
+    }
     for(const lbl of(c.labels||[])){
       const el=this._lblEls[lbl.id];if(!el)continue;
       const raw=tApply(lbl,this._tier).font_size||lbl.font_size;
@@ -3368,6 +3470,32 @@ class RoomOverlayCard extends HTMLElement{
         }
       }
       setSt(el,'filter',_ovF);
+    }
+    // Light glow -- colour from the light itself, strength from its brightness
+    for(const g0 of(c.glows||[])){
+      const gel=this._glowEls[g0.id];if(!gel)continue;
+      const g=tApply(g0,this._tier);
+      const gShow=!g.group||(this._groupState[g.group]??true);
+      this._setGrpVis(gel,gShow);
+      if(!gShow)continue;
+      const gst=g.entity?s[g.entity]:null;
+      let gOn=!!gst&&gst.state!=='off'&&gst.state!=='unavailable'&&gst.state!=='unknown';
+      if(flipped)gOn=!gOn;
+      let gOp=0;
+      if(gOn){
+        const br=(gst&&gst.attributes)?gst.attributes.brightness:null;
+        const frac=(br==null||flipped)?1:Math.max(0,Math.min(1,br/255));
+        const minb=g.min_brightness??0;
+        gOp=(br!=null&&!flipped&&br<minb)?0:(g.intensity==null?0.7:Number(g.intensity))*frac;
+      }
+      // Edit mode keeps every glow visible (and grabbable) even with its light off
+      if((c.test_mode??false)&&gOp<0.25)gOp=0.25;
+      setSt(gel,'opacity',Math.max(0,Math.min(1,gOp)).toFixed(3));
+      const gfx=this._glowFxEls[g0.id];
+      if(gfx&&gOp>0){
+        const gbg=glowBg(g,glowRgb(g,gst));
+        if(gfx.dataset.gwBg!==gbg){gfx.dataset.gwBg=gbg;gfx.style.backgroundImage=gbg;}
+      }
     }
     // Weather overlay
     if(this._wxEl&&c.weather_overlay){
@@ -4073,6 +4201,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         (pR.labels||[]).length===(cR.labels||[]).length&&
         (pR.gauges||[]).length===(cR.gauges||[]).length&&
         (pR.vacuum_widgets||[]).length===(cR.vacuum_widgets||[]).length&&
+        (pR.glows||[]).length===(cR.glows||[]).length&&
         (pR.blinds||[]).length===(cR.blinds||[]).length&&
         ((pR.brightness_model?.source||[]).length===(cR.brightness_model?.source||[]).length)&&
         ((pR.brightness_model?.filter_gradient||[]).length===(cR.brightness_model?.filter_gradient||[]).length)&&
@@ -4539,6 +4668,33 @@ class RoomOverlayCardEditor extends HTMLElement{
       return o;
     });
 
+    tgt.glows=(tgt.glows||[]).map(function(g,i){
+      const o=Object.assign({},g);
+      const idEl=q('[data-gw-id="'+i+'"]');if(idEl)o.id=idEl.value;
+      const entEl=q('[data-gw-ent="'+i+'"]');if(entEl){if(entEl.value.trim())o.entity=entEl.value.trim();else delete o.entity;}
+      const shEl=q('[data-gw-shape="'+i+'"]');if(shEl){if(shEl.value&&shEl.value!=='circle')o.shape=shEl.value;else delete o.shape;}
+      const szEl=q('[data-gw-size="'+i+'"]');if(szEl){const _v=szEl.value.trim();if(_v)o.size=_v;else delete o.size;}
+      const wEl=q('[data-gw-w="'+i+'"]');if(wEl){const _v=wEl.value.trim();if(_v)o.width=_v;else delete o.width;}
+      const hEl=q('[data-gw-h="'+i+'"]');if(hEl){const _v=hEl.value.trim();if(_v)o.height=_v;else delete o.height;}
+      const tEl=q('[data-gw-top="'+i+'"]');if(tEl)o.top=tEl.value;
+      const lEl=q('[data-gw-left="'+i+'"]');if(lEl)o.left=lEl.value;
+      const inEl=q('[data-gw-int="'+i+'"]');if(inEl&&inEl.value!==''){const _n=parseFloat(inEl.value);if(!isNaN(_n))o.intensity=_n;}
+      const foEl=q('[data-gw-fall="'+i+'"]');if(foEl){if(foEl.value&&foEl.value!=='soft')o.falloff=foEl.value;else delete o.falloff;}
+      const blEl=q('[data-gw-blend="'+i+'"]');if(blEl){if(blEl.value&&blEl.value!=='screen')o.blend=blEl.value;else delete o.blend;}
+      const coEl=q('[data-gw-color="'+i+'"]');if(coEl){const _v=coEl.value.trim();if(_v&&_v!=='auto')o.color=_v;else delete o.color;}
+      const anEl=q('[data-gw-anim="'+i+'"]');if(anEl){if(anEl.value)o.animation=anEl.value;else delete o.animation;}
+      const agEl=q('[data-gw-angle="'+i+'"]');if(agEl){const _v=agEl.value.trim();if(_v)o.angle=isNaN(parseFloat(_v))?_v:parseFloat(_v);else delete o.angle;}
+      const zEl=q('[data-gw-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value);
+      const grEl=q('[data-gw-grp="'+i+'"]');if(grEl&&grEl.value.trim())o.group=grEl.value.trim();else delete o.group;
+      const gyR=self._pYaml(q('[data-gw-yaml="'+i+'"]'));
+      if(gyR.ok){
+        const KEEP=['id','entity','shape','size','width','height','top','left','intensity','falloff','blend','color','animation','angle','z_index','group'];
+        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        if(gyR.val)Object.assign(o,gyR.val);
+      }
+      return o;
+    });
+
 
     tgt.labels=(tgt.labels||[]).map(function(lbl,i){
       const o=Object.assign({},lbl);
@@ -4724,7 +4880,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     }
 
     // Prune empty per-room arrays — keeps saved YAML minimal
-    ['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','blinds','groups','filter_conditions'].forEach(function(k){
+    ['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','glows','blinds','groups','filter_conditions'].forEach(function(k){
       if(Array.isArray(tgt[k])&&!tgt[k].length)delete tgt[k];
     });
 
@@ -4978,6 +5134,64 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+=this._mvBtns('ico',i);
     h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
+    h+='</div></details>';
+    return h;
+  }
+
+  _glowItem(g,i){
+    const cp=Object.assign({},g);
+    ['id','entity','shape','size','width','height','top','left','intensity','falloff','blend','color','animation','angle','z_index','group']
+      .forEach(function(k){delete cp[k];});
+    const ys=Object.keys(cp).length?_yaml.s(cp):'';
+    const op=this._openPanels&&this._openPanels.has('gw-'+i);
+    const sw=glowParseColor(g.color);
+    const prevBg=glowBg(g,sw||GLOW_DEFAULT_RGB);
+    let h='<details style="margin-bottom:6px;" data-panel="gw-'+i+'"'+(op?' open':'')+' >';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Light glow: '+this._e(g.id||'glow_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">A soft pool of light blended onto the photo. Colour follows the light\'s own <code>rgb_color</code> / colour temperature and strength follows its brightness. <b>Top/Left is the centre</b> of the glow &mdash; drag it straight onto the lamp in the preview above.</p>';
+    h+='<div style="height:26px;border-radius:6px;background:#101014;position:relative;overflow:hidden;margin-bottom:8px;"><div style="position:absolute;inset:0;background:'+prevBg+';"></div></div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">ID</label><input data-gw-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Light / switch entity</label><input data-gw-ent="'+i+'" type="text" list="roc-entities" placeholder="light.xyz" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Shape</label><select data-gw-shape="'+i+'"'+this._inp('')+'>';
+    [['circle','circle — lamp / bulb'],['ellipse','ellipse — LED strip / window'],['wash','wash — directional spill on a wall']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.shape||'circle')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Size (px or % of width)</label><input data-gw-size="'+i+'" type="text" placeholder="25%" value="'+this._e(g.size||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Width (ellipse / wash)</label><input data-gw-w="'+i+'" type="text" placeholder="= size" value="'+this._e(g.width||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Height (ellipse / wash)</label><input data-gw-h="'+i+'" type="text" placeholder="= width" value="'+this._e(g.height||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Top (centre)</label><input data-gw-top="'+i+'" type="text" value="'+this._e(g.top||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Left (centre)</label><input data-gw-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Intensity (at full brightness)</label><input data-gw-int="'+i+'" type="number" min="0" max="1" step="0.05" value="'+this._e(String(g.intensity==null?0.7:g.intensity))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Falloff</label><select data-gw-fall="'+i+'"'+this._inp('')+'>';
+    [['soft','soft — natural lamp'],['tight','tight — small bright core'],['wide','wide — faint room fill']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.falloff||'soft')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Blend</label><select data-gw-blend="'+i+'"'+this._inp('')+'>';
+    [['screen','screen — light adds up (default)'],['plus-lighter','plus-lighter — stronger'],['soft-light','soft-light — subtle'],['normal','normal — plain paint']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.blend||'screen')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Colour</label><div style="display:flex;gap:6px;align-items:center;"><span style="display:inline-block;width:18px;height:18px;border-radius:50%;flex:none;border:1px solid var(--divider-color);background:'+(sw?('rgb('+sw.join(',')+')'):'conic-gradient(#ffb46e,#8ad0ff,#ffb46e)')+';"></span><input data-gw-color="'+i+'" type="text" placeholder="auto" value="'+this._e(g.color||'')+'"'+this._inp('')+'></div></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Animation</label><select data-gw-anim="'+i+'"'+this._inp('')+'>';
+    [['','none'],['flicker','flicker — candle / fireplace'],['pulse','pulse — slow breathing']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.animation||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Angle (wash only)</label><input data-gw-angle="'+i+'" type="text" placeholder="180deg = downward" value="'+this._e(g.angle==null?'':String(g.angle))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">z-index</label><input data-gw-z="'+i+'" type="number" value="'+this._e(String(g.z_index??2))+'"'+this._inp('font-size:12px;')+'></div>';
+    h+='<div><label class="roc-l">Group (optional)</label><input data-gw-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">Colour <code>auto</code> follows the light. Fixed values also work: <code>#ffb46e</code>, <code>255,180,110</code> or <code>2700K</code>. z-index <b>2</b> keeps the glow under your overlay PNGs (curtains, furniture) &mdash; raise it to let light spill over them.</p>';
+    h+='<div class="roc-adv"><label class="roc-l">min_brightness / transition / animation_speed / anchor / fallback_color / visible / visible_template / fade / slide / portrait / landscape overrides (YAML)</label><textarea data-gw-yaml="'+i+'" rows="5"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+=this._mvBtns('gw',i);
+    h+='<button data-dup-gw="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
+    h+='<button data-rm-gw="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove glow</button>';
     h+='</div></details>';
     return h;
   }
@@ -5346,6 +5560,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     (cR.vacuum_widgets||[]).forEach(function(vw,i){vwInner+=self._vwItem(vw,i);});
     vwInner+='</div><button id="add-vw" style="'+btnStyle+'margin-top:4px;">+ Add vacuum widget</button>';
 
+    let gwInner='<div id="gw-list">';
+    (cR.glows||[]).forEach(function(g,i){gwInner+=self._glowItem(g,i);});
+    gwInner+='</div><button id="add-gw" style="'+btnStyle+'margin-top:4px;">+ Add light glow</button>';
+
     let lblInner='<div id="lbl-list">';
     (cR.labels||[]).forEach(function(lbl,i){lblInner+=self._lblItem(lbl,i);});
     lblInner+='</div><button id="add-lbl" style="'+btnStyle+'margin-top:4px;">+ Add label</button>';
@@ -5644,6 +5862,7 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('icons','Icons — state-aware mdi icons',(cR.icons||[]).length,icoInner,'mdi:star-four-points-outline')
          +sec('labels','Labels — entity values as text',(cR.labels||[]).length,lblInner,'mdi:format-text')
          +sec('lights','Light &amp; switch controls — sliders / toggles',_lcEnts.length,lcInner,'mdi:tune-vertical')
+         +sec('glows','Light glow — light spill on the photo',(cR.glows||[]).length,gwInner,'mdi:lightbulb-on-outline')
          +sec('overlays','Overlay image layers',(cR.overlays||[]).length,ovInner,'mdi:layers-outline')
          +sec('vacuum_widgets','Vacuum status widgets — cross-room informational badge',(cR.vacuum_widgets||[]).length,vwInner,'mdi:robot-vacuum')
          +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner,'mdi:gesture-tap'))
@@ -5988,7 +6207,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     // Reorder (▲▼) — one generic handler for all item lists
-    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds',vw:'vacuum_widgets'};
+    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds',vw:'vacuum_widgets',gw:'glows'};
     this.querySelectorAll('[data-mv]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const p=btn.dataset.mv.split(':');
@@ -6234,6 +6453,34 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
+      el.addEventListener('change',fire);
+    });
+
+    // Light glow
+    const addGw=this.querySelector('#add-gw');
+    if(addGw)addGw.addEventListener('click',function(){
+      const c=self._collectConfig();
+      const gA=A(c,'glows');
+      gA.push({id:'glow_'+(gA.length+1),entity:'',top:'40%',left:'50%',size:'25%',intensity:0.7});
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-gw]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmGw);
+        const c=self._collectConfig();
+        A(c,'glows').splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-dup-gw]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.dupGw),c=self._collectConfig();
+        const dA=A(c,'glows');if(!dA[i])return;
+        const cl=rocClone(dA[i]);cl.id=cl.id+'_2';cl.top=_cp(cl.top);cl.left=_cp(cl.left);
+        dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-gw-id],[data-gw-ent],[data-gw-shape],[data-gw-size],[data-gw-w],[data-gw-h],[data-gw-top],[data-gw-left],[data-gw-int],[data-gw-fall],[data-gw-blend],[data-gw-color],[data-gw-anim],[data-gw-angle],[data-gw-z],[data-gw-grp],[data-gw-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 

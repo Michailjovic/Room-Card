@@ -33,6 +33,7 @@ GUI editor — see [`EDITOR.md`](EDITOR.md) for the tab-by-tab walkthrough.
 | `elements` | list | `[]` | Embedded HA cards |
 | `cards_above` / `cards_below` | list | `[]` | Companion HA cards stacked above/below the image |
 | `light_controls` | object | — | Strip of light sliders with a lux-tracking border |
+| `glows` | list | `[]` | Light-spill layers blended onto the photo, driven by a light's colour and brightness |
 | `groups` | list | `[]` | Client-side element groups (toggle/show/hide) |
 | `rooms` | list | — | Multi-room definitions (see [Multi-room](#multi-room-one-card--whole-home)) |
 | `nav` | object | — | Multi-room navigation strip |
@@ -753,6 +754,84 @@ Requires the `material-slider-card` resource to be installed. In the GUI these l
 *Three lights with per-slider names, a lux sensor driving the gradient, and the live gradient
 preview — the same blue→amber ramp `color_low`/`color_high` produce, rendered so you can check it
 before saving instead of guessing at hex values.*
+
+---
+
+## Light glow (light spill on the photo)
+
+A **glow** is a soft pool of light blended onto the room photo. Its **colour comes from the light
+itself** (`rgb_color`, or its colour temperature) and its **strength from the light's brightness**,
+so a warm dimmed lamp paints a small warm pool and the same lamp at full cold white floods the
+corner. Unlike an overlay, a glow needs no PNG — it is a CSS gradient, so you can place one on
+every lamp in the room without preparing a single image.
+
+Where a `brightness_model` dims or lifts the *whole* photo, glows are the local counterpart: the
+picture stays dark, but the lamps in it light up.
+
+```yaml
+glows:
+  - id: reading_lamp
+    entity: light.bedroom_lamp
+    top: 42%              # the CENTRE of the glow, not its corner
+    left: 18%
+    size: 26%             # diameter, % of card width (or px)
+    intensity: 0.75       # opacity at full brightness
+    falloff: soft         # soft | tight | wide
+    color: auto           # auto = follow the light; or "#ffb46e" / "255,180,110" / "2700K"
+    blend: screen         # screen | plus-lighter | soft-light | normal
+    z_index: 2            # under the overlay PNGs; raise to spill light over them
+```
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `id` | string | **required** | Unique id within the room |
+| `entity` | string | — | Light or switch that drives the glow (any non-`off` state lights it) |
+| `top` / `left` | string | `50%` | **Centre** of the glow — drag it straight onto the lamp in Edit mode |
+| `size` | string | `25%` | Diameter (`%` of card width, or px) — used for both axes on a circle |
+| `width` / `height` | string | `size` | Explicit box, for `ellipse` and `wash` |
+| `shape` | string | `circle` | `circle` (lamp), `ellipse` (LED strip, window), `wash` (directional spill) |
+| `angle` | number/string | `180deg` | `wash` only — the direction the light travels (`180deg` = downward) |
+| `intensity` | number | `0.7` | Opacity at full brightness; scaled by `brightness / 255` |
+| `falloff` | string | `soft` | `soft` (natural lamp), `tight` (small bright core), `wide` (faint room fill) |
+| `color` | string | `auto` | `auto` follows the light; or `#rrggbb`, `#rgb`, `rgb(...)`, `r,g,b`, `2700K` |
+| `fallback_color` | string | warm bulb | Used when `color: auto` and the light reports no colour at all |
+| `blend` | string | `screen` | How the light mixes with the photo |
+| `animation` | string | — | `flicker` (candle / fireplace) or `pulse` (slow breathing) |
+| `animation_speed` | string | `3.1s`/`4s` | Cycle length for the animation |
+| `min_brightness` | number | `0` | Below this raw brightness (0–255) the glow stays dark |
+| `anchor` | string | `center` | `corner` makes `top`/`left` the top-left corner instead |
+| `transition` | string | `0.6s ease` | Fade when the light turns on or off |
+| `z_index` | number | `2` | Default sits under overlay PNGs (curtains, foreground furniture) |
+| `group` / `visible` / `visible_template` / `fade` / `slide` | | | As on every other element |
+| `portrait:` / `landscape:` | object | — | Per-profile overrides (position, size, intensity…) |
+
+**Brightness and colour.** With `color: auto` the glow reads `rgb_color` first, then
+`color_temp_kelvin` (or legacy mired `color_temp`), and falls back to a warm bulb when the light
+reports neither — a plain `switch` therefore glows warm at full `intensity`. Opacity is
+`intensity × brightness / 255`, so dimming the light dims the pool of light on the photo.
+
+**Shapes.**
+
+- `circle` — a lamp, a ceiling light, a candle. `size` sets the diameter.
+- `ellipse` — an LED strip, a window, a TV. Set `width` and `height`.
+- `wash` — a directional spill anchored on the edge the light comes *from*, fading on every side:
+  under-cabinet LEDs, a wall washer, bias light behind a screen. `angle: 180deg` (default) comes
+  from the top downward, `90deg` from the left, `0deg` from the bottom up.
+
+**Layering.** `z_index: 2` puts the glow above the base photo but below overlay layers (which
+start at 1 and are usually 1…n), so a foreground curtain PNG still covers the light. Raise
+`z_index` above your overlays if you want the light to spill over them.
+
+**Why no blur.** The soft edge comes entirely from gradient stops — the card never puts a CSS
+`filter` on a blended layer, because stacking `filter` over `backdrop-filter`/`mix-blend-mode` is
+the compositing combination that caused the v6.5.1 repaint bug on tablet WebViews.
+
+In `nav.live` mini-rooms a glow always renders, like overlays and the filter engine — it is part
+of how the room looks, not page furniture, so it is not one of the per-element `nav_mini` opt-ins.
+
+In the GUI these live in the **Elements** tab under *Light glow*, with a live falloff preview.
+Turn on **Edit mode** and drag each glow onto its lamp — it stays visible even when the light is
+off, so you can place it at any time of day.
 
 ---
 
