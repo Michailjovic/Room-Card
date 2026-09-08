@@ -1049,15 +1049,31 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     gwTm.hass={states:{'light.lamp':{state:'off',attributes:{}}},callService(){},user:{name:'x'}};
     await settle();
     const gTmEl=gwTm.shadowRoot.querySelector('[data-glow="lamp"]');
-    t('edit mode keeps an off glow visible enough to grab',parseFloat(gTmEl.style.opacity)>=0.25);
-    t('edit mode outlines the glow like other draggable elements',/outline:/.test(gTmEl.getAttribute('style')));
-    t('edit mode makes the glow grabbable (pointer-events + grab cursor)',gTmEl.style.cursor==='grab'&&gTmEl.style.pointerEvents==='auto');
+    t('edit mode keeps an off glow visible enough to see',parseFloat(gTmEl.style.opacity)>=0.25);
+    // Editing affordances live in a sibling chrome box, never inside the glow:
+    // handles parented to the glow would inherit its opacity and be blended.
+    const gChrome=gwTm.shadowRoot.querySelector('[data-glowedit="lamp"]');
+    t('edit mode renders a chrome box per glow',!!gChrome);
+    t('the chrome box is not blended and carries no state opacity',
+      !/mix-blend-mode/.test(gChrome.getAttribute('style'))&&!/opacity/.test(gChrome.getAttribute('style')));
+    t('the chrome box sits exactly on the glow',
+      gChrome.style.top===gTmEl.style.top&&gChrome.style.left===gTmEl.style.left&&gChrome.style.width===gTmEl.style.width);
+    t('the chrome box is what you grab (outline + grab cursor)',
+      /outline:/.test(gChrome.getAttribute('style'))&&gChrome.style.cursor==='grab');
+    t('the chrome box carries a resize handle, hidden until the glow is selected',
+      (function(){const h=gChrome.querySelector('.roc-rh');return!!h&&h.style.display==='none';})());
+    t('the chrome box is labelled with the glow id',
+      (function(){const tg=gChrome.querySelector('.glow-tag');return!!tg&&tg.textContent==='lamp';})());
+    t('no chrome box outside edit mode',!gwCard.shadowRoot.querySelector('[data-glowedit="lamp"]'));
+    t('a circle glow sets width only and derives height from aspect-ratio',
+      gTmEl.style.width==='20%'&&!gTmEl.style.height&&/aspect-ratio:\s*1/.test(gTmEl.getAttribute('style')));
 
     // GUI editor
     const edGw=w.document.createElement('room-overlay-card-editor');
     w.document.body.appendChild(edGw);
     edGw.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',
-      glows:[{id:'lamp',entity:'light.lamp',top:'40%',left:'30%',size:'20%',intensity:0.8,falloff:'tight',color:'2700K',min_brightness:12}]});
+      glows:[{id:'lamp',entity:'light.lamp',top:'40%',left:'30%',size:'20%',intensity:0.8,falloff:'tight',color:'2700K',min_brightness:12,
+        fallback_color:'#ffffff'}]});
     edGw.hass={states:{},user:{name:'x'}};
     edGw._render();
     t('editor renders a light glow panel',!!edGw.querySelector('[data-gw-id="0"]'));
@@ -1069,17 +1085,53 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       edGw.querySelector('[data-gw-color="0"]').value==='2700K');
     const gwYaml=edGw.querySelector('[data-gw-yaml="0"]');
     t('editor glow YAML box carries only the keys without a dedicated field',
-      /min_brightness:/.test(gwYaml.value)&&!/^id:/m.test(gwYaml.value)&&!/falloff:/.test(gwYaml.value));
+      /fallback_color:/.test(gwYaml.value)&&!/^id:/m.test(gwYaml.value)&&!/falloff:/.test(gwYaml.value)&&!/min_brightness:/.test(gwYaml.value));
     edGw.querySelector('[data-gw-id="0"]').value='lamp_renamed';
     edGw.querySelector('[data-gw-int="0"]').value='0.45';
     edGw.querySelector('[data-gw-shape="0"]').value='ellipse';
     const gwOut=edGw._collectConfig().glows[0];
     t('collectConfig round-trips the glow fields',
       gwOut.id==='lamp_renamed'&&gwOut.intensity===0.45&&gwOut.shape==='ellipse'&&gwOut.entity==='light.lamp');
-    t('collectConfig keeps min_brightness from the YAML box',gwOut.min_brightness===12);
+    t('collectConfig keeps fallback_color from the YAML box',gwOut.fallback_color==='#ffffff');
+    t('collectConfig keeps min_brightness from its own field now',gwOut.min_brightness===12);
     t('collectConfig omits defaults (shape circle / blend screen / falloff soft) it did not set',
       (function(){edGw.querySelector('[data-gw-shape="0"]').value='circle';
         const o=edGw._collectConfig().glows[0];return o.shape===undefined&&o.blend===undefined;})());
+    // colour picker + Auto + intensity slider
+    t('editor renders a native colour picker next to the colour field',!!edGw.querySelector('[data-gw-swatch="0"]'));
+    t('the picker shows the resolved colour of a non-hex value (2700K → warm hex)',
+      /^#[0-9a-f]{6}$/.test(edGw.querySelector('[data-gw-swatch="0"]').getAttribute('value'))&&
+      edGw.querySelector('[data-gw-swatch="0"]').getAttribute('value')!=='#000000');
+    edGw.querySelector('[data-gw-swatch="0"]').value='#3366ff';
+    edGw.querySelector('[data-gw-swatch="0"]').dispatchEvent(new w.Event('change',{bubbles:true}));
+    t('picking a colour writes the hex into the colour field and into the config',
+      edGw.querySelector('[data-gw-color="0"]').value==='#3366ff'&&edGw._collectConfig().glows[0].color==='#3366ff');
+    let gwAuto=null;
+    edGw.addEventListener('config-changed',e=>{gwAuto=e.detail.config;});
+    edGw.querySelector('[data-gw-auto="0"]').dispatchEvent(new w.Event('click',{bubbles:true}));
+    t('Auto drops the fixed colour so the glow follows the light again',!!gwAuto&&gwAuto.glows[0].color===undefined);
+    t('editor renders an intensity slider paired with the number field',
+      !!edGw.querySelector('[data-gw-int-range="0"]')&&!!edGw.querySelector('[data-gw-int="0"]'));
+    const gwRange=edGw.querySelector('[data-gw-int-range="0"]');
+    gwRange.value='0.35';gwRange.dispatchEvent(new w.Event('input',{bubbles:true}));
+    t('dragging the slider mirrors into the number field (which collectConfig reads)',
+      edGw.querySelector('[data-gw-int="0"]').value==='0.35'&&edGw._collectConfig().glows[0].intensity===0.35);
+
+    // fields promoted out of the YAML box
+    t('min_brightness / animation speed / anchor / transition have real fields now',
+      !!edGw.querySelector('[data-gw-minb="0"]')&&!!edGw.querySelector('[data-gw-aspeed="0"]')&&
+      !!edGw.querySelector('[data-gw-anchor="0"]')&&!!edGw.querySelector('[data-gw-trans="0"]'));
+    t('min_brightness field is prefilled from the config and no longer in the YAML box',
+      edGw.querySelector('[data-gw-minb="0"]').value==='12'&&!/min_brightness:/.test(edGw.querySelector('[data-gw-yaml="0"]').value));
+    edGw.querySelector('[data-gw-minb="0"]').value='40';
+    edGw.querySelector('[data-gw-anchor="0"]').value='corner';
+    edGw.querySelector('[data-gw-trans="0"]').value='1.2s ease';
+    const gwOut2=edGw._collectConfig().glows[0];
+    t('the promoted fields round-trip through collectConfig',
+      gwOut2.min_brightness===40&&gwOut2.anchor==='corner'&&gwOut2.transition==='1.2s ease');
+    edGw.querySelector('[data-gw-minb="0"]').value='0';
+    t('min_brightness 0 is omitted rather than saved as a no-op',edGw._collectConfig().glows[0].min_brightness===undefined);
+
     let gwAdd=null;
     edGw.addEventListener('config-changed',e=>{gwAdd=e.detail.config;});
     edGw.querySelector('#add-gw').dispatchEvent(new w.Event('click',{bubbles:true}));

@@ -829,9 +829,15 @@ the compositing combination that caused the v6.5.1 repaint bug on tablet WebView
 In `nav.live` mini-rooms a glow always renders, like overlays and the filter engine — it is part
 of how the room looks, not page furniture, so it is not one of the per-element `nav_mini` opt-ins.
 
-In the GUI these live in the **Elements** tab under *Light glow*, with a live falloff preview.
-Turn on **Edit mode** and drag each glow onto its lamp — it stays visible even when the light is
-off, so you can place it at any time of day.
+In the GUI these live in the **Elements** tab under *Light glow*: a live falloff preview, a native
+colour picker with an **Auto** button (hands the colour back to the light), an intensity slider, and
+fields for everything above except the per-profile overrides.
+
+Turn on **Edit mode** and each glow gets a dashed box labelled with its id: drag it onto the lamp,
+click it once and pull a round handle to resize (a circle stays round; an ellipse or wash gets
+width, height and corner handles). Because `top`/`left` is the centre, resizing grows the glow
+symmetrically. A glow stays visible even when its light is off, so you can place it at any time of
+day.
 
 ---
 

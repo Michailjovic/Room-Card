@@ -1,5 +1,38 @@
 # Changelog
 
+## [6.6.1] - 2026-09-08
+
+### Light glow: colour picker, intensity slider, and resize handles in Edit mode
+
+Follow-up to v6.6.0 from using it on a real room photo. No new config keys and no migration — this
+is the editing surface for what v6.6.0 already renders.
+
+- **Colour picker.** A native `<input type="color">` sits beside the colour field. The text field
+  stays the source of truth, so `auto`, `2700K` and `255,180,110` keep working — the picker only
+  writes a hex into it. Dragging inside the picker previews live (debounced), releasing commits, and
+  an **Auto** button hands the colour back to the light. A non-hex value resolves to its real colour
+  in the swatch (`2700K` shows warm, not black).
+- **Intensity slider** paired with the number field, the same pattern as the filter-value sliders.
+- **`min_brightness`, `animation_speed`, `anchor` and `transition` are real fields now** instead of
+  YAML-box keys; only `fallback_color`, `border_radius`, visibility, fade/slide and the per-profile
+  overrides are left in the box.
+- **Edit mode: a chrome box per glow** — a dashed outline labelled with the glow's id that you drag
+  onto the lamp, with round **resize handles** once selected: one for a circle (which keeps it round
+  through `aspect-ratio`), width / height / corner for an ellipse or wash. Because `top`/`left` is
+  the centre, a handle drag grows the glow symmetrically on both sides.
+
+  The handles deliberately are **not** children of the glow. They would inherit its state-driven
+  opacity — 25 % when the light is off, i.e. barely visible — and be `screen`-blended into the photo
+  along with it. The chrome is a plain unblended sibling that mirrors the glow's geometry, and the
+  drag/resize callbacks sync the real glow layer's style live so the light follows the box without
+  waiting for a config round-trip.
+
+- **Geometry is now plain `%` of the stage** rather than percentages pre-resolved to px against the
+  card width. A circle sets `width` and derives its height from `aspect-ratio: 1` — a `%` height is
+  measured against the stage *height* and would turn every circle into an ellipse on a non-square
+  card. This is what lets the resize handles read and write the same units the config stores, and it
+  drops the per-resize recalculation the previous approach needed.
+
 ## [6.6.0] - 2026-09-08
 
 ### Light glow — the lamps in the photo actually light up

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.6.0';
+const ROC_VERSION='6.6.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1756,10 +1756,17 @@ class RoomOverlayCard extends HTMLElement{
       const a11y=vw.tap_action?' tabindex="0" role="button" aria-label="'+escA(vw.id)+'"':'';
       return'<div class="vw vw-rest" data-vw="'+escA(vw.id)+'"'+a11y+' style="position:absolute;top:'+vw.top+';left:'+vw.left+';width:'+vwSz+';height:'+vwSz+';z-index:'+(vw.z_index??7)+';cursor:'+(vw.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;"><div class="vw-bg" data-vwbg="'+escA(vw.id)+'"></div>'+vwIconHtml(vw)+'<span class="vw-count" data-vwc="'+escA(vw.id)+'" style="display:none;"></span></div>';
     }).join('');
+    // Geometry in % of the stage (like zones), so a resize handle writes the
+    // same units it reads. A circle sets width only and derives its height from
+    // aspect-ratio -- a % height would be measured against the stage HEIGHT and
+    // turn every circle into an ellipse on a non-square card.
+    const _glowGeom=(g)=>{
+      const box=(g.shape==='ellipse'||g.shape==='wash');
+      return box?('width:'+(g.width||g.size||'25%')+';height:'+(g.height||g.width||g.size||'25%')+';')
+                :('width:'+(g.size||g.width||'25%')+';aspect-ratio:1;');
+    };
     const glowHtml=(c.glows||[]).map(g0=>{
       const g=tApply(g0,_tier);
-      const _gw=resolveSize(g.width||g.size||'25%',_cardW);
-      const _gh=resolveSize(g.height||g.width||g.size||'25%',_cardW);
       let _fx='position:absolute;inset:0;';
       if(g.shape!=='wash')_fx+='border-radius:50%;';
       else if(g.border_radius)_fx+='border-radius:'+g.border_radius+';';
@@ -1768,8 +1775,18 @@ class RoomOverlayCard extends HTMLElement{
       // top/left is the CENTRE of the glow (a lamp is a point, not a box), done
       // with a transform so _makeDraggable/_snapPos keep working on top/left %.
       const _anchor=g.anchor==='corner'?'':'transform:translate(-50%,-50%);';
-      return'<div class="glow" data-glow="'+escA(g0.id)+'" style="position:absolute;top:'+(g.top??'50%')+';left:'+(g.left??'50%')+';width:'+_gw+';height:'+_gh+';'+_anchor+'z-index:'+(g.z_index??2)+';opacity:0;mix-blend-mode:'+(g.blend||'screen')+';transition:opacity '+(g.transition||'0.6s ease')+';'+(tm?'outline:1px dashed rgba(255,214,120,0.85);':'')+'"><div class="glow-fx" data-glowfx="'+escA(g0.id)+'" style="'+_fx+'"></div></div>';
+      return'<div class="glow" data-glow="'+escA(g0.id)+'" style="position:absolute;top:'+(g.top??'50%')+';left:'+(g.left??'50%')+';'+_glowGeom(g)+_anchor+'z-index:'+(g.z_index??2)+';opacity:0;mix-blend-mode:'+(g.blend||'screen')+';transition:opacity '+(g.transition||'0.6s ease')+';"><div class="glow-fx" data-glowfx="'+escA(g0.id)+'" style="'+_fx+'"></div></div>';
     }).join('');
+    // Edit mode draws its own un-blended chrome box per glow (drag + resize
+    // handles + id tag). Handles parented to the glow itself would inherit its
+    // state-driven opacity and be screen-blended into the photo, so the real
+    // glow layer stays exactly as it renders on the dashboard and all editing
+    // affordances live in this sibling.
+    const glowEditHtml=tm?(c.glows||[]).map(g0=>{
+      const g=tApply(g0,_tier);
+      const _a=g.anchor==='corner'?'':'transform:translate(-50%,-50%);';
+      return'<div class="glow-edit" data-glowedit="'+escA(g0.id)+'" style="position:absolute;top:'+(g.top??'50%')+';left:'+(g.left??'50%')+';'+_glowGeom(g)+_a+'z-index:60;border-radius:'+(g.shape==='wash'?'6px':'50%')+';outline:1px dashed rgba(255,214,120,0.95);"><span class="glow-tag">'+escA(g0.id)+'</span></div>';
+    }).join(''):'';
     const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=tApply(lbl0,_tier);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+escA(lbl.id)+'" style="'+st+'"></div>';}).join('');
     const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+escA(g.id)+'" style="position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;transition:opacity .25s ease,visibility .25s ease;visibility:'+(vis?'visible':'hidden')+';opacity:'+(vis?'1':'0')+';"></div>';}).join('');
     const _wx=c.weather_overlay?(typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay):null;
@@ -1872,7 +1889,7 @@ class RoomOverlayCard extends HTMLElement{
     // (NAV_LIVE_FULL_PLAN.md §6), same mechanism natural-portrait already uses.
     const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini||c._roc_preview)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -2139,6 +2156,11 @@ class RoomOverlayCard extends HTMLElement{
       this._glowEls[g.id]=gel;
       this._glowFxEls[g.id]=gel.querySelector('.glow-fx');
     }
+    this._glowEditEls={};
+    for(const g of(c.glows||[])){
+      const ge=this.shadowRoot.querySelector('[data-glowedit="'+escSel(g.id)+'"]');
+      if(ge)this._glowEditEls[g.id]=ge;
+    }
     this._grpPanelEls={};
     for(const g of(c.groups||[])){if(g.style)this._grpPanelEls[g.id]=this.shadowRoot.querySelector('[data-grp-panel="'+escSel(g.id)+'"]');}
     this._zoneEls={};
@@ -2368,11 +2390,23 @@ class RoomOverlayCard extends HTMLElement{
         });
       }
       for(const g of(c.glows||[])){
-        const el=this._glowEls[g.id];if(!el)continue;
-        el.style.pointerEvents='auto';el.style.cursor='grab';
+        const el=this._glowEditEls[g.id];if(!el)continue;
+        const gl=this._glowEls[g.id];
+        el.style.cursor='grab';
         this._makeDraggable(el,(top,left)=>{
+          if(gl){gl.style.top=top;gl.style.left=left;}   // the light follows the box live
           const nc=rocClone(this._config);
           const gc=this._roomArr(nc,'glows').find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;}
+          _dpFire(nc);this._update();
+        });
+        this._makeGlowResizable(el,g.shape,(width,height)=>{
+          if(gl){gl.style.width=width;if(height)gl.style.height=height;}
+          const nc=rocClone(this._config);
+          const gc=this._roomArr(nc,'glows').find(x=>x.id===g.id);
+          if(gc){
+            if(height){gc.width=width;gc.height=height;delete gc.size;}
+            else{gc.size=width;delete gc.width;delete gc.height;}
+          }
           _dpFire(nc);this._update();
         });
       }
@@ -2411,7 +2445,7 @@ class RoomOverlayCard extends HTMLElement{
         });
       }
       // Keyboard nudge — click to select, arrows to nudge, Escape to deselect
-      const _tmOutline=(type)=>type==='zone'?'3px solid red':'';
+      const _tmOutline=(type)=>type==='zone'?'3px solid red':(type==='glow'?'1px dashed rgba(255,214,120,0.95)':'');
       const _selectTM=(el,type,id)=>{
         if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';}
         this.shadowRoot.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='none';}); // hide every resize handle
@@ -2435,6 +2469,7 @@ class RoomOverlayCard extends HTMLElement{
         else if(e.key==='ArrowLeft')left=Math.max(0,left-step);
         else if(e.key==='ArrowRight')left=Math.min(98,left+step);
         el.style.top=top.toFixed(1)+'%';el.style.left=left.toFixed(1)+'%';
+        if(type==='glow'){const _gl=this._glowEls[id];if(_gl){_gl.style.top=el.style.top;_gl.style.left=el.style.left;}}
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
           const nc=rocClone(this._config);
@@ -2460,7 +2495,7 @@ class RoomOverlayCard extends HTMLElement{
         el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'vacuum_widget',vw.id);},true);
       }
       for(const g of(c.glows||[])){
-        const el=this._glowEls[g.id];if(!el)continue;
+        const el=this._glowEditEls[g.id];if(!el)continue;
         el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'glow',g.id);},true);
       }
       for(const lbl of(c.labels||[])){
@@ -2604,7 +2639,7 @@ class RoomOverlayCard extends HTMLElement{
     this._wireRelTimer();
     // Geometry-dependency flags, computed once per render so the hot paths
     // (_update / _applyResizeStyles) can skip forced layout reads entirely.
-    this._needsCardWidth=rocNeedsPctWidth(c.icons,'size')||rocNeedsPctWidth(c.labels,'font_size')||rocNeedsPctWidth(c.vacuum_widgets,'size')||rocNeedsPctWidth(c.glows,'size')||rocNeedsPctWidth(c.glows,'width')||rocNeedsPctWidth(c.glows,'height');
+    this._needsCardWidth=rocNeedsPctWidth(c.icons,'size')||rocNeedsPctWidth(c.labels,'font_size')||rocNeedsPctWidth(c.vacuum_widgets,'size');
     this._hasDayNightGauge=(this._blindGaugeCfgs||[]).some(function(g){return g&&g._dayNight;});
     this._update();
     this._syncRoomState();
@@ -3293,6 +3328,55 @@ class RoomOverlayCard extends HTMLElement{
     });
   }
 
+  // Resize for a glow's edit-mode chrome box. Not _makeResizable: top/left is
+  // the CENTRE here, so a handle drag grows the box on both sides (hence ×200,
+  // not ×100), a circle resizes on one axis and keeps aspect-ratio, and the
+  // callback speaks size/width/height rather than a top/left/width/height rect.
+  _makeGlowResizable(el,shape,onResize){
+    const self=this;
+    const box=(shape==='ellipse'||shape==='wash');
+    const hs=box?[{p:'top:calc(50% - 7px);right:-7px',c:'ew-resize',w:1,h:0},
+                  {p:'left:calc(50% - 7px);bottom:-7px',c:'ns-resize',w:0,h:1},
+                  {p:'bottom:-7px;right:-7px',c:'nwse-resize',w:1,h:1}]
+                :[{p:'bottom:-7px;right:-7px',c:'nwse-resize',w:1,h:1}];
+    hs.forEach(function(hd){
+      const h=document.createElement('div');
+      h.className='roc-rh';
+      h.style.cssText='position:absolute;'+hd.p+';width:13px;height:13px;background:var(--primary-color,#03a9f4);border:2px solid #fff;border-radius:50%;z-index:1000;cursor:'+hd.c+';box-sizing:border-box;pointer-events:auto;touch-action:none;display:none;';
+      el.appendChild(h);
+      h.addEventListener('mousedown',function(e){e.stopPropagation();e.preventDefault();});
+      h.addEventListener('touchstart',function(e){e.stopPropagation();},{passive:true});
+      h.addEventListener('pointerdown',function(e){
+        e.stopPropagation();e.preventDefault();
+        const cont=self.shadowRoot.querySelector('.content');if(!cont)return;
+        const rect=cont.getBoundingClientRect();
+        const sx=e.clientX,sy=e.clientY;
+        const sw=parseFloat(el.style.width)||10;
+        const sh=parseFloat(el.style.height)||sw;
+        function onMove(ev){
+          const dx=(ev.clientX-sx)/rect.width*200,dy=(ev.clientY-sy)/rect.height*200;
+          const snap=function(v){return ev.altKey?v:Math.round(v*2)/2;};
+          if(!box){
+            const nw=Math.max(2,snap(sw+Math.max(dx,dy)));
+            el.style.width=nw.toFixed(1)+'%';
+          }else{
+            if(hd.w)el.style.width=Math.max(2,snap(sw+dx)).toFixed(1)+'%';
+            if(hd.h)el.style.height=Math.max(2,snap(sh+dy)).toFixed(1)+'%';
+          }
+        }
+        function onUp(){
+          document.removeEventListener('pointermove',onMove);
+          document.removeEventListener('pointerup',onUp);
+          document.removeEventListener('pointercancel',onUp);
+          onResize(el.style.width,box?el.style.height:null);
+        }
+        document.addEventListener('pointermove',onMove);
+        document.addEventListener('pointerup',onUp);
+        document.addEventListener('pointercancel',onUp);
+      });
+    });
+  }
+
   _makeDraggable(el,onDrop){
     const self=this;
     let dragOccurred=false;
@@ -3382,14 +3466,7 @@ class RoomOverlayCard extends HTMLElement{
       const vsz=resolveSize(tApply(vw,this._tier).size||vw.size||'44px',w);
       if(vsz&&vel.style.width!==vsz){vel.style.width=vsz;vel.style.height=vsz;}
     }
-    for(const g0 of(c.glows||[])){
-      const gel=this._glowEls[g0.id];if(!gel)continue;
-      const g=tApply(g0,this._tier);
-      const gw=resolveSize(g.width||g.size||'25%',w);
-      const gh=resolveSize(g.height||g.width||g.size||'25%',w);
-      if(gw)setSt(gel,'width',gw);
-      if(gh)setSt(gel,'height',gh);
-    }
+
     for(const lbl of(c.labels||[])){
       const el=this._lblEls[lbl.id];if(!el)continue;
       const raw=tApply(lbl,this._tier).font_size||lbl.font_size;
@@ -4685,10 +4762,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       const anEl=q('[data-gw-anim="'+i+'"]');if(anEl){if(anEl.value)o.animation=anEl.value;else delete o.animation;}
       const agEl=q('[data-gw-angle="'+i+'"]');if(agEl){const _v=agEl.value.trim();if(_v)o.angle=isNaN(parseFloat(_v))?_v:parseFloat(_v);else delete o.angle;}
       const zEl=q('[data-gw-z="'+i+'"]');if(zEl&&zEl.value)o.z_index=parseInt(zEl.value);
+      const mbEl=q('[data-gw-minb="'+i+'"]');if(mbEl){const _mb=mbEl.value.trim();if(_mb!==''&&Number(_mb)>0)o.min_brightness=parseInt(_mb);else delete o.min_brightness;}
+      const asEl=q('[data-gw-aspeed="'+i+'"]');if(asEl){const _as=asEl.value.trim();if(_as)o.animation_speed=_as;else delete o.animation_speed;}
+      const anEl2=q('[data-gw-anchor="'+i+'"]');if(anEl2){if(anEl2.value==='corner')o.anchor='corner';else delete o.anchor;}
+      const trEl=q('[data-gw-trans="'+i+'"]');if(trEl){const _tr=trEl.value.trim();if(_tr)o.transition=_tr;else delete o.transition;}
       const grEl=q('[data-gw-grp="'+i+'"]');if(grEl&&grEl.value.trim())o.group=grEl.value.trim();else delete o.group;
       const gyR=self._pYaml(q('[data-gw-yaml="'+i+'"]'));
       if(gyR.ok){
-        const KEEP=['id','entity','shape','size','width','height','top','left','intensity','falloff','blend','color','animation','angle','z_index','group'];
+        const KEEP=['id','entity','shape','size','width','height','top','left','intensity','falloff','blend','color','animation','angle','z_index','group',
+                    'min_brightness','animation_speed','anchor','transition'];
         for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
         if(gyR.val)Object.assign(o,gyR.val);
       }
@@ -5140,8 +5222,8 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _glowItem(g,i){
     const cp=Object.assign({},g);
-    ['id','entity','shape','size','width','height','top','left','intensity','falloff','blend','color','animation','angle','z_index','group']
-      .forEach(function(k){delete cp[k];});
+    ['id','entity','shape','size','width','height','top','left','intensity','falloff','blend','color','animation','angle','z_index','group',
+     'min_brightness','animation_speed','anchor','transition'].forEach(function(k){delete cp[k];});
     const ys=Object.keys(cp).length?_yaml.s(cp):'';
     const op=this._openPanels&&this._openPanels.has('gw-'+i);
     const sw=glowParseColor(g.color);
@@ -5149,7 +5231,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     let h='<details style="margin-bottom:6px;" data-panel="gw-'+i+'"'+(op?' open':'')+' >';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Light glow: '+this._e(g.id||'glow_'+i)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
-    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">A soft pool of light blended onto the photo. Colour follows the light\'s own <code>rgb_color</code> / colour temperature and strength follows its brightness. <b>Top/Left is the centre</b> of the glow &mdash; drag it straight onto the lamp in the preview above.</p>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">A soft pool of light blended onto the photo. Colour follows the light\'s own <code>rgb_color</code> / colour temperature and strength follows its brightness. <b>Top/Left is the centre</b> of the glow &mdash; in the preview above, drag it onto the lamp, then click it once and pull the round handle to resize.</p>';
     h+='<div style="height:26px;border-radius:6px;background:#101014;position:relative;overflow:hidden;margin-bottom:8px;"><div style="position:absolute;inset:0;background:'+prevBg+';"></div></div>';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">ID</label><input data-gw-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';
@@ -5167,7 +5249,10 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Left (centre)</label><input data-gw-left="'+i+'" type="text" value="'+this._e(g.left||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label class="roc-l">Intensity (at full brightness)</label><input data-gw-int="'+i+'" type="number" min="0" max="1" step="0.05" value="'+this._e(String(g.intensity==null?0.7:g.intensity))+'"'+this._inp('')+'></div>';
+    const gi=(g.intensity==null?0.7:g.intensity);
+    h+='<div><label class="roc-l">Intensity (at full brightness)</label><div style="display:flex;gap:6px;align-items:center;">'
+      +'<input type="range" data-gw-int-range="'+i+'" min="0" max="1" step="0.05" value="'+this._e(String(gi))+'" style="flex:1;min-width:0;cursor:pointer;">'
+      +'<input data-gw-int="'+i+'" type="number" min="0" max="1" step="0.05" value="'+this._e(String(gi))+'"'+this._inp('width:62px;flex:none;font-size:12px;')+'></div></div>';
     h+='<div><label class="roc-l">Falloff</label><select data-gw-fall="'+i+'"'+this._inp('')+'>';
     [['soft','soft — natural lamp'],['tight','tight — small bright core'],['wide','wide — faint room fill']]
       .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.falloff||'soft')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
@@ -5176,7 +5261,12 @@ class RoomOverlayCardEditor extends HTMLElement{
     [['screen','screen — light adds up (default)'],['plus-lighter','plus-lighter — stronger'],['soft-light','soft-light — subtle'],['normal','normal — plain paint']]
       .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.blend||'screen')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
     h+='</select></div>';
-    h+='<div><label class="roc-l">Colour</label><div style="display:flex;gap:6px;align-items:center;"><span style="display:inline-block;width:18px;height:18px;border-radius:50%;flex:none;border:1px solid var(--divider-color);background:'+(sw?('rgb('+sw.join(',')+')'):'conic-gradient(#ffb46e,#8ad0ff,#ffb46e)')+';"></span><input data-gw-color="'+i+'" type="text" placeholder="auto" value="'+this._e(g.color||'')+'"'+this._inp('')+'></div></div>';
+    const swHex='#'+(sw||GLOW_DEFAULT_RGB).map(function(v){return('0'+Math.max(0,Math.min(255,v|0)).toString(16)).slice(-2);}).join('');
+    h+='<div><label class="roc-l">Colour</label><div style="display:flex;gap:6px;align-items:center;">'
+      +'<input type="color" data-gw-swatch="'+i+'" value="'+swHex+'" title="'+(sw?'Fixed colour':'Currently following the light &mdash; pick a colour to override it')+'" style="width:36px;height:31px;flex:none;padding:2px;border:1px solid '+(sw?'var(--divider-color)':'var(--primary-color)')+';border-radius:6px;background:none;cursor:pointer;'+(sw?'':'opacity:0.6;')+'">'
+      +'<input data-gw-color="'+i+'" type="text" placeholder="auto" value="'+this._e(g.color||'')+'"'+this._inp('')+'>'
+      +'<button type="button" data-gw-auto="'+i+'" title="Follow the light\'s own colour again" style="padding:6px 9px;border-radius:6px;border:1px solid '+(sw?'var(--divider-color)':'var(--primary-color)')+';background:'+(sw?'none':'rgba(3,169,244,0.15)')+';color:'+(sw?'var(--primary-text-color)':'var(--primary-color)')+';cursor:pointer;font-size:11px;flex:none;">Auto</button>'
+      +'</div></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">Animation</label><select data-gw-anim="'+i+'"'+this._inp('')+'>';
@@ -5187,8 +5277,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">z-index</label><input data-gw-z="'+i+'" type="number" value="'+this._e(String(g.z_index??2))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='<div><label class="roc-l">Group (optional)</label><input data-gw-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Min brightness (0&ndash;255)</label><input data-gw-minb="'+i+'" type="number" min="0" max="255" step="1" placeholder="0" value="'+this._e(g.min_brightness==null?'':String(g.min_brightness))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Animation speed</label><input data-gw-aspeed="'+i+'" type="text" placeholder="3.1s" value="'+this._e(g.animation_speed||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Anchor (Top/Left means&hellip;)</label><select data-gw-anchor="'+i+'"'+this._inp('')+'>';
+    [['center','centre of the glow'],['corner','top-left corner']].forEach(function(o){
+      h+='<option value="'+o[0]+'"'+((g.anchor||'center')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Fade transition</label><input data-gw-trans="'+i+'" type="text" placeholder="0.6s ease" value="'+this._e(g.transition||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
     h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">Colour <code>auto</code> follows the light. Fixed values also work: <code>#ffb46e</code>, <code>255,180,110</code> or <code>2700K</code>. z-index <b>2</b> keeps the glow under your overlay PNGs (curtains, furniture) &mdash; raise it to let light spill over them.</p>';
-    h+='<div class="roc-adv"><label class="roc-l">min_brightness / transition / animation_speed / anchor / fallback_color / visible / visible_template / fade / slide / portrait / landscape overrides (YAML)</label><textarea data-gw-yaml="'+i+'" rows="5"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
+    h+='<div class="roc-adv"><label class="roc-l">fallback_color / border_radius / visible / visible_template / fade / slide / portrait / landscape overrides (YAML)</label><textarea data-gw-yaml="'+i+'" rows="5"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+=this._mvBtns('gw',i);
     h+='<button data-dup-gw="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-gw="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove glow</button>';
@@ -6480,8 +6579,32 @@ class RoomOverlayCardEditor extends HTMLElement{
         dA.splice(i+1,0,cl);self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-gw-id],[data-gw-ent],[data-gw-shape],[data-gw-size],[data-gw-w],[data-gw-h],[data-gw-top],[data-gw-left],[data-gw-int],[data-gw-fall],[data-gw-blend],[data-gw-color],[data-gw-anim],[data-gw-angle],[data-gw-z],[data-gw-grp],[data-gw-yaml]').forEach(function(el){
+    this.querySelectorAll('[data-gw-id],[data-gw-ent],[data-gw-shape],[data-gw-size],[data-gw-w],[data-gw-h],[data-gw-top],[data-gw-left],[data-gw-int],[data-gw-fall],[data-gw-blend],[data-gw-color],[data-gw-anim],[data-gw-angle],[data-gw-z],[data-gw-grp],[data-gw-minb],[data-gw-aspeed],[data-gw-anchor],[data-gw-trans],[data-gw-yaml]').forEach(function(el){
       el.addEventListener('change',fire);
+    });
+    // Colour picker → writes a hex into the text field (which stays the source
+    // of truth, so "auto" / "2700K" / "r,g,b" keep working); dragging in the
+    // picker previews live, releasing it commits.
+    this.querySelectorAll('[data-gw-swatch]').forEach(function(sw){
+      const txt=self.querySelector('[data-gw-color="'+sw.dataset.gwSwatch+'"]');
+      if(!txt)return;
+      sw.addEventListener('input',function(){txt.value=sw.value;sw.style.opacity='1';self._fireDebounced();});
+      sw.addEventListener('change',function(){txt.value=sw.value;self._fire(self._collectConfig());});
+    });
+    this.querySelectorAll('[data-gw-auto]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const txt=self.querySelector('[data-gw-color="'+btn.dataset.gwAuto+'"]');
+        if(!txt)return;
+        txt.value='';
+        const c=self._collectConfig();
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-gw-int-range]').forEach(function(range){
+      const num=self.querySelector('[data-gw-int="'+range.dataset.gwIntRange+'"]');
+      if(!num)return;
+      range.addEventListener('input',function(){num.value=range.value;self._fireDebounced();});
+      num.addEventListener('change',function(){range.value=num.value;});
     });
 
     // Vacuum widgets
