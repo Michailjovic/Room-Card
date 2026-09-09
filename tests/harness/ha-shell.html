@@ -78,7 +78,11 @@
          {id:'open_bottom',icon:'mdi:tv',top:'2%',left:'10%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_bottom'}},
          {id:'open_full',icon:'mdi:view-dashboard',top:'2%',left:'18%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_full'}},
          {id:'open_dialog',icon:'mdi:cog',top:'2%',left:'26%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_dialog'}},
-         {id:'tile_src',icon:'mdi:water',top:'50%',left:'50%',width:'6%',height:'6%',section:'sec_right',tile:{name:'Leak sensor'}}
+         {id:'tile_src',icon:'mdi:water',top:'50%',left:'50%',width:'6%',height:'6%',section:'sec_right',tile:{
+           name:'Washer',
+           image:img('#456'),
+           overlays:[{id:'drum',image:img('#789'),transform:{entity:'light.harness',origin:'50% 50%',spin:{min_duration:'0.5s',max_duration:'2s'}}}]
+         }}
        ]},
       {id:'kitchen',name:'Kitchen',base_image:img('#231'),
        badges:[{id:'vac2',position:'bottom-left',icon:'mdi:robot-vacuum',label:[{value:'Ready'}]}]}

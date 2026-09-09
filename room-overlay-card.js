@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.8.0';
+const ROC_VERSION='6.9.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1754,6 +1754,7 @@ class RoomOverlayCard extends HTMLElement{
     const sx=this._getSections(this._config).find(function(x){return x.def.id===id;});
     if(!sx)return;
     const s=this._hass.states;
+    const self=this;
     const tileEls=(this._secTileEls&&this._secTileEls[id])||[];
     let activeCount=0;
     sx.tiles.forEach(function(entry,idx){
@@ -1795,6 +1796,30 @@ class RoomOverlayCard extends HTMLElement{
           const pv=pst?parseFloat(pst.state):NaN;
           pEl.style.width=(isNaN(pv)?0:Math.max(0,Math.min(100,pv)))+'%';
         }
+      }
+      // Image tile overlays (v6.9.0, D3 scheme b) -- exactly the room overlay's
+      // own condition/transform resolvers (resolveVal/tfResolve/_ovImg),
+      // applied to the tile's own tiny stage. Not per global state tick: this
+      // whole method already only runs while the panel is open.
+      if(td.image&&Array.isArray(td.overlays)&&td.overlays.length){
+        const ovEls=tileEl.querySelectorAll('.roc-tile-ov');
+        td.overlays.forEach(function(ov,oi){
+          const el=ovEls[oi];if(!el)return;
+          const img=self._ovImg(ov);
+          if(img){const bg="url('"+escUrl(img)+"')";if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
+          const rawOp=(ov.conditions&&ov.conditions.opacity)?Number(resolveVal(ov.conditions.opacity,s,0)):1;
+          if(rawOp>0&&ov.animation){el.style.animation='roc-'+ov.animation+' '+(ov.animation==='blink'?'1s step-end':'2s ease-in-out')+' infinite';el.style.opacity='';}
+          else{el.style.animation='none';setSt(el,'opacity',String(rawOp));}
+          const ovF=(ov.conditions&&ov.conditions.filter)?resolveVal(ov.conditions.filter,s,'none'):'none';
+          setSt(el,'filter',ovF);
+          if(ov.transform){
+            const tfr=tfResolve(ov.transform,ov.transform.entity?s[ov.transform.entity]:null);
+            if(tfr){
+              setSt(el,'transform',tfr.transform||'');
+              if(ov.transform.spin)setSt(el,'animation',tfr.animation==='none'?'none':tfr.animation);
+            }
+          }
+        });
       }
     });
     const badgeEl=this._secBadgeEls&&this._secBadgeEls[id];
@@ -2148,13 +2173,28 @@ class RoomOverlayCard extends HTMLElement{
     // and nav.live minis, same as vacuum_widgets above.
     const _secList=(_isGhost||_isMini)?[]:this._getSections(cAll);
     const _secOpenId=this._sectionOpen;
+    // Image tile stage (v6.9.0, D3 scheme b) -- a tiny independent room: its
+    // own base image plus absolutely-positioned overlay layers, laid out and
+    // animated by the SAME markup shape as a room's own `ovHtml` above (see
+    // _updateSectionTiles() for the matching update-time resolvers). Never a
+    // nested room-overlay-card (COCKPIT_PLAN.md kap.4).
+    const _tileStageHtml=function(td){
+      const ovHtmlT=(td.overlays||[]).map(function(ov,oi){
+        const _tf=ov.transform;
+        const _tfSt=_tf?('transform-origin:'+(_tf.origin||'50% 50%')+';will-change:transform;'+(_tf.perspective?'transform-style:preserve-3d;':'')):'';
+        const _tfTr=_tf?(',transform '+(_tf.transition||'0.8s ease')):'';
+        return'<div class="roc-tile-ov" data-tile-ov="'+oi+'" style="z-index:'+(ov.z_index??oi+1)+';opacity:0;'+_tfSt+'transition:opacity '+(ov.transition??'2s ease')+',filter '+(ov.transition??'2s ease')+_tfTr+';"></div>';
+      }).join('');
+      return'<div class="roc-tile-img-stage"><div class="roc-tile-img-base" style="'+(td.image?'background-image:url(\''+escUrl(td.image)+'\');':'')+'"></div>'+ovHtmlT+'</div>';
+    };
     const _secTileHtml=function(entry,idx){
       const td=rocTileDef(entry);
+      const isImg=!!td.image;
       const quickHtml=(td.quick||[]).map(function(q,qi){
         return'<button type="button" data-quick="'+qi+'" title="'+escA(q.name||'')+'"><ha-icon icon="'+escA(q.icon||'mdi:play')+'"></ha-icon></button>';
       }).join('');
-      return'<div class="roc-tile" data-tile-idx="'+idx+'"'+(td.tap_action?' data-tappable tabindex="0" role="button"':'')+'>'
-        +'<div class="roc-tile-icon-wrap"><ha-icon class="roc-tile-icon" data-tile-icon icon="'+escA(td.icon)+'"></ha-icon></div>'
+      return'<div class="roc-tile'+(isImg?' roc-tile-img':'')+'" data-tile-idx="'+idx+'"'+(td.tap_action?' data-tappable tabindex="0" role="button"':'')+'>'
+        +(isImg?_tileStageHtml(td):'<div class="roc-tile-icon-wrap"><ha-icon class="roc-tile-icon" data-tile-icon icon="'+escA(td.icon)+'"></ha-icon></div>')
         +'<div class="roc-tile-body">'
           +'<div class="roc-tile-name">'+escA(td.name)+'</div>'
           +'<div class="roc-tile-state" data-tile-state></div>'
@@ -2189,7 +2229,7 @@ class RoomOverlayCard extends HTMLElement{
         +'</div>';
       }).join('')
     );
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--primary-color,#03a9f4);color:#fff;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:11px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:#03a9f4;}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--primary-color,#03a9f4);color:#fff;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:11px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:#03a9f4;}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -4578,6 +4618,67 @@ class RoomOverlayCardEditor extends HTMLElement{
     return{ok:true,val:p};
   }
 
+  // One tile overlay's fields, read back from its composite-keyed
+  // (kind:i:ti) structured fields -- the exact same shape _collectConfig()
+  // already reads for top-level `overlays`, just keyed differently because a
+  // tile's overlays are nested inside one element's own tile: rather than a
+  // flat array (v6.9.0, D3 scheme b).
+  _collectTileOverlay(kind,i,ti,ov){
+    const self=this;
+    const key=kind+':'+i+':'+ti;
+    const q=function(s){return self.querySelector(s);};
+    const o=Object.assign({},ov);
+    const idEl=q('[data-tlov-id="'+key+'"]');if(idEl)o.id=idEl.value;
+    const imgEl=q('[data-tlov-img="'+key+'"]');if(imgEl){if(imgEl.value)o.image=imgEl.value;else delete o.image;}
+    const trEl=q('[data-tlov-tr="'+key+'"]');if(trEl)o.transition=trEl.value;
+    const animEl=q('[data-tlov-anim="'+key+'"]');if(animEl&&animEl.value)o.animation=animEl.value;else delete o.animation;
+    const tfModeEl=q('[data-tlov-tf-mode="'+key+'"]');
+    if(tfModeEl){
+      const tfMode=tfModeEl.value;
+      if(!tfMode)delete o.transform;
+      else{
+        const gv=function(k){const e=q('[data-tlov-tf-'+k+'="'+key+'"]');return e?String(e.value).trim():'';};
+        const tf={};
+        const _e1=gv('ent');if(_e1)tf.entity=_e1;
+        const _a1=gv('attr');if(_a1)tf.attribute=_a1;
+        const _o1=gv('origin');if(_o1)tf.origin=_o1;
+        const _t1=gv('tr');if(_t1)tf.transition=_t1;
+        const _p1=gv('persp');if(_p1)tf.perspective=_p1;
+        if(tfMode==='states'){
+          const mp={};
+          self.querySelectorAll('[data-tlov-tfk^="'+key+'-"]').forEach(function(kEl){
+            const rowKey=kEl.dataset.tlovTfk;
+            const vEl=self.querySelector('[data-tlov-tfv="'+rowKey+'"]');
+            const k=kEl.value.trim();
+            if(k&&vEl&&vEl.value.trim())mp[k]=vEl.value.trim();
+          });
+          if(Object.keys(mp).length)tf.map=mp;
+        }else if(tfMode==='range'){
+          tf.from={value:Number(gv('fv')||0),transform:gv('ft')||'none'};
+          tf.to={value:Number(gv('tv')||100),transform:gv('tt')||'none'};
+        }else if(tfMode==='spin'){
+          const sp={};
+          const _s1=gv('smin');if(_s1)sp.min_duration=_s1;
+          const _s2=gv('smax');if(_s2)sp.max_duration=_s2;
+          const _s3=gv('saxis');if(_s3&&_s3!=='z')sp.axis=_s3;
+          const _s4=q('[data-tlov-tf-srev="'+key+'"]');if(_s4&&_s4.checked)sp.reverse=true;
+          tf.spin=sp;
+        }
+        o.transform=tf;
+      }
+    }
+    const yaR=this._pYaml(q('[data-tlov-yaml="'+key+'"]'));
+    if(yaR.ok){
+      const p=yaR.val;
+      if(p){
+        if(p.opacity||p.filter){o.conditions={};if(p.opacity)o.conditions.opacity=p.opacity;if(p.filter)o.conditions.filter=p.filter;}
+        else delete o.conditions;
+        if(p.state_images)o.state_images=p.state_images;else delete o.state_images;
+      }else{delete o.conditions;delete o.state_images;}
+    }
+    return o;
+  }
+
   // <input type=color> cannot express alpha — if the picker still shows the hex
   // of the original (possibly rgba) value, keep the original string.
   _colorVal(el,orig){
@@ -4791,7 +4892,18 @@ class RoomOverlayCardEditor extends HTMLElement{
       const linkEl=q('[data-sec-link="'+kind+':'+i+'"]');
       if(linkEl&&linkEl.value)o.section=linkEl.value;else delete o.section;
       const tileR=self._pYaml(q('[data-sec-tile="'+kind+':'+i+'"]'));
-      if(tileR.ok){if(tileR.val)o.tile=tileR.val;else delete o.tile;}
+      const tile=(tileR.ok&&tileR.val)?tileR.val:{};
+      // Image mode (v6.9.0, D3 scheme b): `image` is its own field, `overlays`
+      // its own structured list -- both live OUTSIDE the tile: YAML box, read
+      // from the current array on `o.tile` (the last render's, so add/remove/
+      // reorder always start from what is actually on screen).
+      const imgEl=q('[data-tile-img="'+kind+':'+i+'"]');
+      const imgV=imgEl?imgEl.value.trim():'';
+      if(imgV)tile.image=imgV;else delete tile.image;
+      const prevOvs=(o.tile&&Array.isArray(o.tile.overlays))?o.tile.overlays:[];
+      const ovs=prevOvs.map(function(ov,ti){return self._collectTileOverlay(kind,i,ti,ov);});
+      if(ovs.length)tile.overlays=ovs;else delete tile.overlays;
+      if(Object.keys(tile).length)o.tile=tile;else delete o.tile;
     };
     // Multi-room: sections write into the room being edited; shared keys stay top-level
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
@@ -6800,9 +6912,137 @@ class RoomOverlayCardEditor extends HTMLElement{
     secs.forEach(function(s){h+='<option value="'+self._e(s.id||'')+'"'+(item.section===s.id?' selected':'')+'>'+self._e(s.title||s.id||'')+'</option>';});
     h+='</select>';
     if(!secs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No sections yet — add one in the Sections tab first.</p>';
-    const tileYaml=item.tile?_yaml.s(item.tile):'';
-    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea></div>';
+    // The tile YAML box carries the icon-scheme fields only (D3 scheme a) —
+    // `image`/`overlays` (scheme b, v6.9.0) get their own structured editor
+    // below, reusing the overlay editor's UI (COCKPIT_PLAN.md kap.5.2).
+    const tileScalar=Object.assign({},item.tile||{});
+    delete tileScalar.image;delete tileScalar.overlays;
+    const tileYaml=Object.keys(tileScalar).length?_yaml.s(tileScalar):'';
+    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
+    h+=this._tileImageBox(kind,i,item);
     h+='</div>';
+    h+='</div>';
+    return h;
+  }
+
+  // Tile image mode (v6.9.0, D3 scheme b) -- `tile.image` switches a tile from
+  // the icon+state scheme to a device photo with its own overlays. `image:`
+  // gets a real field (like an overlay's own "Image URL"); the overlays list
+  // below mirrors _ovItem/_ovTransform exactly but composite-keyed
+  // ("kind:i:ti") since it is nested inside one element's own tile, not a
+  // flat top-level/per-room array -- so it needs its own add/remove/reorder
+  // rather than the generic [data-mv]/_mvKinds mechanism.
+  _tileImageBox(kind,i,item){
+    const self=this;
+    const t=item.tile||{};
+    const key=kind+':'+i;
+    const ovs=Array.isArray(t.overlays)?t.overlays:[];
+    let h='<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--divider-color);">';
+    h+='<label class="roc-l">Tile image (optional — switches this tile from an icon to a device photo with movable parts)</label>';
+    h+='<input data-tile-img="'+key+'" type="text" placeholder="/local/pracka.webp" value="'+this._e(t.image||'')+'"'+this._inp('')+'>';
+    h+='<div data-tile-ov-box="'+key+'" style="'+(t.image?'':'display:none;')+'margin-top:8px;">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><label style="font-size:12px;font-weight:500;">Overlays (moving parts)</label>';
+    h+='<button type="button" data-add-tlov="'+key+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Overlay</button></div>';
+    if(!ovs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">No overlays yet — the tile shows just the image.</p>';
+    ovs.forEach(function(ov,ti){h+=self._tileOverlayItem(kind,i,ti,ov);});
+    h+='</div></div>';
+    return h;
+  }
+
+  _tileOverlayItem(kind,i,ti,ov){
+    const key=kind+':'+i+':'+ti;
+    const condView=Object.assign({},ov.conditions||{});
+    if(ov.state_images)condView.state_images=ov.state_images;
+    const condYaml=Object.keys(condView).length?_yaml.s(condView):'';
+    const open=this._openPanels&&this._openPanels.has('tlov-'+key);
+    let h='<details style="margin-bottom:6px;" data-panel="tlov-'+key+'"'+(open?' open':'')+'>';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Overlay: '+this._e(ov.id||'ov_'+ti)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">ID</label><input data-tlov-id="'+key+'" type="text" value="'+this._e(ov.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Image URL</label><input data-tlov-img="'+key+'" type="text" value="'+this._e(ov.image||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Transition</label><input data-tlov-tr="'+key+'" type="text" value="'+this._e(ov.transition||'2s ease')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Animation</label>';
+    h+='<select data-tlov-anim="'+key+'"'+this._inp('')+'>';
+    h+='<option value=""'+(!ov.animation?' selected':'')+'>none</option>';
+    h+='<option value="pulse"'+(ov.animation==="pulse"?' selected':'')+'>pulse (fade in/out)</option>';
+    h+='<option value="blink"'+(ov.animation==="blink"?' selected':'')+'>blink (hard on/off)</option>';
+    h+='</select></div></div>';
+    h+='<div><label class="roc-l">Conditions YAML (opacity / filter / state_images)</label>';
+    h+='<textarea data-tlov-yaml="'+key+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(condYaml)+'</textarea></div>';
+    h+=this._tileOverlayTransform(kind,i,ti,ov);
+    h+='<div style="display:flex;gap:6px;margin-top:8px;">';
+    h+='<button type="button" data-mv-tlov="'+key+':up" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9650;</button>';
+    h+='<button type="button" data-mv-tlov="'+key+':down" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9660;</button>';
+    h+='<button type="button" data-rm-tlov="'+key+'" style="padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove overlay</button>';
+    h+='</div>';
+    h+='</div></details>';
+    return h;
+  }
+
+  // Transform sub-panel for a tile overlay — identical fields/behaviour to
+  // _ovTransform, composite-keyed ("kind:i:ti") instead of a bare index.
+  _tileOverlayTransform(kind,i,ti,ov){
+    const key=kind+':'+i+':'+ti;
+    const tf=ov.transform||{};
+    const mode=ov.transform?(tf.spin?'spin':((tf.from&&tf.to)?'range':(tf.map?'states':''))):'';
+    const open=this._openPanels&&this._openPanels.has('tlovtf-'+key);
+    const pane=function(m){return'style="'+(mode===m?'':'display:none;')+'"';};
+    let h='<details style="margin:8px 0;" data-panel="tlovtf-'+key+'"'+(open?' open':'')+'>';
+    h+='<summary style="cursor:pointer;padding:6px 8px;background:var(--secondary-background-color);border-radius:6px;font-size:12px;font-weight:500;list-style:none;">&#9654; Transform &mdash; make this layer move'+(mode?' <span style="opacity:0.7;">('+mode+')</span>':'')+'</summary>';
+    h+='<div style="padding:8px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Mode</label><select data-tlov-tf-mode="'+key+'"'+this._inp('')+'>';
+    [['','none'],['states','states → transform'],['range','numeric range'],['spin','continuous spin']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+(mode===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Entity</label><input data-tlov-tf-ent="'+key+'" type="text" list="roc-entities" placeholder="sensor.pracka_stav" value="'+this._e(tf.entity||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Attribute (blank = state)</label><input data-tlov-tf-attr="'+key+'" type="text" placeholder="current_position" value="'+this._e(tf.attribute||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Origin — hinge/axle on the tile image</label><input data-tlov-tf-origin="'+key+'" type="text" placeholder="50% 50%" value="'+this._e(tf.origin||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div data-tlov-tfpane="'+key+'-states" '+pane('states')+'>';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">';
+    h+='<label style="font-size:12px;font-weight:500;">State &rarr; transform</label>';
+    h+='<button type="button" data-add-tlovtfm="'+key+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ State</button>';
+    h+='</div>';
+    const keys=Object.keys(tf.map||{});
+    keys.forEach(function(k,j){
+      h+='<div style="display:grid;grid-template-columns:130px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px;">';
+      h+='<input type="text" data-tlov-tfk="'+key+'-'+j+'" placeholder="on / * " value="'+escA(k)+'" class="roc-in">';
+      h+='<input type="text" data-tlov-tfv="'+key+'-'+j+'" placeholder="rotateY(-72deg)" value="'+escA(tf.map[k])+'" class="roc-in">';
+      h+='<button type="button" data-rm-tlovtfm="'+key+'-'+j+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
+      h+='</div>';
+    });
+    if(!keys.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">No states yet. <code>*</code> matches anything not listed.</p>';
+    h+='</div>';
+    const fr=tf.from||{},to=tf.to||{};
+    h+='<div data-tlov-tfpane="'+key+'-range" '+pane('range')+'>';
+    h+='<div style="display:grid;grid-template-columns:80px 1fr;gap:8px;margin-bottom:6px;align-items:end;">';
+    h+='<div><label class="roc-l">From value</label><input data-tlov-tf-fv="'+key+'" type="number" placeholder="0" value="'+this._e(fr.value==null?'':String(fr.value))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">… transform</label><input data-tlov-tf-ft="'+key+'" type="text" placeholder="translateY(0%)" value="'+this._e(fr.transform||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">To value</label><input data-tlov-tf-tv="'+key+'" type="number" placeholder="100" value="'+this._e(to.value==null?'':String(to.value))+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">… transform</label><input data-tlov-tf-tt="'+key+'" type="text" placeholder="translateY(-92%)" value="'+this._e(to.transform||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">Both sides must use the same functions in the same order &mdash; the numbers in between are interpolated.</p>';
+    h+='</div>';
+    const sp=(tf.spin===true?{}:(tf.spin||{}));
+    h+='<div data-tlov-tfpane="'+key+'-spin" '+pane('spin')+'>';
+    h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">';
+    h+='<div><label class="roc-l">Fastest (at max)</label><input data-tlov-tf-smin="'+key+'" type="text" placeholder="0.35s" value="'+this._e(sp.min_duration||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Slowest (just on)</label><input data-tlov-tf-smax="'+key+'" type="text" placeholder="2.5s" value="'+this._e(sp.max_duration||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Axis</label><select data-tlov-tf-saxis="'+key+'"'+this._inp('')+'>';
+    [['z','flat (seen from the front)'],['x','tilted — X'],['y','tilted — Y']]
+      .forEach(function(o){h+='<option value="'+o[0]+'"'+((sp.axis||'z')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Direction</label><label style="display:flex;align-items:center;gap:6px;font-size:12px;padding-top:6px;"><input type="checkbox" data-tlov-tf-srev="'+key+'"'+(sp.reverse?' checked':'')+' style="width:15px;height:15px;">reverse</label></div>';
+    h+='</div></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">';
+    h+='<div><label class="roc-l">Movement transition</label><input data-tlov-tf-tr="'+key+'" type="text" placeholder="0.8s ease" value="'+this._e(tf.transition||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Perspective (3D depth)</label><input data-tlov-tf-persp="'+key+'" type="text" placeholder="900px — for rotateX/Y" value="'+this._e(tf.perspective||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='</div></details>';
     return h;
   }
 
@@ -6934,6 +7174,100 @@ class RoomOverlayCardEditor extends HTMLElement{
           if(hadA)self._openPanels.add(b);else self._openPanels.delete(b);
           if(hadB)self._openPanels.add(a);else self._openPanels.delete(a);
         }
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    // Tile overlays (v6.9.0, D3 scheme b) -- nested one level inside one
+    // element's own tile:, so they need their own add/remove/reorder rather
+    // than the generic [data-mv]/_mvKinds mechanism above (which only knows
+    // flat top-level/per-room arrays). `_mvKinds`/`A`/`T` are reused as-is.
+    const _tileOvArr=function(c,kind,i){
+      const key=_mvKinds[kind];if(!key)return null;
+      const arr=A(c,key);const item=arr[i];if(!item)return null;
+      if(!item.tile)item.tile={};
+      if(!Array.isArray(item.tile.overlays))item.tile.overlays=[];
+      return item.tile.overlays;
+    };
+    this.querySelectorAll('[data-tile-img]').forEach(function(el){
+      el.addEventListener('input',function(){
+        const box=self.querySelector('[data-tile-ov-box="'+el.dataset.tileImg+'"]');
+        if(box)box.style.display=el.value.trim()?'':'none';
+      });
+      el.addEventListener('change',fire);
+    });
+    this.querySelectorAll('[data-add-tlov]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.addTlov.split(':'); // kind:i
+        const c=self._collectConfig();
+        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        ovs.push({id:'overlay_'+(ovs.length+1),image:'',transition:'2s ease'});
+        if(!self._openPanels)self._openPanels=new Set();
+        self._openPanels.add('tlov-'+p[0]+':'+p[1]+':'+(ovs.length-1));
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-rm-tlov]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.rmTlov.split(':'); // kind:i:ti
+        const c=self._collectConfig();
+        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        ovs.splice(parseInt(p[2],10),1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-mv-tlov]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.mvTlov.split(':'); // kind:i:ti:dir
+        const c=self._collectConfig();
+        const ti=parseInt(p[2],10),dir=p[3]==='up'?-1:1,tj=ti+dir;
+        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs||tj<0||tj>=ovs.length)return;
+        const t=ovs[ti];ovs[ti]=ovs[tj];ovs[tj]=t;
+        if(self._openPanels){
+          const a='tlov-'+p[0]+':'+p[1]+':'+ti,b='tlov-'+p[0]+':'+p[1]+':'+tj;
+          const hadA=self._openPanels.has(a),hadB=self._openPanels.has(b);
+          if(hadA)self._openPanels.add(b);else self._openPanels.delete(b);
+          if(hadB)self._openPanels.add(a);else self._openPanels.delete(a);
+        }
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-tlov-id],[data-tlov-img],[data-tlov-tr],[data-tlov-yaml],[data-tlov-anim]').forEach(function(el){el.addEventListener('change',fire);});
+    // Tile overlay transform sub-panel -- identical wiring to the room
+    // overlay's own [data-ov-tf-*] block below, composite-keyed.
+    this.querySelectorAll('[data-tlov-tf-mode]').forEach(function(sel){
+      sel.addEventListener('change',function(){
+        const key=sel.dataset.tlovTfMode;
+        ['states','range','spin'].forEach(function(m){
+          const p=self.querySelector('[data-tlov-tfpane="'+key+'-'+m+'"]');
+          if(p)p.style.display=(sel.value===m)?'':'none';
+        });
+        fire();
+      });
+    });
+    this.querySelectorAll('[data-tlov-tf-ent],[data-tlov-tf-attr],[data-tlov-tf-origin],[data-tlov-tf-tr],[data-tlov-tf-persp],[data-tlov-tf-fv],[data-tlov-tf-ft],[data-tlov-tf-tv],[data-tlov-tf-tt],[data-tlov-tf-smin],[data-tlov-tf-smax],[data-tlov-tf-saxis],[data-tlov-tf-srev],[data-tlov-tfk],[data-tlov-tfv]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-add-tlovtfm]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.addTlovtfm.split(':'); // kind:i:ti
+        const c=self._collectConfig();
+        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        const ov=ovs[parseInt(p[2],10)];if(!ov)return;
+        const tf=ov.transform||(ov.transform={});
+        const mp=tf.map||(tf.map={});
+        let k='state',nx=2;while(mp[k]!==undefined)k='state_'+(nx++);
+        mp[k]='none';
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-rm-tlovtfm]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const raw=btn.dataset.rmTlovtfm,dash=raw.lastIndexOf('-'); // "kind:i:ti-j"
+        const p=raw.slice(0,dash).split(':'),j=parseInt(raw.slice(dash+1),10);
+        const c=self._collectConfig();
+        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        const ov=ovs[parseInt(p[2],10)];const tf=ov&&ov.transform;if(!tf||!tf.map)return;
+        const k=Object.keys(tf.map)[j];if(k===undefined)return;
+        delete tf.map[k];
+        if(!Object.keys(tf.map).length)delete tf.map;
         self._config=c;self._render();self._fire(c);
       });
     });

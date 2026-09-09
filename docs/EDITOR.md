@@ -54,7 +54,11 @@ mock-up.*
   Any zone, icon, element or blind (not badges) also carries a **Section** field at the bottom of
   its own panel — pick a section declared on the **Sections** tab to add that item's tile to the
   matching cockpit panel, with a `tile:` YAML box (name/entity/icon/state/etc.) that only appears
-  once a section is picked. See [Configuration → Sections & panels](CONFIGURATION.md#sections--panels-cockpit-tiles).
+  once a section is picked, plus its own **Image** field. Fill in the image and the tile switches
+  from an icon to a device photo, revealing an **Overlays** list — add / remove / reorder overlays
+  each with the exact same panel a room's own overlays get (Image URL, Conditions YAML, and a
+  **Transform** sub-panel with the states/range/spin mode select), just scoped to that one tile.
+  See [Configuration → Sections & panels](CONFIGURATION.md#sections--panels-cockpit-tiles).
 
 - **Sections** — declares cockpit panels (`sections:`): id, title, icon, placement
   (sheet-right / sheet-bottom / full / dialog), size, columns, subtitle, badge mode, the

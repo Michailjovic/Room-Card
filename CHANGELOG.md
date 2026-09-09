@@ -1,5 +1,47 @@
 # Changelog
 
+## [6.9.0] - 2026-09-09
+
+### Cockpit — image tiles
+
+The v6.8.0 cockpit panel could only show an animated icon per tile. `tile.image` adds the second
+scheme the plan always intended (D3): a tile becomes a tiny, self-contained stage — its own device
+photo plus `tile.overlays` that move, using exactly the [`transform:`](docs/CONFIGURATION.md#moving-an-overlay--transform)
+engine a room's own `overlays:` already use. Never a nested `room-overlay-card` — a tile is not a
+room.
+
+```yaml
+zones:
+  - id: pracka
+    section: appliances
+    tile:
+      name: Pračka
+      image: /local/pracka.webp
+      overlays:
+        - id: buben
+          image: /local/pracka_buben.png
+          transform:
+            entity: sensor.pracka_stav
+            origin: 50% 58%
+            spin: { min_duration: 1.2s, max_duration: 3s }
+```
+
+- Each tile overlay accepts the same fields a room overlay does (`image`, `transition`,
+  `animation`, `conditions.opacity`/`filter`, `state_images`, `transform.map`/`from`–`to`/`spin`),
+  with `origin` measured against the tile's own image rather than the room photo — `group` is the
+  one field that does not carry over, since a tile has no room-level `groups` of its own to join.
+- Per D4, a tile image is never cropped out of the room photo — it is its own asset, exactly like
+  any other overlay PNG in this card.
+- A tile without `image:` stays in the existing icon+state scheme, unchanged.
+- Editor: filling in a tile's new **Image** field reveals an **Overlays** list on that tile, with
+  add/remove/reorder — and the exact same per-overlay panel (Image URL,
+  Conditions YAML, Transform sub-panel with the states/range/spin mode select) a room's own
+  overlay editor already has, just scoped to that one tile.
+
+No migration — a tile without `image:` renders exactly as in v6.8.0. See
+[`docs/CONFIGURATION.md` → Image tiles](docs/CONFIGURATION.md#image-tiles) and
+[`docs/EDITOR.md`](docs/EDITOR.md#the-five-tabs).
+
 ## [6.8.0] - 2026-09-09
 
 ### Cockpit — sections & panels

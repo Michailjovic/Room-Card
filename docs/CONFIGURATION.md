@@ -1076,6 +1076,8 @@ to the tagged element itself:
 | `progress` | entity id (0–100) | — (no progress bar) | `sensor.washer_progress` |
 | `quick` | list of `{name, icon, service, data, target}` | — (no quick buttons) | see below |
 | `tap_action` | action object | — (tile is not tappable) | `{ action: more-info }` |
+| `image` | image URL | — (tile stays in icon mode) | `/local/pracka.webp` |
+| `overlays` | list of tile overlays | — | see [Image tiles](#image-tiles) below |
 
 A tile with no matching entity (or an entity missing from `hass.states`) renders with a dimmed
 `unavailable` state rather than going blank. `state_class: auto` colours the state text blue while
@@ -1096,6 +1098,37 @@ tile:
       target: { entity_id: sensor.washer_program }
 ```
 
+### Image tiles
+
+Setting `tile.image` switches a tile from the icon+state scheme to a device photo with its own
+moving parts — D3's scheme (b), "the wow" of the cockpit feature. The tile becomes a tiny,
+self-contained stage: its own base image plus absolutely-positioned `overlays`, reusing exactly
+the same [overlay](#overlays) and [`transform:`](#moving-an-overlay--transform) engine a room's
+own `overlays:` use — never a nested `room-overlay-card` (a tile is not a room).
+
+```yaml
+tile:
+  name: Washer
+  image: /local/pracka.webp          # the tile's own base photo
+  overlays:
+    - id: buben                      # just the drum, transparent elsewhere
+      image: /local/pracka_buben.png
+      transform:
+        entity: sensor.pracka_stav
+        origin: 50% 58%               # the drum's own centre, in % of the TILE image
+        spin: { min_duration: 1.2s, max_duration: 3s }
+```
+
+Each entry in `overlays` accepts the same fields a room overlay does — `id`, `image`, `transition`,
+`animation`, `conditions` (`opacity` / `filter`, including the `{condition, value}` list form),
+`state_images`, and `transform` (`map` / `from`–`to` / `spin`, with `origin`, `perspective`,
+`transition`) — with `origin` measured against the *tile's own* image, not the room photo. The one
+room-overlay field that does not apply here is `group` (`groups` are a room-level pop-up concept —
+D13 — and a tile has no room-level groups of its own to join).
+
+Per D4, a tile image is never cropped out of the room photo — it is its own asset, drawn or
+photographed separately, exactly like any other overlay PNG in this card.
+
 ### Degradation rules
 
 A section with nothing tagged into it (and no `card:`) shows an explanatory empty state instead of
@@ -1103,6 +1136,9 @@ a blank panel. An embedded `card:` whose custom element never registers shows a 
 a blank panel. A tile whose entity is missing from `hass` shows as `unavailable` instead of going
 blank. These match the same "never render a blank surface" rule the rest of this card follows for
 missing entities elsewhere.
+
+An image tile with no `image:` on a given overlay simply shows nothing for that layer (same as a
+room overlay with no matching `state_images` entry) — it never throws or blanks the whole tile.
 
 ---
 

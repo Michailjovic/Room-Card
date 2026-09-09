@@ -523,6 +523,18 @@ t('tfResolve of a missing block is null',g.tfResolve(null,{state:'on'})===null&&
   t('rocTileDef with no tile: block derives name from the element id',noTile.name==='lamp'&&noTile.icon==='mdi:lamp');
   const bare=g.rocTileDef({kind:'zones',item:{id:'x'}});
   t('rocTileDef falls back to a generic icon when the element has none',bare.icon==='mdi:help-box');
+
+  // rocTileDef: image mode (v6.9.0, D3 scheme b) -- `image`/`overlays` pass
+  // through untouched (Object.assign already carries them), and a tile
+  // without `image:` stays in icon mode regardless of what else is set.
+  const imgTile=g.rocTileDef({kind:'zones',item:{id:'pracka',icon:'mdi:washing-machine',entity:'sensor.pracka',tile:{
+    image:'/local/pracka.webp',
+    overlays:[{id:'buben',image:'/local/pracka_buben.png',transform:{entity:'sensor.pracka',spin:{min_duration:'1.2s'}}}]
+  }}});
+  t('rocTileDef carries tile.image through untouched',imgTile.image==='/local/pracka.webp');
+  t('rocTileDef carries tile.overlays through untouched (array, same entries)',Array.isArray(imgTile.overlays)&&imgTile.overlays.length===1&&imgTile.overlays[0].id==='buben');
+  const iconTile=g.rocTileDef({kind:'zones',item:{id:'y',icon:'mdi:fan',tile:{name:'Fan'}}});
+  t('rocTileDef with no tile.image stays icon mode (image undefined)',iconTile.image===undefined);
 })();
 
 // ---- version single-source check (v5.0 C5) --------------------------------

@@ -1379,6 +1379,124 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     !!secTileOut&&secTileOut.zones[0].section===undefined);
 }
 
+// ============================================================================
+// Cockpit image tiles (v6.9.0) — COCKPIT_PLAN.md kap.7 "icon vs image tile
+// branch", tile.image + tile.overlays reusing the room's own overlay+
+// transform engine, and the tile overlay editor (kap.5.2).
+// ============================================================================
+{
+  const imgCfg={
+    base_image:'/local/x.webp',
+    sections:[{id:'appliances',title:'Appliances'}],
+    zones:[
+      {id:'washer',top:'1%',left:'1%',width:'10%',height:'10%',
+        section:'appliances',
+        tile:{name:'Washer',icon:'mdi:washing-machine',
+          image:'/local/washer.webp',
+          overlays:[
+            {id:'drum',image:'/local/washer_drum.png',
+              transform:{entity:'sensor.washer_state',spin:{min_duration:'1s',max_duration:'3s'}}},
+            {id:'led',image:'/local/washer_led.png',conditions:{opacity:1}}
+          ]}},
+      {id:'fan',top:'20%',left:'1%',width:'10%',height:'10%',
+        section:'appliances',
+        tile:{name:'Fan',icon:'mdi:fan'}} // no tile.image -> stays icon mode
+    ]
+  };
+  const elImg=mkCard(imgCfg);
+  elImg.hass={states:{'sensor.washer_state':{state:'on'}},callService(){},user:{name:'x'}};
+  elImg._openSection('appliances');
+
+  const washerTile=elImg.shadowRoot.querySelector('[data-section-panel="appliances"] [data-tile-idx="0"]');
+  const fanTile=elImg.shadowRoot.querySelector('[data-section-panel="appliances"] [data-tile-idx="1"]');
+  t('an image tile renders its own stage, not the icon-wrap',
+    !!washerTile.querySelector('.roc-tile-img-stage')&&!washerTile.querySelector('.roc-tile-icon-wrap'));
+  t('a tile without tile.image stays in icon mode',
+    !!fanTile.querySelector('.roc-tile-icon-wrap')&&!fanTile.querySelector('.roc-tile-img-stage'));
+  t('the stage base layer carries the tile image url',
+    /washer\.webp/.test(washerTile.querySelector('.roc-tile-img-base').style.backgroundImage));
+  const ovEls=washerTile.querySelectorAll('.roc-tile-ov');
+  t('each declared overlay renders its own layer, in declared order',ovEls.length===2);
+  t('a spin transform overlay reuses tfResolve exactly like a room overlay (full speed on a plain "on" state)',
+    ovEls[0].style.animation==='roc-tf-spin 1.00s linear infinite');
+  t('an overlay with conditions.opacity reuses resolveVal exactly like a room overlay',
+    ovEls[1].style.opacity==='1');
+
+  // Degradation: an overlay with no image at all never throws, background stays unset.
+  const bareOvCfg={base_image:'/local/x.webp',sections:[{id:'s',title:'S'}],
+    zones:[{id:'z',top:'1%',left:'1%',width:'5%',height:'5%',section:'s',
+      tile:{image:'/local/x.webp',overlays:[{id:'blank'}]}}]};
+  const elBareOv=mkCard(bareOvCfg);
+  elBareOv.hass={states:{},callService(){},user:{name:'x'}};
+  elBareOv._openSection('s');
+  t('an overlay with neither image nor conditions renders without throwing (opacity defaults to 1)',
+    elBareOv.shadowRoot.querySelector('[data-section-panel="s"] .roc-tile-ov').style.opacity==='1');
+
+  // ---- Editor: tile image field + tile overlay editor (add/remove/reorder) --
+  const edImg=w.document.createElement('room-overlay-card-editor');
+  edImg.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'appliances',title:'Appliances'}],
+    zones:[{id:'washer',top:'1%',left:'1%',width:'5%',height:'5%',section:'appliances',
+      tile:{name:'Washer',image:'/local/washer.webp',overlays:[{id:'drum',image:'/local/drum.png'}]}}]});
+  edImg.hass={states:{},user:{name:'x'}};
+  edImg._tab='elements';edImg._render();
+
+  const imgInput=edImg.querySelector('[data-tile-img="z:0"]');
+  t('the zone tile editor has an Image field prefilled from tile.image',
+    !!imgInput&&imgInput.value==='/local/washer.webp');
+  const ovBox=edImg.querySelector('[data-tile-ov-box="z:0"]');
+  t('the overlays box is visible once tile.image is set',
+    !!ovBox&&!/display:\s*none/.test(ovBox.getAttribute('style')||''));
+  t('the existing overlay renders its own composite-keyed editor panel',
+    !!edImg.querySelector('[data-tlov-id="z:0:0"]'));
+  t('the tile YAML box no longer carries image/overlays (they have their own fields)',
+    !/image|overlays/.test(edImg.querySelector('[data-sec-tile="z:0"]').value));
+
+  let addOut=null;
+  edImg.addEventListener('config-changed',e=>{addOut=e.detail.config;});
+  edImg.querySelector('[data-add-tlov="z:0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('+ Overlay appends a second overlay, keeping the first',
+    !!addOut&&addOut.zones[0].tile.overlays.length===2&&addOut.zones[0].tile.overlays[0].id==='drum');
+
+  edImg.setConfig(addOut);edImg._tab='elements';edImg._render();
+  let rmOut=null;
+  edImg.addEventListener('config-changed',e=>{rmOut=e.detail.config;});
+  edImg.querySelector('[data-rm-tlov="z:0:0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('Remove overlay drops just that one entry',
+    !!rmOut&&rmOut.zones[0].tile.overlays.length===1&&rmOut.zones[0].tile.overlays[0].id!=='drum');
+
+  edImg.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'appliances',title:'Appliances'}],
+    zones:[{id:'washer',top:'1%',left:'1%',width:'5%',height:'5%',section:'appliances',
+      tile:{name:'Washer',image:'/local/washer.webp',overlays:[{id:'a'},{id:'b'}]}}]});
+  edImg._tab='elements';edImg._render();
+  let mvOut=null;
+  edImg.addEventListener('config-changed',e=>{mvOut=e.detail.config;});
+  edImg.querySelector('[data-mv-tlov="z:0:1:up"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('the ▲ button swaps a tile overlay with the one above it',
+    !!mvOut&&mvOut.zones[0].tile.overlays[0].id==='b'&&mvOut.zones[0].tile.overlays[1].id==='a');
+
+  // Transform sub-panel round-trip (states mode) inside a tile overlay.
+  edImg.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'appliances',title:'Appliances'}],
+    zones:[{id:'washer',top:'1%',left:'1%',width:'5%',height:'5%',section:'appliances',
+      tile:{name:'Washer',image:'/local/washer.webp',overlays:[{id:'drum',
+        transform:{entity:'sensor.washer_state',origin:'50% 58%',map:{on:'rotate(180deg)','*':'rotate(0deg)'}}}]}}]});
+  edImg._tab='elements';edImg._render();
+  const tfModeSel=edImg.querySelector('[data-tlov-tf-mode="z:0:0"]');
+  t('the tile overlay transform sub-panel detects "states" mode from the config shape',
+    !!tfModeSel&&tfModeSel.value==='states');
+  t('the state→transform rows are prefilled',
+    !!edImg.querySelector('[data-tlov-tfk="z:0:0-0"]'));
+  let tfOut=null;
+  edImg.addEventListener('config-changed',e=>{tfOut=e.detail.config;});
+  edImg.querySelector('[data-tlov-tf-origin="z:0:0"]').value='40% 40%';
+  edImg.querySelector('[data-tlov-tf-origin="z:0:0"]').dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('collectConfig round-trips a tile overlay transform field',
+    !!tfOut&&tfOut.zones[0].tile.overlays[0].transform.origin==='40% 40%'&&
+    tfOut.zones[0].tile.overlays[0].transform.map.on==='rotate(180deg)');
+}
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();

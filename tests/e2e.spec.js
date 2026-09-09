@@ -203,3 +203,34 @@ test.describe('cockpit sections & panels (v6.8.0)',()=>{
     expect((await panelGeo(page,'sec_full')).open).toBe(true);
   });
 });
+
+// Cockpit image tiles (v6.9.0) — real Chromium check that a tile overlay's
+// transform/animation actually computes, not just an inline style string
+// jsdom would accept uncritically (the harness's sec_right panel carries an
+// image tile with a spin-transform overlay — see tests/harness/ha-shell.html).
+test.describe('cockpit image tiles (v6.9.0)',()=>{
+  test('an image tile stage renders with real geometry and its overlay actually spins',async({page})=>{
+    await clickShadow(page,'[data-ico="open_right"]');
+    const g=await page.evaluate(()=>{
+      const sr=window.__harness.card.shadowRoot;
+      const panel=sr.querySelector('[data-section-panel="sec_right"]');
+      const stage=panel.querySelector('.roc-tile-img-stage');
+      const base=panel.querySelector('.roc-tile-img-base');
+      const ov=panel.querySelector('.roc-tile-ov');
+      const sb=stage.getBoundingClientRect();
+      const cs=getComputedStyle(ov);
+      return{
+        stageW:sb.width,stageH:sb.height,
+        baseBg:getComputedStyle(base).backgroundImage,
+        animName:cs.animationName,
+        animDur:cs.animationDuration,
+        transform:cs.transform
+      };
+    });
+    expect(g.stageW).toBeGreaterThan(10);
+    expect(g.stageH).toBeGreaterThan(10);
+    expect(g.baseBg).toContain('data:image/svg+xml');
+    expect(g.animName).toBe('roc-tf-spin');
+    expect(g.animDur).toBe('0.5s');
+  });
+});
