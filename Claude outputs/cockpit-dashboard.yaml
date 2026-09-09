@@ -366,16 +366,28 @@ sections:
   - id: media
     title: Media
     icon: mdi:cast
-    source: auto
-    domain: media_player
     tiles:
       - id: tv_loznice
         name: Ložnice
         entity: media_player.lg_webos_tv_oled83g58lw_beuyljp
-        icon: mdi:television
         value: >-
-          {% set src = states('sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom') %}
+          {% set src =
+          states('sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom') %}
           {{ src if src not in ['unknown','unavailable',''] else '' }}
+        quick:
+          - name: Hlasitost +
+            icon: mdi:volume-plus
+            service: media_player.volume_up
+            target:
+              entity_id: media_player.lg_webos_tv_oled83g58lw_beuyljp
+          - name: Hlasitost -
+            icon: mdi:volume-minus
+            service: media_player.volume_down
+            target:
+              entity_id: media_player.lg_webos_tv_oled83g58lw_beuyljp
+          - name: Power
+            icon: mdi:power
+            service: script.tv_power_toggle_s_wol
         tap_action:
           condition:
             entity: switch.01_tv
@@ -386,29 +398,73 @@ sections:
           else:
             action: more-info
             entity: switch.01_tv
-      - id: tv_obyvak
+        image: /local/Dashboards/Cockpit/Media/tv-off.webp
+        image_ratio: 16/9
+        overlays:
+          - id: tv_content
+            conditions:
+              opacity:
+                - condition:
+                    entity: media_player.lg_webos_tv_oled83g58lw_beuyljp
+                    state_not:
+                      - 'off'
+                      - unavailable
+                  value: 1
+                - value: 0
+            state_images:
+              - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+                state: Stremio
+                image: /local/Dashboards/Cockpit/Media/tv-Stremio.webp
+              - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+                state: YouTube AdFree
+                image: /local/Dashboards/Cockpit/Media/tv-YouTube.webp
+              - image: /local/Dashboards/Cockpit/Media/tv-LG.webp
+            transition: 2s ease
+      - id: tv_living_room
         name: Obývák
-        entity: media_player.televize_v_obyvaku
-        icon: mdi:television
+        entity: media_player.televize_v_obyvaku_2
         value: >-
-          {% set act = state_attr('remote.televize_v_obyvaku','current_activity') %}
-          {% set names = {'com.stremio.one':'Stremio','com.nuvio.app':'Nuvio','org.smarttube.beta':'SmartTube'} %}
-          {{ names.get(act, act) if act else '' }}
+          {% set src = states('media_player.televize_v_obyvaku_2') %} {{ src if
+          src not in ['unknown','unavailable',''] else '' }}
+        quick:
+          - name: Hlasitost +
+            icon: mdi:volume-plus
+            service: media_player.volume_up
+            target:
+              entity_id: media_player.televize_v_obyvaku_2
+          - name: Hlasitost -
+            icon: mdi:volume-minus
+            service: media_player.volume_down
+            target:
+              entity_id: media_player.televize_v_obyvaku_2
         tap_action:
           action: navigate
           navigation_path: /dashboard-various/google-cast
-      - id: projektor
-        name: Plátno
-        icon: mdi:projector-screen
-        quick:
-          - name: Nahoru
-            icon: mdi:arrow-up-bold
-            service: switch.turn_on
-            target: { entity_id: switch.elitescreen_control_l1_up }
-          - name: Dolů
-            icon: mdi:arrow-down-bold
-            service: switch.turn_on
-            target: { entity_id: switch.elitescreen_control_l2_down }
+        image: /local/Dashboards/Cockpit/Media/monitor-off.webp
+        image_ratio: 16/9
+        overlays:
+          - id: tv_content
+            conditions:
+              opacity:
+                - condition:
+                    entity: media_player.televize_v_obyvaku_2
+                    state_not:
+                      - 'off'
+                      - unavailable
+                  value: 1
+                - value: 0
+            state_images:
+              - entity: media_player.televize_v_obyvaku_2
+                attribute: app_id
+                state: com.stremio.one
+                image: /local/Dashboards/Cockpit/Media/monitor-Stremio.webp
+              - entity: media_player.televize_v_obyvaku_2
+                attribute: app_id
+                state: org.smarttube.beta
+                image: /local/Dashboards/Cockpit/Media/monitor-YouTube.webp
+              - image: /local/Dashboards/Cockpit/Media/monitor-LG.webp
+            transition: 2s ease
+    columns: 1
   - id: cleaning
     title: Úklid
     icon: mdi:robot-vacuum
@@ -434,32 +490,40 @@ sections:
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_bedroom }
-                data: { position: 100 }
+                target:
+                  entity_id: cover.roller_motor_bedroom
+                data:
+                  position: 100
             - type: button
               name: Den
               icon: mdi:blinds
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_bedroom }
-                data: { position: 65 }
+                target:
+                  entity_id: cover.roller_motor_bedroom
+                data:
+                  position: 65
             - type: button
               name: Skulina
               icon: mdi:roller-shade
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_bedroom }
-                data: { position: 2 }
+                target:
+                  entity_id: cover.roller_motor_bedroom
+                data:
+                  position: 2
             - type: button
               name: Zavřeno
               icon: mdi:roller-shade-closed
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_bedroom }
-                data: { position: 0 }
+                target:
+                  entity_id: cover.roller_motor_bedroom
+                data:
+                  position: 0
         - type: tile
           entity: cover.roller_motor_living_room
           name: Obývák
@@ -474,32 +538,40 @@ sections:
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_living_room }
-                data: { position: 100 }
+                target:
+                  entity_id: cover.roller_motor_living_room
+                data:
+                  position: 100
             - type: button
               name: Den
               icon: mdi:blinds
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_living_room }
-                data: { position: 59 }
+                target:
+                  entity_id: cover.roller_motor_living_room
+                data:
+                  position: 59
             - type: button
               name: Skulina
               icon: mdi:roller-shade
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_living_room }
-                data: { position: 2 }
+                target:
+                  entity_id: cover.roller_motor_living_room
+                data:
+                  position: 2
             - type: button
               name: Zavřeno
               icon: mdi:roller-shade-closed
               tap_action:
                 action: perform-action
                 perform_action: cover.set_cover_position
-                target: { entity_id: cover.roller_motor_living_room }
-                data: { position: 0 }
+                target:
+                  entity_id: cover.roller_motor_living_room
+                data:
+                  position: 0
 rooms:
   - id: cockpit
     name: Cockpit

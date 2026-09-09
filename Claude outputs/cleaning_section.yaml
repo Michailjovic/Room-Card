@@ -1,0 +1,48 @@
+  - id: cleaning
+    title: Úklid
+    icon: mdi:robot-vacuum
+    tiles:
+      - id: vacuum_s6
+        name: Kuchyň
+        entity: vacuum.s6_kitchen
+        icon: mdi:robot-vacuum
+        icon_animation: spin
+        active_state: cleaning
+        image: /local/Dashboards/Vacuum/S6.webp
+        value: "{{ state_attr('vacuum.s6_kitchen','battery_level') }}%"
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+        hold_action:
+          action: more-info
+          entity: vacuum.s6_kitchen
+
+      - id: vacuum_s7
+        name: Vysavač S7
+        entity: vacuum.s7_maxv
+        icon: mdi:robot-vacuum
+        icon_animation: spin
+        active_state: cleaning
+        image: /local/Dashboards/Vacuum/S7.webp
+        value: "{{ state_attr('vacuum.s7_maxv','battery_level') }}%"
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+        hold_action:
+          action: more-info
+          entity: vacuum.s7_maxv
+
+      - id: vacuum_s8
+        name: Vysavač S8 Ultra
+        entity: vacuum.s8_maxv_ultra
+        icon: mdi:robot-vacuum
+        icon_animation: spin
+        active_state: cleaning
+        image: /local/Dashboards/Vacuum/S8.webp
+        value: "{{ state_attr('vacuum.s8_maxv_ultra','battery_level') }}%"
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+        hold_action:
+          action: more-info
+          entity: vacuum.s8_maxv_ultra

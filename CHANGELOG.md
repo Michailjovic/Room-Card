@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.12.0] - 2026-09-09
+
+### Cockpit tiles gain `hold_action` / `double_tap_action`
+
+A cockpit tile only ever wired `tap_action` (a plain click listener) — `hold_action`,
+`double_tap_action` and `hold_delay`, long supported on room `zones`/`icons`/`labels`/`gauges`/
+`vacuum_widgets` via the shared long-press machinery, were silently ignored on a tile even if
+written into its YAML. Tiles now go through the same `_addZoneListeners` handling as everything
+else, including the hold-progress ring feedback and the `hold_feedback`/`hold_color` opt-outs. A
+tile's quick buttons were hardened at the same time so pressing one never leaks a touch/mouse
+event through to the tile's own hold timer. See docs/releases/RELEASE_NOTES_v6.12.0.md.
+
 ## [6.11.4] - 2026-09-09
 
 ### `state_images` can now match an attribute, not just the entity's own state

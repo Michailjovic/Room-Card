@@ -76,7 +76,8 @@ mock-up.*
   Each section also has its own **Declared tiles** list (v6.11.3) — content the section owns
   outright, no room/zone/icon tag needed at all (a TV summary, a projector remote). *+ Tile* adds
   one; each gets an ID field (optional — falls back to `<section id>_tile_<index>`), a YAML box
-  for the scalar fields (name/entity/icon/state/value/quick/tap_action/…), and the exact same
+  for the scalar fields (name/entity/icon/state/value/quick/tap_action/hold_action/hold_delay/
+  double_tap_action/…), and the exact same
   **Image** field / **Aspect ratio** override / **Overlays** editor a tagged element's tile gets —
   plus ▲▼ reorder, Duplicate and Remove. See
   [Configuration → Declared tiles](CONFIGURATION.md#declared-tiles-tiles).

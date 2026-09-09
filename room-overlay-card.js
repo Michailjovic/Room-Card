@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.11.4';
+const ROC_VERSION='6.12.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2247,7 +2247,7 @@ class RoomOverlayCard extends HTMLElement{
       const quickHtml=(td.quick||[]).map(function(q,qi){
         return'<button type="button" data-quick="'+qi+'" title="'+escA(q.name||'')+'"><ha-icon icon="'+escA(q.icon||'mdi:play')+'"></ha-icon></button>';
       }).join('');
-      return'<div class="roc-tile'+(isImg?' roc-tile-img':'')+'" data-tile-idx="'+idx+'"'+(td.tap_action?' data-tappable tabindex="0" role="button"':'')+'>'
+      return'<div class="roc-tile'+(isImg?' roc-tile-img':'')+'" data-tile-idx="'+idx+'"'+((td.tap_action||td.hold_action||td.double_tap_action)?' data-tappable tabindex="0" role="button"':'')+'>'
         +(isImg?_tileStageHtml(td):'<div class="roc-tile-icon-wrap"><ha-icon class="roc-tile-icon" data-tile-icon icon="'+escA(td.icon)+'"></ha-icon></div>')
         +'<div class="roc-tile-body">'
           +'<div class="roc-tile-name">'+escA(td.name)+'</div>'
@@ -3055,8 +3055,15 @@ class RoomOverlayCard extends HTMLElement{
         const entry=_secTiles[idx];if(!entry)return;
         _tileSelf._secTileEls[d.id][idx]=tileEl;
         const td=rocTileDef(entry);
-        if(td.tap_action)tileEl.addEventListener('click',function(e){if(e.target.closest('[data-quick]'))return;_tileSelf._exec(td.tap_action,e);});
+        // Quick buttons live inside the tile and must swallow every pointer
+        // event, not just 'click' — _addZoneListeners below also listens for
+        // touchstart/mousedown (to run the hold-progress ring), and those
+        // would otherwise bubble up from a quick button and start a hold on
+        // the tile itself while the user is only pressing a quick button.
         tileEl.querySelectorAll('[data-quick]').forEach(function(qb){
+          ['mousedown','touchstart','touchend'].forEach(function(evt){
+            qb.addEventListener(evt,function(e){e.stopPropagation();},{passive:true});
+          });
           qb.addEventListener('click',function(e){
             e.stopPropagation();
             const qi=parseInt(qb.dataset.quick,10);
@@ -3064,6 +3071,7 @@ class RoomOverlayCard extends HTMLElement{
             if(q&&q.service&&_tileSelf._hass){const dd=q.service.indexOf('.');_tileSelf._hass.callService(q.service.slice(0,dd),q.service.slice(dd+1),q.data||{},q.target);}
           });
         });
+        if(td.tap_action||td.hold_action||td.double_tap_action)_tileSelf._addZoneListeners(tileEl,td.tap_action,td.hold_action,td.double_tap_action,td.hold_delay);
       });
     }
     const _secBackdropEl=this.shadowRoot.querySelector('[data-section-backdrop]');
@@ -7146,7 +7154,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Tile: '+this._e((t&&(t.name||t.id))||'tile_'+ti)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">ID (optional — falls back to "'+this._e(idPlaceholder)+'")</label><input data-dtile-id="'+skey+'" type="text" placeholder="'+this._e(idPlaceholder)+'" value="'+this._e((t&&t.id)||'')+'"'+this._inp('')+'></div>';
-    h+='<div style="margin-bottom:8px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-dtile-yaml="'+skey+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action / hold_action / hold_delay / double_tap_action</label><textarea data-dtile-yaml="'+skey+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
     h+=this._tileImageBox('dt',dtKey,{tile:t||{}});
     h+='<div style="display:flex;gap:6px;margin-top:8px;">';
     h+='<button type="button" data-mv-dtile="'+skey+':up" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9650;</button>';
@@ -7177,7 +7185,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const tileScalar=Object.assign({},item.tile||{});
     delete tileScalar.image;delete tileScalar.image_ratio;delete tileScalar.overlays;
     const tileYaml=Object.keys(tileScalar).length?_yaml.s(tileScalar):'';
-    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
+    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action / hold_action / hold_delay / double_tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
     h+=this._tileImageBox(kind,i,item);
     h+='</div>';
     h+='</div>';

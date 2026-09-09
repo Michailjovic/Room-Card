@@ -1834,6 +1834,80 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   edBootNoAreas._tab='rooms';edBootNoAreas._render();
   t('without hass.areas (older HA) the bootstrap button is simply absent, not an error',
     !edBootNoAreas.querySelector('#bootstrap-areas'));
+
+  // ---- Cockpit tiles: hold_action / double_tap_action (v6.12.0) ------------
+  // Cockpit tiles only ever wired tap_action (a plain 'click' listener) --
+  // hold_action and double_tap_action, long supported on zones/icons/labels/
+  // gauges/vacuum_widgets via _addZoneListeners, were silently ignored on a
+  // tile even if you wrote them into the Tile (YAML) box. Vacuum tiles need
+  // exactly this: a short tap navigates, a long-press opens more-info.
+  const holdTileCfg={base_image:'/local/x.webp',test_mode:false,
+    sections:[{id:'vac',title:'Vac',tiles:[
+      {name:'Vysavač',icon:'mdi:robot-vacuum',hold_delay:20,
+        tap_action:{action:'navigate',navigation_path:'/x/vacuum'},
+        hold_action:{action:'more-info',entity:'vacuum.s6'}},
+      {id:'projector',name:'Plátno',icon:'mdi:projector-screen',hold_delay:20,
+        hold_action:{action:'more-info',entity:'vacuum.s7'},
+        quick:[{name:'Up',icon:'mdi:arrow-up',service:'switch.turn_on',target:{entity_id:'switch.scr_up'}}]}
+    ]}]};
+  const elHoldTile=mkCard(holdTileCfg);
+  elHoldTile.hass={states:{},callService(){},user:{name:'x'}};
+  elHoldTile._openSection('vac');
+
+  const vacTileEl=elHoldTile.shadowRoot.querySelector('[data-section-panel="vac"] [data-tile-idx="0"]');
+  t('a tile with hold_action (even without one) gets data-tappable for cursor/a11y',
+    vacTileEl.hasAttribute('data-tappable'));
+
+  let holdNavPath=null;
+  const _origPushState4=w.history.pushState.bind(w.history);
+  w.history.pushState=(_s,_ti,p)=>{holdNavPath=p;};
+  vacTileEl.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  w.history.pushState=_origPushState4;
+  t('a short tap on a tile with both tap_action and hold_action still runs tap_action',
+    holdNavPath==='/x/vacuum');
+
+  let holdMoreInfo=null;
+  elHoldTile.addEventListener('hass-more-info',e=>{holdMoreInfo=e.detail.entityId;});
+  vacTileEl.dispatchEvent(new w.Event('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,60));
+  vacTileEl.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('holding a cockpit tile past hold_delay now runs hold_action (more-info) instead of tap_action',
+    holdMoreInfo==='vacuum.s6');
+
+  // A quick button must swallow mousedown/touchstart too, not just click --
+  // otherwise pressing it would also start (and, on a slow tap, fire) the
+  // tile's own hold_action underneath it.
+  const projTileEl=elHoldTile.shadowRoot.querySelector('[data-section-panel="vac"] [data-tile-idx="1"]');
+  const projQuickEl=projTileEl.querySelector('[data-quick="0"]');
+  let projMoreInfo=null,projSvc=null;
+  elHoldTile.addEventListener('hass-more-info',e=>{projMoreInfo=e.detail.entityId;});
+  elHoldTile._hass.callService=(dom,svc,data,target)=>{projSvc={dom,svc,target};};
+  projQuickEl.dispatchEvent(new w.Event('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,60));
+  projQuickEl.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('pressing a quick button never leaks through to the tile\'s own hold_action',
+    projMoreInfo===null&&!!projSvc&&projSvc.svc==='turn_on');
+
+  // Editor: the Tile (YAML) field-list comment now mentions the new fields
+  // (hold_action itself already round-trips through the same freeform scalar
+  // YAML box tap_action always has — nothing else to collect).
+  const edHoldTile=w.document.createElement('room-overlay-card-editor');
+  edHoldTile.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'vac',title:'Vac',tiles:[
+      {id:'s6',name:'Vysavač',icon:'mdi:robot-vacuum',
+        tap_action:{action:'navigate',navigation_path:'/x/vacuum'},
+        hold_action:{action:'more-info',entity:'vacuum.s6'}}
+    ]}]});
+  edHoldTile.hass={states:{},user:{name:'x'}};
+  edHoldTile._tab='sections';edHoldTile._render();
+  const holdDtLabel=edHoldTile.querySelector('[data-dtile-yaml="0:0"]').previousElementSibling
+    ||edHoldTile.querySelector('label[for=""],.roc-l');
+  t('the declared-tile YAML box label now mentions hold_action/double_tap_action',
+    /hold_action/.test(edHoldTile.querySelector('[data-panel="dtile-0:0"]').innerHTML)&&
+    /double_tap_action/.test(edHoldTile.querySelector('[data-panel="dtile-0:0"]').innerHTML));
+  const holdDtYaml=edHoldTile.querySelector('[data-dtile-yaml="0:0"]').value;
+  t('a declared tile\'s hold_action round-trips through the freeform YAML box untouched',
+    /hold_action:/.test(holdDtYaml)&&/more-info/.test(holdDtYaml));
 }
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');

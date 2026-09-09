@@ -1138,9 +1138,10 @@ something happened to be tagged elsewhere.
 **GUI editor (v6.11.3).** Declared tiles are fully editable from the card editor, not just
 YAML — open a section in the **Sections** tab and its own *Declared tiles* list sits right there,
 with *+ Tile* to add one, and per-tile ID / a YAML box for the scalar fields (name/entity/icon/
-value/quick/tap_action/…) / a dedicated Image field with its own [Aspect ratio](#image-tiles)
-override / an Overlays editor identical to a tagged element's — plus ▲▼ reorder, Duplicate and
-Remove. No manual `id:`/`image:`/`overlays:` YAML needed unless you want it.
+value/quick/tap_action/hold_action/hold_delay/double_tap_action/…) / a dedicated Image field with
+its own [Aspect ratio](#image-tiles) override / an Overlays editor identical to a tagged element's
+— plus ▲▼ reorder, Duplicate and Remove. No manual `id:`/`image:`/`overlays:` YAML needed unless
+you want it.
 
 ### Per-element `section:` and `tile:`
 
@@ -1162,8 +1163,30 @@ to the tagged element itself:
 | `progress` | entity id (0–100) | — (no progress bar) | `sensor.washer_progress` |
 | `quick` | list of `{name, icon, service, data, target}` | — (no quick buttons) | see below |
 | `tap_action` | action object | — (tile is not tappable) | `{ action: more-info }` |
+| `hold_action` | action object | — (long-press is inert) | `{ action: more-info }` |
+| `double_tap_action` | action object | — (double-tap is inert) | `{ action: toggle, entity: ... }` |
+| `hold_delay` | ms | `500` | `800` |
 | `image` | image URL | — (tile stays in icon mode) | `/local/pracka.webp` |
 | `overlays` | list of tile overlays | — | see [Image tiles](#image-tiles) below |
+
+**`hold_action`/`double_tap_action`/`hold_delay` (v6.12.0).** A tile now supports a long-press and
+a double-tap action exactly like a room `zone`/`icon`/`label`/`gauge`/`vacuum_widget` does — same
+hold-progress ring feedback, same `hold_delay` override, same `hold_feedback`/`hold_color` opt-outs
+at the room level. Handy for a tile whose short tap navigates somewhere (e.g. a full vacuum
+dashboard) while a long-press opens that entity's own more-info dialog instead of adding a second
+tile just for that:
+
+```yaml
+tiles:
+  - name: Kuchyň
+    entity: vacuum.s6_kitchen
+    icon: mdi:robot-vacuum
+    tap_action: { action: navigate, navigation_path: /dashboard-various/vacuum }
+    hold_action: { action: more-info, entity: vacuum.s6_kitchen }
+```
+
+A tile gets the tappable cursor/keyboard-focus treatment as soon as it has *any* of
+`tap_action`/`hold_action`/`double_tap_action`, not only `tap_action`.
 
 A tile with no matching entity (or an entity missing from `hass.states`) renders with a dimmed
 `unavailable` state rather than going blank. `state_class: auto` colours the state text blue while
