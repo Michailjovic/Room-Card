@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.10.0** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.10.1** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -81,6 +81,7 @@ failure broke HACS installs.
 | **v6.8.0** | **Cockpit `sections:`** — pop-up panels of status/control tiles collected from across the whole card (or a single embedded card), opened via `open-section`; four placements, badge counting, template visibility, degradation instead of blank panels, and a GUI **Sections** tab + per-element Section select |
 | **v6.9.0** | **Cockpit image tiles** — `tile.image` + `tile.overlays` turns a cockpit tile into its own tiny stage (a device photo with moving parts), reusing the overlay `transform:` engine (states/range/spin) at tile scale, never a nested card; a tile-overlay editor mirrors the room overlay panel, scoped to one tile |
 | **v6.10.0** | **Cockpit auto tiles & onboarding** — `source: auto`+`domain:` fills a section straight from `hass.states`, sections can now combine collected + auto + an embedded card in one panel, and three editor helpers (recipes, a find-untagged-devices scan, bootstrap rooms from HA areas) remove the need to hand-write the first section's YAML |
+| **v6.10.1** | **Fix** — a slider dragged inside an open cockpit section sheet (e.g. a `card:`-embedded tile card's cover-position slider) no longer drags the room-swipe underneath it |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

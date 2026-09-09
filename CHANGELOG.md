@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.10.1] - 2026-09-09
+
+### Fix: section sheet stole the room-swipe gesture
+
+Dragging a slider (e.g. a native HA tile card's cover-position slider, embedded via a section's
+`card:`) inside an open cockpit section panel also dragged the room behind it, because the
+room-swipe pointerdown listener on `.wrap` didn't know an open `.roc-panel` should own its own
+gestures. Fixed — see docs/releases/RELEASE_NOTES_v6.10.1.md.
+
 ## [6.10.0] - 2026-09-09
 
 ### Cockpit — auto tiles and onboarding

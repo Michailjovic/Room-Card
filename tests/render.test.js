@@ -1348,6 +1348,31 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   elRooms._switchRoom(1,1,true);
   t('switching rooms closes the open section panel',elRooms._sectionOpen===null);
 
+  // Regression (v6.10.1): a pointer drag starting inside an OPEN section sheet
+  // (e.g. a card:-embedded tile card's own percentage slider) must never
+  // engage the room-swipe gesture running on .wrap underneath it.
+  {
+    const elDrag=mkCard(secRoomsCfg);
+    elDrag.hass={states:{},callService(){},user:{name:'x'}};
+    elDrag._openSection('appliances');
+    const wrapD=elDrag.shadowRoot.querySelector('.wrap');
+    const panelTile=elDrag.shadowRoot.querySelector('[data-section-panel="appliances"] .roc-tile');
+    t('panel has a tile to start the drag from',!!panelTile);
+    const fire=(type,el,x)=>{const ev=new w.Event(type,{bubbles:true});ev.pointerId=1;ev.clientX=x;ev.clientY=50;el.dispatchEvent(ev);};
+    fire('pointerdown',panelTile,10);
+    fire('pointermove',wrapD,80); // big horizontal move — would engage room-swipe on the canvas
+    t('a drag starting inside an open section sheet never engages the room-swipe',!elDrag._roomDragActive);
+    fire('pointerup',wrapD,80);
+
+    // Sanity: the identical drag started on the room canvas itself still does.
+    elDrag._closeSection();
+    const baseLayer=elDrag.shadowRoot.querySelector('.wrap .content .layer.base');
+    fire('pointerdown',baseLayer,10);
+    fire('pointermove',wrapD,80);
+    t('...while the same drag started on the room canvas still does (sanity check)',elDrag._roomDragActive===true);
+    fire('pointerup',wrapD,80);
+  }
+
   // ---- Editor: Sections tab + per-element Section select -------------------
   const edSec=w.document.createElement('room-overlay-card-editor');
   edSec.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
