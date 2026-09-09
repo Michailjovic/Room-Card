@@ -1497,6 +1497,136 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     tfOut.zones[0].tile.overlays[0].transform.map.on==='rotate(180deg)');
 }
 
+// ============================================================================
+// Cockpit auto tiles & onboarding (v6.10.0) -- COCKPIT_PLAN.md kap.3.1/4
+// (`source: auto` + `domain:`, resolution order collected->auto->card) and
+// kap.5.3 (editor onboarding: recipes, the untagged-device scan, area
+// bootstrap).
+// ============================================================================
+{
+  const autoCfg={
+    base_image:'/local/x.webp',
+    sections:[
+      {id:'heating',title:'Heating',icon:'mdi:radiator',source:'auto',domain:'climate'},
+      {id:'elec',title:'Electricity',placement:'full',card:{type:'custom:electricity-panel-card'}}
+    ],
+    zones:[
+      {id:'living',top:'1%',left:'1%',width:'5%',height:'5%',section:'heating',tile:{name:'Obývák',entity:'climate.tagged'}},
+      {id:'meter',top:'2%',left:'2%',width:'5%',height:'5%',section:'elec',tile:{name:'Meter'}}
+    ]
+  };
+  const elAuto=mkCard(autoCfg);
+  elAuto.hass={states:{
+    'climate.tagged':{state:'heat',attributes:{friendly_name:'Obývák'}},
+    'climate.extra':{state:'off',attributes:{friendly_name:'Ložnice'}},
+    'cover.other':{state:'closed',attributes:{friendly_name:'Roleta'}}
+  },callService(){},user:{name:'x'}};
+  // A richer hass than mkCard's own empty-states one only reaches the panel
+  // skeleton on the next _render() (kap.4: built once per render, never per
+  // state tick) -- same as the portrait-switch re-render earlier in this file.
+  elAuto._rendered=false;elAuto._render();
+
+  const heatTiles=elAuto.shadowRoot.querySelectorAll('[data-section-panel="heating"] .roc-tile');
+  t('a source:auto section combines its collected tile with auto tiles from hass',heatTiles.length===2);
+  t('collected tiles come first (resolution order, kap.4)',
+    heatTiles[0].querySelector('.roc-tile-name').textContent==='Obývák'&&heatTiles[0].dataset.tileIdx==='0');
+  t('an auto tile for a different-domain entity is not pulled in',
+    ![...heatTiles].some(function(el){return el.textContent.indexOf('Roleta')>=0;}));
+  t('the already-collected entity is not duplicated as an auto tile',
+    [...heatTiles].filter(function(el){return el.querySelector('.roc-tile-name').textContent==='Obývák';}).length===1);
+
+  elAuto._openSection('heating');
+  const autoTileEl=elAuto.shadowRoot.querySelector('[data-section-panel="heating"] [data-tile-idx="1"]');
+  t('the auto tile got its live state via the same _updateSectionTiles() path as a collected tile',
+    !!autoTileEl&&autoTileEl.querySelector('[data-tile-state]').textContent==='off');
+
+  const elecBody=elAuto.shadowRoot.querySelector('[data-section-panel="elec"] .roc-panel-body');
+  const elecKids=[...elecBody.children].map(function(k){return k.className;});
+  t('a card: section with collected tiles renders the tiles above the embedded card host (kap.4 resolution order)',
+    elecKids.indexOf('roc-card-tile-host')>0&&elecKids[0].indexOf('roc-tile')>=0);
+
+  // ---- Editor: source select gains "auto" + a Domain select ---------------
+  const edAuto=w.document.createElement('room-overlay-card-editor');
+  edAuto.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'heating',title:'Heating',source:'auto',domain:'climate'}]});
+  edAuto.hass={states:{},user:{name:'x'}};
+  edAuto._tab='sections';edAuto._render();
+  const srcSel=edAuto.querySelector('[data-sec-source="0"]');
+  t('the Content source select offers Auto',!!srcSel&&!!srcSel.querySelector('option[value="auto"]'));
+  t('a source:auto section prefills the select to Auto',srcSel.value==='auto');
+  const domBox=edAuto.querySelector('[data-sec-domain-box="0"]');
+  t('the Domain box is visible once source is Auto',!!domBox&&!/display:none/.test(domBox.getAttribute('style')||''));
+  t('the Domain select is prefilled from config',edAuto.querySelector('[data-sec-domain="0"]').value==='climate');
+  let domOut=null;
+  edAuto.addEventListener('config-changed',e=>{domOut=e.detail.config;});
+  edAuto.querySelector('[data-sec-domain="0"]').value='vacuum';
+  edAuto.querySelector('[data-sec-domain="0"]').dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('collectConfig round-trips the domain field',
+    !!domOut&&domOut.sections[0].domain==='vacuum'&&domOut.sections[0].source==='auto');
+
+  // ---- Editor: recipes (kap.5.3.3) -----------------------------------------
+  const edRecipe=w.document.createElement('room-overlay-card-editor');
+  edRecipe.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{}});
+  edRecipe.hass={states:{},user:{name:'x'}};
+  edRecipe._tab='sections';edRecipe._render();
+  let recipeOut=null;
+  edRecipe.addEventListener('config-changed',e=>{recipeOut=e.detail.config;});
+  const recSel=edRecipe.querySelector('#add-section-recipe');
+  t('a Recipe select is offered next to + Add section',!!recSel);
+  recSel.value='cleaning';
+  recSel.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('picking the Cleaning recipe adds a pre-filled auto/vacuum section',
+    !!recipeOut&&recipeOut.sections.length===1&&recipeOut.sections[0].source==='auto'&&
+    recipeOut.sections[0].domain==='vacuum'&&recipeOut.sections[0].icon==='mdi:robot-vacuum');
+
+  // ---- Editor: untagged-device scan (kap.5.3.2) ----------------------------
+  const edScan=w.document.createElement('room-overlay-card-editor');
+  edScan.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{}});
+  edScan.hass={states:{'vacuum.roomba':{state:'docked',attributes:{friendly_name:'Roomba'}}},user:{name:'x'}};
+  edScan._tab='sections';edScan._render();
+  t('an untagged vacuum shows up in the "Find untagged devices" scan',
+    /Roomba|1 vacuum/.test(edScan.textContent));
+  const scanBtn=edScan.querySelector('[data-add-untagged-recipe="cleaning"]');
+  t('the scan offers a one-click "+ Add a section for these"',!!scanBtn);
+  let scanOut=null;
+  edScan.addEventListener('config-changed',e=>{scanOut=e.detail.config;});
+  scanBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+  t('clicking it adds the same Cleaning recipe section',
+    !!scanOut&&scanOut.sections.length===1&&scanOut.sections[0].domain==='vacuum');
+
+  // ---- Editor: bootstrap rooms from HA areas (kap.5.3.1) -------------------
+  const edBoot=w.document.createElement('room-overlay-card-editor');
+  edBoot.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{}});
+  edBoot.hass={states:{},user:{name:'x'},
+    areas:{area1:{name:'Obývák'},area2:{name:'Ložnice'}},
+    devices:{dev1:{area_id:'area1'}},
+    entities:{
+      'light.ob':{area_id:'area1'},
+      'climate.dev':{device_id:'dev1'},
+      'sensor.other':{area_id:'area2'}
+    }};
+  edBoot._tab='rooms';edBoot._render();
+  const bootBtn=edBoot.querySelector('#bootstrap-areas');
+  t('the "Create a room for each area" button shows once hass.areas is present',!!bootBtn);
+  let bootOut=null;
+  edBoot.addEventListener('config-changed',e=>{bootOut=e.detail.config;});
+  bootBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
+  t('bootstrap converts to multi-room and adds one room per area',
+    !!bootOut&&Array.isArray(bootOut.rooms)&&bootOut.rooms.length===3);
+  const obyvakRoom=bootOut&&bootOut.rooms.find(function(r){return r.name==='Obývák';});
+  t('an area room gets its directly-assigned entity pre-assigned as an icon',
+    !!obyvakRoom&&Array.isArray(obyvakRoom.icons)&&obyvakRoom.icons.some(function(ic){return ic.entity==='light.ob';}));
+  t('an entity reached only via its device (device.area_id) is picked up too',
+    !!obyvakRoom&&obyvakRoom.icons.some(function(ic){return ic.entity==='climate.dev';}));
+
+  const edBootNoAreas=w.document.createElement('room-overlay-card-editor');
+  edBootNoAreas.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{}});
+  edBootNoAreas.hass={states:{},user:{name:'x'}};
+  edBootNoAreas._tab='rooms';edBootNoAreas._render();
+  t('without hass.areas (older HA) the bootstrap button is simply absent, not an error',
+    !edBootNoAreas.querySelector('#bootstrap-areas'));
+}
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();

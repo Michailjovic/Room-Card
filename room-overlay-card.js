@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.9.0';
+const ROC_VERSION='6.10.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -554,6 +554,28 @@ function rocTileDef(entry){
   if(out.name===undefined)out.name=it.id||'';
   if(out.entity===undefined)out.entity=it.entity;
   if(out.icon===undefined)out.icon=it.icon||'mdi:help-box';
+  return out;
+}
+
+// Auto tiles (v6.10.0, COCKPIT_PLAN.md kap.3.1/4) -- a section's `source: auto`
+// + `domain:` derives extra tiles straight from `hass.states` instead of a
+// tagged element, for domains listed in the schema comment. Default icon per
+// domain (a tagged element's own `tile.icon`/`icon` always wins -- this only
+// covers the auto-derived, unTagged case). Pure given (def, hass, exclude);
+// the card calls it once per _render() (never per state tick, kap.4) and
+// caches the merged list on this._secResolvedTiles -- see _render().
+const ROC_DOMAIN_ICON={climate:'mdi:thermostat',cover:'mdi:window-shutter',media_player:'mdi:cast',vacuum:'mdi:robot-vacuum',fan:'mdi:fan',light:'mdi:lightbulb',switch:'mdi:toggle-switch'};
+function rocAutoTiles(def,hass,exclude){
+  if(!hass||!hass.states||!def||!def.domain)return[];
+  const s=hass.states,pre=def.domain+'.',out=[];
+  for(const eid in s){
+    if(eid.indexOf(pre)!==0)continue;
+    if(exclude&&exclude.has(eid))continue;
+    const name=(s[eid].attributes&&s[eid].attributes.friendly_name)||eid;
+    out.push({_name:name,kind:'auto',item:{id:eid,entity:eid,icon:ROC_DOMAIN_ICON[def.domain]||'mdi:help-box',tile:{name:name}},room:null});
+  }
+  out.sort(function(a,b){return a._name.localeCompare(b._name);});
+  out.forEach(function(o){delete o._name;});
   return out;
 }
 
@@ -1756,8 +1778,9 @@ class RoomOverlayCard extends HTMLElement{
     const s=this._hass.states;
     const self=this;
     const tileEls=(this._secTileEls&&this._secTileEls[id])||[];
+    const tiles=(this._secResolvedTiles&&this._secResolvedTiles[id])||sx.tiles;
     let activeCount=0;
-    sx.tiles.forEach(function(entry,idx){
+    tiles.forEach(function(entry,idx){
       const tileEl=tileEls[idx];if(!tileEl)return;
       const td=rocTileDef(entry);
       const st=td.entity?s[td.entity]:undefined;
@@ -2173,6 +2196,23 @@ class RoomOverlayCard extends HTMLElement{
     // and nav.live minis, same as vacuum_widgets above.
     const _secList=(_isGhost||_isMini)?[]:this._getSections(cAll);
     const _secOpenId=this._sectionOpen;
+    // Auto tiles (v6.10.0): merge `source: auto`+`domain:` entities (from
+    // hass.states, deduped against this section's own collected tiles) onto
+    // the end of each section's tile list, ONCE per _render() -- never per
+    // state tick (kap.4). Cached on the instance so _updateSectionTiles(),
+    // the tile click wiring below and _setupTemplates() all iterate the
+    // exact same array the DOM was built from (index-stable).
+    const _secResolved={};
+    _secList.forEach((sx)=>{
+      const d=sx.def;
+      let tiles=sx.tiles;
+      if(d.source==='auto'&&d.domain){
+        const already=new Set(tiles.map(function(t){return rocTileDef(t).entity;}).filter(Boolean));
+        tiles=tiles.concat(rocAutoTiles(d,this._hass,already));
+      }
+      _secResolved[d.id]=tiles;
+    });
+    this._secResolvedTiles=_secResolved;
     // Image tile stage (v6.9.0, D3 scheme b) -- a tiny independent room: its
     // own base image plus absolutely-positioned overlay layers, laid out and
     // animated by the SAME markup shape as a room's own `ovHtml` above (see
@@ -2209,9 +2249,11 @@ class RoomOverlayCard extends HTMLElement{
     // explanatory empty state, never a blank panel.
     const _secPanelBodyHtml=function(sx){
       const d=sx.def;
-      if(d.card)return'<div class="roc-card-tile-host" data-section-card="'+escA(d.id)+'"></div>';
-      if(!sx.tiles.length)return'<div class="roc-panel-empty">Zatím sem nic nepatří — přidej <code>section: '+escA(d.id)+'</code> některému prvku v místnosti.</div>';
-      return sx.tiles.map(_secTileHtml).join('');
+      const tiles=_secResolved[d.id]||sx.tiles;
+      const tilesHtml=tiles.length?tiles.map(_secTileHtml).join(''):'';
+      const cardHtml=d.card?'<div class="roc-card-tile-host" data-section-card="'+escA(d.id)+'"></div>':'';
+      if(!tilesHtml&&!cardHtml)return'<div class="roc-panel-empty">Zatím sem nic nepatří — přidej <code>section: '+escA(d.id)+'</code> některému prvku v místnosti.</div>';
+      return tilesHtml+cardHtml;
     };
     const secPanelHtml=!_secList.length?'':(
       '<div class="roc-panel-backdrop'+(_secOpenId?' open':'')+'" data-section-backdrop></div>'
@@ -2993,9 +3035,10 @@ class RoomOverlayCard extends HTMLElement{
       if(closeBtn)closeBtn.addEventListener('click',e=>{e.stopPropagation();this._closeSection();});
       this._secTileEls[d.id]=[];
       const _tileSelf=this;
+      const _secTiles=this._secResolvedTiles&&this._secResolvedTiles[d.id]||sx.tiles;
       pEl.querySelectorAll('.roc-tile').forEach(function(tileEl){
         const idx=parseInt(tileEl.dataset.tileIdx,10);
-        const entry=sx.tiles[idx];if(!entry)return;
+        const entry=_secTiles[idx];if(!entry)return;
         _tileSelf._secTileEls[d.id][idx]=tileEl;
         const td=rocTileDef(entry);
         if(td.tap_action)tileEl.addEventListener('click',function(e){if(e.target.closest('[data-quick]'))return;_tileSelf._exec(td.tap_action,e);});
@@ -3338,7 +3381,7 @@ class RoomOverlayCard extends HTMLElement{
         self._secVisMap[secId]=ok;
         if(!ok&&self._sectionOpen===secId)self._closeSection();
       });
-      sx.tiles.forEach(function(entry,idx){
+      ((self._secResolvedTiles&&self._secResolvedTiles[secId])||sx.tiles).forEach(function(entry,idx){
         const td=rocTileDef(entry);
         if(typeof td.state==='string'&&td.state.indexOf('{{')>=0)sub(td.state,function(r){
           const v=r!==undefined&&r!==null?String(r):'';
@@ -4600,6 +4643,48 @@ class RoomOverlayCardEditor extends HTMLElement{
     this._config=c;this._render();this._fire(c);
   }
 
+  // Onboarding (v6.10.0, COCKPIT_PLAN.md kap.5.3.1) — "I found N areas in
+  // Home Assistant — create a room for each?". Converts to multi-room first
+  // (same move as _convertToRooms(), reused verbatim) if needed, then adds
+  // one room per hass.areas entry with its entities pre-assigned as icons in
+  // a simple grid (no photo yet, so no meaningful position to place them at
+  // — the user repositions them in the Elements tab once a photo is added,
+  // kap.5.3.1: "the user only adds photos"). One-shot: the button that calls
+  // this only shows while the card is still single-room (see roomsInner).
+  _bootstrapAreas(){
+    if(!this._hass||!this._hass.areas)return;
+    const c=this._collectConfig();
+    if(!Array.isArray(c.rooms)||!c.rooms.length){
+      const room={id:'room_1',name:'Room 1'};
+      ROOM_KEYS.forEach(function(k){if(c[k]!==undefined){room[k]=c[k];delete c[k];}});
+      c.rooms=[room];
+    }
+    const areas=this._hass.areas,devices=this._hass.devices||{},entities=this._hass.entities||{};
+    const existingIds=new Set(c.rooms.map(function(r){return r.id;}));
+    Object.keys(areas).forEach(function(areaId){
+      const area=areas[areaId]||{};
+      const name=area.name||areaId;
+      let base=String(name||'room').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'room';
+      let id=base,n=1;
+      while(existingIds.has(id)){n++;id=base+'_'+n;}
+      existingIds.add(id);
+      const icons=[];let col=0,row=0;
+      Object.keys(entities).forEach(function(eid){
+        const ent=entities[eid]||{};
+        const entArea=ent.area_id||(ent.device_id&&devices[ent.device_id]&&devices[ent.device_id].area_id);
+        if(entArea!==areaId)return;
+        const dom=eid.split('.')[0];
+        icons.push({id:eid.replace(/[^A-Za-z0-9_-]/g,'_'),entity:eid,icon:ROC_DOMAIN_ICON[dom]||'mdi:help-box',top:(5+row*12)+'%',left:(5+col*12)+'%',width:'8%',height:'8%'});
+        col++;if(col>=7){col=0;row++;}
+      });
+      const room={id:id,name:name};
+      if(icons.length)room.icons=icons;
+      c.rooms.push(room);
+    });
+    this._editRoomIdx=Math.max(0,c.rooms.length-1);
+    this._config=c;this._render();this._fire(c);
+  }
+
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
   // Parse a YAML textarea non-destructively: invalid input keeps the previous
@@ -5473,8 +5558,14 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(srcEl&&srcEl.value==='card'){
         const cyR=self._pYaml(q('[data-sec-card-yaml="'+i+'"]'));
         if(cyR.ok&&cyR.val&&cyR.val.card)o.card=cyR.val.card;else if(cyR.ok)delete o.card;
-      }else{
+        delete o.source;delete o.domain;
+      }else if(srcEl&&srcEl.value==='auto'){
         delete o.card;
+        o.source='auto';
+        const domEl=q('[data-sec-domain="'+i+'"]');
+        if(domEl&&domEl.value)o.domain=domEl.value;else delete o.domain;
+      }else{
+        delete o.card;delete o.source;delete o.domain;
       }
       return o;
     }).filter(function(o){return o&&o.id;});
@@ -6319,8 +6410,28 @@ class RoomOverlayCardEditor extends HTMLElement{
       const entry=_secCollectedAll.find(function(x){return x.def.id===sec.id;});
       sectionsInner+=self._sectionItem(sec,i,(entry&&entry.tiles)||[]);
     });
-    sectionsInner+='</div><button id="add-section" style="'+btnStyle+'margin-top:4px;">+ Add section</button>';
-    if(!(c.sections||[]).length)sectionsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:10px 0 0;">Sections are user-defined buckets for things that aren\'t one room — appliances, media, heating\u2026 Add one, then tag a zone/icon/element/blind in any room with its id via the Section field (Elements tab).</p>';
+    sectionsInner+='</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><button id="add-section" style="'+btnStyle+'">+ Add section</button><select id="add-section-recipe"'+this._inp('width:auto;')+'><option value="">Recipe\u2026</option><option value="appliances">Appliances</option><option value="cleaning">Cleaning</option><option value="media">Media</option><option value="heating">Heating</option><option value="covers">Covers</option><option value="electricity">Electricity</option><option value="weather">Weather</option></select></div>';
+    if(!(c.sections||[]).length)sectionsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:10px 0 0;">Sections are user-defined buckets for things that aren\'t one room — appliances, media, heating\u2026 Add one, then tag a zone/icon/element/blind in any room with its id via the Section field (Elements tab), pick a Recipe above, or use the scan below.</p>';
+    // Onboarding (v6.10.0, COCKPIT_PLAN.md kap.5.3.2) — devices HA knows
+    // about in the four spatial-ish domains that aren't reachable from any
+    // section yet (neither tagged into one nor covered by an existing
+    // `source: auto` section for that domain). Purely a hass.states scan +
+    // config read, so it's always current, not a one-shot "run scan" click.
+    if(this._hass){
+      const _untagged=self._scanUntagged(c);
+      if(_untagged.length){
+        const _byDom={};
+        _untagged.forEach(function(u){(_byDom[u.domain]=_byDom[u.domain]||[]).push(u);});
+        const _domRecipe={vacuum:'cleaning',climate:'heating',cover:'covers',media_player:'media'};
+        const _domLabel={vacuum:'vacuum',climate:'climate',cover:'cover',media_player:'media player'};
+        sectionsInner+='<div style="margin-top:10px;padding:8px;border:1px dashed var(--divider-color);border-radius:6px;"><div style="font-size:12px;font-weight:600;margin-bottom:4px;">Find untagged devices</div>';
+        Object.keys(_byDom).forEach(function(dom){
+          const list=_byDom[dom];
+          sectionsInner+='<div style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">'+list.length+' '+_domLabel[dom]+' '+(list.length===1?'entity':'entities')+' not in any section ('+list.slice(0,3).map(function(u){return self._e(u.name);}).join(', ')+(list.length>3?'\u2026':'')+') — <button data-add-untagged-recipe="'+_domRecipe[dom]+'" style="padding:2px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">+ Add a section for these</button></div>';
+        });
+        sectionsInner+='</div>';
+      }
+    }
 
     let grpInner='<div id="grp-list">';
     (cR.groups||[]).forEach(function(g,i){grpInner+=self._groupItem(g,i);});
@@ -6438,6 +6549,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
+      // Onboarding (v6.10.0, COCKPIT_PLAN.md kap.5.3.1) — offered only when
+      // hass actually exposes the modern area registry (hass.areas/devices/
+      // entities, plain synchronous dictionaries — no websocket round-trip).
+      // Older HA without them simply never shows the button (graceful
+      // degradation by omission, not an error).
+      if(this._hass&&this._hass.areas){
+        const _areaN=Object.keys(this._hass.areas).length;
+        if(_areaN>0)roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:10px 0 6px;">I found '+_areaN+' area'+(_areaN===1?'':'s')+' in Home Assistant.</p><button id="bootstrap-areas" style="'+btnStyle+'">Create a room for each area</button>';
+      }
     }
 
     // ---- First-run onboarding + tabbed editor (v1.14.1) ---------------------
@@ -6844,6 +6964,45 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
   }
 
+  // ----- Cockpit onboarding (v6.10.0, COCKPIT_PLAN.md kap.5.3) --------------
+  // Recipe defaults for "+ Add section" (5.3.3) and the untagged-device scan's
+  // one-click add (5.3.2) — both just build a section def and push it, same
+  // as the plain "+ Add section" button already does.
+  _recipeDef(kind){
+    const R={
+      appliances:{title:'Appliances',icon:'mdi:washing-machine',placement:'sheet-right'},
+      cleaning:{title:'Cleaning',icon:'mdi:robot-vacuum',placement:'sheet-right',source:'auto',domain:'vacuum'},
+      media:{title:'Media',icon:'mdi:cast',placement:'sheet-right',source:'auto',domain:'media_player'},
+      heating:{title:'Heating',icon:'mdi:radiator',placement:'sheet-right',source:'auto',domain:'climate'},
+      covers:{title:'Covers',icon:'mdi:window-shutter',placement:'sheet-right',source:'auto',domain:'cover'},
+      electricity:{title:'Electricity',icon:'mdi:flash',placement:'full',card:{type:'custom:electricity-panel-card'}},
+      weather:{title:'Weather',icon:'mdi:weather-partly-cloudy',placement:'sheet-right'}
+    };
+    return R[kind]||null;
+  }
+  // Devices in the four spatial-ish domains (kap.5.3.2) that aren't reachable
+  // from any section yet — neither individually tagged nor swept in by an
+  // existing `source: auto` section for that domain. Re-evaluated on every
+  // editor render (cheap: one states scan), never persisted itself.
+  _scanUntagged(c){
+    if(!this._hass||!this._hass.states)return[];
+    const doms=['vacuum','climate','cover','media_player'];
+    const collected=rocCollectSections(c);
+    const collectedEntities=new Set();
+    collected.forEach(function(sx){sx.tiles.forEach(function(t){const e=t.item&&t.item.entity;if(e)collectedEntities.add(e);});});
+    const autoDomains=new Set((c.sections||[]).filter(function(s){return s&&s.source==='auto'&&s.domain;}).map(function(s){return s.domain;}));
+    const s=this._hass.states,out=[];
+    for(const eid in s){
+      const dom=eid.split('.')[0];
+      if(doms.indexOf(dom)<0)continue;
+      if(autoDomains.has(dom))continue;
+      if(collectedEntities.has(eid))continue;
+      out.push({entity:eid,domain:dom,name:(s[eid].attributes&&s[eid].attributes.friendly_name)||eid});
+    }
+    out.sort(function(a,b){return a.name.localeCompare(b.name);});
+    return out;
+  }
+
   // ----- Cockpit sections editor (v6.8.0) -----------------------------------
   // Top-level list (like `rooms`), not per-room — reuses the same _mvBtns/
   // _mvKinds reorder mechanism the per-room element lists use (COCKPIT_PLAN.md
@@ -6853,6 +7012,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const op=this._openPanels&&this._openPanels.has('sec-'+i);
     const isCard=!!sec.card;
+    const isAuto=!isCard&&sec.source==='auto';
     const cardYaml=sec.card?_yaml.s({card:sec.card}):'';
     const vtYaml=sec.visible_template!==undefined?_yaml.s(sec.visible_template):'';
     let h='<details style="margin-bottom:6px;" data-panel="sec-'+i+'"'+(op?' open':'')+'>';
@@ -6875,10 +7035,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">Subtitle (optional)</label><input data-sec-subtitle="'+i+'" type="text" value="'+this._e(sec.subtitle||'')+'"'+this._inp('')+'></div>';
     h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:flex;align-items:center;gap:6px;"><input data-sec-backdrop="'+i+'" type="checkbox"'+(sec.backdrop!==false?' checked':'')+' style="width:auto;cursor:pointer;"> Tap outside closes (backdrop)</label></div>';
-    h+='<div style="margin-bottom:8px;"><label class="roc-l">Content source</label><select data-sec-source="'+i+'"'+this._inp('')+'>';
-    h+='<option value="collected"'+(!isCard?' selected':'')+'>Collected — elements tagged with this section</option>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Content source (collected tagging always applies in addition to this)</label><select data-sec-source="'+i+'"'+this._inp('')+'>';
+    h+='<option value="collected"'+(!isCard&&!isAuto?' selected':'')+'>Collected only — elements tagged with this section</option>';
+    h+='<option value="auto"'+(isAuto?' selected':'')+'>Auto — by domain, from Home Assistant</option>';
     h+='<option value="card"'+(isCard?' selected':'')+'>Embedded card</option>';
     h+='</select></div>';
+    h+='<div data-sec-domain-box="'+i+'" style="'+(isAuto?'':'display:none;')+'margin-bottom:8px;"><label class="roc-l">Domain</label><select data-sec-domain="'+i+'"'+this._inp('')+'>';
+    [['climate','Climate'],['cover','Cover'],['media_player','Media player'],['vacuum','Vacuum'],['fan','Fan'],['light','Light'],['switch','Switch']].forEach(function(o){h+='<option value="'+o[0]+'"'+((sec.domain||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Adds one tile per matching entity not already tagged into this section. Resolved live from Home Assistant, so nothing to list here.</p></div>';
     h+='<div data-sec-card-box="'+i+'" style="'+(isCard?'':'display:none;')+'margin-bottom:8px;"><label class="roc-l">Embedded card (YAML — a full <code>card:</code> block, e.g. <code>card: {type: custom:electricity-panel-card}</code>)</label><textarea data-sec-card-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(cardYaml)+'</textarea></div>';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">visible_template (optional, YAML — a Jinja template; falsy hides the section)</label><textarea data-sec-vt="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(vtYaml)+'</textarea></div>';
     if(!isCard){
@@ -7112,6 +7276,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     const convRooms=this.querySelector('#conv-rooms');
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
+    const bootstrapAreas=this.querySelector('#bootstrap-areas');
+    if(bootstrapAreas)bootstrapAreas.addEventListener('click',function(){self._bootstrapAreas();});
     ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-auto-bp','nav-wheel','nav-follow-btn','nav-chips','nav-cards','nav-mini-templates','nav-mini-camera-refresh','nav-mini-width-ref','url-sync','url-sync-key'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
@@ -7865,6 +8031,29 @@ class RoomOverlayCardEditor extends HTMLElement{
       self._openPanels.add('sec-'+(c.sections.length-1));
       self._config=c;self._render();self._fire(c);
     });
+    // Onboarding — recipes (kap.5.3.3) and the untagged-device scan's
+    // one-click add (kap.5.3.2) both fill in the same section skeleton the
+    // plain +Add section button uses, just pre-filled from _recipeDef().
+    function addSectionFromRecipe(kind){
+      const rd=self._recipeDef(kind);if(!rd)return;
+      const c=self._collectConfig();
+      if(!Array.isArray(c.sections))c.sections=[];
+      const base=rd.id_base||kind;
+      let n=0,id=base;
+      while(c.sections.some(function(s){return s.id===id;})){n++;id=base+'_'+n;}
+      c.sections.push(Object.assign({id:id},rd));
+      if(!self._openPanels)self._openPanels=new Set();
+      self._openPanels.add('sec-'+(c.sections.length-1));
+      self._config=c;self._render();self._fire(c);
+    }
+    const addSecRecipe=this.querySelector('#add-section-recipe');
+    if(addSecRecipe)addSecRecipe.addEventListener('change',function(){
+      const kind=addSecRecipe.value;if(!kind)return;
+      addSectionFromRecipe(kind);
+    });
+    this.querySelectorAll('[data-add-untagged-recipe]').forEach(function(btn){
+      btn.addEventListener('click',function(){addSectionFromRecipe(btn.dataset.addUntaggedRecipe);});
+    });
     this.querySelectorAll('[data-rm-sec]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const i=parseInt(btn.dataset.rmSec,10);
@@ -7888,12 +8077,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this.querySelectorAll('[data-sec-source]').forEach(function(sel){
       sel.addEventListener('change',function(){
-        const box=self.querySelector('[data-sec-card-box="'+sel.dataset.secSource+'"]');
-        if(box)box.style.display=sel.value==='card'?'':'none';
+        const cardBox=self.querySelector('[data-sec-card-box="'+sel.dataset.secSource+'"]');
+        if(cardBox)cardBox.style.display=sel.value==='card'?'':'none';
+        const domBox=self.querySelector('[data-sec-domain-box="'+sel.dataset.secSource+'"]');
+        if(domBox)domBox.style.display=sel.value==='auto'?'':'none';
         fire();
       });
     });
-    this.querySelectorAll('[data-sec-id],[data-sec-title],[data-sec-icon],[data-sec-placement],[data-sec-size],[data-sec-columns],[data-sec-badge],[data-sec-subtitle],[data-sec-backdrop],[data-sec-card-yaml],[data-sec-vt]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-sec-id],[data-sec-title],[data-sec-icon],[data-sec-placement],[data-sec-size],[data-sec-columns],[data-sec-badge],[data-sec-subtitle],[data-sec-backdrop],[data-sec-card-yaml],[data-sec-domain],[data-sec-vt]').forEach(function(el){el.addEventListener('change',fire);});
     // Per-element Section select + tile: box (zones/icons/elements/blinds) —
     // one generic handler keyed by "kind:i", shared across all four editors.
     this.querySelectorAll('[data-sec-link]').forEach(function(sel){

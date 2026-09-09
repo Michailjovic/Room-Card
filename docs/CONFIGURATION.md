@@ -1043,6 +1043,8 @@ icons:
 | `badge` | `auto` \| `none` | `auto` | `none` |
 | `backdrop` | boolean | `true` | `false` |
 | `visible_template` | Jinja template | — (always visible) | `"{{ is_state('alarm_control_panel.home','armed_away') }}"` |
+| `source` | `auto` | — (collected tiles only) | `auto` |
+| `domain` | `climate` \| `cover` \| `media_player` \| `vacuum` \| `fan` \| `light` \| `switch` | — | `climate` |
 | `card` | Lovelace card config | — (use collected tiles instead) | `{ type: custom:electricity-panel-card }` |
 
 `badge` shows, in the panel header, a count of tiles whose `state` currently equals their own
@@ -1052,9 +1054,36 @@ it re-evaluates live, the same as any other `visible_template` in this card.
 
 `card` switches the section from *collected* tiles to a single **embedded card** filling the whole
 panel body — for a bespoke or third-party dashboard fragment (D12: the card is embedded, never
-rendered through — this card does not read or reshape its internals). When `card` is set, any
-`section:` tags pointing at that id are ignored for tile collection. If the card's custom element
+rendered through — this card does not read or reshape its internals). If the card's custom element
 never registers, the panel shows a legible notice instead of staying blank.
+
+A section can combine all three content sources at once. Resolution order in the panel body:
+collected tiles first, then `source: auto` tiles for entities not already collected into this
+section, then the embedded `card:` at the bottom.
+
+### Auto tiles (`source: auto`)
+
+For a domain-shaped bucket ("everything that's a `climate.*`") you don't want to tag entity by
+entity, set `source: auto` and a `domain:`. Every entity in that domain gets its own tile, sorted
+by friendly name, minus whatever is already collected into this section by a `section:` tag:
+
+```yaml
+sections:
+  - id: heating
+    title: Heating
+    icon: mdi:radiator
+    source: auto
+    domain: climate
+```
+
+An auto tile always shows in icon mode — `tile.image`/`overlays` only exist for a tagged element,
+since there is no element to hang a hand-authored photo off. Its icon defaults per domain
+(`climate` → `mdi:thermostat`, `cover` → `mdi:window-shutter`, `media_player` → `mdi:cast`,
+`vacuum` → `mdi:robot-vacuum`, `fan` → `mdi:fan`, `light` → `mdi:lightbulb`, `switch` →
+`mdi:toggle-switch`) and its name from the entity's own `friendly_name`. The list is rebuilt
+whenever the card re-renders (a room switch, a resize that flips the layout profile, …) — not on
+every state tick, same performance rule as tile collection itself — so an entity Home Assistant
+adds while the dashboard is already open appears at the next such render, not instantly.
 
 ### Per-element `section:` and `tile:`
 
@@ -1128,6 +1157,27 @@ D13 — and a tile has no room-level groups of its own to join).
 
 Per D4, a tile image is never cropped out of the room photo — it is its own asset, drawn or
 photographed separately, exactly like any other overlay PNG in this card.
+
+### Onboarding (editor only)
+
+Three GUI helpers do the typing for you (D11 — none of this is reachable only through YAML):
+
+- **Recipes.** A "Recipe…" select next to *+ Add section* pre-fills a whole section — Appliances,
+  Cleaning (`source: auto` / `vacuum`), Media (`source: auto` / `media_player`), Heating
+  (`climate`), Covers (`cover`), Electricity (`card: { type: custom:electricity-panel-card }`,
+  with the missing-card notice from [Degradation rules](#degradation-rules) if it isn't installed),
+  or Weather (id/title/icon only — no source is settled for it yet, see the plan's open questions).
+- **Find untagged devices.** The Sections tab lists `vacuum`/`climate`/`cover`/`media_player`
+  entities Home Assistant knows about that aren't reachable from any section yet — neither tagged
+  individually nor already swept in by an existing `source: auto` section for that domain — grouped
+  by domain, each with a one-click *+ Add a section for these* button (the matching recipe above).
+- **Bootstrap rooms from HA areas.** While the card is still single-room, and only when the
+  connected Home Assistant exposes the modern area registry (`hass.areas`/`devices`/`entities` —
+  older HA simply never shows this button), the Rooms & menu tab offers *"I found N areas in Home
+  Assistant — create a room for each?"*. One click converts to multi-room and adds one room per
+  area, named after it, with that area's entities pre-assigned as `icons:` in a simple placeholder
+  grid (no photo exists yet to position them against) — reposition them in the Elements tab once
+  you add a room photo.
 
 ### Degradation rules
 

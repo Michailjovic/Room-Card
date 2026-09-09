@@ -1,5 +1,48 @@
 # Changelog
 
+## [6.10.0] - 2026-09-09
+
+### Cockpit — auto tiles and onboarding
+
+The last cockpit phase (COCKPIT_PLAN.md kap.8): `source: auto` fills a section straight from
+`hass.states` by domain, without tagging a single element, and three editor helpers do the typing
+for the rest of the setup so a new user doesn't have to invent the YAML from scratch.
+
+```yaml
+sections:
+  - id: heating
+    title: Heating
+    icon: mdi:radiator
+    source: auto
+    domain: climate
+```
+
+- A section can now combine all three content sources at once — collected tiles first, then
+  `source: auto` tiles for entities not already collected into it, then an embedded `card:` at
+  the bottom (the plan's resolution order, kap.4). Previously a `card:` section always ignored any
+  collected tiles; it no longer does.
+- Auto tiles cover `climate` / `cover` / `media_player` / `vacuum` / `fan` / `light` / `switch`,
+  sorted by friendly name, each with a domain default icon. Always icon mode — an auto tile has no
+  element to hang a `tile.image` off. Resolved once per render (a room switch, a layout-profile
+  flip, …), never on a state tick, same performance rule tile collection already followed.
+- Editor — **Content source** gains *Auto* alongside *Collected only* / *Embedded card*, with a
+  Domain select.
+- Editor onboarding (Sections tab): a **Recipe** select next to *+ Add section* pre-fills a whole
+  section for a common case (Appliances, Cleaning, Media, Heating, Covers, Electricity, Weather),
+  and a **Find untagged devices** box lists vacuum/climate/cover/media_player entities Home
+  Assistant knows about that aren't in any section yet, each with a one-click "add a section for
+  these" using the matching recipe.
+- Editor onboarding (Rooms & menu tab): while the card is still single-room and the connected Home
+  Assistant exposes its area registry (`hass.areas`/`devices`/`entities`), a **Create a room for
+  each area** button bootstraps the whole `rooms:` list in one click, with each area's entities
+  pre-assigned as icons in a placeholder grid (no photo exists yet to position them against —
+  reposition after adding one). Older Home Assistant without the area registry simply never shows
+  the button.
+
+No migration — a config with no `source: auto` sections renders exactly as before. See
+[`docs/CONFIGURATION.md` → Sections & panels](docs/CONFIGURATION.md#sections--panels-cockpit-tiles)
+and [`docs/EDITOR.md`](docs/EDITOR.md#the-five-tabs).
+
 ## [6.9.0] - 2026-09-09
 
 ### Cockpit — image tiles

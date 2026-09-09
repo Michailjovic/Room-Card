@@ -62,11 +62,21 @@ mock-up.*
 
 - **Sections** — declares cockpit panels (`sections:`): id, title, icon, placement
   (sheet-right / sheet-bottom / full / dialog), size, columns, subtitle, badge mode, the
-  tap-outside-to-close backdrop, an optional `visible_template`, and the content source — either
-  *Collected* (tiles from whatever's tagged with this section elsewhere in the card, shown here
-  as a live read-only list so you can see at a glance what's tagged in) or *Embedded card* (a
-  YAML box for a single `card:` block that fills the whole panel). Add / duplicate / remove /
-  reorder sections the same way as any other Elements list.
+  tap-outside-to-close backdrop, an optional `visible_template`, and the content source —
+  *Collected only* (tiles from whatever's tagged with this section elsewhere in the card, shown
+  here as a live read-only list so you can see at a glance what's tagged in), *Auto* (a Domain
+  select — climate / cover / media player / vacuum / fan / light / switch — adds one tile per
+  matching entity not already tagged in), or *Embedded card* (a YAML box for a single `card:`
+  block). Collected tagging always applies regardless of which of these is picked, so a section
+  can combine all three. Add / duplicate / remove / reorder sections the same way as any other
+  Elements list.
+
+  Next to *+ Add section*, a **Recipe** select pre-fills a whole section for a common case
+  (Appliances, Cleaning, Media, Heating, Covers, Electricity, Weather) — pick one instead of
+  filling in id/title/icon/source by hand. Below the section list, a **Find untagged devices**
+  box lists vacuum/climate/cover/media_player entities Home Assistant knows about that aren't in
+  any section yet, grouped by domain, each with a one-click button that adds the matching recipe.
+  See [Configuration → Onboarding](CONFIGURATION.md#onboarding-editor-only).
 
 - **Layout** — height source, orientation, threshold, and both profile grids as Portrait /
   Landscape sub-tabs, each with a live mini grid preview. See
@@ -81,7 +91,11 @@ mock-up.*
   up immediately instead of on save.*
 
 - **Rooms & menu** — four accordions: Room identity, Presence & follow, Navigation menu, and
-  Deep-linking. Add / remove / reorder rooms here.
+  Deep-linking. Add / remove / reorder rooms here. While the card is still single-room and the
+  connected Home Assistant exposes its area registry, a **Create a room for each area** button
+  offers to bootstrap the whole `rooms:` list from `hass.areas` in one click, with each area's
+  entities pre-assigned as icons — see
+  [Configuration → Onboarding](CONFIGURATION.md#onboarding-editor-only).
 
 ### Live navigation thumbnails (`nav.live`)
 

@@ -535,6 +535,23 @@ t('tfResolve of a missing block is null',g.tfResolve(null,{state:'on'})===null&&
   t('rocTileDef carries tile.overlays through untouched (array, same entries)',Array.isArray(imgTile.overlays)&&imgTile.overlays.length===1&&imgTile.overlays[0].id==='buben');
   const iconTile=g.rocTileDef({kind:'zones',item:{id:'y',icon:'mdi:fan',tile:{name:'Fan'}}});
   t('rocTileDef with no tile.image stays icon mode (image undefined)',iconTile.image===undefined);
+
+  // rocAutoTiles (v6.10.0, COCKPIT_PLAN.md kap.3.1/4) -- `source: auto` +
+  // `domain:` derives tiles straight from hass.states.
+  const autoHass={states:{
+    'climate.obyvak':{state:'heat',attributes:{friendly_name:'Obývák'}},
+    'climate.loznice':{state:'off',attributes:{friendly_name:'Ložnice'}},
+    'climate.already_tagged':{state:'off',attributes:{friendly_name:'Už tagováno'}},
+    'cover.blind1':{state:'closed',attributes:{friendly_name:'Roleta'}},
+  }};
+  const autoNone=g.rocAutoTiles({domain:'climate'},null,new Set());
+  t('rocAutoTiles with no hass returns []',Array.isArray(autoNone)&&autoNone.length===0);
+  const autoTiles=g.rocAutoTiles({domain:'climate'},autoHass,new Set(['climate.already_tagged']));
+  t('rocAutoTiles filters by domain',autoTiles.every(function(e){return e.item.entity.indexOf('climate.')===0;}));
+  t('rocAutoTiles excludes already-collected entities',!autoTiles.some(function(e){return e.item.entity==='climate.already_tagged';}));
+  t('rocAutoTiles sorts by friendly name (Loznice < Obyvak)',autoTiles.length===2&&autoTiles[0].item.entity==='climate.loznice'&&autoTiles[1].item.entity==='climate.obyvak');
+  t('rocAutoTiles gives a domain default icon',autoTiles[0].item.icon==='mdi:thermostat');
+  t('rocAutoTiles other domains are untouched by a climate filter',g.rocAutoTiles({domain:'cover'},autoHass,new Set()).length===1);
 })();
 
 // ---- version single-source check (v5.0 C5) --------------------------------
