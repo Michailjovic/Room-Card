@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.11.2';
+const ROC_VERSION='6.11.3';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -5001,10 +5001,36 @@ class RoomOverlayCardEditor extends HTMLElement{
       const imgEl=q('[data-tile-img="'+kind+':'+i+'"]');
       const imgV=imgEl?imgEl.value.trim():'';
       if(imgV)tile.image=imgV;else delete tile.image;
+      const imgrEl=q('[data-tile-imgr="'+kind+':'+i+'"]');
+      const imgrV=imgrEl?imgrEl.value.trim():'';
+      if(imgrV)tile.image_ratio=imgrV;else delete tile.image_ratio;
       const prevOvs=(o.tile&&Array.isArray(o.tile.overlays))?o.tile.overlays:[];
       const ovs=prevOvs.map(function(ov,ti){return self._collectTileOverlay(kind,i,ti,ov);});
       if(ovs.length)tile.overlays=ovs;else delete tile.overlays;
       if(Object.keys(tile).length)o.tile=tile;else delete o.tile;
+    };
+    // Section-declared tiles (v6.11.2) — a section's own `tiles:` array, no
+    // room/zone/element anchor. The declared tile object IS the tile: (flat),
+    // unlike a tagged element's item.tile, so this rebuilds it directly rather
+    // than reusing _secTile. Image/overlays reuse the exact same composite-
+    // keyed machinery as a tagged element's tile (kind:'dt', i:'<secI>_<ti>').
+    const _collectDeclTile=function(secIdx,ti,prevTile){
+      const dtKey=secIdx+'_'+ti;
+      const skey=secIdx+':'+ti;
+      const o={};
+      const idEl=q('[data-dtile-id="'+skey+'"]');if(idEl&&idEl.value.trim())o.id=idEl.value.trim();
+      const yaR=self._pYaml(q('[data-dtile-yaml="'+skey+'"]'));
+      if(yaR.ok&&yaR.val)Object.assign(o,yaR.val);
+      const imgEl=q('[data-tile-img="dt:'+dtKey+'"]');
+      const imgV=imgEl?imgEl.value.trim():'';
+      if(imgV)o.image=imgV;
+      const imgrEl=q('[data-tile-imgr="dt:'+dtKey+'"]');
+      const imgrV=imgrEl?imgrEl.value.trim():'';
+      if(imgrV)o.image_ratio=imgrV;
+      const prevOvs=Array.isArray(prevTile&&prevTile.overlays)?prevTile.overlays:[];
+      const ovs=prevOvs.map(function(ov,oi){return self._collectTileOverlay('dt',dtKey,oi,ov);});
+      if(ovs.length)o.overlays=ovs;
+      return o;
     };
     // Multi-room: sections write into the room being edited; shared keys stay top-level
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
@@ -5583,6 +5609,9 @@ class RoomOverlayCardEditor extends HTMLElement{
       }else{
         delete o.card;delete o.source;delete o.domain;
       }
+      const prevTiles=Array.isArray(sec.tiles)?sec.tiles:[];
+      o.tiles=prevTiles.map(function(pt,ti){return _collectDeclTile(i,ti,pt);});
+      if(!o.tiles.length)delete o.tiles;
       return o;
     }).filter(function(o){return o&&o.id;});
     if(!c.sections.length)delete c.sections;
@@ -7061,6 +7090,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</select><p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">Adds one tile per matching entity not already tagged into this section. Resolved live from Home Assistant, so nothing to list here.</p></div>';
     h+='<div data-sec-card-box="'+i+'" style="'+(isCard?'':'display:none;')+'margin-bottom:8px;"><label class="roc-l">Embedded card (YAML — a full <code>card:</code> block, e.g. <code>card: {type: custom:electricity-panel-card}</code>)</label><textarea data-sec-card-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(cardYaml)+'</textarea></div>';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">visible_template (optional, YAML — a Jinja template; falsy hides the section)</label><textarea data-sec-vt="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(vtYaml)+'</textarea></div>';
+    h+=this._declTilesBox(i,sec);
     if(!isCard){
       h+='<div style="margin-bottom:4px;"><label class="roc-l">Currently collected ('+tiles.length+')</label>';
       if(tiles.length){
@@ -7075,6 +7105,47 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+=this._mvBtns('sec',i);
     h+='<button data-dup-sec="'+i+'" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;margin-top:8px;margin-right:6px;">Duplicate</button>';
     h+='<button data-rm-sec="'+i+'" style="padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;margin-top:8px;">Remove section</button>';
+    h+='</div></details>';
+    return h;
+  }
+
+  // Section-declared tiles (v6.11.2, kap.4's "declared" source) — content a
+  // section owns directly, no room/zone/element/blind tag needed at all. One
+  // list per section, editable right where it's declared; each tile reuses
+  // the same Image/Overlays editor a tagged element's tile: gets, via the
+  // composite-keyed machinery below (kind:'dt', i:'<sectionIdx>_<tileIdx>').
+  _declTilesBox(secIdx,sec){
+    const self=this;
+    const tiles=Array.isArray(sec.tiles)?sec.tiles:[];
+    let h='<div style="margin-bottom:8px;">';
+    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><label class="roc-l" style="margin:0;">Declared tiles (no room/zone tag needed)</label>';
+    h+='<button type="button" data-add-dtile="'+secIdx+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Tile</button></div>';
+    if(!tiles.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">No declared tiles yet — content collected from tagged elements (below) or Auto still applies too.</p>';
+    tiles.forEach(function(t,ti){h+=self._declTileItem(secIdx,ti,t,sec.id);});
+    h+='</div>';
+    return h;
+  }
+
+  _declTileItem(secIdx,ti,t,secId){
+    const skey=secIdx+':'+ti;
+    const dtKey=secIdx+'_'+ti;
+    const open=this._openPanels&&this._openPanels.has('dtile-'+skey);
+    const scalar=Object.assign({},t||{});
+    delete scalar.id;delete scalar.image;delete scalar.image_ratio;delete scalar.overlays;
+    const scalarYaml=Object.keys(scalar).length?_yaml.s(scalar):'';
+    const idPlaceholder=(secId||'section')+'_tile_'+ti;
+    let h='<details style="margin-bottom:6px;" data-panel="dtile-'+skey+'"'+(open?' open':'')+'>';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Tile: '+this._e((t&&(t.name||t.id))||'tile_'+ti)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">ID (optional — falls back to "'+this._e(idPlaceholder)+'")</label><input data-dtile-id="'+skey+'" type="text" placeholder="'+this._e(idPlaceholder)+'" value="'+this._e((t&&t.id)||'')+'"'+this._inp('')+'></div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-dtile-yaml="'+skey+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
+    h+=this._tileImageBox('dt',dtKey,{tile:t||{}});
+    h+='<div style="display:flex;gap:6px;margin-top:8px;">';
+    h+='<button type="button" data-mv-dtile="'+skey+':up" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9650;</button>';
+    h+='<button type="button" data-mv-dtile="'+skey+':down" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9660;</button>';
+    h+='<button type="button" data-dup-dtile="'+skey+'" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">Duplicate</button>';
+    h+='<button type="button" data-rm-dtile="'+skey+'" style="padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove tile</button>';
+    h+='</div>';
     h+='</div></details>';
     return h;
   }
@@ -7096,7 +7167,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     // `image`/`overlays` (scheme b, v6.9.0) get their own structured editor
     // below, reusing the overlay editor's UI (COCKPIT_PLAN.md kap.5.2).
     const tileScalar=Object.assign({},item.tile||{});
-    delete tileScalar.image;delete tileScalar.overlays;
+    delete tileScalar.image;delete tileScalar.image_ratio;delete tileScalar.overlays;
     const tileYaml=Object.keys(tileScalar).length?_yaml.s(tileScalar):'';
     h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
     h+=this._tileImageBox(kind,i,item);
@@ -7121,6 +7192,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<label class="roc-l">Tile image (optional — switches this tile from an icon to a device photo with movable parts)</label>';
     h+='<input data-tile-img="'+key+'" type="text" placeholder="/local/pracka.webp" value="'+this._e(t.image||'')+'"'+this._inp('')+'>';
     h+='<div data-tile-ov-box="'+key+'" style="'+(t.image?'':'display:none;')+'margin-top:8px;">';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Aspect ratio (optional — overrides the 4/3 default stage, e.g. for a widescreen TV/monitor photo)</label><input data-tile-imgr="'+key+'" type="text" placeholder="4/3 (default) — e.g. 16/9" value="'+this._e(t.image_ratio||'')+'"'+this._inp('')+'></div>';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><label style="font-size:12px;font-weight:500;">Overlays (moving parts)</label>';
     h+='<button type="button" data-add-tlov="'+key+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Overlay</button></div>';
     if(!ovs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 4px;">No overlays yet — the tile shows just the image.</p>';
@@ -7364,6 +7436,19 @@ class RoomOverlayCardEditor extends HTMLElement{
     // than the generic [data-mv]/_mvKinds mechanism above (which only knows
     // flat top-level/per-room arrays). `_mvKinds`/`A`/`T` are reused as-is.
     const _tileOvArr=function(c,kind,i){
+      // Section-declared tiles (v6.11.2): 'dt' isn't in _mvKinds (sections
+      // aren't per-room), and its i is composite ("<sectionIdx>_<tileIdx>")
+      // since a declared tile has no flat top-level/per-room array of its own.
+      if(kind==='dt'){
+        const parts=String(i).split('_');
+        const secI=parseInt(parts[0],10),tileI=parseInt(parts[1],10);
+        if(!Array.isArray(c.sections))return null;
+        const sec=c.sections[secI];if(!sec)return null;
+        if(!Array.isArray(sec.tiles))sec.tiles=[];
+        const item=sec.tiles[tileI];if(!item)return null;
+        if(!Array.isArray(item.overlays))item.overlays=[];
+        return item.overlays;
+      }
       const key=_mvKinds[kind];if(!key)return null;
       const arr=A(c,key);const item=arr[i];if(!item)return null;
       if(!item.tile)item.tile={};
@@ -7377,11 +7462,68 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
       el.addEventListener('change',fire);
     });
+    this.querySelectorAll('[data-tile-imgr]').forEach(function(el){el.addEventListener('change',fire);});
+    // Section-declared tiles (v6.11.2) — add/remove/duplicate/reorder within
+    // one section's own tiles: array (not a flat top-level/per-room array,
+    // so this doesn't go through the generic [data-mv]/_mvKinds mechanism).
+    this.querySelectorAll('[data-add-dtile]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const secI=parseInt(btn.dataset.addDtile,10);
+        const c=self._collectConfig();
+        if(!Array.isArray(c.sections)||!c.sections[secI])return;
+        const sec=c.sections[secI];
+        if(!Array.isArray(sec.tiles))sec.tiles=[];
+        sec.tiles.push({name:'New tile'});
+        if(!self._openPanels)self._openPanels=new Set();
+        self._openPanels.add('dtile-'+secI+':'+(sec.tiles.length-1));
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-rm-dtile]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.rmDtile.split(':'); // secI:ti
+        const c=self._collectConfig();
+        const sec=(c.sections||[])[parseInt(p[0],10)];if(!sec||!Array.isArray(sec.tiles))return;
+        sec.tiles.splice(parseInt(p[1],10),1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-dup-dtile]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.dupDtile.split(':'); // secI:ti
+        const c=self._collectConfig();
+        const secI=parseInt(p[0],10),ti=parseInt(p[1],10);
+        const sec=(c.sections||[])[secI];if(!sec||!Array.isArray(sec.tiles)||!sec.tiles[ti])return;
+        const copy=rocClone(sec.tiles[ti]);
+        if(copy.id)copy.id=copy.id+'_copy';
+        sec.tiles.splice(ti+1,0,copy);
+        if(!self._openPanels)self._openPanels=new Set();
+        self._openPanels.add('dtile-'+secI+':'+(ti+1));
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-mv-dtile]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const p=btn.dataset.mvDtile.split(':'); // secI:ti:dir
+        const c=self._collectConfig();
+        const secI=parseInt(p[0],10),ti=parseInt(p[1],10),dir=p[2]==='up'?-1:1,tj=ti+dir;
+        const sec=(c.sections||[])[secI];if(!sec||!Array.isArray(sec.tiles)||tj<0||tj>=sec.tiles.length)return;
+        const t=sec.tiles[ti];sec.tiles[ti]=sec.tiles[tj];sec.tiles[tj]=t;
+        if(self._openPanels){
+          const a='dtile-'+secI+':'+ti,b='dtile-'+secI+':'+tj;
+          const hadA=self._openPanels.has(a),hadB=self._openPanels.has(b);
+          if(hadA)self._openPanels.add(b);else self._openPanels.delete(b);
+          if(hadB)self._openPanels.add(a);else self._openPanels.delete(a);
+        }
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-dtile-id],[data-dtile-yaml]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-add-tlov]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const p=btn.dataset.addTlov.split(':'); // kind:i
         const c=self._collectConfig();
-        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        const ovs=_tileOvArr(c,p[0],p[1]);if(!ovs)return;
         ovs.push({id:'overlay_'+(ovs.length+1),image:'',transition:'2s ease'});
         if(!self._openPanels)self._openPanels=new Set();
         self._openPanels.add('tlov-'+p[0]+':'+p[1]+':'+(ovs.length-1));
@@ -7392,7 +7534,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       btn.addEventListener('click',function(){
         const p=btn.dataset.rmTlov.split(':'); // kind:i:ti
         const c=self._collectConfig();
-        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        const ovs=_tileOvArr(c,p[0],p[1]);if(!ovs)return;
         ovs.splice(parseInt(p[2],10),1);
         self._config=c;self._render();self._fire(c);
       });
@@ -7402,7 +7544,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         const p=btn.dataset.mvTlov.split(':'); // kind:i:ti:dir
         const c=self._collectConfig();
         const ti=parseInt(p[2],10),dir=p[3]==='up'?-1:1,tj=ti+dir;
-        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs||tj<0||tj>=ovs.length)return;
+        const ovs=_tileOvArr(c,p[0],p[1]);if(!ovs||tj<0||tj>=ovs.length)return;
         const t=ovs[ti];ovs[ti]=ovs[tj];ovs[tj]=t;
         if(self._openPanels){
           const a='tlov-'+p[0]+':'+p[1]+':'+ti,b='tlov-'+p[0]+':'+p[1]+':'+tj;
@@ -7431,7 +7573,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       btn.addEventListener('click',function(){
         const p=btn.dataset.addTlovtfm.split(':'); // kind:i:ti
         const c=self._collectConfig();
-        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        const ovs=_tileOvArr(c,p[0],p[1]);if(!ovs)return;
         const ov=ovs[parseInt(p[2],10)];if(!ov)return;
         const tf=ov.transform||(ov.transform={});
         const mp=tf.map||(tf.map={});
@@ -7445,7 +7587,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         const raw=btn.dataset.rmTlovtfm,dash=raw.lastIndexOf('-'); // "kind:i:ti-j"
         const p=raw.slice(0,dash).split(':'),j=parseInt(raw.slice(dash+1),10);
         const c=self._collectConfig();
-        const ovs=_tileOvArr(c,p[0],parseInt(p[1],10));if(!ovs)return;
+        const ovs=_tileOvArr(c,p[0],p[1]);if(!ovs)return;
         const ov=ovs[parseInt(p[2],10)];const tf=ov&&ov.transform;if(!tf||!tf.map)return;
         const k=Object.keys(tf.map)[j];if(k===undefined)return;
         delete tf.map[k];

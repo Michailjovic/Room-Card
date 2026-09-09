@@ -1,5 +1,18 @@
 # Changelog
 
+## [6.11.3] - 2026-09-09
+
+### Declared tiles now have a full GUI editor
+
+Section-declared `tiles:` (v6.11.0) could only be authored in YAML — the Sections tab showed them
+in a read-only "currently collected" list with no way to add or edit one. Each section now has its
+own **Declared tiles** list: *+ Tile*, an ID field, a YAML box for the scalar fields, and the exact
+same Image / [Aspect ratio](#) (v6.11.2) / Overlays editor a tagged element's tile gets, plus ▲▼
+reorder, Duplicate and Remove — reusing the same composite-keyed image/overlay machinery
+(`kind:'dt'`) rather than a parallel implementation. The Aspect ratio field is also now available
+on a room-tagged element's tile editor, not just declared tiles. See
+docs/releases/RELEASE_NOTES_v6.11.3.md.
+
 ## [6.11.2] - 2026-09-09
 
 ### Fix: widescreen tile images were cropped by a hardcoded 4:3 stage

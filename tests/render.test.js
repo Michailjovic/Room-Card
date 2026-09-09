@@ -1469,6 +1469,8 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   const imgInput=edImg.querySelector('[data-tile-img="z:0"]');
   t('the zone tile editor has an Image field prefilled from tile.image',
     !!imgInput&&imgInput.value==='/local/washer.webp');
+  t('the zone tile editor also has an (empty) Aspect ratio field (v6.11.2)',
+    !!edImg.querySelector('[data-tile-imgr="z:0"]'));
   const ovBox=edImg.querySelector('[data-tile-ov-box="z:0"]');
   t('the overlays box is visible once tile.image is set',
     !!ovBox&&!/display:\s*none/.test(ovBox.getAttribute('style')||''));
@@ -1636,6 +1638,92 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     /\.roc-tile-img \.roc-tile-quick\{[^}]*flex-direction:row/.test(declCss));
   t('a plain icon tile\'s quick buttons keep the vertical side-rail',
     /(?<!-img )\.roc-tile-quick\{[^}]*flex-direction:column/.test(declCss));
+
+  // ---- Editor: section-declared tiles (v6.11.3) ----------------------------
+  // A declared tile has no room/zone/element anchor, so it gets its own
+  // editable list right inside the Sections tab -- reusing the exact same
+  // Image/Aspect-ratio/Overlays machinery a tagged element's tile: gets
+  // (kind:'dt', i:'<sectionIdx>_<tileIdx>'), plus its own add/remove/
+  // duplicate/reorder (a section's tiles: isn't a flat top-level array, so
+  // this doesn't go through the generic [data-mv]/_mvKinds mechanism).
+  const edDt=w.document.createElement('room-overlay-card-editor');
+  edDt.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'media',title:'Media',tiles:[
+      {id:'tv1',name:'Ložnice',entity:'media_player.tv1',icon:'mdi:television',
+        image:'/local/tv1.webp',image_ratio:'16/9',
+        overlays:[{id:'ov1',image:'/local/ov1.webp'}],
+        tap_action:{action:'navigate',navigation_path:'/x/tv1'}}
+    ]}]});
+  edDt.hass={states:{},user:{name:'x'}};
+  edDt._tab='sections';edDt._render();
+
+  t('the Sections tab renders an editable panel for a declared tile',
+    !!edDt.querySelector('[data-panel="dtile-0:0"]'));
+  t('the declared tile ID field is prefilled',
+    edDt.querySelector('[data-dtile-id="0:0"]').value==='tv1');
+  const dtYaml=edDt.querySelector('[data-dtile-yaml="0:0"]').value;
+  t('the declared tile YAML box carries name/entity/icon/tap_action but not id/image/image_ratio/overlays',
+    /name:\s*Ložnice/.test(dtYaml)&&/entity:\s*media_player\.tv1/.test(dtYaml)&&
+    !/image/.test(dtYaml)&&!/overlays/.test(dtYaml)&&!/^id:/m.test(dtYaml));
+  t('the declared tile Image field is prefilled from tile.image',
+    edDt.querySelector('[data-tile-img="dt:0_0"]').value==='/local/tv1.webp');
+  t('the declared tile Aspect ratio field is prefilled from tile.image_ratio (v6.11.2)',
+    edDt.querySelector('[data-tile-imgr="dt:0_0"]').value==='16/9');
+  t('the declared tile\'s own overlay renders through the same composite-keyed editor as a tagged tile\'s',
+    !!edDt.querySelector('[data-tlov-id="dt:0_0:0"]'));
+
+  let dtRatioOut=null;
+  edDt.addEventListener('config-changed',e=>{dtRatioOut=e.detail.config;});
+  const dtRatioEl=edDt.querySelector('[data-tile-imgr="dt:0_0"]');
+  dtRatioEl.value='4/3';dtRatioEl.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('collectConfig round-trips a declared tile\'s image_ratio field',
+    !!dtRatioOut&&dtRatioOut.sections[0].tiles[0].image_ratio==='4/3');
+
+  let dtOvOut=null;
+  edDt.addEventListener('config-changed',e=>{dtOvOut=e.detail.config;});
+  edDt.querySelector('[data-add-tlov="dt:0_0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('+ Overlay on a declared tile appends into that tile\'s own overlays array',
+    !!dtOvOut&&Array.isArray(dtOvOut.sections[0].tiles[0].overlays)&&dtOvOut.sections[0].tiles[0].overlays.length===2);
+
+  // + Tile
+  edDt.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'media',title:'Media'}]});
+  edDt._tab='sections';edDt._render();
+  let addTOut=null;
+  edDt.addEventListener('config-changed',e=>{addTOut=e.detail.config;});
+  edDt.querySelector('[data-add-dtile="0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('+ Tile adds a new declared tile to a section with none yet',
+    !!addTOut&&Array.isArray(addTOut.sections[0].tiles)&&addTOut.sections[0].tiles.length===1);
+
+  // Remove tile
+  edDt.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'media',title:'Media',tiles:[{id:'a',name:'A'},{id:'b',name:'B'}]}]});
+  edDt._tab='sections';edDt._render();
+  let rmTOut=null;
+  edDt.addEventListener('config-changed',e=>{rmTOut=e.detail.config;});
+  edDt.querySelector('[data-rm-dtile="0:0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('Remove tile drops just that one declared tile',
+    !!rmTOut&&rmTOut.sections[0].tiles.length===1&&rmTOut.sections[0].tiles[0].id==='b');
+
+  // Duplicate
+  edDt.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'media',title:'Media',tiles:[{id:'a',name:'A'}]}]});
+  edDt._tab='sections';edDt._render();
+  let dupTOut=null;
+  edDt.addEventListener('config-changed',e=>{dupTOut=e.detail.config;});
+  edDt.querySelector('[data-dup-dtile="0:0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('Duplicate creates a second declared tile with a distinct id',
+    !!dupTOut&&dupTOut.sections[0].tiles.length===2&&dupTOut.sections[0].tiles[1].id==='a_copy');
+
+  // Reorder
+  edDt.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'media',title:'Media',tiles:[{id:'a',name:'A'},{id:'b',name:'B'}]}]});
+  edDt._tab='sections';edDt._render();
+  let mvTOut=null;
+  edDt.addEventListener('config-changed',e=>{mvTOut=e.detail.config;});
+  edDt.querySelector('[data-mv-dtile="0:1:up"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('the ▲ button swaps a declared tile with the one above it',
+    !!mvTOut&&mvTOut.sections[0].tiles[0].id==='b'&&mvTOut.sections[0].tiles[1].id==='a');
 
   // ---- Editor: source select gains "auto" + a Domain select ---------------
   const edAuto=w.document.createElement('room-overlay-card-editor');

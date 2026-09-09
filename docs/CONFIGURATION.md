@@ -1126,6 +1126,13 @@ resolution order is **declared → room-tagged collected → auto → embedded `
 first because it is the most deliberate authoring — content the section owns outright, not
 something happened to be tagged elsewhere.
 
+**GUI editor (v6.11.3).** Declared tiles are fully editable from the card editor, not just
+YAML — open a section in the **Sections** tab and its own *Declared tiles* list sits right there,
+with *+ Tile* to add one, and per-tile ID / a YAML box for the scalar fields (name/entity/icon/
+value/quick/tap_action/…) / a dedicated Image field with its own [Aspect ratio](#image-tiles)
+override / an Overlays editor identical to a tagged element's — plus ▲▼ reorder, Duplicate and
+Remove. No manual `id:`/`image:`/`overlays:` YAML needed unless you want it.
+
 ### Per-element `section:` and `tile:`
 
 Add these two keys to any `zones`, `icons`, `elements` or `blinds` entry (badges cannot be tagged).

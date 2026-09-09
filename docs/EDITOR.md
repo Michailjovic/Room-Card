@@ -54,8 +54,10 @@ mock-up.*
   Any zone, icon, element or blind (not badges) also carries a **Section** field at the bottom of
   its own panel — pick a section declared on the **Sections** tab to add that item's tile to the
   matching cockpit panel, with a `tile:` YAML box (name/entity/icon/state/etc.) that only appears
-  once a section is picked, plus its own **Image** field. Fill in the image and the tile switches
-  from an icon to a device photo, revealing an **Overlays** list — add / remove / reorder overlays
+  once a section is picked, plus its own **Image** field and an **Aspect ratio** field (v6.11.2 —
+  overrides the tile stage's default 4:3 box, e.g. `16/9` for a widescreen TV/monitor photo). Fill
+  in the image and the tile switches from an icon to a device photo, revealing an **Overlays**
+  list — add / remove / reorder overlays
   each with the exact same panel a room's own overlays get (Image URL, Conditions YAML, and a
   **Transform** sub-panel with the states/range/spin mode select), just scoped to that one tile.
   See [Configuration → Sections & panels](CONFIGURATION.md#sections--panels-cockpit-tiles).
@@ -70,6 +72,14 @@ mock-up.*
   block). Collected tagging always applies regardless of which of these is picked, so a section
   can combine all three. Add / duplicate / remove / reorder sections the same way as any other
   Elements list.
+
+  Each section also has its own **Declared tiles** list (v6.11.3) — content the section owns
+  outright, no room/zone/icon tag needed at all (a TV summary, a projector remote). *+ Tile* adds
+  one; each gets an ID field (optional — falls back to `<section id>_tile_<index>`), a YAML box
+  for the scalar fields (name/entity/icon/state/value/quick/tap_action/…), and the exact same
+  **Image** field / **Aspect ratio** override / **Overlays** editor a tagged element's tile gets —
+  plus ▲▼ reorder, Duplicate and Remove. See
+  [Configuration → Declared tiles](CONFIGURATION.md#declared-tiles-tiles).
 
   Next to *+ Add section*, a **Recipe** select pre-fills a whole section for a common case
   (Appliances, Cleaning, Media, Heating, Covers, Electricity, Weather) — pick one instead of
