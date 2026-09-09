@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.11.1** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.11.2** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -84,6 +84,7 @@ failure broke HACS installs.
 | **v6.10.1** | **Fix** — a slider dragged inside an open cockpit section sheet (e.g. a `card:`-embedded tile card's cover-position slider) no longer drags the room-swipe underneath it |
 | **v6.11.0** | **Declared tiles** — a section can own `tiles:` directly (no room/zone/icon tag needed); resolution order is now declared → collected → auto → card |
 | **v6.11.1** | **Fix** — `tile.quick` buttons on an image tile now lay out in a row instead of a vertical column |
+| **v6.11.2** | **Fix** — new `tile.image_ratio` overrides an image tile's hardcoded 4:3 stage, so a widescreen device photo (TV, monitor) no longer gets cropped by `background-size: cover` |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

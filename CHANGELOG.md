@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.11.2] - 2026-09-09
+
+### Fix: widescreen tile images were cropped by a hardcoded 4:3 stage
+
+An image tile's stage (`.roc-tile-img-stage`) had a hardcoded `aspect-ratio: 4/3`; combined with
+`background-size: cover`, a widescreen device photo (a TV, a monitor) got its left/right edges
+cropped off to fill the narrower box — not stretched, but visibly missing content. New optional
+`tile.image_ratio` overrides the stage's aspect ratio per tile (e.g. `'16/9'`); unset tiles keep
+the existing `4/3` default, so nothing already shipped changes. See
+docs/releases/RELEASE_NOTES_v6.11.2.md.
+
 ## [6.11.1] - 2026-09-09
 
 ### Fix: quick buttons on an image tile now lay out in a row

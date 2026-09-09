@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.11.1';
+const ROC_VERSION='6.11.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2238,7 +2238,8 @@ class RoomOverlayCard extends HTMLElement{
         const _tfTr=_tf?(',transform '+(_tf.transition||'0.8s ease')):'';
         return'<div class="roc-tile-ov" data-tile-ov="'+oi+'" style="z-index:'+(ov.z_index??oi+1)+';opacity:0;'+_tfSt+'transition:opacity '+(ov.transition??'2s ease')+',filter '+(ov.transition??'2s ease')+_tfTr+';"></div>';
       }).join('');
-      return'<div class="roc-tile-img-stage"><div class="roc-tile-img-base" style="'+(td.image?'background-image:url(\''+escUrl(td.image)+'\');':'')+'"></div>'+ovHtmlT+'</div>';
+      const _stageSt=td.image_ratio?('aspect-ratio:'+td.image_ratio+';'):'';
+      return'<div class="roc-tile-img-stage" style="'+_stageSt+'"><div class="roc-tile-img-base" style="'+(td.image?'background-image:url(\''+escUrl(td.image)+'\');':'')+'"></div>'+ovHtmlT+'</div>';
     };
     const _secTileHtml=function(entry,idx){
       const td=rocTileDef(entry);

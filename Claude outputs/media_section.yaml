@@ -1,0 +1,56 @@
+  - id: media
+    title: Media
+    icon: mdi:cast
+    source: auto
+    domain: media_player
+    columns: 1
+    tiles:
+      - id: tv_loznice
+        name: Ložnice
+        entity: media_player.lg_webos_tv_oled83g58lw_beuyljp
+        image: /local/Dashboards/Cockpit/Media/tv-off.webp
+        image_ratio: '16/9'
+        value: >-
+          {% set src = states('sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom') %}
+          {{ src if src not in ['unknown','unavailable',''] else '' }}
+        overlays:
+          - id: tv_content
+            conditions:
+              opacity:
+                - condition:
+                    entity: media_player.lg_webos_tv_oled83g58lw_beuyljp
+                    state_not:
+                      - 'off'
+                      - unavailable
+                  value: 1
+                - value: 0
+            state_images:
+              - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+                state: Stremio
+                image: /local/Dashboards/Cockpit/Media/tv-Stremio.webp
+              - entity: sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom
+                state: YouTube AdFree
+                image: /local/Dashboards/Cockpit/Media/tv-YouTube.webp
+              - image: /local/Dashboards/Cockpit/Media/tv-LG.webp
+        quick:
+          - name: Hlasitost +
+            icon: mdi:volume-plus
+            service: media_player.volume_up
+            target: { entity_id: media_player.lg_webos_tv_oled83g58lw_beuyljp }
+          - name: Hlasitost -
+            icon: mdi:volume-minus
+            service: media_player.volume_down
+            target: { entity_id: media_player.lg_webos_tv_oled83g58lw_beuyljp }
+          - name: Power
+            icon: mdi:power
+            service: script.tv_power_toggle_s_wol
+        tap_action:
+          condition:
+            entity: switch.01_tv
+            state: 'on'
+          then:
+            action: navigate
+            navigation_path: /dashboard-various/LG_remote
+          else:
+            action: more-info
+            entity: switch.01_tv

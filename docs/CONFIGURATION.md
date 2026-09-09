@@ -1203,6 +1203,21 @@ D13 — and a tile has no room-level groups of its own to join).
 Per D4, a tile image is never cropped out of the room photo — it is its own asset, drawn or
 photographed separately, exactly like any other overlay PNG in this card.
 
+The stage the image sits in defaults to a `4/3` box (`background-size: cover`, so a photo that
+doesn't match gets cropped to fill it, not stretched). A widescreen device photo — a TV, a
+monitor — needs a wider box or it loses its edges. Set `tile.image_ratio` to override it, as any
+valid CSS `aspect-ratio` value:
+
+```yaml
+tile:
+  name: Ložnice
+  image: /local/tv-off.webp
+  image_ratio: '16/9'   # v6.11.2 — overrides the 4/3 default stage for this tile only
+```
+
+Leave it unset for anything that already looks right at `4/3` (a washer's front panel, for
+example) — this only changes tiles that opt in.
+
 ### Onboarding (editor only)
 
 Three GUI helpers do the typing for you (D11 — none of this is reachable only through YAML):

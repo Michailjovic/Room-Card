@@ -1579,6 +1579,7 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     base_image:'/local/x.webp',
     sections:[{id:'media',title:'Media',source:'auto',domain:'media_player',tiles:[
       {name:'Ložnice',entity:'media_player.tv1',icon:'mdi:television',
+        image:'/local/tv1.webp',image_ratio:'16/9',
         tap_action:{action:'navigate',navigation_path:'/x/tv1'}},
       {id:'projector',name:'Plátno',icon:'mdi:projector-screen',quick:[
         {name:'Up',icon:'mdi:arrow-up',service:'switch.turn_on',target:{entity_id:'switch.scr_up'}}
@@ -1602,6 +1603,15 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     mediaTiles[1].querySelector('.roc-tile-name').textContent==='Plátno'&&
     mediaTiles[2].querySelector('.roc-tile-name').textContent==='Tablet'&&
     mediaTiles[3].querySelector('.roc-tile-name').textContent==='Chromecast');
+
+  // Regression (v6.11.2): a widescreen source photo was cropped by the
+  // hardcoded 4:3 stage aspect-ratio -- `tile.image_ratio` overrides it inline.
+  const tv1Stage=mediaTiles[0].querySelector('.roc-tile-img-stage');
+  t('tile.image_ratio sets an inline aspect-ratio override on the image stage',
+    !!tv1Stage&&/aspect-ratio:\s*16\/9/.test(tv1Stage.getAttribute('style')||''));
+  const scrStage=mediaTiles[1].querySelector('.roc-tile-img-stage');
+  t('without image_ratio the stage gets no inline aspect-ratio (falls back to the 4/3 default in CSS)',
+    !scrStage||!/aspect-ratio/.test(scrStage.getAttribute('style')||''));
 
   elDecl._openSection('media');
   let declNavPath=null;
