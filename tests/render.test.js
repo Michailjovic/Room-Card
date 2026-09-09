@@ -1908,6 +1908,45 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   const holdDtYaml=edHoldTile.querySelector('[data-dtile-yaml="0:0"]').value;
   t('a declared tile\'s hold_action round-trips through the freeform YAML box untouched',
     /hold_action:/.test(holdDtYaml)&&/more-info/.test(holdDtYaml));
+
+  // ---- Icon "chip" style (v6.12.1) -----------------------------------------
+  // The cockpit's section-opener icons (and any other plain `icons:` entry)
+  // rendered as flat, un-styled mdi glyphs with no visual affordance that
+  // they're tappable buttons. `chip: true` reuses the exact same frosted-
+  // glass circular look the built-in vacuum_widgets badge already has, so a
+  // row of section openers can be made to match a vacuum_widgets badge
+  // sitting elsewhere on the same card.
+  const chipCfg={base_image:'/local/x.webp',
+    icons:[
+      {id:'plain',icon:'mdi:washing-machine',top:'8%',left:'8%'},
+      {id:'chipped',icon:'mdi:cast',top:'8%',left:'20%',chip:true}
+    ]};
+  const elChip=mkCard(chipCfg);
+  elChip.hass={states:{},callService(){},user:{name:'x'}};
+  const plainIcoEl=elChip.shadowRoot.querySelector('[data-ico="plain"]');
+  const chipIcoEl=elChip.shadowRoot.querySelector('[data-ico="chipped"]');
+  t('an ordinary icon (no chip:) keeps the old flat look, no ico-chip class',
+    !!plainIcoEl&&!plainIcoEl.classList.contains('ico-chip'));
+  t('chip:true adds the ico-chip class that carries the frosted-glass CSS',
+    !!chipIcoEl&&chipIcoEl.classList.contains('ico-chip'));
+  const chipCss=elChip.shadowRoot.querySelector('style').textContent;
+  t('the ico-chip CSS reuses the exact same visual recipe as a vacuum_widgets badge (inset:3px glass panel + backdrop blur)',
+    /\.ico\.ico-chip::after\{[^}]*inset:3px[^}]*backdrop-filter:blur\(7px\)/.test(chipCss));
+
+  // editor: Chip style checkbox on the icon panel
+  const edChip=w.document.createElement('room-overlay-card-editor');
+  edChip.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    icons:[{id:'opener',icon:'mdi:cast',top:'8%',left:'8%',chip:true}]});
+  edChip.hass={states:{},user:{name:'x'}};
+  edChip._tab='elements';edChip._render();
+  t('the icon editor prefills the Chip style checkbox from config',
+    edChip.querySelector('[data-ico-chip="0"]').checked===true);
+  let chipOut=null;
+  edChip.addEventListener('config-changed',e=>{chipOut=e.detail.config;});
+  const chipCb=edChip.querySelector('[data-ico-chip="0"]');
+  chipCb.checked=false;chipCb.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('unchecking Chip style removes icon.chip from the collected config',
+    !!chipOut&&chipOut.icons[0].chip===undefined);
 }
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');

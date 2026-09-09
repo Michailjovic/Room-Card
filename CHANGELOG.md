@@ -1,5 +1,17 @@
 # Changelog
 
+## [6.12.1] - 2026-09-09
+
+### `icons[].chip` — a frosted-glass circular badge style
+
+A plain `icons:` entry has always rendered as a bare glyph (optionally with a flat-color circle
+behind it via `background:`). New `chip: true` renders it instead with the exact same frosted-glass
+circular badge look the built-in vacuum status widget already has — a soft outer ring, a blurred
+dark glass panel, border and drop shadow — with nothing to tune. Meant for a row of "open this
+section" launcher icons that should read as a consistent set of tappable buttons rather than plain
+floating glyphs. Purely additive — icons without `chip` are pixel-identical to before. See
+docs/releases/RELEASE_NOTES_v6.12.1.md.
+
 ## [6.12.0] - 2026-09-09
 
 ### Cockpit tiles gain `hold_action` / `double_tap_action`

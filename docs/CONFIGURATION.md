@@ -614,7 +614,30 @@ icons:
         value: "#FFD54F"
       - value: "#888"
     tap_action: { action: toggle, entity: light.lamp }
+```
 
+An icon renders as a bare glyph by default. `background` gives it a plain flat-color circle behind it
+(`background: rgba(0,0,0,0.55)`). **`chip: true`** (v6.12.1) is a nicer alternative: the same
+frosted-glass circular badge the built-in [vacuum widget](#vacuum-status-widget) uses — a soft outer ring,
+a blurred dark glass panel, a subtle border and drop shadow — with no color/tuning needed:
+
+```yaml
+icons:
+  - id: open_media
+    icon: mdi:cast
+    chip: true               # frosted-glass circular badge instead of a bare glyph
+    top: "8%"
+    left: "26%"
+    tap_action: { action: open-section, section: media }
+```
+
+Handy for a row of "open this section" launcher icons that should read as a consistent set of
+tappable buttons rather than plain floating glyphs — see
+[Sections & panels](#sections--panels-cockpit-tiles) below, and the
+[vacuum widget](#vacuum-status-widget)'s own badge for the same look with live status.
+`chip` and `background` are mutually exclusive — when both are set, `chip` wins.
+
+```yaml
 labels:
   # Entity value with automatic unit
   - id: temp_label

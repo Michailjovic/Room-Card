@@ -424,8 +424,9 @@ sections:
         name: Obývák
         entity: media_player.televize_v_obyvaku_2
         value: >-
-          {% set src = states('media_player.televize_v_obyvaku_2') %} {{ src if
-          src not in ['unknown','unavailable',''] else '' }}
+          {% set ti = state_attr('media_player.televize_v_obyvaku_2','media_title') %}
+          {% set ar = state_attr('media_player.televize_v_obyvaku_2','media_artist') %}
+          {{ (ti ~ ' – ' ~ ar) if (ti and ar) else (ti or '') }}
         quick:
           - name: Hlasitost +
             icon: mdi:volume-plus
@@ -455,12 +456,16 @@ sections:
                 - value: 0
             state_images:
               - entity: media_player.televize_v_obyvaku_2
-                attribute: app_id
-                state: com.stremio.one
+                attribute: app_name
+                state: Stremio
                 image: /local/Dashboards/Cockpit/Media/monitor-Stremio.webp
               - entity: media_player.televize_v_obyvaku_2
-                attribute: app_id
-                state: org.smarttube.beta
+                attribute: app_name
+                state: Nuvio
+                image: /local/Dashboards/Cockpit/Media/monitor-Stremio.webp
+              - entity: media_player.televize_v_obyvaku_2
+                attribute: app_name
+                state: SmartTube beta
                 image: /local/Dashboards/Cockpit/Media/monitor-YouTube.webp
               - image: /local/Dashboards/Cockpit/Media/monitor-LG.webp
             transition: 2s ease
@@ -468,8 +473,55 @@ sections:
   - id: cleaning
     title: Úklid
     icon: mdi:robot-vacuum
-    source: auto
-    domain: vacuum
+    tiles:
+      - id: vacuum_s6
+        name: Kuchyň
+        entity: vacuum.s6_kitchen
+        icon: mdi:robot-vacuum
+        icon_animation: spin
+        active_state: cleaning
+        image: /local/Dashboards/Vacuum/S6.webp
+        value: >-
+          {% set b = state_attr('vacuum.s6_kitchen','battery_level') %}
+          {{ (b ~ '%') if b is not none else '—' }}
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+        hold_action:
+          action: more-info
+          entity: vacuum.s6_kitchen
+      - id: vacuum_s7
+        name: Vysavač S7
+        entity: vacuum.s7_maxv
+        icon: mdi:robot-vacuum
+        icon_animation: spin
+        active_state: cleaning
+        image: /local/Dashboards/Vacuum/S7.webp
+        value: >-
+          {% set b = state_attr('vacuum.s7_maxv','battery_level') %}
+          {{ (b ~ '%') if b is not none else '—' }}
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+        hold_action:
+          action: more-info
+          entity: vacuum.s7_maxv
+      - id: vacuum_s8
+        name: Vysavač S8 Ultra
+        entity: vacuum.s8_maxv_ultra
+        icon: mdi:robot-vacuum
+        icon_animation: spin
+        active_state: cleaning
+        image: /local/Dashboards/Vacuum/S8.webp
+        value: >-
+          {% set b = state_attr('vacuum.s8_maxv_ultra','battery_level') %}
+          {{ (b ~ '%') if b is not none else '—' }}
+        tap_action:
+          action: navigate
+          navigation_path: /dashboard-various/vacuum
+        hold_action:
+          action: more-info
+          entity: vacuum.s8_maxv_ultra
   - id: covers
     title: Rolety
     icon: mdi:window-shutter
@@ -580,36 +632,28 @@ rooms:
     icons:
       - id: open_appliances
         icon: mdi:washing-machine
+        chip: true
+        size: 22px
         top: 8%
         left: 8%
-        width: 8%
-        height: 8%
+        z_index: 6
         tap_action:
           action: open-section
           section: appliances
-        z_index: 6
-        section: appliances
-      - id: open_cleaning
-        icon: mdi:robot-vacuum
-        top: 8%
-        left: 20%
-        width: 8%
-        height: 8%
-        tap_action:
-          action: open-section
-          section: cleaning
-        z_index: 6
-        section: cleaning
       - id: open_media
         icon: mdi:popcorn
+        chip: true
+        size: 22px
         top: 8%
-        left: 32%
+        left: 26%
         z_index: 6
         tap_action:
           action: open-section
           section: media
       - id: open_covers
         icon: mdi:roller-shade
+        chip: true
+        size: 22px
         top: 8%
         left: 44%
         z_index: 6
@@ -1371,6 +1415,9 @@ vacuum_widgets:
       - entity: sensor.s8_maxv_ultra_status
     z_index: 7
     tap_action:
+      action: open-section
+      section: cleaning
+    hold_action:
       action: navigate
       navigation_path: /dashboard-various/vacuum
 url_sync: cockpit
