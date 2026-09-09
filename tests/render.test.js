@@ -1457,6 +1457,35 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   t('an overlay with neither image nor conditions renders without throwing (opacity defaults to 1)',
     elBareOv.shadowRoot.querySelector('[data-section-panel="s"] .roc-tile-ov').style.opacity==='1');
 
+  // ---- state_images: attribute-based matching (v6.11.4) --------------------
+  // A media_player's current app often lives in an attribute (app_id), not
+  // the entity's own state -- _ovImg's state_images now optionally matches an
+  // `attribute` instead of falling back to plain `.state` equality.
+  const attrCfg={base_image:'/local/x.webp',sections:[{id:'s',title:'S'}],
+    zones:[{id:'z',top:'1%',left:'1%',width:'5%',height:'5%',section:'s',
+      tile:{image:'/local/tv-off.webp',overlays:[{id:'content',state_images:[
+        {entity:'media_player.tv',attribute:'app_id',state:'com.stremio.one',image:'/local/stremio.webp'},
+        {entity:'media_player.tv',state:'playing',image:'/local/plain-state.webp'},
+        {image:'/local/default.webp'}
+      ]}]}}]};
+  const elAttr=mkCard(attrCfg);
+  elAttr.hass={states:{'media_player.tv':{state:'playing',attributes:{app_id:'com.stremio.one'}}},callService(){},user:{name:'x'}};
+  elAttr._openSection('s');
+  t('state_images with `attribute` set matches the attribute\'s value, not the entity state',
+    /stremio\.webp/.test(elAttr.shadowRoot.querySelector('[data-section-panel="s"] .roc-tile-ov').style.backgroundImage));
+
+  const elAttr2=mkCard(attrCfg);
+  elAttr2.hass={states:{'media_player.tv':{state:'playing',attributes:{app_id:'org.smarttube.beta'}}},callService(){},user:{name:'x'}};
+  elAttr2._openSection('s');
+  t('an attribute entry that doesn\'t match falls through to the next state_images entry (plain state, unaffected by attribute)',
+    /plain-state\.webp/.test(elAttr2.shadowRoot.querySelector('[data-section-panel="s"] .roc-tile-ov').style.backgroundImage));
+
+  const elAttr3=mkCard(attrCfg);
+  elAttr3.hass={states:{'media_player.tv':{state:'idle',attributes:{app_id:'com.google.android.apps.tv.launcherx'}}},callService(){},user:{name:'x'}};
+  elAttr3._openSection('s');
+  t('no state_images entry matching falls back to the entity-less default entry',
+    /default\.webp/.test(elAttr3.shadowRoot.querySelector('[data-section-panel="s"] .roc-tile-ov').style.backgroundImage));
+
   // ---- Editor: tile image field + tile overlay editor (add/remove/reorder) --
   const edImg=w.document.createElement('room-overlay-card-editor');
   edImg.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},

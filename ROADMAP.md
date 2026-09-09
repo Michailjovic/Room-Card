@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.11.3** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.11.4** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -86,6 +86,7 @@ failure broke HACS installs.
 | **v6.11.1** | **Fix** — `tile.quick` buttons on an image tile now lay out in a row instead of a vertical column |
 | **v6.11.2** | **Fix** — new `tile.image_ratio` overrides an image tile's hardcoded 4:3 stage, so a widescreen device photo (TV, monitor) no longer gets cropped by `background-size: cover` |
 | **v6.11.3** | **Declared tiles GUI editor** — a section's `tiles:` are now fully editable in the Sections tab (add/edit/duplicate/reorder/remove), reusing the tagged-element tile's Image/Aspect ratio/Overlays machinery; Aspect ratio also added to the tagged-element tile editor |
+| **v6.11.4** | **`state_images` attribute matching** — an entry can now match an entity's attribute (e.g. a media_player's `app_id`) instead of only its own state |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

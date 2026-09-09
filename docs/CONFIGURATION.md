@@ -230,6 +230,15 @@ overlays:
       opacity:
         - value: 1
 
+  # State-driven, matched against an ATTRIBUTE instead of the entity's own
+  # state (v6.11.4) — for a media_player whose current app lives in app_id,
+  # not a state of its own. Entries are checked in order, first match wins.
+  - id: tv_content
+    state_images:
+      - { entity: media_player.tv, attribute: app_id, state: com.stremio.one, image: /local/stremio.webp }
+      - { entity: media_player.tv, attribute: app_id, state: org.smarttube.beta, image: /local/smarttube.webp }
+      - { image: /local/tv_default.webp }    # default — nothing else matched
+
   # Tint a glow PNG from a light's live color
   - id: rgb_strip
     image: /local/strip_glow.png

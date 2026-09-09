@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.11.4] - 2026-09-09
+
+### `state_images` can now match an attribute, not just the entity's own state
+
+An overlay's `state_images` only ever compared against an entity's own `state` — no way to key off
+an attribute like a media_player's `app_id`, which is how most cast/Android-TV devices expose their
+current app (their own `state` is just playing/paused/idle/off). New optional `attribute:` field on
+a `state_images` entry: when set, it's compared against that attribute's value instead of `.state`.
+Unset entries keep matching plain state, exactly as before — this is additive, no existing config
+changes behavior. See docs/releases/RELEASE_NOTES_v6.11.4.md.
+
 ## [6.11.3] - 2026-09-09
 
 ### Declared tiles now have a full GUI editor

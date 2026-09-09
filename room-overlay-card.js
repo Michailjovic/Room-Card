@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.11.3';
+const ROC_VERSION='6.11.4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4326,7 +4326,15 @@ class RoomOverlayCard extends HTMLElement{
   _ovImg(ov){
     if(ov.image)return ov.image;
     if(ov.state_images?.length){
-      for(const m of ov.state_images){if(!('entity'in m))continue;if(this._hass.states[m.entity]?.state===m.state)return m.image;}
+      for(const m of ov.state_images){
+        if(!('entity'in m))continue;
+        const st=this._hass.states[m.entity];if(!st)continue;
+        // v6.11.4: `attribute` matches an attribute's value instead of the
+        // entity's own state -- e.g. a media_player's app_id, which has no
+        // dedicated state of its own to key off.
+        const val=m.attribute?st.attributes?.[m.attribute]:st.state;
+        if(val===m.state)return m.image;
+      }
       const d=ov.state_images.find(m=>!('entity'in m));if(d)return d.image;
     }
     return'';
