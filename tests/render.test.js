@@ -1617,6 +1617,16 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   t('a declared tile\'s quick button calls its service exactly like a tagged element\'s',
     !!declSvc&&declSvc.dom==='switch'&&declSvc.svc==='turn_on'&&declSvc.target.entity_id==='switch.scr_up');
 
+  // Regression (v6.11.1): on an image tile, quick buttons sit BELOW the body
+  // (v6.9.0's column layout for .roc-tile-img) -- a vertical stack of round
+  // buttons there reads wrong, so they lay out in a row instead. Plain icon
+  // tiles keep the vertical side-rail (unchanged, checked by its absence here).
+  const declCss=elDecl.shadowRoot.querySelector('style').textContent;
+  t('an image tile\'s quick buttons lay out in a row, not a column',
+    /\.roc-tile-img \.roc-tile-quick\{[^}]*flex-direction:row/.test(declCss));
+  t('a plain icon tile\'s quick buttons keep the vertical side-rail',
+    /(?<!-img )\.roc-tile-quick\{[^}]*flex-direction:column/.test(declCss));
+
   // ---- Editor: source select gains "auto" + a Domain select ---------------
   const edAuto=w.document.createElement('room-overlay-card-editor');
   edAuto.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},

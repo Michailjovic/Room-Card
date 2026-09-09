@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.11.1] - 2026-09-09
+
+### Fix: quick buttons on an image tile now lay out in a row
+
+`tile.quick` buttons stack in a vertical side-rail on a plain icon tile, which made sense next to
+a small icon circle — but on an image tile (`tile.image` set) that same column read wrong sitting
+below a tall photo. Image tiles now lay their `quick` buttons out in a row instead; plain icon
+tiles are unchanged. See docs/releases/RELEASE_NOTES_v6.11.1.md.
+
 ## [6.11.0] - 2026-09-09
 
 ### Declared tiles — a section can own content directly, no room anchor needed

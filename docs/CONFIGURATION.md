@@ -1168,6 +1168,10 @@ tile:
       target: { entity_id: sensor.washer_program }
 ```
 
+On a plain icon tile, `quick` buttons stack in a vertical side-rail next to the icon/body. On an
+[image tile](#image-tiles) (`tile.image` set) they lay out in a row below the body instead (v6.11.1)
+— a vertical stack read wrong once the tile itself is a tall photo rather than a small icon circle.
+
 ### Image tiles
 
 Setting `tile.image` switches a tile from the icon+state scheme to a device photo with its own
