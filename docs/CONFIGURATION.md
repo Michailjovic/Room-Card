@@ -991,7 +991,8 @@ it closes on Escape, on tapping the backdrop, or when you switch rooms.
 
 Declare the panel at the top level in `sections:`, then tag the elements that should appear in it
 (on `zones`, `icons`, `elements` or `blinds` — not `badges`) with `section: <id>` and an optional
-`tile:` block describing how that element's tile should look.
+`tile:` block describing how that element's tile should look. Content with no natural room hotspot
+can skip tagging an element entirely and be [declared straight on the section](#declared-tiles-tiles).
 
 ```yaml
 sections:
@@ -1084,6 +1085,46 @@ since there is no element to hang a hand-authored photo off. Its icon defaults p
 whenever the card re-renders (a room switch, a resize that flips the layout profile, …) — not on
 every state tick, same performance rule as tile collection itself — so an entity Home Assistant
 adds while the dashboard is already open appears at the next such render, not instantly.
+
+### Declared tiles (`tiles:`)
+
+Some section content has no natural home on a room's photo at all — a TV's status summary, a
+projector-screen remote. Tagging an existing zone/icon just to carry a tile works, but inventing a
+throwaway icon purely to hang the tag on is backwards. A section can own tiles directly instead,
+with the exact same fields a tagged element's own `tile:` block takes (`name`, `entity`, `icon`,
+`value`, `quick`, `tap_action`, `image`/`overlays`, …) — no room, no zone, no icon required:
+
+```yaml
+sections:
+  - id: media
+    title: Media
+    icon: mdi:cast
+    source: auto
+    domain: media_player
+    tiles:
+      - id: tv_living_room        # optional — falls back to "<section id>_tile_<index>"
+        name: Living room
+        entity: media_player.tv_living_room
+        icon: mdi:television
+        value: "{{ state_attr('remote.tv_living_room','current_activity') }}"
+        tap_action: { action: navigate, navigation_path: /dashboard/remote }
+      - name: Screen
+        icon: mdi:projector-screen
+        quick:
+          - name: Up
+            icon: mdi:arrow-up-bold
+            service: switch.turn_on
+            target: { entity_id: switch.screen_up }
+          - name: Down
+            icon: mdi:arrow-down-bold
+            service: switch.turn_on
+            target: { entity_id: switch.screen_down }
+```
+
+Declared tiles combine with everything else a section can pull in (COCKPIT_PLAN.md kap.4): the
+resolution order is **declared → room-tagged collected → auto → embedded `card:`**. Declared comes
+first because it is the most deliberate authoring — content the section owns outright, not
+something happened to be tagged elsewhere.
 
 ### Per-element `section:` and `tile:`
 

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.10.1';
+const ROC_VERSION='6.11.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -534,6 +534,19 @@ function rocCollectSections(cAll){
   const rooms=Array.isArray(cAll.rooms)&&cAll.rooms.length?cAll.rooms:[cAll];
   const bySec={};
   defs.forEach(function(d){if(d&&d.id&&!bySec[d.id])bySec[d.id]=[];});
+  // Section-declared tiles (v6.11.0, D-ext): pure dashboard content with no
+  // natural room hotspot (a TV summary, a projector-screen remote) shouldn't
+  // need a throwaway room icon just to carry `section:`+`tile:` -- a section
+  // can now own tiles directly via `tiles:`, same shape as a tagged element's
+  // own `tile:` block. Declared first (most deliberate authoring), then
+  // room-tagged collected elements, same as any other section.
+  defs.forEach(function(d){
+    if(d&&d.id&&Array.isArray(d.tiles)){
+      d.tiles.forEach(function(t,ti){
+        bySec[d.id].push({kind:'declared',item:{id:(t&&t.id)||(d.id+'_tile_'+ti),tile:t},room:null});
+      });
+    }
+  });
   rooms.forEach(function(room){
     ROC_SECTION_TAG_KINDS.forEach(function(kind){
       (room[kind]||[]).forEach(function(item){

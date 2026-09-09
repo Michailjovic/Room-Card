@@ -1,5 +1,16 @@
 # Changelog
 
+## [6.11.0] - 2026-09-09
+
+### Declared tiles — a section can own content directly, no room anchor needed
+
+A section can now declare its own `tiles:` inline — the exact same fields a tagged element's
+`tile:` block takes (name/entity/icon/value/quick/tap_action/image/overlays), but with no
+zones/icons/elements/blinds tag required at all. For content with no natural home on a room's
+photo (a TV status summary, a projector-screen remote), inventing a throwaway room icon just to
+carry `section:`+`tile:` was backwards. Resolution order is now declared → room-tagged collected →
+auto → embedded `card:`. See docs/releases/RELEASE_NOTES_v6.11.0.md.
+
 ## [6.10.1] - 2026-09-09
 
 ### Fix: section sheet stole the room-swipe gesture

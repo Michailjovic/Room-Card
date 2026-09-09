@@ -515,6 +515,26 @@ t('tfResolve of a missing block is null',g.tfResolve(null,{state:'on'})===null&&
     return r.length===1&&r[0].tiles.length===0;
   })());
 
+  // Section-declared tiles (v6.11.0): a section can own tiles directly via
+  // `tiles:` -- no room/zone anchor needed at all (a TV summary, a projector
+  // remote -- pure dashboard content with nowhere natural to hang a room icon).
+  const declCfg={
+    sections:[{id:'media',tiles:[{name:'Ložnice',entity:'media_player.tv1'},{id:'custom_id',name:'Plátno'}]}],
+    zones:[{id:'z1',section:'media'}]
+  };
+  const declSecs=g.rocCollectSections(declCfg);
+  t('a section with tiles: collects them with no room/element anchor',
+    declSecs[0].tiles.length===3&&declSecs[0].tiles[0].kind==='declared'&&declSecs[0].tiles[0].room===null);
+  t('declared tiles come before room-tagged ones (most deliberate authoring first)',
+    declSecs[0].tiles[0].item.tile.name==='Ložnice'&&declSecs[0].tiles[1].item.tile.name==='Plátno'&&declSecs[0].tiles[2].kind==='zones');
+  t('a declared tile without its own id falls back to "<section>_tile_<index>"',
+    declSecs[0].tiles[0].item.id==='media_tile_0');
+  t('a declared tile keeps an explicit id',declSecs[0].tiles[1].item.id==='custom_id');
+  t('rocTileDef reads a declared tile exactly like a tagged element\'s tile: block',
+    g.rocTileDef(declSecs[0].tiles[0]).entity==='media_player.tv1');
+  t('a section with no tiles: is unaffected (back-compat)',
+    g.rocCollectSections({sections:[{id:'a'}],zones:[{id:'z1',section:'a'}]})[0].tiles[0].kind==='zones');
+
   // rocTileDef: defaults derived from the tagged element when `tile:` omits them (§3.2)
   const withTile=g.rocTileDef({kind:'zones',item:{id:'washer',icon:'mdi:washing-machine',entity:'sensor.washer',tile:{name:'Pračka',active_state:'run'}}});
   t('rocTileDef keeps explicit tile fields',withTile.name==='Pračka'&&withTile.active_state==='run');

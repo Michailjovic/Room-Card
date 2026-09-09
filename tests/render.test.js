@@ -1570,6 +1570,53 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   t('a card: section with collected tiles renders the tiles above the embedded card host (kap.4 resolution order)',
     elecKids.indexOf('roc-card-tile-host')>0&&elecKids[0].indexOf('roc-tile')>=0);
 
+  // ---- Section-declared tiles (v6.11.0) -----------------------------------
+  // A section can own tiles directly via `tiles:` -- pure dashboard content
+  // (a TV summary, a projector remote) with no natural room hotspot, so no
+  // room/zone/icon tag is needed at all. Combines with room-tagged collected
+  // AND auto in the same resolution order (declared -> room-tagged -> auto).
+  const declCfg={
+    base_image:'/local/x.webp',
+    sections:[{id:'media',title:'Media',source:'auto',domain:'media_player',tiles:[
+      {name:'Ložnice',entity:'media_player.tv1',icon:'mdi:television',
+        tap_action:{action:'navigate',navigation_path:'/x/tv1'}},
+      {id:'projector',name:'Plátno',icon:'mdi:projector-screen',quick:[
+        {name:'Up',icon:'mdi:arrow-up',service:'switch.turn_on',target:{entity_id:'switch.scr_up'}}
+      ]}
+    ]}],
+    zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%',section:'media',
+      tile:{name:'Tablet',entity:'media_player.tv2'}}]
+  };
+  const elDecl=mkCard(declCfg);
+  elDecl.hass={states:{
+    'media_player.tv1':{state:'playing',attributes:{}},
+    'media_player.tv2':{state:'off',attributes:{}},
+    'media_player.tv3':{state:'idle',attributes:{friendly_name:'Chromecast'}}
+  },callService(){},user:{name:'x'}};
+  elDecl._rendered=false;elDecl._render();
+
+  const mediaTiles=elDecl.shadowRoot.querySelectorAll('[data-section-panel="media"] .roc-tile');
+  t('a section with no room/zone tag at all still renders its declared tiles',mediaTiles.length===4);
+  t('declared tiles render first, then room-tagged collected, then auto (resolution order)',
+    mediaTiles[0].querySelector('.roc-tile-name').textContent==='Ložnice'&&
+    mediaTiles[1].querySelector('.roc-tile-name').textContent==='Plátno'&&
+    mediaTiles[2].querySelector('.roc-tile-name').textContent==='Tablet'&&
+    mediaTiles[3].querySelector('.roc-tile-name').textContent==='Chromecast');
+
+  elDecl._openSection('media');
+  let declNavPath=null;
+  const _origPushState3=w.history.pushState.bind(w.history);
+  w.history.pushState=(_s,_ti,p)=>{declNavPath=p;};
+  elDecl.shadowRoot.querySelector('[data-section-panel="media"] [data-tile-idx="0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  w.history.pushState=_origPushState3;
+  t('a declared tile\'s own tap_action drills through exactly like a tagged element\'s',declNavPath==='/x/tv1');
+
+  let declSvc=null;
+  elDecl._hass.callService=(dom,svc,data,target)=>{declSvc={dom,svc,data,target};};
+  elDecl.shadowRoot.querySelector('[data-section-panel="media"] [data-tile-idx="1"] [data-quick="0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('a declared tile\'s quick button calls its service exactly like a tagged element\'s',
+    !!declSvc&&declSvc.dom==='switch'&&declSvc.svc==='turn_on'&&declSvc.target.entity_id==='switch.scr_up');
+
   // ---- Editor: source select gains "auto" + a Domain select ---------------
   const edAuto=w.document.createElement('room-overlay-card-editor');
   edAuto.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
