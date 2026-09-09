@@ -549,6 +549,7 @@ zones:
 | `browser-mod-popup` | `title`, `size`, `content` | Open a browser-mod popup |
 | `toggle-group` / `show-group` / `hide-group` | `group` | Control element groups |
 | `switch-room` / `next-room` / `prev-room` / `follow-room` | — / `room` | Multi-room navigation |
+| `open-section` / `close-section` | `section` / — | Open/close a [cockpit panel](#sections--panels-cockpit-tiles) |
 | `none` | — | Do nothing |
 
 Any action may carry `confirmation: true` (or `confirmation: {text: "..."}`). A `hold_action`
@@ -976,6 +977,132 @@ elements:
     height: 14%
     card: { type: tile, entity: light.bedroom }
 ```
+
+---
+
+## Sections & panels (cockpit tiles)
+
+A pop-up panel of small status/control tiles, opened by tapping an icon (or any element with
+`tap_action: { action: open-section, section: <id> }`). Unlike [groups](#groups-pop-up-control-panels),
+which show/hide a fixed layout you position by hand, a section's panel body is a scrollable grid
+of tiles built automatically from whichever elements across the whole card declare `section: <id>`
+— or, for a fully custom body, from a single embedded card. Only one panel is open at a time, and
+it closes on Escape, on tapping the backdrop, or when you switch rooms.
+
+Declare the panel at the top level in `sections:`, then tag the elements that should appear in it
+(on `zones`, `icons`, `elements` or `blinds` — not `badges`) with `section: <id>` and an optional
+`tile:` block describing how that element's tile should look.
+
+```yaml
+sections:
+  - id: appliances
+    title: Appliances
+    icon: mdi:washing-machine
+    placement: sheet-right
+    columns: 2
+
+icons:
+  - id: open_appliances
+    icon: mdi:washing-machine
+    top: 80%
+    left: 90%
+    tap_action: { action: open-section, section: appliances }
+
+zones:
+  - id: washer
+    section: appliances
+    tile:
+      name: Washer
+      entity: sensor.washer_program
+      icon: mdi:washing-machine
+      icon_animation: spin
+      active_state: run
+      tap_action: { action: navigate, navigation_path: /dashboard-home/utility }
+
+icons:
+  - id: dryer
+    section: appliances
+    tile:
+      name: Dryer
+      entity: switch.dryer
+      icon: mdi:tumble-dryer
+      active_state: "on"
+```
+
+### `sections:` (top level)
+
+| Key | Type | Default | Example |
+|---|---|---|---|
+| `id` | string, required | — | `appliances` |
+| `title` | string | `id` | `Appliances` |
+| `icon` | string | — (no icon shown) | `mdi:washing-machine` |
+| `placement` | `sheet-right` \| `sheet-bottom` \| `full` \| `dialog` | `sheet-right` | `dialog` |
+| `size` | CSS length | `420px` (sheet-right) / `80%` (sheet-bottom) / `620px` (dialog); ignored by `full` | `340px` |
+| `columns` | number | `2` | `3` |
+| `subtitle` | string | — (hidden) | `2 running` |
+| `badge` | `auto` \| `none` | `auto` | `none` |
+| `backdrop` | boolean | `true` | `false` |
+| `visible_template` | Jinja template | — (always visible) | `"{{ is_state('alarm_control_panel.home','armed_away') }}"` |
+| `card` | Lovelace card config | — (use collected tiles instead) | `{ type: custom:electricity-panel-card }` |
+
+`badge` shows, in the panel header, a count of tiles whose `state` currently equals their own
+`active_state` (`auto`), or nothing at all (`none`) — it is never set to a fixed number.
+`visible_template` hides the whole panel (and its launcher's effect) when the template is falsy;
+it re-evaluates live, the same as any other `visible_template` in this card.
+
+`card` switches the section from *collected* tiles to a single **embedded card** filling the whole
+panel body — for a bespoke or third-party dashboard fragment (D12: the card is embedded, never
+rendered through — this card does not read or reshape its internals). When `card` is set, any
+`section:` tags pointing at that id are ignored for tile collection. If the card's custom element
+never registers, the panel shows a legible notice instead of staying blank.
+
+### Per-element `section:` and `tile:`
+
+Add these two keys to any `zones`, `icons`, `elements` or `blinds` entry (badges cannot be tagged).
+`section: <id>` adds that element's tile to the named panel, in room-then-element declaration
+order. `tile:` customises how the tile looks and behaves — every field is optional and falls back
+to the tagged element itself:
+
+| Key | Type | Default | Example |
+|---|---|---|---|
+| `name` | string | the element's `id` | `Washer` |
+| `entity` | entity id | the element's own `entity` | `sensor.washer_program` |
+| `icon` | string | the element's own `icon`, else `mdi:help-box` | `mdi:washing-machine` |
+| `icon_animation` | `none` \| `spin` \| `pulse` \| `blink` | `none` | `spin` |
+| `state` | string or Jinja template | the entity's live state | `"{{ states('sensor.washer_program') }}"` |
+| `state_class` | `auto` \| `run` \| `done` \| `""` | `auto` | `done` |
+| `active_state` | string | — (tile is never "active") | `run` |
+| `value` | string or Jinja template | — (hidden) | `"{{ state_attr('sensor.washer_program','time_remaining') }}"` |
+| `progress` | entity id (0–100) | — (no progress bar) | `sensor.washer_progress` |
+| `quick` | list of `{name, icon, service, data, target}` | — (no quick buttons) | see below |
+| `tap_action` | action object | — (tile is not tappable) | `{ action: more-info }` |
+
+A tile with no matching entity (or an entity missing from `hass.states`) renders with a dimmed
+`unavailable` state rather than going blank. `state_class: auto` colours the state text blue while
+`state` equals `active_state` ("running"), green once it has moved past `active_state` to some
+other known state ("done"), and plain otherwise; set `run`/`done`/`""` directly to override that
+logic, or set `state`/`active_state` to a `{{ }}` template for full Jinja control (templates are
+evaluated the same way as elsewhere in this card, and only refresh while the panel is open).
+
+`quick` renders small round buttons on the tile that call a service directly, without opening the
+entity's more-info dialog or navigating anywhere:
+
+```yaml
+tile:
+  quick:
+    - name: Pause
+      icon: mdi:pause
+      service: washer.pause
+      target: { entity_id: sensor.washer_program }
+```
+
+### Degradation rules
+
+A section with nothing tagged into it (and no `card:`) shows an explanatory empty state instead of
+a blank panel. An embedded `card:` whose custom element never registers shows a notice instead of
+a blank panel. A tile whose entity is missing from `hass` shows as `unavailable` instead of going
+blank. These match the same "never render a blank surface" rule the rest of this card follows for
+missing entities elsewhere.
 
 ---
 

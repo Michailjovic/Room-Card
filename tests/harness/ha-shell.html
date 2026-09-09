@@ -59,10 +59,27 @@
       landscape:{rows:['auto','auto'],place:{nav:{row:1},image:{row:2}}}
     },
     nav:{style:'tabs'},
+    sections:[
+      {id:'sec_right',title:'Right sheet',icon:'mdi:washing-machine',placement:'sheet-right'},
+      {id:'sec_bottom',title:'Bottom sheet',icon:'mdi:tv',placement:'sheet-bottom'},
+      {id:'sec_full',title:'Full',icon:'mdi:view-dashboard',placement:'full'},
+      {id:'sec_dialog',title:'Dialog',icon:'mdi:cog',placement:'dialog'}
+    ],
     rooms:[
       {id:'bedroom',name:'Bedroom',base_image:img('#123'),
        glows:[{id:'lamp',entity:'light.harness',top:'45%',left:'30%',size:'26%',intensity:0.85,color:'#ffb46e'}],
-       badges:[{id:'vac',position:'bottom-left',icon:'mdi:robot-vacuum',label:[{value:'Ready'}]}]},
+       badges:[{id:'vac',position:'bottom-left',icon:'mdi:robot-vacuum',label:[{value:'Ready'}]}],
+       // Cockpit sections (v6.8.0) — one launcher + one tagged tile per placement, for the
+       // geometry tier's own tests (COCKPIT_PLAN.md kap.7). Panels are absolutely positioned
+       // inside .wrap and hidden until opened, so this does not perturb any of the
+       // pre-existing geometry assertions above.
+       icons:[
+         {id:'open_right',icon:'mdi:washing-machine',top:'2%',left:'2%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_right'}},
+         {id:'open_bottom',icon:'mdi:tv',top:'2%',left:'10%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_bottom'}},
+         {id:'open_full',icon:'mdi:view-dashboard',top:'2%',left:'18%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_full'}},
+         {id:'open_dialog',icon:'mdi:cog',top:'2%',left:'26%',width:'6%',height:'6%',tap_action:{action:'open-section',section:'sec_dialog'}},
+         {id:'tile_src',icon:'mdi:water',top:'50%',left:'50%',width:'6%',height:'6%',section:'sec_right',tile:{name:'Leak sensor'}}
+       ]},
       {id:'kitchen',name:'Kitchen',base_image:img('#231'),
        badges:[{id:'vac2',position:'bottom-left',icon:'mdi:robot-vacuum',label:[{value:'Ready'}]}]}
     ]

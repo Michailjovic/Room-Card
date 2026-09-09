@@ -35,7 +35,7 @@ mock-up.*
 - **Edit mode** — see [below](#edit-mode).
 - **Haptics** — feedback on actions (companion app) and hold-gesture registration.
 
-## The four tabs
+## The five tabs
 
 - **Image** — the background (image or camera), image-swap conditions, weather overlay, CSS
   filters, the brightness model, filter transition and zoom. Also the **companion cards** (above
@@ -50,6 +50,19 @@ mock-up.*
   *A room with one badge, one blind, one embedded card, and three light controls — the badge
   next to each count (blue "1"/"3") is the quick way to see what a room actually uses without
   opening every section.*
+
+  Any zone, icon, element or blind (not badges) also carries a **Section** field at the bottom of
+  its own panel — pick a section declared on the **Sections** tab to add that item's tile to the
+  matching cockpit panel, with a `tile:` YAML box (name/entity/icon/state/etc.) that only appears
+  once a section is picked. See [Configuration → Sections & panels](CONFIGURATION.md#sections--panels-cockpit-tiles).
+
+- **Sections** — declares cockpit panels (`sections:`): id, title, icon, placement
+  (sheet-right / sheet-bottom / full / dialog), size, columns, subtitle, badge mode, the
+  tap-outside-to-close backdrop, an optional `visible_template`, and the content source — either
+  *Collected* (tiles from whatever's tagged with this section elsewhere in the card, shown here
+  as a live read-only list so you can see at a glance what's tagged in) or *Embedded card* (a
+  YAML box for a single `card:` block that fills the whole panel). Add / duplicate / remove /
+  reorder sections the same way as any other Elements list.
 
 - **Layout** — height source, orientation, threshold, and both profile grids as Portrait /
   Landscape sub-tabs, each with a live mini grid preview. See

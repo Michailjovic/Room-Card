@@ -1,5 +1,62 @@
 # Changelog
 
+## [6.8.0] - 2026-09-09
+
+### Cockpit — sections & panels
+
+The house view has always been per-room: nothing pulled entities *across* rooms into one place.
+`sections:` adds pop-up panels of small status/control tiles — a laundry cockpit, a media panel, a
+security overview — opened by tapping any icon and closed by Escape, the backdrop, or a room
+switch. Each panel's body is built automatically from whichever elements anywhere in the card
+declare `section: <id>`, or, for a fully custom body, from a single embedded card.
+
+```yaml
+sections:
+  - id: appliances
+    title: Appliances
+    icon: mdi:washing-machine
+    placement: sheet-right
+
+icons:
+  - id: open_appliances
+    icon: mdi:washing-machine
+    top: 80%
+    left: 90%
+    tap_action: { action: open-section, section: appliances }
+
+zones:
+  - id: washer
+    section: appliances
+    tile:
+      name: Washer
+      entity: sensor.washer_program
+      icon_animation: spin
+      active_state: run
+```
+
+- **Four placements** — `sheet-right`, `sheet-bottom`, `full`, `dialog` — plus `size`, `columns`,
+  `subtitle`, an `auto`/`none` badge counting active tiles, a `visible_template`, and an optional
+  `backdrop: false` to keep the panel open on an outside tap.
+- **Tiles** carry `name`/`entity`/`icon`/`icon_animation`/`state`/`state_class`/`active_state`/
+  `value`/`progress`/`quick`/`tap_action`, every field optional and defaulting from the tagged
+  element itself. `state`/`value` accept a `{{ }}` template. `quick` puts small service-call
+  buttons directly on the tile.
+- **`card:`** switches a section to a single embedded card filling the whole panel body (D12:
+  embedded, never rendered through).
+- **Degrades, never blanks** — an empty section, an unregistered `card:` custom element, and a
+  tile whose entity is missing from `hass` each show an explanatory state instead of a blank
+  panel.
+- New `open-section` / `close-section` tap actions; a new **Sections** tab in the editor
+  (add/duplicate/remove/reorder, a live read-only list of what's currently tagged in); a
+  **Section** select with a `tile:` YAML box on every zone/icon/element/blind panel.
+- `groups` is untouched and unmerged — sections are a separate, additive mechanism for the same
+  "tap an icon, see a panel" shape, aimed at cross-room summaries rather than a fixed, hand-placed
+  control layout.
+
+No migration — a card without `sections:` renders exactly as before. See
+[`docs/CONFIGURATION.md` → Sections & panels](docs/CONFIGURATION.md#sections--panels-cockpit-tiles)
+and [`docs/EDITOR.md`](docs/EDITOR.md#the-five-tabs).
+
 ## [6.7.1] - 2026-09-08
 
 ### Fix: the e2e job was red — the glow geometry test looked for the card in the wrong DOM

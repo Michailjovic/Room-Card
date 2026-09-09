@@ -109,3 +109,97 @@ test('window resize re-pins',async({page})=>{
   expect(Math.abs(g2.card.b-g2.innerH)).toBeLessThanOrEqual(2);
   expect(g2.pageOverflow).toBeLessThanOrEqual(1);
 });
+
+// Cockpit sections & panels (v6.8.0) — COCKPIT_PLAN.md kap.7 "e2e (Playwright, real Chromium)":
+// panel geometry at each placement at a wide and a narrow viewport; the panel does not overflow
+// the card; the house remains visible behind sheet-right; Escape closes. The harness's shared
+// CONFIG carries one launcher icon + one declared section per placement (sec_right/sec_bottom/
+// sec_full/sec_dialog) — see tests/harness/ha-shell.html.
+async function clickShadow(page,sel){
+  await page.evaluate((s)=>{window.__harness.card.shadowRoot.querySelector(s).click();},sel);
+  await settle(page,400);
+}
+async function panelGeo(page,secId){
+  return page.evaluate((id)=>{
+    const sr=window.__harness.card.shadowRoot;
+    const rb=el=>{if(!el)return null;const b=el.getBoundingClientRect();
+      return{t:b.top,b:b.bottom,l:b.left,r:b.right,w:b.width,h:b.height};};
+    const panel=sr.querySelector('[data-section-panel="'+id+'"]');
+    return{panel:rb(panel),open:panel?panel.classList.contains('open'):null,wrap:rb(sr.querySelector('.wrap'))};
+  },secId);
+}
+
+const PLACEMENTS=[
+  ['open_right','sec_right','sheet-right'],
+  ['open_bottom','sec_bottom','sheet-bottom'],
+  ['open_full','sec_full','full'],
+  ['open_dialog','sec_dialog','dialog'],
+];
+
+test.describe('cockpit sections & panels (v6.8.0)',()=>{
+  for(const[launcher,secId,placement]of PLACEMENTS){
+    test(placement+': panel opens and stays within the room image (wide viewport)',async({page})=>{
+      await clickShadow(page,'[data-ico="'+launcher+'"]');
+      const g=await panelGeo(page,secId);
+      const ov=await geo(page);
+      expect(g.open).toBe(true);
+      expect(g.panel).not.toBeNull();
+      // never spills past the room image box (.wrap) — the panel's own containing block
+      expect(g.panel.l).toBeGreaterThanOrEqual(g.wrap.l-1);
+      expect(g.panel.r).toBeLessThanOrEqual(g.wrap.r+1);
+      expect(g.panel.t).toBeGreaterThanOrEqual(g.wrap.t-1);
+      expect(g.panel.b).toBeLessThanOrEqual(g.wrap.b+1);
+      expect(ov.pageOverflow).toBeLessThanOrEqual(1);
+    });
+
+    test(placement+': panel opens and stays within the room image (narrow viewport)',async({page})=>{
+      await page.setViewportSize({width:375,height:700});
+      await settle(page,500);
+      await clickShadow(page,'[data-ico="'+launcher+'"]');
+      const g=await panelGeo(page,secId);
+      const ov=await geo(page);
+      expect(g.open).toBe(true);
+      expect(g.panel.l).toBeGreaterThanOrEqual(g.wrap.l-1);
+      expect(g.panel.r).toBeLessThanOrEqual(g.wrap.r+1);
+      expect(g.panel.t).toBeGreaterThanOrEqual(g.wrap.t-1);
+      expect(g.panel.b).toBeLessThanOrEqual(g.wrap.b+1);
+      expect(ov.pageOverflow).toBeLessThanOrEqual(1);
+    });
+  }
+
+  test('sheet-right: the house stays visible beside the panel, not covered by it',async({page})=>{
+    await clickShadow(page,'[data-ico="open_right"]');
+    const g=await panelGeo(page,'sec_right');
+    expect(g.panel.l).toBeGreaterThan(g.wrap.l+40); // a real strip of the photo remains uncovered
+  });
+
+  test('sheet-bottom: the house stays visible above the panel, not covered by it',async({page})=>{
+    await clickShadow(page,'[data-ico="open_bottom"]');
+    const g=await panelGeo(page,'sec_bottom');
+    expect(g.panel.t).toBeGreaterThan(g.wrap.t+40);
+  });
+
+  test('full: panel fills the whole room image, edge to edge',async({page})=>{
+    await clickShadow(page,'[data-ico="open_full"]');
+    const g=await panelGeo(page,'sec_full');
+    expect(Math.abs(g.panel.l-g.wrap.l)).toBeLessThanOrEqual(1);
+    expect(Math.abs(g.panel.r-g.wrap.r)).toBeLessThanOrEqual(1);
+    expect(Math.abs(g.panel.t-g.wrap.t)).toBeLessThanOrEqual(1);
+    expect(Math.abs(g.panel.b-g.wrap.b)).toBeLessThanOrEqual(1);
+  });
+
+  test('Escape closes the open panel',async({page})=>{
+    await clickShadow(page,'[data-ico="open_dialog"]');
+    expect((await panelGeo(page,'sec_dialog')).open).toBe(true);
+    await page.keyboard.press('Escape');
+    await settle(page,400);
+    expect((await panelGeo(page,'sec_dialog')).open).toBe(false);
+  });
+
+  test('only one panel is open at a time',async({page})=>{
+    await clickShadow(page,'[data-ico="open_right"]');
+    await clickShadow(page,'[data-ico="open_full"]');
+    expect((await panelGeo(page,'sec_right')).open).toBe(false);
+    expect((await panelGeo(page,'sec_full')).open).toBe(true);
+  });
+});

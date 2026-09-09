@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.7.1** (2026-09-08, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.8.0** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -68,7 +68,7 @@ and finally fully event-driven transitions (MutationObserver on HA's own DOM, no
 no timers). v4.6.3 also hardened the release pipeline itself after a silent asset-upload
 failure broke HACS installs.
 
-### v6.1 – v6.6 — calibration, vacuum widget, light glow — ✅ SHIPPED
+### v6.1 – v6.8 — calibration, vacuum widget, light glow, cockpit — ✅ SHIPPED
 
 | Version | Highlights |
 |---|---|
@@ -78,6 +78,7 @@ failure broke HACS installs.
 | **v6.6.0** | **`glows`** — light-spill layers blended onto the photo: colour from the light's own `rgb_color`/colour temperature, strength from its brightness, circle / ellipse / directional wash, optional flicker, GUI editor section with live falloff preview |
 | **v6.7.0** | **Overlay `transform:`** — an overlay moves with its entity (states map / numeric range / speed-driven spin), with `origin` as the hinge in % of the photo, optional `perspective`, and a GUI panel per overlay. Replaces the per-thing animation code every moving element used to need |
 | **v6.6.1** | Light glow editing surface — native colour picker + Auto, intensity slider, `min_brightness`/`animation_speed`/`anchor`/`transition` promoted to fields, and an un-blended Edit-mode chrome box per glow with drag + resize handles (geometry moved to plain `%` + `aspect-ratio`) |
+| **v6.8.0** | **Cockpit `sections:`** — pop-up panels of status/control tiles collected from across the whole card (or a single embedded card), opened via `open-section`; four placements, badge counting, template visibility, degradation instead of blank panels, and a GUI **Sections** tab + per-element Section select |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 
@@ -152,7 +153,15 @@ this release) gives the submission screenshots something finished to show off.
    [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) + [`docs/EDITOR.md`](docs/EDITOR.md),
    reflecting the v4 layout engine, cover control, light controls (sliders + switches), and the
    revalidated editor. Screenshots already exist in `screenshots/` and are current.
-1b. 🎯 **Live floorplan (v7 vision)** — one floorplan image with live mini room cards at absolute
+1a. **Cockpit — sections & panels** — user-defined section buckets filled by tagging elements in
+   rooms, rendered as panels over the image; the whole-house "cockpit" is a preset built from
+   them, not code. Full spec, closed decisions and phasing: [`COCKPIT_PLAN.md`](COCKPIT_PLAN.md).
+   - ✅ **v6.8.0 — shipped**: `sections:` + panels (four placements, tiles, `open-section`,
+     degradation rules, GUI Sections tab). See [`CHANGELOG.md`](CHANGELOG.md#680---2026-09-09).
+   - 🎯 **v6.9.0** — image tiles (`tile.image` + `tile.overlays`).
+   - 🎯 **v6.10.0** — onboarding automations.
+
+1b. 🅿️ **Live floorplan (v7 vision)** — one floorplan image with live mini room cards at absolute
    positions on it, reusing the `nav.live: full` mount/scale mechanism and `zoom` pan/zoom; click a
    room to enter it. Wants its own planning document (in the style of `NAV_LIVE_FULL_PLAN.md`)
    before any code.

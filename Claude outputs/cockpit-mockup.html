@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Room Overlay Card — koncept cockpitu</title>
+<style>
+:root{
+  --bg:#0b0e13; --card:#12161d; --panel:#161c25; --line:#252d38;
+  --txt:#e6edf3; --dim:#8b97a6; --acc:#58a6ff; --warm:#ffb46e;
+  --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+
+/* ---------- shell ---------- */
+#app{height:100%;display:flex;flex-direction:column}
+#viewport{flex:1;min-height:0;display:flex;justify-content:center;padding:16px;overflow:hidden}
+#cardwrap{width:100%;max-width:1600px;transition:max-width .25s ease}
+#cardwrap.narrow{max-width:430px}
+
+.ha-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  height:100%;display:flex;flex-direction:column;overflow:hidden}
+
+/* nav strip — exactly what the card has today */
+.nav{display:flex;gap:6px;padding:8px;flex:none;overflow-x:auto}
+.thumb{flex:none;width:104px;height:60px;border-radius:9px;position:relative;overflow:hidden;
+  border:1px solid var(--line);cursor:pointer;background:#1b2029}
+.thumb.narrow{width:74px;height:44px}
+.thumb.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.thumb .tn{position:absolute;left:5px;bottom:3px;font:600 9px/1.3 monospace;color:#e9f0f7;
+  text-shadow:0 1px 3px #000;letter-spacing:.03em}
+.thumb .tv{position:absolute;right:5px;top:3px;font:600 9px/1.3 monospace;color:#cfe0ee;text-shadow:0 1px 3px #000}
+.thumb .dots{position:absolute;left:5px;top:4px;display:flex;gap:3px}
+.dot{width:6px;height:6px;border-radius:50%;background:#3a4552;box-shadow:0 0 0 1px rgba(0,0,0,.5)}
+.dot.lit{background:var(--warm)}
+.dot.blind{background:#6ea8d8}
+.dot.open{background:var(--bad)}
+
+/* exception band — his waste-collection banner, generalised */
+.notice{flex:none;margin:0 8px 8px;padding:8px 12px;border-radius:10px;display:flex;gap:10px;
+  align-items:center;background:rgba(210,153,34,.12);border:1px solid rgba(210,153,34,.45);font-size:13px}
+.notice .ic{width:22px;height:22px;flex:none;border-radius:6px;background:rgba(210,153,34,.25);
+  display:grid;place-items:center;font-size:13px}
+.notice .pg{margin-left:auto;color:var(--dim);font:11px/1 monospace}
+
+/* stage = the house image + everything on it */
+.stage{position:relative;flex:1;min-height:0;margin:0 8px 8px;border-radius:10px;overflow:hidden;background:#0a0d12}
+.stage img.house{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+
+/* wow layer: labels + glows placed on the image, same as today's card */
+.chip{position:absolute;transform:translate(-50%,-50%);background:rgba(8,11,16,.78);
+  border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:4px 9px;
+  font:600 12px/1.3 -apple-system,sans-serif;white-space:nowrap;backdrop-filter:blur(4px);
+  box-shadow:0 3px 12px rgba(0,0,0,.5)}
+.chip small{display:block;font-weight:500;font-size:10px;color:var(--dim)}
+.glow{position:absolute;transform:translate(-50%,-50%);border-radius:50%;pointer-events:none;
+  mix-blend-mode:screen;transition:opacity .6s ease}
+
+/* console — the row of panel openers */
+.console{position:absolute;left:50%;bottom:32px;transform:translateX(-50%);display:flex;gap:10px;
+  padding:8px 10px;border-radius:999px;background:rgba(8,11,16,.72);border:1px solid rgba(255,255,255,.12);
+  backdrop-filter:blur(8px);z-index:30}
+.cbtn{width:46px;height:46px;border-radius:50%;border:1px solid rgba(255,255,255,.14);
+  background:rgba(255,255,255,.05);color:var(--txt);cursor:pointer;display:grid;place-items:center;
+  font-size:19px;position:relative;transition:.15s}
+.cbtn:hover{background:rgba(88,166,255,.18);border-color:var(--acc)}
+.cbtn.on{background:rgba(88,166,255,.25);border-color:var(--acc);color:#cfe6ff}
+.cbtn .badge{position:absolute;top:-2px;right:-2px;min-width:17px;height:17px;border-radius:9px;
+  background:var(--warn);color:#1b1400;font:700 10px/17px monospace;text-align:center;padding:0 4px}
+.cbtn .cap{position:absolute;top:52px;left:50%;transform:translateX(-50%);font-size:10px;color:var(--dim);white-space:nowrap}
+
+/* ---------- panel ---------- */
+.backdrop{position:absolute;inset:0;background:rgba(4,6,10,.55);backdrop-filter:blur(2px);
+  opacity:0;pointer-events:none;transition:opacity .22s ease;z-index:40}
+.backdrop.on{opacity:1;pointer-events:auto}
+.panel{position:absolute;z-index:50;background:var(--panel);border:1px solid var(--line);
+  display:flex;flex-direction:column;box-shadow:0 18px 60px rgba(0,0,0,.6);
+  opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease}
+.panel.on{opacity:1;pointer-events:auto}
+/* placements */
+.panel[data-place="sheet-right"]{top:0;right:0;bottom:0;width:min(420px,46%);
+  border-radius:14px 0 0 14px;transform:translateX(16px)}
+.panel[data-place="sheet-bottom"]{left:0;right:0;bottom:0;height:min(62%,520px);
+  border-radius:14px 14px 0 0;transform:translateY(16px)}
+.panel[data-place="full"]{inset:10px;border-radius:12px;transform:scale(.985)}
+.panel[data-place="dialog"]{top:50%;left:50%;width:min(620px,86%);max-height:82%;
+  border-radius:14px;transform:translate(-50%,-50%) scale(.97)}
+.panel.on[data-place="sheet-right"],.panel.on[data-place="sheet-bottom"]{transform:none}
+.panel.on[data-place="full"]{transform:scale(1)}
+.panel.on[data-place="dialog"]{transform:translate(-50%,-50%) scale(1)}
+
+.phead{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.phead .pic{width:30px;height:30px;border-radius:8px;background:rgba(88,166,255,.16);color:var(--acc);
+  display:grid;place-items:center;font-size:16px}
+.phead h2{margin:0;font-size:15px;font-weight:600;letter-spacing:.01em}
+.phead .sub{font-size:11px;color:var(--dim);margin-left:2px}
+.pclose{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);
+  background:none;color:var(--dim);cursor:pointer;font-size:15px}
+.pclose:hover{color:var(--txt);border-color:var(--acc)}
+.pbody{flex:1;min-height:0;overflow:auto;padding:12px;display:grid;gap:10px;align-content:start}
+.pbody.g2{grid-template-columns:1fr 1fr}
+.pbody.g1{grid-template-columns:1fr}
+@media(max-width:640px){.pbody.g2{grid-template-columns:1fr}}
+
+/* tiles = ordinary HA cards would sit here */
+.tile{background:#1b222c;border:1px solid var(--line);border-radius:11px;padding:11px 12px}
+.tile .th{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.tile .ti{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;font-size:14px;
+  background:rgba(255,255,255,.06)}
+.tile .tt{font-weight:600;font-size:13px}
+.tile .ts{margin-left:auto;font-size:11px;color:var(--dim)}
+.tile .big{font-size:20px;font-weight:650;letter-spacing:-.01em}
+.tile .big span{font-size:12px;font-weight:500;color:var(--dim)}
+.bar{height:6px;border-radius:3px;background:#2a3441;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:3px}
+.bar.done i{background:var(--ok)}
+.state{font-size:11px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--dim)}
+.state.run{color:#9fd0ff;border-color:#2c4a6b;background:rgba(88,166,255,.1)}
+.state.done{color:#8ee0a1;border-color:#245c33;background:rgba(63,185,80,.1)}
+.state.idle{color:var(--dim)}
+.row{display:flex;align-items:center;gap:9px}
+.mini{width:38px;height:38px;border-radius:8px;background:#26303c;flex:none;display:grid;place-items:center;font-size:16px}
+.ctrls{display:flex;gap:5px;margin-left:auto}
+.ctrls button{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:none;
+  color:var(--txt);cursor:pointer;font-size:13px}
+.ctrls button:hover{border-color:var(--acc);color:var(--acc)}
+.slider{height:5px;border-radius:3px;background:#2a3441;position:relative;margin-top:9px}
+.slider i{position:absolute;inset:0 auto 0 0;background:var(--acc);border-radius:3px}
+.slider b{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:#dce7f2;
+  transform:translate(-50%,-50%);box-shadow:0 1px 4px #000}
+.modes{display:flex;gap:6px;flex-wrap:wrap}
+.modes button{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:none;
+  color:var(--dim);cursor:pointer;font-size:12px}
+.modes button.on{border-color:var(--acc);background:rgba(88,166,255,.14);color:#cfe6ff}
+.hint{font-size:11px;color:var(--dim);grid-column:1/-1;margin:2px 0 0}
+/* device tile = a small photo of the actual thing, live, not a text row */
+.dtile{grid-column:span 1;background:#1b222c;border:1px solid var(--line);border-radius:12px;
+  overflow:hidden;cursor:pointer;display:flex;flex-direction:column;transition:.15s}
+.dtile:hover{border-color:var(--acc);transform:translateY(-1px)}
+.dimg{position:relative;height:104px;background:#141a22;display:grid;place-items:center;overflow:hidden}
+.dimg svg{width:88px;height:88px}
+.dimg .ov{position:absolute;inset:0;pointer-events:none}
+.dmeta{padding:9px 11px;display:flex;flex-direction:column;gap:5px}
+.dname{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px}
+.dname .state{margin-left:auto}
+.dbig{font-size:17px;font-weight:650}
+.dbig span{font-size:11px;font-weight:500;color:var(--dim)}
+.darrow{position:absolute;right:8px;top:8px;width:22px;height:22px;border-radius:7px;
+  background:rgba(8,11,16,.7);border:1px solid rgba(255,255,255,.16);color:#cfe0ee;
+  display:grid;place-items:center;font-size:13px}
+.quick{display:flex;gap:5px;margin-top:2px}
+.quick button{flex:1;padding:5px 0;border-radius:7px;border:1px solid var(--line);background:none;
+  color:var(--txt);cursor:pointer;font-size:11px}
+.quick button:hover{border-color:var(--acc);color:var(--acc)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rot{transform-origin:50% 50%;animation:spin 2.6s linear infinite}
+.rot.fast{animation-duration:.9s}
+.pulse{animation:ph 2.2s ease-in-out infinite}
+@keyframes ph{0%,100%{opacity:.35}50%{opacity:.9}}
+
+/* level 2 — the full controller, his existing subview */
+.lvl2{position:absolute;inset:0;background:var(--panel);display:flex;flex-direction:column;
+  transform:translateX(14px);opacity:0;pointer-events:none;transition:.2s ease;z-index:5}
+.lvl2.on{transform:none;opacity:1;pointer-events:auto}
+.l2head{flex:none;display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.l2back{width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:none;
+  color:var(--dim);cursor:pointer;font-size:15px}
+.l2back:hover{color:var(--txt);border-color:var(--acc)}
+.l2body{flex:1;min-height:0;overflow:auto;padding:12px}
+.foreign{grid-column:1/-1;border:1px dashed #35414f;border-radius:11px;padding:16px;text-align:center;color:var(--dim);font-size:12px}
+.foreign b{color:var(--txt);display:block;margin-bottom:4px;font-size:13px}
+
+/* ---------- dev bar ---------- */
+#bar{flex:none;border-top:1px solid var(--line);background:#0f131a;padding:9px 14px;
+  display:flex;gap:22px;align-items:center;flex-wrap:wrap;font-size:12px}
+#bar b{color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.07em;font-size:10px}
+#bar .grp{display:flex;gap:6px;align-items:center}
+#bar button{padding:5px 11px;border-radius:8px;border:1px solid var(--line);background:none;
+  color:var(--txt);cursor:pointer;font-size:12px}
+#bar button.on{border-color:var(--acc);background:rgba(88,166,255,.14);color:#cfe6ff}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewport"><div id="cardwrap"><div class="ha-card">
+
+    <div class="nav" id="nav"></div>
+    <div class="notice">
+      <div class="ic">🗑</div>
+      <div><b>Zítra svoz</b> — multikomoditní sběr</div>
+      <div class="pg">1/2</div>
+    </div>
+
+    <div class="stage" id="stage">
+      <img class="house" id="house" alt="">
+      <div class="glow" id="g1"></div>
+      <div class="glow" id="g2"></div>
+
+      <div class="chip" style="top:26%;left:26%">21,4 °C<small>Obývák</small></div>
+      <div class="chip" style="top:22%;left:70%">19,8 °C<small>Ložnice</small></div>
+      <div class="chip" style="top:64%;left:22%">2,1 kW<small>Odběr</small></div>
+      <div class="chip" style="top:60%;left:72%">61 °C<small>Bojler</small></div>
+
+      <div class="console" id="console"></div>
+
+      <div class="backdrop" id="backdrop"></div>
+      <div class="panel" id="panel" data-place="sheet-right">
+        <div class="phead">
+          <div class="pic" id="p-ic">◻</div>
+          <div><h2 id="p-title">Panel</h2><div class="sub" id="p-sub"></div></div>
+          <button class="pclose" id="p-close">✕</button>
+        </div>
+        <div class="pbody g2" id="p-body"></div>
+        <div class="lvl2" id="lvl2"><div class="l2head"><button class="l2back" id="l2-back">‹</button><div><h2 id="l2-title" style="margin:0;font-size:15px;font-weight:600"></h2><div class="sub" id="l2-sub"></div></div></div><div class="l2body" id="l2-body"></div></div>
+      </div>
+    </div>
+
+  </div></div></div>
+
+  <div id="bar">
+    <div class="grp"><b>Umístění</b>
+      <button data-place="sheet-right" class="on">boční šuplík</button>
+      <button data-place="full">celá plocha</button>
+      <button data-place="dialog">dialog</button>
+      <button data-place="sheet-bottom">zespodu</button>
+    </div>
+    <div class="grp"><b>Šířka</b>
+      <button id="w-wide" class="on">desktop</button>
+      <button id="w-narrow">mobil</button>
+    </div>
+    <div class="grp"><b>Světla</b>
+      <button id="lights" class="on">rozsvíceno</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+const $=s=>document.querySelector(s);
+const svg=(w,h,inner)=>'data:image/svg+xml;utf8,'+encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'">'+inner+'</svg>');
+
+/* ------------------------------------------------------------------ *
+ * Placeholder house. THIS IS THE PART THE USER SUPPLIES — a photo, an
+ * AI render, a floorplan, anything. Everything else on the stage is
+ * card config.
+ * ------------------------------------------------------------------ */
+const house=svg(1600,900,
+  '<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">'+
+  '<stop offset="0" stop-color="#101a26"/><stop offset="1" stop-color="#0a0f16"/></linearGradient>'+
+  '<linearGradient id="fl" x1="0" y1="0" x2="0" y2="1">'+
+  '<stop offset="0" stop-color="#2a323d"/><stop offset="1" stop-color="#1d242d"/></linearGradient></defs>'+
+  '<rect width="1600" height="900" fill="url(#sky)"/>'+
+  // ground
+  '<rect y="770" width="1600" height="130" fill="#131a22"/>'+
+  // house body
+  '<rect x="250" y="180" width="1100" height="600" fill="url(#fl)" stroke="#3d4a58" stroke-width="3"/>'+
+  // roof
+  '<path d="M220 180 L800 60 L1380 180 Z" fill="#232b35" stroke="#3d4a58" stroke-width="3"/>'+
+  // floor divider
+  '<rect x="250" y="470" width="1100" height="8" fill="#3d4a58"/>'+
+  // room partitions
+  '<rect x="790" y="180" width="8" height="290" fill="#3d4a58"/>'+
+  '<rect x="640" y="478" width="8" height="302" fill="#3d4a58"/>'+
+  '<rect x="1030" y="478" width="8" height="302" fill="#3d4a58"/>'+
+  // upstairs left: living
+  '<rect x="300" y="330" width="330" height="120" rx="10" fill="#39434f"/>'+
+  '<rect x="660" y="360" width="110" height="90" rx="6" fill="#3f4a57"/>'+
+  // upstairs right: bedroom
+  '<rect x="850" y="340" width="290" height="110" rx="10" fill="#39434f"/>'+
+  '<rect x="1180" y="300" width="120" height="150" rx="8" fill="#2f3843"/>'+
+  // downstairs left: kitchen
+  '<rect x="290" y="600" width="320" height="90" rx="8" fill="#3a444f"/>'+
+  '<rect x="300" y="520" width="300" height="60" rx="6" fill="#333c46"/>'+
+  // downstairs mid: bath
+  '<rect x="690" y="590" width="120" height="110" rx="10" fill="#39434f"/>'+
+  '<rect x="850" y="560" width="140" height="140" rx="10" fill="#333c46"/>'+
+  // downstairs right: utility + boiler
+  '<rect x="1080" y="540" width="90" height="170" rx="8" fill="#3a444f"/>'+
+  '<rect x="1200" y="600" width="110" height="110" rx="8" fill="#39434f"/>'+
+  // windows
+  '<rect x="252" y="250" width="60" height="90" fill="#16222e"/>'+
+  '<rect x="1288" y="250" width="60" height="90" fill="#16222e"/>'+
+  '<rect x="252" y="560" width="60" height="90" fill="#16222e"/>'
+);
+$('#house').src=house;
+
+/* glows — the card already does this */
+function setGlow(el,top,left,size,color){
+  el.style.top=top; el.style.left=left; el.style.width=size; el.style.aspectRatio='1';
+  el.style.background='radial-gradient(circle closest-side,'+color+' 0%, rgba(0,0,0,0) 72%)';
+}
+setGlow($('#g1'),'40%','28%','26%','rgba(255,180,110,.85)');
+setGlow($('#g2'),'68%','26%','22%','rgba(255,214,160,.7)');
+
+/* ------------------------------------------------------------------ *
+ * nav — rooms, exactly as today, plus the house entry
+ * ------------------------------------------------------------------ */
+const ROOMS=[
+  {n:'Dům',   t:'',        hub:true, dots:[]},
+  {n:'Obývák',t:'21,4°',   dots:['lit']},
+  {n:'Ložnice',t:'19,8°',  dots:['blind']},
+  {n:'Kuchyň',t:'22,6°',   dots:['lit','open']},
+  {n:'Koupelna',t:'23,9°', dots:[]},
+  {n:'Předsíň',t:'20,1°',  dots:['lit']}
+];
+const nav=$('#nav');
+ROOMS.forEach((r,i)=>{
+  const d=document.createElement('div');
+  d.className='thumb'+(i===0?' on':'');
+  d.style.background=i===0?'#1a222c':'linear-gradient(135deg,#232c37,#171d25)';
+  d.innerHTML='<div class="dots">'+r.dots.map(c=>'<div class="dot '+c+'"></div>').join('')+'</div>'+
+    (r.t?'<div class="tv">'+r.t+'</div>':'')+'<div class="tn">'+r.n+'</div>';
+  nav.appendChild(d);
+});
+
+/* ------------------------------------------------------------------ *
+ * The four sections. THIS is what we had to invent.
+ * ------------------------------------------------------------------ */
+const tile=(icon,title,side,body)=>
+  '<div class="tile"><div class="th"><div class="ti">'+icon+'</div><div class="tt">'+title+'</div>'+
+  (side?'<div class="ts">'+side+'</div>':'')+'</div>'+body+'</div>';
+
+const ART={
+  washer:(run)=>'<svg viewBox="0 0 100 100"><rect x="14" y="10" width="72" height="80" rx="9" fill="#4a5563"/>'+
+    '<rect x="14" y="10" width="72" height="16" rx="7" fill="#3b4552"/>'+
+    '<circle cx="24" cy="18" r="3" fill="'+(run?'#3fb950':'#5d6a79')+'"/>'+
+    '<circle cx="50" cy="58" r="25" fill="#2b333d"/><circle cx="50" cy="58" r="20" fill="#1a2027"/>'+
+    '<g class="rot'+(run?'':' stop')+'" style="transform-origin:50px 58px;'+(run?'':'animation:none')+'">'+
+    '<circle cx="50" cy="42" r="3.2" fill="#54626f"/><circle cx="64" cy="58" r="3.2" fill="#54626f"/>'+
+    '<circle cx="50" cy="74" r="3.2" fill="#54626f"/><circle cx="36" cy="58" r="3.2" fill="#54626f"/></g></svg>',
+  dishwasher:(done)=>'<svg viewBox="0 0 100 100"><rect x="16" y="8" width="68" height="84" rx="8" fill="#4a5563"/>'+
+    '<rect x="22" y="26" width="56" height="60" rx="5" fill="#2b333d"/>'+
+    '<rect x="22" y="14" width="56" height="7" rx="3" fill="#3b4552"/>'+
+    '<circle cx="72" cy="17" r="3" fill="'+(done?'#3fb950':'#5d6a79')+'"/>'+
+    '<rect x="30" y="36" width="40" height="3" rx="1.5" fill="#3d4753"/>'+
+    '<rect x="30" y="50" width="40" height="3" rx="1.5" fill="#3d4753"/>'+
+    '<rect x="30" y="64" width="40" height="3" rx="1.5" fill="#3d4753"/></svg>',
+  oven:(on)=>'<svg viewBox="0 0 100 100"><rect x="12" y="14" width="76" height="74" rx="8" fill="#4a5563"/>'+
+    '<rect x="20" y="34" width="60" height="46" rx="5" fill="'+(on?'#5a3418':'#232a33')+'"/>'+
+    (on?'<rect x="20" y="34" width="60" height="46" rx="5" fill="#ff8a3c" opacity=".5" class="pulse"/>':'')+
+    '<rect x="20" y="20" width="60" height="8" rx="4" fill="#3b4552"/>'+
+    '<circle cx="72" cy="24" r="3" fill="'+(on?'#ffb46e':'#5d6a79')+'"/></svg>',
+  dryer:()=>'<svg viewBox="0 0 100 100"><rect x="14" y="10" width="72" height="80" rx="9" fill="#454f5c"/>'+
+    '<rect x="14" y="10" width="72" height="16" rx="7" fill="#39424e"/>'+
+    '<circle cx="50" cy="58" r="24" fill="#2b333d"/><circle cx="50" cy="58" r="19" fill="#1a2027"/></svg>',
+  vacuum:(run)=>'<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="34" fill="#4a5563"/>'+
+    '<circle cx="50" cy="50" r="27" fill="#39424e"/>'+
+    '<g class="rot'+(run?' fast':'')+'" style="transform-origin:50px 50px;'+(run?'':'animation:none')+'">'+
+    '<rect x="48.5" y="28" width="3" height="44" rx="1.5" fill="#5d6a79"/>'+
+    '<rect x="28" y="48.5" width="44" height="3" rx="1.5" fill="#5d6a79"/></g>'+
+    '<circle cx="50" cy="50" r="7" fill="#2b333d"/>'+
+    '<circle cx="50" cy="22" r="4" fill="'+(run?'#58a6ff':'#5d6a79')+'"/></svg>',
+  tv:()=>'<svg viewBox="0 0 100 100"><rect x="8" y="20" width="84" height="52" rx="5" fill="#2b333d"/>'+
+    '<rect x="12" y="24" width="76" height="44" rx="3" fill="#14304a"/>'+
+    '<circle cx="38" cy="44" r="11" fill="#1f4a6e"/><rect x="52" y="36" width="26" height="4" rx="2" fill="#28587f"/>'+
+    '<rect x="52" y="46" width="18" height="4" rx="2" fill="#28587f"/>'+
+    '<rect x="40" y="72" width="20" height="4" fill="#3b4552"/><rect x="30" y="76" width="40" height="4" rx="2" fill="#3b4552"/></svg>',
+  speaker:()=>'<svg viewBox="0 0 100 100"><rect x="28" y="10" width="44" height="80" rx="8" fill="#454f5c"/>'+
+    '<circle cx="50" cy="34" r="12" fill="#2b333d"/><circle cx="50" cy="34" r="6" fill="#1a2027"/>'+
+    '<circle cx="50" cy="66" r="16" fill="#2b333d"/><circle cx="50" cy="66" r="8" fill="#1a2027"/></svg>'
+};
+
+const dtile=(key,art,name,state,stateCls,big,bar,quick)=>
+  '<div class="dtile" data-drill="'+key+'"><div class="dimg">'+art+'<div class="darrow">›</div></div>'+
+  '<div class="dmeta"><div class="dname">'+name+'<span class="state '+stateCls+'">'+state+'</span></div>'+
+  (big?'<div class="dbig">'+big+'</div>':'')+
+  (bar!=null?'<div class="bar'+(bar>=100?' done':'')+'"><i style="width:'+bar+'%"></i></div>':'')+
+  (quick?'<div class="quick">'+quick+'</div>':'')+'</div></div>';
+
+const PANELS={
+  appliances:{
+    icon:'🧺', title:'Spotřebiče', sub:'stroje, které mají cyklus', cols:'g2', badge:1,
+    body:
+      dtile('washer',ART.washer(true),'Pračka','pere','run','38 <span>min zbývá</span>',52)+
+      dtile('dishwasher',ART.dishwasher(true),'Myčka','hotovo','done','vyndat',100)+
+      dtile('oven',ART.oven(false),'Trouba','vypnuto','idle','— <span>°C</span>',null)+
+      dtile('dryer',ART.dryer(),'Sušička','stojí','idle','prázdná',null)+
+      '<p class="hint">Nečteš „pračka" — vidíš pračku, které se točí buben. Obrázek dodá uživatel, pohyb dělá transform engine (v6.7.0). Klik na dlaždici otevře plný ovladač.</p>'
+  },
+  vacuums:{
+    icon:'🤖', title:'Vysavače', sub:'kde jsou a co dělají', cols:'g2',
+    body:
+      dtile('vac1',ART.vacuum(true),'Roborock','uklízí kuchyň','run','62 % · 24 min',62,
+        '<button>Pauza</button><button>Do doku</button>')+
+      dtile('vac2',ART.vacuum(false),'Dreame','v doku','idle','100 % nabito',null,
+        '<button>Start</button><button>Bod</button>')+
+      '<p class="hint">Vysavač je jediný spotřebič, který je <b>prostorový</b> — proto vlastní sekce. Jeho poloha může svítit i na obrázku domu.</p>'
+  },
+  media:{
+    icon:'🎬', title:'Multimédia', sub:'co kde hraje', cols:'g2',
+    body:
+      dtile('tv',ART.tv(),'TV Obývák','přehrává','run','Dune: Part Two <span>· 01:12</span>',44,
+        '<button>⏮</button><button>⏸</button><button>⏭</button>')+
+      dtile('sonos',ART.speaker(),'Sonos Kuchyň','hraje','run','Radiohead <span>· 34 %</span>',34,
+        '<button>⏸</button><button>🔇</button>')+
+      '<div class="modes" style="grid-column:1/-1"><button>Ztlumit vše</button><button>Vypnout vše</button></div>'+
+      '<p class="hint">Klik na obrazovku otevře tvůj dálkový ovladač — tedy universal-remote-card, tak jak ji máš dneska.</p>'
+  },
+  heating:{
+    icon:'🌡', title:'Topení', sub:'srovnání místností + režim domu', cols:'g2',
+    body:
+      '<div class="modes" style="grid-column:1/-1;margin-bottom:2px">'+
+      '<button class="on">Doma</button><button>Pryč</button><button>Noc</button><button>Útlum</button></div>'+
+      tile('🛋','Obývák','21,4 → 22,0','<div class="slider"><i style="width:62%"></i><b style="left:62%"></b></div>'+
+        '<div class="quick"><button>−</button><button>+</button></div>')+
+      tile('🛏','Ložnice','19,8 → 19,0','<div class="slider"><i style="width:38%"></i><b style="left:38%"></b></div>'+
+        '<div class="quick"><button>−</button><button>+</button></div>')+
+      tile('🍳','Kuchyň','22,6 → 22,0','<div class="slider"><i style="width:66%"></i><b style="left:66%"></b></div>'+
+        '<div class="quick"><button>−</button><button>+</button></div>')+
+      tile('🚿','Koupelna','23,9 → 24,0','<div class="slider"><i style="width:74%"></i><b style="left:74%"></b></div>'+
+        '<div class="quick"><button>−</button><button>+</button></div>')+
+      '<p class="hint">Cílová teplota jde nastavit rovnou tady — to je „co umíme nativně". Na plný rozvrh se proklikneš dál.</p>'
+  },
+  electricity:{
+    icon:'⚡', title:'Elektřina', sub:'vložená electricity-panel-card', cols:'g1',
+    body:
+      '<div class="foreign"><b>custom:electricity-panel-card</b>'+
+      'Panel jen vytvoří místo a velikost. Obsah je tvoje existující karta, beze změny.<br>'+
+      'Když ji uživatel nemá nainstalovanou, vykreslí se tady tahle hláška s odkazem — ne prázdno.</div>'
+  }
+};
+
+/* level 2 — the full controller behind a tile */
+const DRILL={
+  washer:{t:'Pračka — ovladač',s:'tvůj dnešní subview',b:'Program, teplota, odložený start, historie cyklů.'},
+  dishwasher:{t:'Myčka — ovladač',s:'tvůj dnešní subview',b:'Program, sůl, leštidlo, odložený start.'},
+  oven:{t:'Trouba — ovladač',s:'tvůj dnešní subview',b:'Režim, teplota, timer, sonda.'},
+  dryer:{t:'Sušička — ovladač',s:'tvůj dnešní subview',b:'Program, zbytková vlhkost.'},
+  vac1:{t:'Roborock — ovladač',s:'custom:anyvac-card',b:'Mapa, zóny, sací výkon, plán úklidu.'},
+  vac2:{t:'Dreame — ovladač',s:'custom:anyvac-card',b:'Mapa, zóny, sací výkon, plán úklidu.'},
+  tv:{t:'TV Obývák — ovladač',s:'custom:universal-remote-card',b:'Kompletní dálkový ovladač, zdroje, aplikace.'},
+  sonos:{t:'Sonos Kuchyň — ovladač',s:'media karta',b:'Fronta, skupiny reproduktorů, ekvalizér.'}
+};
+
+/* ------------------------------------------------------------------ *
+ * console + panel behaviour
+ * ------------------------------------------------------------------ */
+const order=[['appliances','Spotřebiče'],['vacuums','Vysavače'],['media','Multimédia'],['heating','Topení'],['electricity','Elektřina']];
+const cons=$('#console'), panel=$('#panel'), backdrop=$('#backdrop');
+let open=null, place='sheet-right';
+
+order.forEach(([k,label])=>{
+  const b=document.createElement('button');
+  b.className='cbtn'; b.dataset.k=k;
+  b.innerHTML=PANELS[k].icon+(PANELS[k].badge?'<span class="badge">'+PANELS[k].badge+'</span>':'')+
+    '<span class="cap">'+label+'</span>';
+  b.addEventListener('click',()=>openPanel(k===open?null:k));
+  cons.appendChild(b);
+});
+
+function openPanel(k){
+  open=k;
+  cons.querySelectorAll('.cbtn').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+  if(!k){panel.classList.remove('on');backdrop.classList.remove('on');return;}
+  const p=PANELS[k];
+  $('#p-ic').textContent=p.icon;
+  $('#p-title').textContent=p.title;
+  $('#p-sub').textContent=p.sub;
+  const body=$('#p-body');
+  body.className='pbody '+(p.cols||'g2');
+  body.innerHTML=p.body;
+  panel.dataset.place=place;
+  lvl2.classList.remove('on');
+  panel.classList.add('on'); backdrop.classList.add('on');
+}
+const lvl2=$('#lvl2');
+function closeL2(){lvl2.classList.remove('on');}
+$('#p-body').addEventListener('click',e=>{
+  const t=e.target.closest('.dtile'); if(!t)return;
+  if(e.target.closest('.quick'))return;              // quick actions stay in the panel
+  const d=DRILL[t.dataset.drill]; if(!d)return;
+  $('#l2-title').textContent=d.t; $('#l2-sub').textContent=d.s;
+  $('#l2-body').innerHTML='<div class="foreign"><b>'+d.s+'</b>'+d.b+
+    '<br><br>Tohle je stránka, kterou už dneska máš. Panel na ni jen odkazuje — buď ji vloží sem, nebo použije <code>navigate</code>.</div>';
+  lvl2.classList.add('on');
+});
+$('#l2-back').addEventListener('click',closeL2);
+$('#p-close').addEventListener('click',()=>{closeL2();openPanel(null);});
+backdrop.addEventListener('click',()=>{closeL2();openPanel(null);});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(lvl2.classList.contains('on'))closeL2();else openPanel(null);}});
+
+/* dev bar */
+document.querySelectorAll('#bar [data-place]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    document.querySelectorAll('#bar [data-place]').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); place=b.dataset.place; panel.dataset.place=place;
+    if(open){panel.classList.remove('on');requestAnimationFrame(()=>requestAnimationFrame(()=>panel.classList.add('on')));}
+  });
+});
+$('#w-wide').addEventListener('click',()=>{
+  $('#cardwrap').classList.remove('narrow');$('#w-wide').classList.add('on');$('#w-narrow').classList.remove('on');
+  document.querySelectorAll('.thumb').forEach(t=>t.classList.remove('narrow'));
+});
+$('#w-narrow').addEventListener('click',()=>{
+  $('#cardwrap').classList.add('narrow');$('#w-narrow').classList.add('on');$('#w-wide').classList.remove('on');
+  document.querySelectorAll('.thumb').forEach(t=>t.classList.add('narrow'));
+});
+const lb=$('#lights');
+lb.addEventListener('click',()=>{
+  const on=lb.classList.toggle('on');
+  lb.textContent=on?'rozsvíceno':'zhasnuto';
+  $('#g1').style.opacity=on?'1':'0';
+  $('#g2').style.opacity=on?'1':'0';
+});
+
+window.__mock={openPanel:openPanel,setPlace:p=>{place=p;panel.dataset.place=p;if(open)openPanel(open);},
+  narrow:v=>{$('#cardwrap').classList.toggle('narrow',v);document.querySelectorAll('.thumb').forEach(t=>t.classList.toggle('narrow',v));}};
+})();
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.7.1';
+const ROC_VERSION='6.8.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -519,6 +519,44 @@ function cfgKey(c){
 // nav that DROPS the URL hash); more reliable than url_sync for this purpose.
 const ROC_ROOM_MEM=new Map();
 
+// ----- Cockpit sections: collection engine (v6.8.0) -------------------------
+// Sections are user-defined buckets (COCKPIT_PLAN.md D1) filled by tagging
+// existing zones/icons/elements/blinds with `section: <id>` (D2) — single
+// source of truth, no parallel registry. Walks every room in room-then-
+// element order and groups matches by section id, preserving the order
+// `sections:` itself was declared in. Pure function of the config; the card
+// caches the result per config object (see RoomOverlayCard#_getSections) so
+// it never runs on a state tick, only when _render() is asked to rebuild.
+const ROC_SECTION_TAG_KINDS=['zones','icons','elements','blinds'];
+function rocCollectSections(cAll){
+  const defs=Array.isArray(cAll&&cAll.sections)?cAll.sections:[];
+  if(!defs.length)return[];
+  const rooms=Array.isArray(cAll.rooms)&&cAll.rooms.length?cAll.rooms:[cAll];
+  const bySec={};
+  defs.forEach(function(d){if(d&&d.id&&!bySec[d.id])bySec[d.id]=[];});
+  rooms.forEach(function(room){
+    ROC_SECTION_TAG_KINDS.forEach(function(kind){
+      (room[kind]||[]).forEach(function(item){
+        if(item&&item.section&&bySec[item.section])
+          bySec[item.section].push({kind:kind,item:item,room:room});
+      });
+    });
+  });
+  return defs.filter(function(d){return d&&d.id;}).map(function(d){return{def:d,tiles:bySec[d.id]||[]};});
+}
+// A tile's effective display fields, defaulted from the element it is
+// attached to when no `tile:` block (or an incomplete one) is given (§3.2:
+// "tile: is optional. Without it, the element is collected with sensible
+// defaults derived from its own id, icon and entity.").
+function rocTileDef(entry){
+  const it=entry.item,t=(it&&it.tile)||{};
+  const out=Object.assign({},t);
+  if(out.name===undefined)out.name=it.id||'';
+  if(out.entity===undefined)out.entity=it.entity;
+  if(out.icon===undefined)out.icon=it.icon||'mdi:help-box';
+  return out;
+}
+
 function evalCond(c,s){
   const e=s[c.entity];if(!e)return false;
   const sv=c.attribute!==undefined?String(e.attributes[c.attribute]??''): e.state,nv=parseFloat(sv);let r=true;
@@ -934,6 +972,7 @@ class RoomOverlayCard extends HTMLElement{
     this._rafPending=false;this._relevantEntities=null;this._relevantAttrSources=null;this._prevStates={};
     this._io=null;this._ro=null;this._visible=true;this._testFlipped=false;this._lblEls={};this._gaugeEls={};
     this._groupState={};this._grpPanelEls={};
+    this._sectionOpen=null;this._secCfgRef=null;this._secCache=[];this._secPanelEls={};this._secBadgeEls={};this._secTileEls={};this._secCardEls={};this._secVisMap={};this._secKeyHandler=null;
     this._selectedTM=null;this._tmKeyHandler=null;
     this._lcEls=[];this._lcCfg=null;this._lcPrevCol=null;this._lcToggles=[];
     this._bcontEls={};this._wxEl=null;this._camTimer=null;
@@ -985,6 +1024,7 @@ class RoomOverlayCard extends HTMLElement{
     // Embedded cards do their own change detection — always forward hass
     // (even while off-screen, so they're current the moment the card scrolls back)
     for(const k in this._cardEls){try{this._cardEls[k].hass=h;}catch(_){}}
+    for(const k in(this._secCardEls||{})){try{this._secCardEls[k].hass=h;}catch(_){}}
     for(const el of(this._navCardEls||[]))try{el.hass=h;}catch(_){}
     for(const ri in(this._navMiniEls||{}))try{this._navMiniEls[ri].el.hass=h;}catch(_){}
     for(const el of(this._stripCardEls||[]))try{el.hass=h;}catch(_){}
@@ -1660,6 +1700,138 @@ class RoomOverlayCard extends HTMLElement{
     this._requestPin('window-resize');this._requestLayout();this._applyResizeStyles();
   }
 
+  // Collected sections, cached by config object identity — _render() runs
+  // on every room switch (see _switchRoom) but the collection only needs to
+  // change when setConfig() actually assigns a new config.
+  _getSections(cAll){
+    if(this._secCfgRef===cAll)return this._secCache;
+    this._secCfgRef=cAll;
+    this._secCache=rocCollectSections(cAll);
+    return this._secCache;
+  }
+
+  // ----- Cockpit sections: open/close + live tile state (v6.8.0) -----------
+  // One panel open at a time (COCKPIT_PLAN.md D7); closing the view (room
+  // switch) closes it too — see _switchRoom.
+  _openSection(id){
+    const secs=this._getSections(this._config);
+    if(!secs.some(function(sx){return sx.def.id===id;}))return;
+    if(this._secVisMap&&this._secVisMap[id]===false)return; // visible_template says hidden
+    this._sectionOpen=id;
+    this._applySectionOpenState();
+    if(!this._secKeyHandler){
+      const self=this;
+      this._secKeyHandler=function(e){if(e.key==='Escape'&&self._sectionOpen)self._closeSection();};
+      document.addEventListener('keydown',this._secKeyHandler);
+    }
+    const pEl=this._secPanelEls&&this._secPanelEls[id];
+    if(pEl){const btn=pEl.querySelector('.roc-panel-close');if(btn)try{btn.focus();}catch(_){}}
+    this._updateSectionTiles();
+  }
+  _closeSection(){
+    if(!this._sectionOpen)return;
+    this._sectionOpen=null;
+    this._applySectionOpenState();
+    if(this._secKeyHandler){document.removeEventListener('keydown',this._secKeyHandler);this._secKeyHandler=null;}
+  }
+  _applySectionOpenState(){
+    if(this._secPanelEls)for(const id in this._secPanelEls){
+      const pEl=this._secPanelEls[id];if(pEl)pEl.classList.toggle('open',id===this._sectionOpen);
+    }
+    const backdropEl=this.shadowRoot&&this.shadowRoot.querySelector('[data-section-backdrop]');
+    if(backdropEl)backdropEl.classList.toggle('open',!!this._sectionOpen);
+  }
+  // Patches live entity-derived tile content (state/value default, progress,
+  // unavailable, active-state icon animation, header badge). Gated on a panel
+  // actually being open — collection + skeleton already happened in _render(),
+  // this only runs per hass tick while a user is looking at it (COCKPIT_PLAN.md
+  // kap.4: "the panel body is built once per open, not per state tick").
+  // `state`/`value` given as a `{{ }}` template are owned by the template
+  // subscription in _setupTemplates() instead — left untouched here.
+  _updateSectionTiles(){
+    if(!this._sectionOpen||!this._hass)return;
+    const id=this._sectionOpen;
+    const sx=this._getSections(this._config).find(function(x){return x.def.id===id;});
+    if(!sx)return;
+    const s=this._hass.states;
+    const tileEls=(this._secTileEls&&this._secTileEls[id])||[];
+    let activeCount=0;
+    sx.tiles.forEach(function(entry,idx){
+      const tileEl=tileEls[idx];if(!tileEl)return;
+      const td=rocTileDef(entry);
+      const st=td.entity?s[td.entity]:undefined;
+      const known=!td.entity||!!st;
+      tileEl.classList.toggle('unavailable',!known);
+      const stateStr=st?st.state:'';
+      const isActive=td.active_state!==undefined&&stateStr===String(td.active_state);
+      if(isActive)activeCount++;
+      const iconEl=tileEl.querySelector('[data-tile-icon]');
+      if(iconEl){
+        const anim=td.icon_animation;
+        const animOn=anim&&anim!=='none'&&(td.active_state===undefined||isActive);
+        iconEl.className='roc-tile-icon'+(animOn?(anim==='spin'?' tia-spin':anim==='pulse'?' tia-pulse':anim==='blink'?' tia-blink':''):'');
+      }
+      const isTpl=function(v){return typeof v==='string'&&v.indexOf('{{')>=0;};
+      const stateEl=tileEl.querySelector('[data-tile-state]');
+      if(stateEl&&!isTpl(td.state)){
+        const txt=td.state!==undefined?td.state:(known?stateStr:'unavailable');
+        let cls='roc-tile-state';
+        const sc=td.state_class===undefined||td.state_class==='auto'
+          ?(isActive?'run':(known&&td.active_state!==undefined&&stateStr&&stateStr!==td.active_state?'done':''))
+          :td.state_class;
+        if(sc==='run')cls+=' ts-run';else if(sc==='done')cls+=' ts-done';
+        stateEl.className=cls;
+        if(stateEl.textContent!==txt)stateEl.textContent=txt||'';
+      }
+      const valEl=tileEl.querySelector('[data-tile-value]');
+      if(valEl&&!isTpl(td.value)){
+        const v=td.value!==undefined?td.value:'';
+        if(valEl.textContent!==v)valEl.textContent=v;
+      }
+      if(td.progress){
+        const pEl=tileEl.querySelector('[data-tile-progress]');
+        if(pEl){
+          const pst=s[td.progress];
+          const pv=pst?parseFloat(pst.state):NaN;
+          pEl.style.width=(isNaN(pv)?0:Math.max(0,Math.min(100,pv)))+'%';
+        }
+      }
+    });
+    const badgeEl=this._secBadgeEls&&this._secBadgeEls[id];
+    if(badgeEl){
+      const mode=sx.def.badge===undefined?'auto':sx.def.badge;
+      const txt=mode==='none'?'':(activeCount>0?String(activeCount):'');
+      if(badgeEl.textContent!==txt)badgeEl.textContent=txt;
+    }
+  }
+  // `card:` source (D12: embed only, never render through) — same
+  // getHelpers()/createCardElement path `elements` already uses, with the
+  // direct-create fallback, and a legible notice if the custom element never
+  // registered instead of a silently blank panel (kap.6 degradation rules).
+  _mountSectionCards(secList,gen){
+    this._secCardEls={};
+    const self=this;
+    for(const sx of secList){
+      const d=sx.def;
+      if(!d.card)continue;
+      const host=this.shadowRoot.querySelector('[data-section-card="'+escSel(d.id)+'"]');
+      if(!host)continue;
+      const type=d.card.type;
+      const tag=type&&type.indexOf('custom:')===0?type.slice(7):null;
+      if(tag&&!customElements.get(tag)){
+        host.innerHTML='<div class="roc-panel-notice">Card <code>'+escA(type)+'</code> is not registered — is it installed?</div>';
+        continue;
+      }
+      const secId=d.id;
+      const wrap=makeHACard(d.card,function(cardEl){
+        if(self._renderGen!==gen)return; // stale render
+        self._secCardEls[secId]=cardEl;
+        if(self._hass)try{cardEl.hass=self._hass;}catch(_){}
+      });
+      if(wrap)host.appendChild(wrap);
+    }
+  }
+
   _render(){
     if(!this._config)return;
     const _gen=++this._renderGen; // stale async mounts (card helpers) bail via this
@@ -1967,7 +2139,57 @@ class RoomOverlayCard extends HTMLElement{
     // (NAV_LIVE_FULL_PLAN.md §6), same mechanism natural-portrait already uses.
     const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini||c._roc_preview)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
-    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div></div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    // ----- Cockpit sections: panel chrome (v6.8.0) --------------------------
+    // One panel node per declared section (COCKPIT_PLAN.md kap.4 asks for a
+    // single reused element; N cheap hidden divs toggled by visibility is the
+    // same idiom `groups`/`grpHtml`+`_setGrpVis` already use elsewhere in this
+    // file, so it stays consistent with the rest of the renderer instead of
+    // introducing a second DOM-reuse mechanism). Suppressed for swipe ghosts
+    // and nav.live minis, same as vacuum_widgets above.
+    const _secList=(_isGhost||_isMini)?[]:this._getSections(cAll);
+    const _secOpenId=this._sectionOpen;
+    const _secTileHtml=function(entry,idx){
+      const td=rocTileDef(entry);
+      const quickHtml=(td.quick||[]).map(function(q,qi){
+        return'<button type="button" data-quick="'+qi+'" title="'+escA(q.name||'')+'"><ha-icon icon="'+escA(q.icon||'mdi:play')+'"></ha-icon></button>';
+      }).join('');
+      return'<div class="roc-tile" data-tile-idx="'+idx+'"'+(td.tap_action?' data-tappable tabindex="0" role="button"':'')+'>'
+        +'<div class="roc-tile-icon-wrap"><ha-icon class="roc-tile-icon" data-tile-icon icon="'+escA(td.icon)+'"></ha-icon></div>'
+        +'<div class="roc-tile-body">'
+          +'<div class="roc-tile-name">'+escA(td.name)+'</div>'
+          +'<div class="roc-tile-state" data-tile-state></div>'
+          +'<div class="roc-tile-value" data-tile-value></div>'
+          +(td.progress?'<div class="roc-tile-progress"><div class="roc-tile-progress-bar" data-tile-progress></div></div>':'')
+        +'</div>'
+        +(quickHtml?'<div class="roc-tile-quick">'+quickHtml+'</div>':'')
+      +'</div>';
+    };
+    // Degradation (COCKPIT_PLAN.md kap.6): an embedded `card:` source gets its
+    // own mount host (wired up like `elements` below); no tiles + no card = an
+    // explanatory empty state, never a blank panel.
+    const _secPanelBodyHtml=function(sx){
+      const d=sx.def;
+      if(d.card)return'<div class="roc-card-tile-host" data-section-card="'+escA(d.id)+'"></div>';
+      if(!sx.tiles.length)return'<div class="roc-panel-empty">Zatím sem nic nepatří — přidej <code>section: '+escA(d.id)+'</code> některému prvku v místnosti.</div>';
+      return sx.tiles.map(_secTileHtml).join('');
+    };
+    const secPanelHtml=!_secList.length?'':(
+      '<div class="roc-panel-backdrop'+(_secOpenId?' open':'')+'" data-section-backdrop></div>'
+      +_secList.map(function(sx){
+        const d=sx.def,isOpen=d.id===_secOpenId,placement=d.placement||'sheet-right',cols=d.columns||2;
+        const sizeStyle=d.size?('--roc-panel-size:'+d.size+';'):'';
+        return'<div class="roc-panel pl-'+escA(placement)+(isOpen?' open':'')+'" data-section-panel="'+escA(d.id)+'" style="'+sizeStyle+'--roc-panel-cols:'+cols+';" role="dialog" aria-label="'+escA(d.title||d.id)+'">'
+          +'<div class="roc-panel-hd">'
+            +(d.icon?'<ha-icon icon="'+escA(d.icon)+'"></ha-icon>':'')
+            +'<div class="roc-panel-hd-txt"><div class="roc-panel-title">'+escA(d.title||d.id)+'<span class="roc-panel-badge" data-section-badge></span></div>'
+            +(d.subtitle?'<div class="roc-panel-subtitle">'+escA(d.subtitle)+'</div>':'')+'</div>'
+            +'<button class="roc-panel-close" type="button" aria-label="Close"><ha-icon icon="mdi:close"></ha-icon></button>'
+          +'</div>'
+          +'<div class="roc-panel-body">'+_secPanelBodyHtml(sx)+'</div>'
+        +'</div>';
+      }).join('')
+    );
+    this.shadowRoot.innerHTML='<style>:host{display:block;}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--primary-color,#03a9f4);color:#fff;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:11px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:#03a9f4;}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -2719,6 +2941,45 @@ class RoomOverlayCard extends HTMLElement{
     // (_update / _applyResizeStyles) can skip forced layout reads entirely.
     this._needsCardWidth=rocNeedsPctWidth(c.icons,'size')||rocNeedsPctWidth(c.labels,'font_size')||rocNeedsPctWidth(c.vacuum_widgets,'size');
     this._hasDayNightGauge=(this._blindGaugeCfgs||[]).some(function(g){return g&&g._dayNight;});
+    // ----- Cockpit sections: wiring (v6.8.0) --------------------------------
+    this._secPanelEls={};this._secBadgeEls={};this._secTileEls={};
+    for(const sx of _secList){
+      const d=sx.def;
+      const pEl=this.shadowRoot.querySelector('[data-section-panel="'+escSel(d.id)+'"]');
+      if(!pEl)continue;
+      this._secPanelEls[d.id]=pEl;
+      this._secBadgeEls[d.id]=pEl.querySelector('[data-section-badge]');
+      const closeBtn=pEl.querySelector('.roc-panel-close');
+      if(closeBtn)closeBtn.addEventListener('click',e=>{e.stopPropagation();this._closeSection();});
+      this._secTileEls[d.id]=[];
+      const _tileSelf=this;
+      pEl.querySelectorAll('.roc-tile').forEach(function(tileEl){
+        const idx=parseInt(tileEl.dataset.tileIdx,10);
+        const entry=sx.tiles[idx];if(!entry)return;
+        _tileSelf._secTileEls[d.id][idx]=tileEl;
+        const td=rocTileDef(entry);
+        if(td.tap_action)tileEl.addEventListener('click',function(e){if(e.target.closest('[data-quick]'))return;_tileSelf._exec(td.tap_action,e);});
+        tileEl.querySelectorAll('[data-quick]').forEach(function(qb){
+          qb.addEventListener('click',function(e){
+            e.stopPropagation();
+            const qi=parseInt(qb.dataset.quick,10);
+            const q=(td.quick||[])[qi];
+            if(q&&q.service&&_tileSelf._hass){const dd=q.service.indexOf('.');_tileSelf._hass.callService(q.service.slice(0,dd),q.service.slice(dd+1),q.data||{},q.target);}
+          });
+        });
+      });
+    }
+    const _secBackdropEl=this.shadowRoot.querySelector('[data-section-backdrop]');
+    if(_secBackdropEl){
+      const _bdSelf=this;
+      _secBackdropEl.addEventListener('click',function(){
+        const openEntry=_secList.find(function(sx){return sx.def.id===_bdSelf._sectionOpen;});
+        if(!openEntry||openEntry.def.backdrop===false)return;
+        _bdSelf._closeSection();
+      });
+    }
+    this._mountSectionCards(_secList,_gen);
+    this._updateSectionTiles();
     this._update();
     this._syncRoomState();
     this._layoutStage();
@@ -2888,6 +3149,7 @@ class RoomOverlayCard extends HTMLElement{
       ghost.style.pointerEvents='none';
       ghost.style.transition='transform .3s ease,opacity .3s ease';
     }
+    if(this._sectionOpen)this._closeSection(); // COCKPIT_PLAN.md kap.7: panel closes on room switch
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
     // Editor preview instance (see _mountPreview): tell the editor GUI so its
@@ -3025,6 +3287,33 @@ class RoomOverlayCard extends HTMLElement{
     for(const gw of(c.glows||[]))vis('gw:'+gw.id,gw.visible_template,this._glowEls[gw.id],'',gw);
     for(const e of(c.elements||[]))vis('e:'+e.id,e.visible_template,this._contEls[e.id],'block',e);
     for(const g of[...(c.gauges||[]),...(this._blindGaugeCfgs||[])])vis('g:'+g.id,g.visible_template,this._gaugeEls[g.id],'',g);
+    // Cockpit sections: `visible_template` (whole section) + templated tile
+    // `state`/`value` (COCKPIT_PLAN.md kap.3.1/3.2). Top-level `this._config`,
+    // not the room-merged `c` — `sections:` isn't a ROOM_KEYS field. Skipped
+    // for nav.live minis (no panel DOM was built for them — see _render()).
+    if(!c._roc_mini)for(const sx of this._getSections(this._config)){
+      const d=sx.def,secId=d.id;
+      if(d.visible_template)sub(d.visible_template,function(r){
+        const ok=tmplTruthy(r);
+        self._secVisMap[secId]=ok;
+        if(!ok&&self._sectionOpen===secId)self._closeSection();
+      });
+      sx.tiles.forEach(function(entry,idx){
+        const td=rocTileDef(entry);
+        if(typeof td.state==='string'&&td.state.indexOf('{{')>=0)sub(td.state,function(r){
+          const v=r!==undefined&&r!==null?String(r):'';
+          const tileEl=self._secTileEls&&self._secTileEls[secId]&&self._secTileEls[secId][idx];
+          const stateEl=tileEl&&tileEl.querySelector('[data-tile-state]');
+          if(stateEl&&stateEl.textContent!==v)stateEl.textContent=v;
+        });
+        if(typeof td.value==='string'&&td.value.indexOf('{{')>=0)sub(td.value,function(r){
+          const v=r!==undefined&&r!==null?String(r):'';
+          const tileEl=self._secTileEls&&self._secTileEls[secId]&&self._secTileEls[secId][idx];
+          const valEl=tileEl&&tileEl.querySelector('[data-tile-value]');
+          if(valEl&&valEl.textContent!==v)valEl.textContent=v;
+        });
+      });
+    }
   }
 
   _setGrpVis(el,show){
@@ -3680,6 +3969,8 @@ class RoomOverlayCard extends HTMLElement{
     for(const g of(c.groups||[])){
       if(g.style&&this._grpPanelEls[g.id])this._setGrpVis(this._grpPanelEls[g.id],this._groupState[g.id]??false);
     }
+    // Cockpit sections: live tile values while a panel is open (v6.8.0)
+    this._updateSectionTiles();
     for(const z of(c.zones||[])){
       const el=this._zoneEls[z.id];if(!el)continue;
       const gShow=!z.group||(this._groupState[z.group]??true);
@@ -3984,6 +4275,8 @@ class RoomOverlayCard extends HTMLElement{
           this._switchRoom((this._roomIdx-1+this._config.rooms.length)%this._config.rooms.length,-1,true);
         break;
       case'follow-room':this._followNow();break;
+      case'open-section':if(a.section)this._openSection(a.section);break;
+      case'close-section':this._closeSection();break;
       case'toggle-group':
       case'show-group':
       case'hide-group':
@@ -4012,6 +4305,7 @@ class RoomOverlayCard extends HTMLElement{
   // _pvMo/_barMo) are still nulled — that path builds them from scratch.
   disconnectedCallback(){
     if(this._tmKeyHandler){document.removeEventListener('keydown',this._tmKeyHandler);this._tmKeyHandler=null;}
+    if(this._secKeyHandler){document.removeEventListener('keydown',this._secKeyHandler);this._secKeyHandler=null;}
     if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart
@@ -4490,6 +4784,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     const q=function(s){return this.querySelector(s);}.bind(this);
     const v=function(id,fb){const el=q('#'+id);return el?el.value:fb;};
+    // Cockpit sections (v6.8.0): shared `section`/`tile` reader for zones,
+    // icons, elements and blinds — the only element kinds that may be tagged
+    // into a section (COCKPIT_PLAN.md kap.3.2; badges are not in that list).
+    const _secTile=function(kind,i,o){
+      const linkEl=q('[data-sec-link="'+kind+':'+i+'"]');
+      if(linkEl&&linkEl.value)o.section=linkEl.value;else delete o.section;
+      const tileR=self._pYaml(q('[data-sec-tile="'+kind+':'+i+'"]'));
+      if(tileR.ok){if(tileR.val)o.tile=tileR.val;else delete o.tile;}
+    };
     // Multi-room: sections write into the room being edited; shared keys stay top-level
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
     if(hasRooms)c.rooms=c.rooms.map(function(r){return Object.assign({},r);});
@@ -4777,6 +5080,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const slR=self._pYaml(q('[data-z-slider="'+i+'"]'));
       if(slR.ok){if(slR.val&&slR.val.entity)o.slider=slR.val;else delete o.slider;}
       const zGrpEl=q('[data-z-grp="'+i+'"]');if(zGrpEl&&zGrpEl.value.trim())o.group=zGrpEl.value.trim();else if(zGrpEl)delete o.group;
+      _secTile('z',i,o);
       return o;
     });
 
@@ -4815,6 +5119,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       }
       const elGrpEl=q('[data-el-grp="'+i+'"]');if(elGrpEl&&elGrpEl.value.trim())o.group=elGrpEl.value.trim();else delete o.group;
       const elNmEl=q('[data-el-nav-mini="'+i+'"]');if(elNmEl){if(elNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      _secTile('el',i,o);
       return o;
     });
 
@@ -4841,6 +5146,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
       const icoGrpEl=q('[data-ico-grp="'+i+'"]');if(icoGrpEl&&icoGrpEl.value.trim())o.group=icoGrpEl.value.trim();else delete o.group;
       const icoNmEl=q('[data-ico-nav-mini="'+i+'"]');if(icoNmEl){if(icoNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      _secTile('ico',i,o);
       return o;
     });
 
@@ -5022,6 +5328,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(_ccPs.length)_ctl.presets=_ccPs;
         o.control=_ctl;
       }else{delete o.control;}
+      _secTile('bl',i,o);
       return o;
     });
 
@@ -5034,6 +5341,32 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(yaR.ok){if(yaR.val&&yaR.val.style)o.style=yaR.val.style;else delete o.style;}
       return o;
     });
+
+    // Cockpit sections (v6.8.0) — top-level, not room-scoped: always write to
+    // `c`, never `tgt` (mirrors how `rooms` itself is card-level).
+    c.sections=(c.sections||[]).map(function(sec,i){
+      const o=Object.assign({},sec);
+      const idEl=q('[data-sec-id="'+i+'"]');if(idEl&&idEl.value.trim())o.id=idEl.value.trim();
+      const titleEl=q('[data-sec-title="'+i+'"]');if(titleEl&&titleEl.value.trim())o.title=titleEl.value;else delete o.title;
+      const iconEl=q('[data-sec-icon="'+i+'"]');if(iconEl&&iconEl.value.trim())o.icon=iconEl.value.trim();else delete o.icon;
+      const plEl=q('[data-sec-placement="'+i+'"]');if(plEl&&plEl.value&&plEl.value!=='sheet-right')o.placement=plEl.value;else delete o.placement;
+      const sizeEl=q('[data-sec-size="'+i+'"]');if(sizeEl&&sizeEl.value.trim())o.size=sizeEl.value.trim();else delete o.size;
+      const colEl=q('[data-sec-columns="'+i+'"]');if(colEl&&colEl.value&&parseInt(colEl.value,10)!==2)o.columns=parseInt(colEl.value,10)||2;else delete o.columns;
+      const badgeEl=q('[data-sec-badge="'+i+'"]');if(badgeEl&&badgeEl.value==='none')o.badge='none';else delete o.badge;
+      const subEl=q('[data-sec-subtitle="'+i+'"]');if(subEl&&subEl.value.trim())o.subtitle=subEl.value;else delete o.subtitle;
+      const bdEl=q('[data-sec-backdrop="'+i+'"]');if(bdEl&&!bdEl.checked)o.backdrop=false;else delete o.backdrop;
+      const vtR=self._pYaml(q('[data-sec-vt="'+i+'"]'));
+      if(vtR.ok){if(vtR.val!==undefined)o.visible_template=vtR.val;else delete o.visible_template;}
+      const srcEl=q('[data-sec-source="'+i+'"]');
+      if(srcEl&&srcEl.value==='card'){
+        const cyR=self._pYaml(q('[data-sec-card-yaml="'+i+'"]'));
+        if(cyR.ok&&cyR.val&&cyR.val.card)o.card=cyR.val.card;else if(cyR.ok)delete o.card;
+      }else{
+        delete o.card;
+      }
+      return o;
+    }).filter(function(o){return o&&o.id;});
+    if(!c.sections.length)delete c.sections;
 
     // ---- Multi-room meta + card-level multiroom fields ----------------------
     if(hasRooms){
@@ -5290,6 +5623,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">slider (YAML — drag on zone sets light/cover/number; keys: entity, direction, live, min, max, color, invert)</label><textarea data-z-slider="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(sliderYaml)+'</textarea></div>';
     h+='<div><label class="roc-l">Group (optional)</label><input data-z-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(z.group||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
+    h+=this._secTileHtml('z',i,z);
     h+=this._mvBtns('z',i);
     h+='<button data-dup-z="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-z="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove zone</button>';
@@ -5362,6 +5696,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
     h+=this._navMiniField('el',i,el.nav_mini===true);
+    h+=this._secTileHtml('el',i,el);
     h+=this._mvBtns('el',i);
     h+='<button data-dup-el="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-el="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove element</button>';
@@ -5400,6 +5735,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div style="margin-bottom:6px;"><label class="roc-l">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
     h+=this._navMiniField('ico',i,ico.nav_mini===true);
+    h+=this._secTileHtml('ico',i,ico);
     h+=this._mvBtns('ico',i);
     h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-ico="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove icon</button>';
@@ -5685,6 +6021,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
     h+=this._navMiniField('bl',i,b.nav_mini===true);
+    h+=this._secTileHtml('bl',i,b);
     h+=this._mvBtns('bl',i);
     h+='<button data-dup-bl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-bl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove blind</button>';
@@ -5861,6 +6198,17 @@ class RoomOverlayCardEditor extends HTMLElement{
     let blInner='<div id="bl-list">';
     (cR.blinds||[]).forEach(function(b,i){blInner+=self._blindItem(b,i);});
     blInner+='</div><button id="add-bl" style="'+btnStyle+'margin-top:4px;">+ Add blind</button>';
+
+    // Cockpit sections (v6.8.0) — top-level list, not per-room; the read-only
+    // "currently collected" preview reuses the card's own collection engine.
+    let sectionsInner='<div id="sec-list">';
+    const _secCollectedAll=rocCollectSections(c);
+    (c.sections||[]).forEach(function(sec,i){
+      const entry=_secCollectedAll.find(function(x){return x.def.id===sec.id;});
+      sectionsInner+=self._sectionItem(sec,i,(entry&&entry.tiles)||[]);
+    });
+    sectionsInner+='</div><button id="add-section" style="'+btnStyle+'margin-top:4px;">+ Add section</button>';
+    if(!(c.sections||[]).length)sectionsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:10px 0 0;">Sections are user-defined buckets for things that aren\'t one room — appliances, media, heating\u2026 Add one, then tag a zone/icon/element/blind in any room with its id via the Section field (Elements tab).</p>';
 
     let grpInner='<div id="grp-list">';
     (cR.groups||[]).forEach(function(g,i){grpInner+=self._groupItem(g,i);});
@@ -6135,6 +6483,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +_tabBtn('elements','mdi:shape','Elements')
       +_tabBtn('responsive','mdi:monitor-cellphone','Layout')
       +_tabBtn('rooms','mdi:floor-plan','Rooms &amp; menu')
+      +_tabBtn('sections','mdi:view-dashboard-outline','Sections')
       +'</div>'
       +_panel('image',
           sec('basic','Background &amp; basics'+(hasRooms?' — room: '+this._e(cR.name||cR.id||''):''),undefined,basicInner,'mdi:image-outline')
@@ -6153,7 +6502,8 @@ class RoomOverlayCardEditor extends HTMLElement{
          +sec('vacuum_widgets','Vacuum status widgets — cross-room informational badge',(cR.vacuum_widgets||[]).length,vwInner,'mdi:robot-vacuum')
          +sec('zones','Zones — invisible tap areas',(cR.zones||[]).length,zInner,'mdi:gesture-tap'))
       +_panel('responsive',respInner)
-      +_panel('rooms',roomsInner);
+      +_panel('rooms',roomsInner)
+      +_panel('sections',sectionsInner);
     const _dlOpts=this._dlOptions();
     this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
       +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}.roc-ed.roc-hideadv .roc-adv{display:none;}</style>'
@@ -6382,6 +6732,80 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
   }
 
+  // ----- Cockpit sections editor (v6.8.0) -----------------------------------
+  // Top-level list (like `rooms`), not per-room — reuses the same _mvBtns/
+  // _mvKinds reorder mechanism the per-room element lists use (COCKPIT_PLAN.md
+  // kap.5.1). `tiles` is the read-only "currently collected" preview, computed
+  // once per render via the same rocCollectSections() the card itself uses.
+  _sectionItem(sec,i,tiles){
+    const self=this;
+    const op=this._openPanels&&this._openPanels.has('sec-'+i);
+    const isCard=!!sec.card;
+    const cardYaml=sec.card?_yaml.s({card:sec.card}):'';
+    const vtYaml=sec.visible_template!==undefined?_yaml.s(sec.visible_template):'';
+    let h='<details style="margin-bottom:6px;" data-panel="sec-'+i+'"'+(op?' open':'')+'>';
+    h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">'+(sec.icon?'<ha-icon icon="'+this._e(sec.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'&#9654;')+' Section: '+this._e(sec.title||sec.id||'section_'+i)+'</summary>';
+    h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">ID</label><input data-sec-id="'+i+'" type="text" value="'+this._e(sec.id||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Title</label><input data-sec-title="'+i+'" type="text" value="'+this._e(sec.title||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon</label><div style="display:flex;gap:6px;align-items:center;"><ha-icon data-roc-prev icon="'+this._e(sec.icon||'')+'" style="--mdc-icon-size:20px;flex:none;color:var(--primary-text-color);"></ha-icon><input data-sec-icon="'+i+'" type="text" placeholder="mdi:washing-machine" value="'+this._e(sec.icon||'')+'"'+this._inp('')+'></div></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Placement</label><select data-sec-placement="'+i+'"'+this._inp('')+'>';
+    [['sheet-right','Sheet — right'],['sheet-bottom','Sheet — bottom'],['full','Full'],['dialog','Dialog']].forEach(function(o){h+='<option value="'+o[0]+'"'+((sec.placement||'sheet-right')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='<div><label class="roc-l">Size (sheet width / dialog max-width)</label><input data-sec-size="'+i+'" type="text" placeholder="420px" value="'+this._e(sec.size||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Columns</label><input data-sec-columns="'+i+'" type="number" min="1" placeholder="2" value="'+this._e(sec.columns!=null?String(sec.columns):'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Badge</label><select data-sec-badge="'+i+'"'+this._inp('')+'>';
+    [['auto','Auto — count active'],['none','None']].forEach(function(o){h+='<option value="'+o[0]+'"'+((sec.badge===undefined?'auto':sec.badge)===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+    h+='</select></div>';
+    h+='</div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Subtitle (optional)</label><input data-sec-subtitle="'+i+'" type="text" value="'+this._e(sec.subtitle||'')+'"'+this._inp('')+'></div>';
+    h+='<div style="margin-bottom:8px;"><label style="font-size:12px;display:flex;align-items:center;gap:6px;"><input data-sec-backdrop="'+i+'" type="checkbox"'+(sec.backdrop!==false?' checked':'')+' style="width:auto;cursor:pointer;"> Tap outside closes (backdrop)</label></div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Content source</label><select data-sec-source="'+i+'"'+this._inp('')+'>';
+    h+='<option value="collected"'+(!isCard?' selected':'')+'>Collected — elements tagged with this section</option>';
+    h+='<option value="card"'+(isCard?' selected':'')+'>Embedded card</option>';
+    h+='</select></div>';
+    h+='<div data-sec-card-box="'+i+'" style="'+(isCard?'':'display:none;')+'margin-bottom:8px;"><label class="roc-l">Embedded card (YAML — a full <code>card:</code> block, e.g. <code>card: {type: custom:electricity-panel-card}</code>)</label><textarea data-sec-card-yaml="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(cardYaml)+'</textarea></div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">visible_template (optional, YAML — a Jinja template; falsy hides the section)</label><textarea data-sec-vt="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(vtYaml)+'</textarea></div>';
+    if(!isCard){
+      h+='<div style="margin-bottom:4px;"><label class="roc-l">Currently collected ('+tiles.length+')</label>';
+      if(tiles.length){
+        h+='<ul style="margin:0;padding-left:18px;font-size:12px;color:var(--secondary-text-color);">';
+        tiles.forEach(function(t){h+='<li>'+self._e((t.room&&(t.room.name||t.room.id))||'—')+' &rarr; '+self._e(t.item.id||t.kind)+' ('+t.kind+')</li>';});
+        h+='</ul>';
+      }else{
+        h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:2px 0 0;">Nothing tagged yet — open an element in the Elements tab and set its Section field.</p>';
+      }
+      h+='</div>';
+    }
+    h+=this._mvBtns('sec',i);
+    h+='<button data-dup-sec="'+i+'" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;margin-top:8px;margin-right:6px;">Duplicate</button>';
+    h+='<button data-rm-sec="'+i+'" style="padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;margin-top:8px;">Remove section</button>';
+    h+='</div></details>';
+    return h;
+  }
+
+  // Section select + `tile:` YAML box, shared by zone/icon/element/blind
+  // editors (COCKPIT_PLAN.md kap.5.2 — badges are not taggable). `kind` is the
+  // same short letter used by _mvKinds ('z'/'ico'/'el'/'bl'), so the generic
+  // [data-sec-link]/[data-sec-tile] wiring in _listen() and the _secTile()
+  // reader in _collectConfig() both key off "kind:i" without per-kind code.
+  _secTileHtml(kind,i,item){
+    const self=this;
+    const secs=(this._config&&this._config.sections)||[];
+    let h='<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--divider-color);"><label class="roc-l">Section (cockpit panel)</label><select data-sec-link="'+kind+':'+i+'"'+this._inp('')+'>';
+    h+='<option value=""'+(!item.section?' selected':'')+'>— none —</option>';
+    secs.forEach(function(s){h+='<option value="'+self._e(s.id||'')+'"'+(item.section===s.id?' selected':'')+'>'+self._e(s.title||s.id||'')+'</option>';});
+    h+='</select>';
+    if(!secs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No sections yet — add one in the Sections tab first.</p>';
+    const tileYaml=item.tile?_yaml.s(item.tile):'';
+    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea></div>';
+    h+='</div>';
+    return h;
+  }
+
   _groupItem(g,i){
     const op=this._openPanels&&this._openPanels.has('grp-'+i);
     const styleYaml=g.style?_yaml.s({style:g.style}):'';
@@ -6486,21 +6910,21 @@ class RoomOverlayCardEditor extends HTMLElement{
     const redoBtn=this.querySelector('#roc-redo');
     if(redoBtn)redoBtn.addEventListener('click',function(){self._redo();});
     // Live icon previews
-    this.querySelectorAll('[data-ico-icon],[data-b-icon],[data-vw-icon]').forEach(function(inp){
+    this.querySelectorAll('[data-ico-icon],[data-b-icon],[data-vw-icon],[data-sec-icon]').forEach(function(inp){
       inp.addEventListener('input',function(){
         const prev=inp.parentElement&&inp.parentElement.querySelector('ha-icon[data-roc-prev]');
         if(prev)prev.setAttribute('icon',inp.value.trim());
       });
     });
     // Reorder (▲▼) — one generic handler for all item lists
-    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds',vw:'vacuum_widgets',gw:'glows'};
+    const _mvKinds={z:'zones',ov:'overlays',b:'badges',el:'elements',ico:'icons',lbl:'labels',g:'gauges',bl:'blinds',vw:'vacuum_widgets',gw:'glows',sec:'sections'};
     this.querySelectorAll('[data-mv]').forEach(function(btn){
       btn.addEventListener('click',function(){
         const p=btn.dataset.mv.split(':');
         const key=_mvKinds[p[0]];if(!key)return;
         const i=parseInt(p[1]),dir=parseInt(p[2]),j=i+dir;
         const c=self._collectConfig();
-        const arr=T(c)[key];
+        const arr=p[0]==='sec'?c[key]:T(c)[key]; // sections are top-level, not per-room
         if(!arr||j<0||j>=arr.length)return;
         const t=arr[i];arr[i]=arr[j];arr[j]=t;
         // keep the moved panel open at its new index
@@ -7094,6 +7518,58 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     });
     this.querySelectorAll('[data-grp-id],[data-grp-gc],[data-grp-vis],[data-grp-yaml]').forEach(function(el){el.addEventListener('change',fire);});
+
+    // ----- Cockpit sections (v6.8.0) — top-level list, own add/remove/dup ----
+    const addSec=this.querySelector('#add-section');
+    if(addSec)addSec.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!Array.isArray(c.sections))c.sections=[];
+      let n=c.sections.length+1,id='section_'+n;
+      while(c.sections.some(function(s){return s.id===id;})){n++;id='section_'+n;}
+      c.sections.push({id:id,title:'Section '+n,icon:'mdi:view-grid-outline'});
+      if(!self._openPanels)self._openPanels=new Set();
+      self._openPanels.add('sec-'+(c.sections.length-1));
+      self._config=c;self._render();self._fire(c);
+    });
+    this.querySelectorAll('[data-rm-sec]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.rmSec,10);
+        const c=self._collectConfig();
+        if(Array.isArray(c.sections))c.sections.splice(i,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-dup-sec]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const i=parseInt(btn.dataset.dupSec,10);
+        const c=self._collectConfig();
+        if(!Array.isArray(c.sections)||!c.sections[i])return;
+        const copy=rocClone(c.sections[i]);
+        const baseId=copy.id||'section';let n=1,id=baseId+'_copy';
+        while(c.sections.some(function(s){return s.id===id;})){n++;id=baseId+'_copy'+n;}
+        copy.id=id;
+        c.sections.splice(i+1,0,copy);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-sec-source]').forEach(function(sel){
+      sel.addEventListener('change',function(){
+        const box=self.querySelector('[data-sec-card-box="'+sel.dataset.secSource+'"]');
+        if(box)box.style.display=sel.value==='card'?'':'none';
+        fire();
+      });
+    });
+    this.querySelectorAll('[data-sec-id],[data-sec-title],[data-sec-icon],[data-sec-placement],[data-sec-size],[data-sec-columns],[data-sec-badge],[data-sec-subtitle],[data-sec-backdrop],[data-sec-card-yaml],[data-sec-vt]').forEach(function(el){el.addEventListener('change',fire);});
+    // Per-element Section select + tile: box (zones/icons/elements/blinds) —
+    // one generic handler keyed by "kind:i", shared across all four editors.
+    this.querySelectorAll('[data-sec-link]').forEach(function(sel){
+      sel.addEventListener('change',function(){
+        const box=self.querySelector('[data-sec-tile-box="'+sel.dataset.secLink+'"]');
+        if(box)box.style.display=sel.value?'':'none';
+        fire();
+      });
+    });
+    this.querySelectorAll('[data-sec-tile]').forEach(function(el){el.addEventListener('change',fire);});
   }
 
   disconnectedCallback(){

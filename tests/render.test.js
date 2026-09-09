@@ -1252,6 +1252,133 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     t('setting the mode to none drops the whole transform block',!!tfNone&&tfNone.overlays[0].transform===undefined);
   }
 
+
+// ============================================================================
+// Cockpit sections & panels (v6.8.0) — COCKPIT_PLAN.md kap.7 "render (jsdom)"
+// ============================================================================
+{
+  const secCfg={
+    base_image:'/local/x.webp',
+    sections:[
+      {id:'appliances',title:'Spotřebiče',icon:'mdi:washing-machine'},
+      {id:'media',title:'Media',placement:'full'},
+      {id:'empty_sec',title:'Empty section'}
+    ],
+    zones:[{id:'washer',top:'10%',left:'10%',width:'10%',height:'10%',
+      section:'appliances',
+      tile:{name:'Pračka',entity:'sensor.washer_state',icon:'mdi:washing-machine',active_state:'run',
+        tap_action:{action:'navigate',navigation_path:'/x/washer'}}}],
+    icons:[
+      {id:'ghost',icon:'mdi:help',top:'5%',left:'5%',
+        section:'appliances',tile:{name:'Ghost',entity:'sensor.missing_thing'}},
+      {id:'tv',icon:'mdi:television',top:'20%',left:'20%',
+        section:'media',tile:{name:'TV'}},
+      {id:'opener',icon:'mdi:apps',top:'50%',left:'50%',
+        tap_action:{action:'open-section',section:'appliances'}}
+    ]
+  };
+  const elSec=mkCard(secCfg);
+  elSec.hass={states:{'sensor.washer_state':{state:'run'}},callService(){},user:{name:'x'}};
+
+  t('one .roc-panel per declared section',elSec.shadowRoot.querySelectorAll('.roc-panel').length===3);
+  t('no panel is open by default',!elSec.shadowRoot.querySelector('.roc-panel.open'));
+  t('appliances panel collected both tagged elements (zone + icon)',
+    elSec.shadowRoot.querySelectorAll('[data-section-panel="appliances"] .roc-tile').length===2);
+  t('media panel got its own placement class',
+    !!elSec.shadowRoot.querySelector('[data-section-panel="media"].pl-full'));
+  t('default placement is sheet-right',
+    !!elSec.shadowRoot.querySelector('[data-section-panel="appliances"].pl-sheet-right'));
+  t('a section nothing was tagged into renders an explanatory empty state, not a blank panel',
+    !!elSec.shadowRoot.querySelector('[data-section-panel="empty_sec"] .roc-panel-empty'));
+
+  // Tapping a launcher icon (tap_action: open-section) opens the right panel —
+  // the launcher itself is a plain, untagged icon; no new render primitive.
+  elSec.shadowRoot.querySelector('[data-ico="opener"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('tapping an icon with action: open-section opens that panel',
+    !!elSec.shadowRoot.querySelector('[data-section-panel="appliances"].open'));
+  t('the backdrop is shown while a panel is open',
+    !!elSec.shadowRoot.querySelector('.roc-panel-backdrop.open'));
+  t('badge counts tiles whose state matches active_state (washer is "run")',
+    elSec.shadowRoot.querySelector('[data-section-panel="appliances"] [data-section-badge]').textContent==='1');
+  t('a tile whose entity is missing from hass renders unavailable, never blank',
+    elSec.shadowRoot.querySelector('[data-section-panel="appliances"] [data-tile-idx="1"]').classList.contains('unavailable'));
+
+  // One panel open at a time (D7): opening media closes appliances.
+  elSec._openSection('media');
+  t('opening a second section closes the first (one panel open at a time)',
+    !elSec.shadowRoot.querySelector('[data-section-panel="appliances"].open')&&
+    !!elSec.shadowRoot.querySelector('[data-section-panel="media"].open'));
+
+  // Drill-through: a tile's own tap_action fires through the normal _exec path.
+  elSec._openSection('appliances');
+  let _secNavPath=null;
+  const _origPushState2=w.history.pushState.bind(w.history);
+  w.history.pushState=(_s,_ti,p)=>{_secNavPath=p;};
+  elSec.shadowRoot.querySelector('[data-section-panel="appliances"] [data-tile-idx="0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  w.history.pushState=_origPushState2;
+  t('tapping a tile with tap_action drills through via the standard navigate action',_secNavPath==='/x/washer');
+
+  // Escape and the backdrop both close the open panel.
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  t('Escape closes the open panel',!elSec.shadowRoot.querySelector('.roc-panel.open'));
+  elSec._openSection('appliances');
+  elSec.shadowRoot.querySelector('[data-section-backdrop]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('tapping the backdrop closes the open panel',!elSec.shadowRoot.querySelector('.roc-panel.open'));
+
+  // Embedded `card:` source — degradation when the custom element never registered.
+  const cardSecCfg={base_image:'/local/x.webp',sections:[{id:'elec',title:'Elec',card:{type:'custom:nonexistent-roc-card-xyz'}}]};
+  const elCardSec=mkCard(cardSecCfg);
+  elCardSec.hass={states:{},callService(){},user:{name:'x'}};
+  t('an embedded card whose custom element is not registered renders a legible notice, not a blank panel',
+    !!elCardSec.shadowRoot.querySelector('[data-section-panel="elec"] .roc-panel-notice'));
+
+  // Closes on room switch (kap.7 test plan).
+  const secRoomsCfg={
+    base_image:'/local/x.webp',
+    sections:[{id:'appliances',title:'Appl'}],
+    rooms:[
+      {id:'r1',name:'R1',base_image:'/a.webp',zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%',section:'appliances'}]},
+      {id:'r2',name:'R2',base_image:'/b.webp'}
+    ]
+  };
+  const elRooms=mkCard(secRoomsCfg);
+  elRooms.hass={states:{},callService(){},user:{name:'x'}};
+  elRooms._openSection('appliances');
+  t('panel collection works across rooms too',elRooms._sectionOpen==='appliances');
+  elRooms._switchRoom(1,1,true);
+  t('switching rooms closes the open section panel',elRooms._sectionOpen===null);
+
+  // ---- Editor: Sections tab + per-element Section select -------------------
+  const edSec=w.document.createElement('room-overlay-card-editor');
+  edSec.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',layout:{},
+    sections:[{id:'appliances',title:'Spotřebiče',icon:'mdi:washing-machine'}],
+    zones:[{id:'washer',top:'1%',left:'1%',width:'5%',height:'5%',section:'appliances',tile:{name:'Pračka'}}]});
+  edSec.hass={states:{},user:{name:'x'}};
+  t('editor renders a Sections tab button',!!edSec.querySelector('[data-roctab="sections"]'));
+  edSec._tab='sections';edSec._render();
+  t('Sections tab lists the declared section',!!edSec.querySelector('[data-sec-id="0"]'));
+  t('Sections tab shows the collected tile in its read-only preview',
+    /washer/.test(edSec.querySelector('[data-panel="sec-0"]').textContent));
+  let secAdd=null;
+  edSec.addEventListener('config-changed',e=>{secAdd=e.detail.config;});
+  edSec.querySelector('#add-section').dispatchEvent(new w.Event('click',{bubbles:true}));
+  t('+ Add section appends a new section',!!secAdd&&secAdd.sections.length===2);
+
+  edSec._tab='elements';edSec._render();
+  const secSel=edSec.querySelector('[data-sec-link="z:0"]');
+  t('the zone editor panel has a Section select listing the declared sections',
+    !!secSel&&!!secSel.querySelector('option[value="appliances"]'));
+  t('the Section select is prefilled to the tagged section',secSel.value==='appliances');
+  const tileBox=edSec.querySelector('[data-sec-tile-box="z:0"]');
+  t('the tile: box is visible once a section is set',!!tileBox&&!/display:none/.test(tileBox.getAttribute('style')||''));
+  let secTileOut=null;
+  edSec.addEventListener('config-changed',e=>{secTileOut=e.detail.config;});
+  secSel.value='';
+  secSel.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('clearing the Section select drops section: from the collected zone',
+    !!secTileOut&&secTileOut.zones[0].section===undefined);
+}
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();

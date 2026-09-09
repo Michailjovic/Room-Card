@@ -494,6 +494,37 @@ t('tfResolve spin owns the transform slot (empty, the keyframes drive it)',
   g.tfResolve({spin:{}},{state:'on',attributes:{}}).transform==='');
 t('tfResolve of a missing block is null',g.tfResolve(null,{state:'on'})===null&&g.tfResolve({},{state:'on'})===null);
 
+// ---- Cockpit sections: collection engine (v6.8.0) --------------------------
+(function(){
+  const cfg={
+    sections:[{id:'appliances'},{id:'media'},{id:'empty'}],
+    rooms:[
+      {id:'kitchen',name:'Kitchen',zones:[{id:'washer',section:'appliances'}],icons:[{id:'fan',section:'media'}]},
+      {id:'hall',name:'Hall',elements:[{id:'tv',section:'media'}],blinds:[{id:'roller',section:'appliances'}]},
+    ]
+  };
+  const secs=g.rocCollectSections(cfg);
+  t('rocCollectSections returns one entry per declared section, in declared order',secs.length===3&&secs[0].def.id==='appliances'&&secs[1].def.id==='media'&&secs[2].def.id==='empty');
+  t('rocCollectSections collects tagged zones/icons/elements/blinds',secs[0].tiles.length===2&&secs[1].tiles.length===2);
+  t('rocCollectSections preserves room order then element order',secs[0].tiles[0].kind==='zones'&&secs[0].tiles[0].room.id==='kitchen'&&secs[0].tiles[1].kind==='blinds'&&secs[0].tiles[1].room.id==='hall');
+  t('a section nothing is tagged into collects an empty tile list, not an error',secs[2].tiles.length===0);
+  t('a config with no sections: returns []',g.rocCollectSections({rooms:[{zones:[{id:'x',section:'y'}]}]}).length===0);
+  t('a single-room (no rooms:) config still collects',g.rocCollectSections({sections:[{id:'a'}],zones:[{id:'z1',section:'a'}]})[0].tiles.length===1);
+  t('an item tagged with an undeclared section id is silently ignored',(function(){
+    const r=g.rocCollectSections({sections:[{id:'a'}],zones:[{id:'z1',section:'nope'}]});
+    return r.length===1&&r[0].tiles.length===0;
+  })());
+
+  // rocTileDef: defaults derived from the tagged element when `tile:` omits them (§3.2)
+  const withTile=g.rocTileDef({kind:'zones',item:{id:'washer',icon:'mdi:washing-machine',entity:'sensor.washer',tile:{name:'Pračka',active_state:'run'}}});
+  t('rocTileDef keeps explicit tile fields',withTile.name==='Pračka'&&withTile.active_state==='run');
+  t('rocTileDef defaults entity/icon from the tagged element when tile: omits them',withTile.entity==='sensor.washer'&&withTile.icon==='mdi:washing-machine');
+  const noTile=g.rocTileDef({kind:'icons',item:{id:'lamp',icon:'mdi:lamp'}});
+  t('rocTileDef with no tile: block derives name from the element id',noTile.name==='lamp'&&noTile.icon==='mdi:lamp');
+  const bare=g.rocTileDef({kind:'zones',item:{id:'x'}});
+  t('rocTileDef falls back to a generic icon when the element has none',bare.icon==='mdi:help-box');
+})();
+
 // ---- version single-source check (v5.0 C5) --------------------------------
 // ROC_VERSION in the card source must match package.json — the two used to be
 // bumped by hand independently and could drift.
