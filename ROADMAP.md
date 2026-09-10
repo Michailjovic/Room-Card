@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.14.0** (2026-09-10, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.15.0** (2026-09-10, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -92,6 +92,7 @@ failure broke HACS installs.
 | **v6.12.2** | **Fix** — scrolling on touch no longer accidentally fires a tap_action; a real page-scroll drag is now told apart from a tap by travel distance, across every tappable element type |
 | **v6.13.0** | **`layout.height: fill`** — opts portrait into the same full-viewport pin landscape always had (portrait otherwise sizes to content), so a cockpit's section panels get real screen height on phones too |
 | **v6.14.0** | **`image_align`** — `top`/`center`/`bottom`, controls where the photo sits when its box is taller than needed (e.g. under `layout.height: fill`), instead of always centering the letterbox/crop |
+| **v6.15.0** | **`nav_mini: false` under `nav.live: full`** — per-element opt-OUT of a room's own live mini thumbnail (mirrors `custom`'s existing opt-in); editor checkbox becomes "Hide from mini" in this tier |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

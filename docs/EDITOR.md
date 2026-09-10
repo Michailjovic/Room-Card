@@ -123,7 +123,10 @@ are static images or living miniatures of each room.
 - **full** — every thumbnail is a real, independent mini `room-overlay-card` — gauges, labels,
   icons, badges, blinds, all of it, scaled down. Heaviest option; the *Mini-room settings* panel
   shown above lets you cap the cost (`Reference width`, `Camera refresh`, and whether
-  label/colour templates subscribe at all).
+  label/colour templates subscribe at all). If one specific element is still too cramped or
+  cluttered at thumbnail scale (v6.15.0), its own panel has a "Hide from mini" checkbox — check it
+  to keep just that element out of the room's own thumbnail without giving up `full` for anything
+  else.
 - **custom** — same real-instance mechanism as `full`, but starts empty; you opt individual
   elements in with a "Show in mini" checkbox on their own panel. Use this when a room is too busy
   to look good shrunk down whole.

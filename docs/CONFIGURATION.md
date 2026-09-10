@@ -1414,6 +1414,26 @@ Templates and camera streams are extra per-instance subscriptions, so they defau
 heavier than `composite` (real DOM trees + scaled compositing layers, one per room) — test on
 your actual tablet before enabling on more than a couple of rooms.
 
+"Everything unconditionally" can still be too much for one specific element — a room's own
+launcher icons for its section panels, say, cramped and unreadable at thumbnail scale even though
+everything else in the mini looks fine. Since v6.15.0, `nav_mini: false` on any gauge, label,
+icon, badge, blind, or embedded card hides just that one element from its own room's `full` mini,
+without giving up `full` for the room or the card as a whole:
+
+```yaml
+icons:
+  - id: open_media
+    tap_action: { action: open-section, section: media }
+    nav_mini: false   # keep this launcher icon out of the (already-full) mini thumbnail
+```
+
+The editor's per-element "Show in mini" checkbox becomes "Hide from mini" once `live: full` is
+selected — unchecked (the default) keeps `full`'s normal everything-shows behaviour; checking it
+writes `nav_mini: false`. This is the mirror image of `custom`'s checkbox below: `full` starts
+from everything and opts individual elements *out*, `custom` starts from nothing and opts them
+*in* — same field, same checkbox, opposite default and opposite meaning depending on the active
+tier.
+
 With **`nav.live: custom`** every mini uses that exact same real-instance mechanism, but instead
 of showing everything, it starts **empty** — only elements you opt in appear. Add
 `nav_mini: true` to any gauge, label, icon, badge, blind, or embedded card to include it, and
@@ -1426,13 +1446,15 @@ nav:
 gauges:
   - id: temp_gauge
     entity: sensor.bedroom_temp
-    nav_mini: true   # shows in the mini; omit or set false to hide it there
+    nav_mini: true   # shows in the mini; omit (or, under custom, set false) to hide it there
 weather_nav_mini: true
 ```
 
 The editor has a matching "Show in mini" checkbox on every element's panel (and a weather toggle
 in the Basic tab) once `live: custom` is selected. Useful when a room is too busy to look good
-shrunk down in full, or one specific embedded card doesn't belong at thumbnail scale.
+shrunk down in full, or one specific embedded card doesn't belong at thumbnail scale. Note that
+the same `nav_mini` field means the opposite thing depending on the active tier (see `full` above,
+v6.15.0): opt-in under `custom`, opt-out under `full`.
 
 Switching works several ways: nav thumbnails/tabs, the **follow button** (crosshair that lights
 up when you're away from your presence room; `{action: follow-room}`), **finger-attached swipe**

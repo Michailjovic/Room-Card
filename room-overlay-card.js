@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.14.0';
+const ROC_VERSION='6.15.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -796,18 +796,20 @@ function rocBuildMiniConfig(cAll,ri){
     if(!o)return;
     delete o.cards_above;delete o.cards_below;delete o.light_controls;
     if(Array.isArray(o.blinds))o.blinds.forEach(function(b){if(b)delete b.control;});
-    if(isCustom){
-      // 'custom' tier: keep only opted-in elements (nav_mini:true) — applied
-      // to whichever layer this call is filtering (top-level defaults when
-      // called with gcfg, that room's own overrides when called per-room),
-      // so a room relying on a top-level default array is filtered exactly
-      // like one with its own array (matches the always-off strip above,
-      // which has the same top-level+per-room duality for the same reason).
-      ['gauges','labels','icons','badges','blinds','elements'].forEach(function(k){
-        if(Array.isArray(o[k]))o[k]=o[k].filter(function(it){return it&&it.nav_mini===true;});
+    // Per-item nav_mini filtering (v6.15.0: applies in BOTH live tiers, with
+    // opposite defaults). 'custom' tier is opt-in — "show nothing except what
+    // I explicitly chose" — so only nav_mini:true survives. 'full' tier is
+    // opt-out — "show everything" is the whole point of 'full' — so
+    // everything survives except an item explicitly marked nav_mini:false;
+    // that lets one cluttering element (e.g. a room's own launcher icons)
+    // be hidden from its OWN room's live mini without giving up 'full' for
+    // every other element/room.
+    ['gauges','labels','icons','badges','blinds','elements'].forEach(function(k){
+      if(Array.isArray(o[k]))o[k]=o[k].filter(function(it){
+        return it&&(isCustom?it.nav_mini===true:it.nav_mini!==false);
       });
-      if(!_wxOptIn)delete o.weather_overlay;
-    }
+    });
+    if(isCustom&&!_wxOptIn)delete o.weather_overlay;
   };
   stripAlways(gcfg);
   if(Array.isArray(gcfg.rooms))gcfg.rooms.forEach(stripAlways);
@@ -2373,8 +2375,9 @@ class RoomOverlayCard extends HTMLElement{
       // whole thing to fit its thumb box, so every mini keeps the SAME font/
       // icon/gauge proportions no matter each room's own aspect_ratio. Both
       // tiers share this entire mount/scale mechanism unchanged — only
-      // rocBuildMiniConfig's content differs (custom additionally filters by
-      // nav_mini, §13).
+      // rocBuildMiniConfig's content differs: both tiers honor nav_mini per
+      // §13, but with opposite defaults (custom opt-in, full opt-out —
+      // v6.15.0).
       if(_navLiveReal){
         const _wRef=(navCfg.mini&&Number(navCfg.mini.width_ref))||480;
         cAll.rooms.forEach(function(r,ri){
@@ -5378,7 +5381,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const iconEl=q('[data-b-icon="'+i+'"]');if(iconEl){if(iconEl.value)o.icon=iconEl.value;else delete o.icon;}
       const bxEl=q('[data-b-x="'+i+'"]');if(bxEl){if(bxEl.value.trim())o.x=bxEl.value.trim();else delete o.x;}
       const byEl=q('[data-b-y="'+i+'"]');if(byEl){if(byEl.value.trim())o.y=byEl.value.trim();else delete o.y;}const bAnimEl=q('[data-b-anim="'+i+'"]');if(bAnimEl&&bAnimEl.value)o.animation=bAnimEl.value;else delete o.animation;const bAcEl=q('[data-b-ac="'+i+'"]');if(bAcEl&&bAcEl.value&&o.animation)o.animation_color=self._colorVal(bAcEl,b.animation_color);else delete o.animation_color;
-      const bNmEl=q('[data-b-nav-mini="'+i+'"]');if(bNmEl){if(bNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      const bNmEl=q('[data-b-nav-mini="'+i+'"]');self._navMiniSet(bNmEl,o);
       const yaR=self._pYaml(q('[data-b-yaml="'+i+'"]'));
       if(yaR.ok){
         // The YAML textarea owns every key except those with dedicated fields —
@@ -5405,7 +5408,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(yaR.val)Object.assign(o,yaR.val);
       }
       const elGrpEl=q('[data-el-grp="'+i+'"]');if(elGrpEl&&elGrpEl.value.trim())o.group=elGrpEl.value.trim();else delete o.group;
-      const elNmEl=q('[data-el-nav-mini="'+i+'"]');if(elNmEl){if(elNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      const elNmEl=q('[data-el-nav-mini="'+i+'"]');self._navMiniSet(elNmEl,o);
       _secTile('el',i,o);
       return o;
     });
@@ -5433,7 +5436,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const holdR=self._pYaml(q('[data-ico-hold="'+i+'"]'));
       if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
       const icoGrpEl=q('[data-ico-grp="'+i+'"]');if(icoGrpEl&&icoGrpEl.value.trim())o.group=icoGrpEl.value.trim();else delete o.group;
-      const icoNmEl=q('[data-ico-nav-mini="'+i+'"]');if(icoNmEl){if(icoNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      const icoNmEl=q('[data-ico-nav-mini="'+i+'"]');self._navMiniSet(icoNmEl,o);
       _secTile('ico',i,o);
       return o;
     });
@@ -5520,7 +5523,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(lblGradStops.length)o.color_gradient=lblGradStops.sort((a,b)=>a.value-b.value);
       else delete o.color_gradient;
       const lblGrpEl=q('[data-lbl-grp="'+i+'"]');if(lblGrpEl&&lblGrpEl.value.trim())o.group=lblGrpEl.value.trim();else delete o.group;
-      const lblNmEl=q('[data-lbl-nav-mini="'+i+'"]');if(lblNmEl){if(lblNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      const lblNmEl=q('[data-lbl-nav-mini="'+i+'"]');self._navMiniSet(lblNmEl,o);
       return o;
     });
 
@@ -5555,7 +5558,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const gAlertAttrEl=q('[data-g-alert-attr="'+i+'"]');
       if(gAlertEntEl&&gAlertEntEl.value.trim()&&gAlertOpEl&&gAlertOpEl.value&&gAlertValEl&&gAlertValEl.value.trim()){const _ac={entity:gAlertEntEl.value.trim(),operator:gAlertOpEl.value,value:parseFloat(gAlertValEl.value)};if(gAlertAttrEl&&gAlertAttrEl.value.trim())_ac.attribute=gAlertAttrEl.value.trim();o.alert_conditions=_ac;}else delete o.alert_conditions;
       const gGrpEl=q('[data-g-grp="'+i+'"]');if(gGrpEl&&gGrpEl.value.trim())o.group=gGrpEl.value.trim();else delete o.group;
-      const gNmEl=q('[data-g-nav-mini="'+i+'"]');if(gNmEl){if(gNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      const gNmEl=q('[data-g-nav-mini="'+i+'"]');self._navMiniSet(gNmEl,o);
       return o;
     });
     tgt.blinds=(tgt.blinds||[]).map(function(b,i){
@@ -5591,7 +5594,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(yaR.val)Object.assign(o,yaR.val);
       }
       const blGrpEl=q('[data-bl-grp="'+i+'"]');if(blGrpEl&&blGrpEl.value.trim())o.group=blGrpEl.value.trim();else delete o.group;
-      const blNmEl=q('[data-bl-nav-mini="'+i+'"]');if(blNmEl){if(blNmEl.checked)o.nav_mini=true;else delete o.nav_mini;}
+      const blNmEl=q('[data-bl-nav-mini="'+i+'"]');self._navMiniSet(blNmEl,o);
       const _ccDispEl=q('[data-bl-ccdisp="'+i+'"]');
       if(_ccDispEl&&_ccDispEl.value&&_ccDispEl.value!=='off'){
         const _ctl={placement:_ccDispEl.value==='dock'?'dock':'float'};
@@ -5881,15 +5884,35 @@ class RoomOverlayCardEditor extends HTMLElement{
     return h;
   }
 
-  // 'nav.live: custom' per-element opt-in checkbox (NAV_LIVE_FULL_PLAN.md
-  // §13, opt-in default confirmed 2026-08-05). Renders nothing outside
-  // custom mode — the field/data-attribute simply won't exist in the DOM, so
-  // the generic collect loop naturally skips writing/clearing it, leaving
-  // whatever nav_mini value the config already had untouched (switching live
-  // modes back and forth never loses a user's per-element choices).
-  _navMiniField(prefix,i,checked){
-    if(!(this._config&&this._config.nav&&this._config.nav.live==='custom'))return'';
-    return '<div style="display:flex;align-items:center;gap:7px;margin-top:6px;"><input data-'+prefix+'-nav-mini="'+i+'" type="checkbox"'+(checked?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:12px;cursor:pointer;">Show in nav.live: custom mini</label></div>';
+  // Per-element nav_mini checkbox (NAV_LIVE_FULL_PLAN.md §13, opt-in default
+  // confirmed 2026-08-05; opt-out under 'full' added v6.15.0). Renders
+  // nothing outside the two live-mini tiers — the field/data-attribute
+  // simply won't exist in the DOM, so the generic collect loop naturally
+  // skips writing/clearing it, leaving whatever nav_mini value the config
+  // already had untouched (switching live modes back and forth never loses
+  // a user's per-element choices). The checkbox's MEANING flips with the
+  // tier: 'custom' is opt-in (checked = "show it"), 'full' is opt-out
+  // (checked = "hide it") — matching each tier's own default of showing
+  // nothing vs. showing everything. navMiniVal is the item's raw nav_mini
+  // config value (undefined/true/false), not a pre-computed boolean, so
+  // this can tell "unset" apart from an explicit false.
+  _navMiniField(prefix,i,navMiniVal){
+    const _live=this._config&&this._config.nav&&this._config.nav.live;
+    if(_live!=='custom'&&_live!=='full')return'';
+    const _isFull=_live==='full';
+    const checked=_isFull?navMiniVal===false:navMiniVal===true;
+    const label=_isFull?'Hide from nav.live: full mini':'Show in nav.live: custom mini';
+    return '<div style="display:flex;align-items:center;gap:7px;margin-top:6px;"><input data-'+prefix+'-nav-mini="'+i+'" type="checkbox"'+(checked?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><label style="font-size:12px;cursor:pointer;">'+label+'</label></div>';
+  }
+  // Collects one nav-mini checkbox's checked state into o.nav_mini, with the
+  // same tier-dependent meaning _navMiniField renders (see above): 'full'
+  // writes an explicit false (opt-out) when checked, 'custom' writes true
+  // (opt-in); unchecked always deletes the field in both tiers, reverting to
+  // that tier's default.
+  _navMiniSet(el,o){
+    if(!el)return;
+    if(el.checked)o.nav_mini=(this._config&&this._config.nav&&this._config.nav.live==='full')?false:true;
+    else delete o.nav_mini;
   }
 
   _zoneItem(z,i){
@@ -5958,7 +5981,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label class="roc-l">label / visible / icon_color / tap_action / group (YAML)</label>';
     h+='<textarea data-b-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(bYaml)+'</textarea></div>';
-    h+=this._navMiniField('b',i,b.nav_mini===true);
+    h+=this._navMiniField('b',i,b.nav_mini);
     h+=this._mvBtns('b',i);
     h+='<button data-rm-b="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove badge</button>';
     h+='</div></details>';
@@ -5992,7 +6015,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">card / visible / z_index / border_radius (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
-    h+=this._navMiniField('el',i,el.nav_mini===true);
+    h+=this._navMiniField('el',i,el.nav_mini);
     h+=this._secTileHtml('el',i,el);
     h+=this._mvBtns('el',i);
     h+='<button data-dup-el="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
@@ -6032,7 +6055,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
     h+='</div>';
     h+='<div style="margin-bottom:6px;"><label class="roc-l">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
-    h+=this._navMiniField('ico',i,ico.nav_mini===true);
+    h+=this._navMiniField('ico',i,ico.nav_mini);
     h+=this._secTileHtml('ico',i,ico);
     h+=this._mvBtns('ico',i);
     h+='<button data-dup-ico="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
@@ -6182,7 +6205,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="margin-bottom:8px;"><label class="roc-l">Template (Jinja — replaces entity value, e.g. {{ states(\'sensor.x\') | round(1) }})</label><textarea data-lbl-tmpl="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(lbl.template||'')+'</textarea></div>';
     h+='<div><label class="roc-l">font_size / color / visible / visible_template / format / tap_action / fade / mobile / z_index (YAML)</label>';h+='<textarea data-lbl-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-lbl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(lbl.group||'')+'"'+this._inp('')+'></div>';
-    h+=this._navMiniField('lbl',i,lbl.nav_mini===true);
+    h+=this._navMiniField('lbl',i,lbl.nav_mini);
     h+=this._mvBtns('lbl',i);
     h+='<button data-dup-lbl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-lbl="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove label</button>';h+='</div></details>';return h;}
@@ -6226,7 +6249,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div><label class="roc-l">background / transition / visible / visible_template / tap_action / fade / mobile / z_index / color (YAML)</label>';h+='<textarea data-g-yaml="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ys)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-g-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(g.group||'')+'"'+this._inp('')+'></div>';
-    h+=this._navMiniField('g',i,g.nav_mini===true);
+    h+=this._navMiniField('g',i,g.nav_mini);
     h+=this._mvBtns('g',i);
     h+='<button data-dup-g="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';
     h+='<button data-rm-g="'+i+'" style="margin-top:8px;padding:4px 10px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:12px;">Remove gauge</button>';h+='</div></details>';return h;}
@@ -6318,7 +6341,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="margin-bottom:8px;"><label class="roc-l">background / border_radius / transition / visible / visible_conditions (YAML)</label>';
     h+='<textarea data-bl-yaml="'+i+'" rows="2"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(ysBl)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-bl-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(b.group||'')+'"'+this._inp('')+'></div>';
-    h+=this._navMiniField('bl',i,b.nav_mini===true);
+    h+=this._navMiniField('bl',i,b.nav_mini);
     h+=this._secTileHtml('bl',i,b);
     h+=this._mvBtns('bl',i);
     h+='<button data-dup-bl="'+i+'" style="margin-top:8px;margin-right:6px;padding:4px 10px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Duplicate</button>';

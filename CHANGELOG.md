@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.15.0] - 2026-09-10
+
+### `nav_mini: false` — opt a single element out of `nav.live: full`'s mini thumbnail
+
+`nav.live: full` shows a room's whole live state in its own thumbnail — gauges, labels, icons,
+badges, blinds, embedded cards, everything, unconditionally. That's the point of `full`, but it
+also means one specific element (a cluster of "open section" launcher icons, say) can end up
+cramped or cluttered at thumbnail scale with no way to hide just that one thing short of switching
+the whole room to `custom` and re-opting everything else back in.
+
+`nav_mini` is now honored in both live tiers, with opposite defaults matching each tier's own
+starting point: `custom` stays opt-in (`nav_mini: true` to show an otherwise-hidden element),
+while `full` is now opt-out (`nav_mini: false` to hide an otherwise-shown one). The editor's
+per-element "Show in mini" checkbox becomes "Hide from mini" once `live: full` is active — same
+field, same checkbox, meaning flipped to match the tier. Purely additive: an existing `full` config
+with no `nav_mini` fields renders identically to before.
+
 ## [6.14.0] - 2026-09-10
 
 ### `image_align` — where the photo sits when its box is taller than it needs
