@@ -59,7 +59,7 @@ Each profile is a **CSS grid in % of the available screen**. Every block of the 
 
 ```yaml
 layout:
-  height: viewport      # viewport (default, full view minus HA header) | container | 90vh / 800px
+  height: viewport      # viewport (default) | fill | container | 90vh / 800px
   threshold: 1.0        # w/h ratio below which the card is portrait
   # orientation: landscape          # optional: force one profile
   # orientation:                    # …or pin per device (browser_mod ID)
@@ -101,8 +101,15 @@ Rules and notes:
   fit with no crop and no letterbox (ideal when you have controls at the image edges). Use a
   fixed `%` row + `image_fit` when you want to dictate the height instead.
 - The card is designed for **panel-view / full-screen** dashboards. `height: viewport` measures
-  the real available height (HA header, view padding and safe-areas accounted for). Use
-  `container` or a fixed value when embedding.
+  the real available height (HA header, view padding and safe-areas accounted for) — **on
+  landscape** (tablets, kiosks). **On portrait (phones)**, `viewport` deliberately does *not* pin
+  that height: the card sizes itself to its own content instead (width is the real limiting factor
+  on a phone, and stretching every region to fill leftover vertical space just makes them
+  disproportionately tall). This is fine for a plain photo-and-overlays room card, but a **cockpit
+  with `sections:`** — panels that slide/sheet in from an edge — needs the phone screen genuinely
+  full-height so a bottom sheet has real space to open into. Set `height: fill` for that case: it
+  behaves exactly like `viewport`, except portrait is pinned to the full available height too,
+  the same way landscape always is. Use `container` or a fixed value when embedding either way.
 - The **image region** gets a fixed box from the grid; the image renders inside it at its design
   aspect with `image_fit: cover` (crop, default) or `contain` (letterbox). **Element `%`
   positions stay glued to the image.**

@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.12.2';
+const ROC_VERSION='6.13.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1294,7 +1294,7 @@ class RoomOverlayCard extends HTMLElement{
     // thumbnail host, not a real scrolling page, so the budget math here
     // wouldn't mean anything useful for it anyway.
     if(c._roc_ghost||c._roc_mini)return;
-    if(this._profile==='portrait'&&((this._config.layout&&this._config.layout.height)||'viewport')==='viewport')return; // natural portrait sizes itself
+    if(this._profile==='portrait'&&((this._config.layout&&this._config.layout.height)||'viewport')==='viewport')return; // natural portrait sizes itself ('fill' pins it — falls through to the fit-check below
     const wrap=this._elWrap();
     if(!wrap||!wrap.style.aspectRatio)return; // only the intrinsic image box
     const region=wrap.parentElement;
@@ -1511,8 +1511,9 @@ class RoomOverlayCard extends HTMLElement{
     if(!this.shadowRoot||!this._config)return;
     const c=this._roomCfg||this._config;
     if(c._roc_ghost||c._roc_preview||c._roc_mini)return;
-    if(((this._config.layout&&this._config.layout.height)||'viewport')!=='viewport')return;
-    if(this._profile==='portrait')return; // natural content height — nothing to pin
+    const _lh=(this._config.layout&&this._config.layout.height)||'viewport';
+    if(_lh!=='viewport'&&_lh!=='fill')return;
+    if(this._profile==='portrait'&&_lh==='viewport')return; // natural content height — nothing to pin ('fill' pins portrait too)
     const card=this._elCard();
     if(!card)return;
     const r=this.getBoundingClientRect();
@@ -1951,8 +1952,8 @@ class RoomOverlayCard extends HTMLElement{
     this._lp=_lp;
     const _arResolved=tVal(c.aspect_ratio,_vt)||'16/9';
     const br=(tVal(c.border_radius,_vt)??'12px');
-    // Root height: viewport (default) | container | fixed CSS length. Ghosts and
-    // editor previews fill/fix their host instead of the viewport.
+    // Root height: viewport (default) | fill | container | fixed CSS length.
+    // Ghosts and editor previews fill/fix their host instead of the viewport.
     const _lhRaw=(cAll.layout&&cAll.layout.height)||'viewport';
     // Portrait, default 'viewport' mode: size from CONTENT (width is the real
     // limiting factor in portrait), not a forced full-screen pin — force-
@@ -1960,13 +1961,19 @@ class RoomOverlayCard extends HTMLElement{
     // proportionally past what it actually needs. Landscape (the kiosk/wall-
     // tablet use case) keeps the viewport-fill goal. An explicit
     // layout.height (container/fixed) always wins, in either profile.
+    // 'fill' (v6.13.0) is the escape hatch from that portrait default: a
+    // panel-view cockpit dashboard (sections/panels, image row on '1fr') wants
+    // the phone screen genuinely pinned full-height too, so its bottom sheet
+    // has real screen to open into — 'fill' behaves exactly like 'viewport'
+    // but also opts portrait INTO the pin instead of sizing to content.
+    const _pinHeight=_lhRaw==='viewport'||_lhRaw==='fill';
     const _naturalRoot=!_isGhost&&!_isMini&&!c._roc_preview&&_rt==='portrait'&&_lhRaw==='viewport';
     let _rootH;
     if(_isGhost)_rootH='100%';
     else if(_isMini)_rootH='auto';       // aspect-derived, via _wrapAspect below — never stretched
     else if(c._roc_preview)_rootH='auto';  // aspect-derived, via _wrapAspect below — was a guessed fixed 420px, left blank space under shorter content
     else if(_naturalRoot)_rootH='auto';
-    else if(_lhRaw==='viewport')_rootH=this._rootHPx?this._rootHPx+'px':'calc(100svh - var(--header-height,56px))'; // pinned px survives re-renders (room switch); CSS calc is first-paint only, refined by _layoutRootHeight()
+    else if(_pinHeight)_rootH=this._rootHPx?this._rootHPx+'px':'calc(100svh - var(--header-height,56px))'; // pinned px survives re-renders (room switch); CSS calc is first-paint only, refined by _layoutRootHeight()
     else if(_lhRaw==='container')_rootH='100%';
     else _rootH=(typeof _lhRaw==='number')?_lhRaw+'px':String(_lhRaw);
     // ---- Multi-room navigation strip -------------------------------------
@@ -6655,14 +6662,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     // Layout tab (v4) — two profiles (portrait/landscape) on a % grid of the viewport
     const _ly=c.layout||{};
     const _lyH=_ly.height||'viewport';
-    const _lyHMode=(_lyH==='viewport'||_lyH==='container')?_lyH:'custom';
+    const _lyHMode=(_lyH==='viewport'||_lyH==='fill'||_lyH==='container')?_lyH:'custom';
     const _lyOr=(typeof _ly.orientation==='string')?_ly.orientation:'auto';
     const _lyPin=(_ly.orientation&&typeof _ly.orientation==='object')?_ly.orientation:null;
     const _bidNowL=window.browser_mod?.browserID||window.browser_mod?.browser_id||'';
     const _pinVal=(_lyPin&&_bidNowL&&_lyPin.by_browser)?(_lyPin.by_browser[_bidNowL]||''):'';
     let respInner='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">Two layout profiles — <b>portrait</b> / <b>landscape</b> — picked by the viewport&#39;s width/height ratio (not by device type). Each profile is a % grid of the available screen and every block (region) gets a cell. <b>You own the percentages</b> (rows should sum to &le;100). Turn on <b>Test mode</b> to see region outlines and a profile switch button on the card.</p>';
     respInner+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">';
-    respInner+='<div><label class="roc-l">Height</label><select id="ly-hmode"'+this._inp('')+'><option value="viewport"'+(_lyHMode==='viewport'?' selected':'')+'>viewport (full view)</option><option value="container"'+(_lyHMode==='container'?' selected':'')+'>container (parent)</option><option value="custom"'+(_lyHMode==='custom'?' selected':'')+'>custom&#8230;</option></select></div>';
+    respInner+='<div><label class="roc-l">Height</label><select id="ly-hmode"'+this._inp('')+'><option value="viewport"'+(_lyHMode==='viewport'?' selected':'')+'>viewport (full view — desktop/tablet; phones size to content)</option><option value="fill"'+(_lyHMode==='fill'?' selected':'')+'>fill (full view, phones too — v6.13.0)</option><option value="container"'+(_lyHMode==='container'?' selected':'')+'>container (parent)</option><option value="custom"'+(_lyHMode==='custom'?' selected':'')+'>custom&#8230;</option></select></div>';
     respInner+='<div><label class="roc-l">Custom height</label><input id="ly-hcustom" type="text" placeholder="e.g. 90vh / 800px" value="'+this._e(_lyHMode==='custom'?String(_lyH):'')+'"'+this._inp('')+'></div>';
     respInner+='<div><label class="roc-l">Orientation</label><select id="ly-orient"'+this._inp('')+'><option value="auto"'+(_lyOr==='auto'?' selected':'')+'>auto (by ratio)</option><option value="portrait"'+(_lyOr==='portrait'?' selected':'')+'>always portrait</option><option value="landscape"'+(_lyOr==='landscape'?' selected':'')+'>always landscape</option></select></div>';
     respInner+='<div><label class="roc-l">Threshold (w/h)</label><input id="ly-threshold" type="number" step="0.05" min="0.1" placeholder="1.0" value="'+(_ly.threshold!=null?_ly.threshold:'')+'"'+this._inp('')+'></div>';

@@ -1,0 +1,42 @@
+layout:
+  portrait:
+    rows:
+      - auto
+      - auto
+      - 1fr
+      - auto
+      - auto
+    place:
+      nav:
+        row: 1
+      image:
+        row: 3
+      lights:
+        row: 2
+      cover:
+        row: 5
+  landscape:
+    rows:
+      - auto
+      - auto
+      - 1fr
+      - auto
+      - auto
+    columns:
+      - 1fr
+      - auto
+    place:
+      nav:
+        row: 1
+        col: 1/3
+      cards_above:
+        row: 2
+        col: 1/3
+      image:
+        row: 3
+      lights:
+        row: 2
+        col: 1/3
+      cover:
+        row: 3/6
+        col: 2

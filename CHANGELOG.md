@@ -1,5 +1,24 @@
 # Changelog
 
+## [6.13.0] - 2026-09-10
+
+### `layout.height: fill` — pin portrait to full viewport height too
+
+`layout.height: viewport` (the default) has always meant something different per profile:
+landscape gets pinned to the real available height (`calc(100svh - header)`), but **portrait
+deliberately sizes itself to its own content instead** — by design, since a phone's width is the
+real limiting factor and stretching leftover vertical space just makes every region disproportion-
+ately tall. That's the right call for a plain photo-and-overlays room card, but it silently fights a
+**cockpit dashboard** (`sections:`/panels sliding in from an edge): on a phone, the panel can only
+open as tall as the card's own natural content height, leaving unused space below the card and no
+real room for a sheet to open into — reported as a section panel stopping short of the bottom of the
+screen with a `type: panel` view already in place and the image row already on `1fr`.
+
+New `height: fill` opts portrait *into* the same pin landscape always had — everything else about
+it (the `calc(100svh - header)` measurement, `container`/fixed-length override, per-profile grids)
+is unchanged. `viewport` keeps its current behaviour on both profiles; this is purely additive. See
+docs/releases/RELEASE_NOTES_v6.13.0.md.
+
 ## [6.12.2] - 2026-09-09
 
 ### Fix: scrolling on touch could accidentally fire a tap_action
