@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.13.0';
+const ROC_VERSION='6.14.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -42,11 +42,19 @@ function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
 // lock_aspect: size a fixed-design-aspect stage to COVER the (per-tier) box,
 // centered. Elements live on this stage → glued to the image, identical across
 // tiers; the per-tier aspect_ratio only changes how much is cropped.
-function coverStage(boxW,boxH,da){
+// align (v6.14.0): 'top'|'center'(default)|'bottom' — where the stage sits
+// vertically when it doesn't exactly fill the box (contain's letterbox gap,
+// or cover's crop overflow). Horizontal stays centered either way — the
+// vertical case is the one a taller-than-needed box (e.g. layout.height:
+// fill's 1fr image row) actually produces.
+function rocStageTop(boxH,h,align){
+  return align==='top'?0:align==='bottom'?(boxH-h):(boxH-h)/2;
+}
+function coverStage(boxW,boxH,da,align){
   if(!(da>0)||!(boxW>0)||!(boxH>0))return null;
   let w,h;
   if(boxW/boxH>=da){w=boxW;h=boxW/da;}else{h=boxH;w=boxH*da;}
-  return{w:w,h:h,left:(boxW-w)/2,top:(boxH-h)/2};
+  return{w:w,h:h,left:(boxW-w)/2,top:rocStageTop(boxH,h,align)};
 }
 // Truthiness for template visibility results (render_template returns native types)
 function tmplTruthy(v){
@@ -186,11 +194,11 @@ function rocCoverHoriz(lp){
   return false; // one column of a multi-column grid → side rail
 }
 // contain counterpart of coverStage — image letterboxed inside the box.
-function containStage(boxW,boxH,da){
+function containStage(boxW,boxH,da,align){
   if(!(da>0)||!(boxW>0)||!(boxH>0))return null;
   let w,h;
   if(boxW/boxH>=da){h=boxH;w=boxH*da;}else{w=boxW;h=boxW/da;}
-  return{w:w,h:h,left:(boxW-w)/2,top:(boxH-h)/2};
+  return{w:w,h:h,left:(boxW-w)/2,top:rocStageTop(boxH,h,align)};
 }
 // Approximate colour temperature (Kelvin) → RGB (Tanner Helland, compact)
 function kelvinToRgb(k){
@@ -1349,6 +1357,7 @@ class RoomOverlayCard extends HTMLElement{
     // Design aspect: lock_aspect wins (explicit / auto from image), else aspect_ratio.
     const da=this._designAspect()||rocRatio(tVal(c.aspect_ratio,prof))||16/9;
     const fit=(tVal(c.image_fit,prof)==='contain')?'contain':'cover';
+    const align=tVal(c.image_align,prof)||'center';
     if(wrap.style.aspectRatio){ // intrinsic (auto-row) image box follows the design aspect
       const _as=da.toFixed(4);
       if(wrap.style.aspectRatio!==_as)wrap.style.aspectRatio=_as;
@@ -1363,9 +1372,9 @@ class RoomOverlayCard extends HTMLElement{
     // is being scaled down for its thumbnail.
     const r={width:wrap.offsetWidth,height:wrap.offsetHeight};
     if(!(r.width>0)||!(r.height>0))return;
-    const key=Math.round(r.width)+'x'+Math.round(r.height)+':'+da.toFixed(4)+':'+fit;
+    const key=Math.round(r.width)+'x'+Math.round(r.height)+':'+da.toFixed(4)+':'+fit+':'+align;
     if(content.dataset.rocStage===key)return; // unchanged
-    const st=(fit==='contain'?containStage:coverStage)(r.width,r.height,da);
+    const st=(fit==='contain'?containStage:coverStage)(r.width,r.height,da,align);
     if(!st)return;
     content.style.position='absolute';content.style.inset='auto';
     content.style.width=st.w+'px';content.style.height=st.h+'px';
@@ -5166,6 +5175,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const _arV=_collProf('aspect_ratio');c.aspect_ratio=_arV!==undefined?_arV:'16/9';
     const _brV=_collProf('border_radius');if(_brV!==undefined)c.border_radius=_brV;else delete c.border_radius;
     const _ifV=_collProf('image_fit');if(_ifV!==undefined)c.image_fit=_ifV;else delete c.image_fit;
+    const _iaV=_collProf('image_align');if(_iaV!==undefined)c.image_align=_iaV;else delete c.image_align;
     const _lav=v('lock_aspect','').trim().toLowerCase();
     if(_lav==='true'||_lav==='on'||_lav==='yes'||_lav==='auto')c.lock_aspect=true;
     else if(_lav)c.lock_aspect=v('lock_aspect','').trim();
@@ -6727,7 +6737,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       h+='</div></div>';
       return h;
     };
-    const _profRowSelect=function(idb,label,val,opts){
+    const _profRowSelect=function(idb,label,val,opts,defLabel){
       const isObj=val&&typeof val==='object';
       const sc=(val!=null&&!isObj)?String(val):'';
       let h='<div style="margin-bottom:8px;"><label class="roc-l">'+label+'</label>';
@@ -6735,7 +6745,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       ROC_PROFILES.forEach(function(pk){
         const v0=isObj?(val[pk]!=null?String(val[pk]):''):(pk==='landscape'?sc:'');
         h+='<select id="'+idb+'__'+pk+'"'+self._inp('font-size:12px;')+'>';
-        h+='<option value=""'+(!v0?' selected':'')+'>'+(pk==='portrait'?'&#8212; same as landscape &#8212;':'&#8212; default: cover &#8212;')+'</option>';
+        h+='<option value=""'+(!v0?' selected':'')+'>'+(pk==='portrait'?'&#8212; same as landscape &#8212;':'&#8212; default: '+(defLabel||'cover')+' &#8212;')+'</option>';
         opts.forEach(function(o){h+='<option value="'+o[0]+'"'+(v0===o[0]?' selected':'')+'>'+o[1]+'</option>';});
         h+='</select>';
       });
@@ -6746,6 +6756,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     respInner+=_profRow('aspect_ratio','Aspect ratio (design shape of the image)',c.aspect_ratio,'e.g. 16/9');
     respInner+=_profRow('border_radius','Border radius',c.border_radius,'e.g. 12px');
     respInner+=_profRowSelect('image_fit','Image fit',c.image_fit,[['cover','cover — crop to fill'],['contain','contain — letterbox']]);
+    respInner+=_profRowSelect('image_align','Image align (v6.14.0)',c.image_align,[['top','top'],['center','center'],['bottom','bottom']],'center');
     respInner+='<div style="border-top:1px solid var(--divider-color);padding-top:12px;"><label class="roc-l">Lock layout to image</label>';
     respInner+='<input id="lock_aspect" type="text" placeholder="off — or: true (auto from image) / 16/9" value="'+this._e(c.lock_aspect===true?'true':(c.lock_aspect||''))+'"'+this._inp('')+'>';
     respInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:6px 0 0;line-height:1.5;">When set, zones / icons / blinds etc. stay glued to the image across every tier — per-tier <code>aspect_ratio</code> then only changes how much of the image is cropped, not where elements sit. Use <b>true</b> to take the design shape from the image automatically, or pin an explicit aspect like <b>1720/968</b> (your source image’s real W/H).</p></div>';
@@ -7435,8 +7446,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     ['base_image','filter_transition','base_image_conditions','base_camera','camera_refresh','weather_entity','weather_effect','weather_opacity','weather-nav-mini','zoom'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
-    // Per-profile inputs (aspect_ratio / border_radius / image_fit — 2 cells each)
-    ROC_PROFILES.forEach(function(pk){['aspect_ratio','border_radius','image_fit'].forEach(function(idb){
+    // Per-profile inputs (aspect_ratio / border_radius / image_fit / image_align — 2 cells each)
+    ROC_PROFILES.forEach(function(pk){['aspect_ratio','border_radius','image_fit','image_align'].forEach(function(idb){
       const el=self.querySelector('#'+idb+'__'+pk);if(el)el.addEventListener('change',fire);
     });});
     const undoBtn=this.querySelector('#roc-undo');

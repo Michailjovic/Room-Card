@@ -20,6 +20,7 @@ GUI editor — see [`EDITOR.md`](EDITOR.md) for the tab-by-tab walkthrough.
 | `border_radius` | string / object | `12px` | Card corner radius — single value or `{portrait, landscape}` |
 | `layout` | object | generated | Layout engine — height source, orientation, threshold and the two profile grids (see [Layout](#layout--two-profiles-on-a--grid)) |
 | `image_fit` | string / object | `cover` | `cover` (crop) or `contain` (letterbox) — single value or `{portrait, landscape}` |
+| `image_align` | string / object | `center` | `top`/`center`/`bottom` — where the photo sits when the image box is taller than it needs (v6.14.0) — single value or `{portrait, landscape}` |
 | `filter_transition` | string | `2s ease` | CSS transition for the base image filter |
 | `filter_conditions` | list | `[]` | Discrete CSS filter states |
 | `brightness_model` | object | — | Multi-stop filter interpolation |
@@ -112,7 +113,13 @@ Rules and notes:
   the same way landscape always is. Use `container` or a fixed value when embedding either way.
 - The **image region** gets a fixed box from the grid; the image renders inside it at its design
   aspect with `image_fit: cover` (crop, default) or `contain` (letterbox). **Element `%`
-  positions stay glued to the image.**
+  positions stay glued to the image.** When that box is taller than the image needs at its design
+  aspect — e.g. an `image` row on `1fr` under `layout.height: fill` — the leftover space is, by
+  default, split evenly above and below (`image_align: center`). Set `image_align: top` to pin the
+  photo to the top of its box instead (the leftover collects at the bottom, out of the way — the
+  usual choice for a cockpit, so the room photo stays right under the nav strip) or `bottom` for
+  the opposite. Purely cosmetic — it doesn't change which region owns the space, only where the
+  photo sits inside it (v6.14.0).
 - **Edit mode** shows region outlines with names, a live viewport + profile badge, and a
   **profile switch button** to preview the other profile.
 - Everything is editable in the GUI **Layout tab**: height source, orientation/threshold,

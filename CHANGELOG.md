@@ -1,5 +1,23 @@
 # Changelog
 
+## [6.14.0] - 2026-09-10
+
+### `image_align` — where the photo sits when its box is taller than it needs
+
+`layout.height: fill` (v6.13.0) fixed a cockpit dashboard's card stopping short of the bottom of a
+phone screen — but pinning the card taller exposed a second, previously invisible issue: the
+`image` region's box is now genuinely tall, and `image_fit: contain`'s letterbox (or `cover`'s
+crop) has always centered vertically — a design photo far shorter than its now-tall box ends up
+floating in the middle, with the letterbox gap split evenly above AND below it, instead of sitting
+right under the nav strip the way it did before the box got taller.
+
+New `image_align: top|center|bottom` (default `center`, unchanged from before). `top` pins the
+photo to the top of its box and pushes all the leftover space to the bottom — the natural choice
+for a cockpit, since that's the space a bottom-sheet panel opens into anyway. Works the same way
+for `cover`'s crop overflow, not just `contain`'s letterbox. Purely additive: `align` is a new
+optional 4th argument on the (previously always-centered) stage-positioning helpers, defaulting to
+the old centered behaviour. See docs/releases/RELEASE_NOTES_v6.14.0.md.
+
 ## [6.13.0] - 2026-09-10
 
 ### `layout.height: fill` — pin portrait to full viewport height too
