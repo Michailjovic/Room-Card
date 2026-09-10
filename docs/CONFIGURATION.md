@@ -564,6 +564,12 @@ zones:
 Any action may carry `confirmation: true` (or `confirmation: {text: "..."}`). A `hold_action`
 shows a **progress ring** while you press, which turns green the moment the hold registers.
 
+**Scroll vs. tap (v6.12.2).** On touch, starting a page scroll with your finger on top of a
+tappable zone/icon/label/gauge/vacuum_widget/tile no longer fires its `tap_action` — the card now
+tracks how far the touch actually travelled and only treats it as a tap below a small (~10px)
+jitter threshold, the same disambiguation a native button uses. No configuration needed; this was
+a bug fix, not a new option.
+
 ```yaml
 tap_action:
   action: perform-action

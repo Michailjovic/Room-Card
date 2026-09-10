@@ -1947,6 +1947,42 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   chipCb.checked=false;chipCb.dispatchEvent(new w.Event('change',{bubbles:true}));
   t('unchecking Chip style removes icon.chip from the collected config',
     !!chipOut&&chipOut.icons[0].chip===undefined);
+
+  // ---- Scroll-vs-tap on touch (v6.12.2) ------------------------------------
+  // touchmove already cancelled the hold timer, but a finger that started a
+  // page scroll on top of a tappable zone/icon/tile still fired its
+  // tap_action on release — every scroll gesture starting on an element
+  // accidentally "clicked" it. Fixed by tracking touch travel distance and
+  // swallowing the tap once it passes a small jitter threshold.
+  const scrollCfg={base_image:'/local/x.webp',test_mode:false,
+    zones:[{id:'sz',top:'10%',left:'10%',width:'80%',height:'80%',
+      tap_action:{action:'navigate',navigation_path:'/x/scrolled'}}]};
+  const elScroll=mkCard(scrollCfg);
+  elScroll.hass={states:{},callService(){},user:{name:'x'}};
+  const szEl=elScroll._zoneEls['sz'];
+
+  const touchTap=(startXY,moveXY)=>{
+    let navPath=null;
+    const orig=w.history.pushState.bind(w.history);
+    w.history.pushState=(_s,_ti,p)=>{navPath=p;};
+    const ts=new w.Event('touchstart',{bubbles:true});ts.touches=[{clientX:startXY[0],clientY:startXY[1]}];
+    szEl.dispatchEvent(ts);
+    if(moveXY){
+      const tm=new w.Event('touchmove',{bubbles:true});tm.touches=[{clientX:moveXY[0],clientY:moveXY[1]}];
+      szEl.dispatchEvent(tm);
+    }
+    const te=new w.Event('touchend',{bubbles:true,cancelable:true});
+    szEl.dispatchEvent(te);
+    w.history.pushState=orig;
+    return navPath;
+  };
+
+  t('a plain tap (no movement) still fires tap_action',
+    touchTap([50,50],null)==='/x/scrolled');
+  t('tiny finger jitter (<~10px) still counts as a tap',
+    touchTap([50,50],[54,52])==='/x/scrolled');
+  t('a real drag (page scroll) starting on the element does NOT fire tap_action',
+    touchTap([50,50],[50,140])===null);
 }
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');

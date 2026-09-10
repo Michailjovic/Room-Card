@@ -1,5 +1,18 @@
 # Changelog
 
+## [6.12.2] - 2026-09-09
+
+### Fix: scrolling on touch could accidentally fire a tap_action
+
+On touch, starting a page scroll with a finger resting on a tappable zone/icon/label/gauge/
+vacuum_widget/tile still fired that element's `tap_action` on release — `touchmove` only cancelled
+the hold timer, it never suppressed the tap itself, so any scroll gesture that began on top of a
+tappable element quietly triggered its tap (typically an unwanted `navigate` away from the page).
+Fixed by tracking touch travel distance and only counting it as a tap below a small (~10px) jitter
+threshold — the same disambiguation a native button uses. No configuration change; this affects
+every element type that goes through the shared `_addZoneListeners` handler. See
+docs/releases/RELEASE_NOTES_v6.12.2.md.
+
 ## [6.12.1] - 2026-09-09
 
 ### `icons[].chip` — a frosted-glass circular badge style

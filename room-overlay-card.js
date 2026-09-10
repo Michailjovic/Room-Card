@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.12.1';
+const ROC_VERSION='6.12.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1141,6 +1141,12 @@ class RoomOverlayCard extends HTMLElement{
   _addZoneListeners(el,tapAction,holdAction,doubleTapAction,holdDelay){
     const delay=holdDelay??500;
     let holdTimer=null,showTimer=null,held=false,tapTimer=null,lastTapTime=0,ring=null;
+    // Scroll-vs-tap: touchmove already cancels the hold timer, but a finger
+    // that started a page scroll on top of a tappable element still fired
+    // its tap_action on release (v6.12.2 fix) — track how far the touch
+    // travelled and swallow the tap once it moved past a small jitter
+    // threshold, exactly like native tap-vs-scroll disambiguation.
+    let touchX=0,touchY=0,scrolled=false;
     const self=this;
     // Hold progress ring — fills over the hold delay, turns green when the hold
     // threshold is reached (so you know it registered). Global opt-out: hold_feedback:false.
@@ -1158,8 +1164,9 @@ class RoomOverlayCard extends HTMLElement{
     };
     const doneHold=function(){if(ring)ring.classList.add('done');};
     const cancel=function(){clearTimeout(holdTimer);clearTimeout(showTimer);if(ring){ring.remove();ring=null;}};
-    const press=function(){
-      held=false;cancel();
+    const press=function(e){
+      held=false;scrolled=false;cancel();
+      if(e&&e.touches&&e.touches[0]){touchX=e.touches[0].clientX;touchY=e.touches[0].clientY;}
       if(holdAction){
         showTimer=setTimeout(function(){startHold(delay-sd);},sd);
         holdTimer=setTimeout(function(){
@@ -1194,9 +1201,17 @@ class RoomOverlayCard extends HTMLElement{
     });
     el.addEventListener('touchstart',press,{passive:true});
     el.addEventListener('touchend',function(e){
-      cancel();e.stopPropagation();e.preventDefault();onTap(e);
+      cancel();e.stopPropagation();e.preventDefault();
+      if(scrolled){scrolled=false;held=false;return;} // finger dragged (page scroll) — not a tap
+      onTap(e);
     });
-    el.addEventListener('touchmove',function(){cancel();},{passive:true});
+    el.addEventListener('touchmove',function(e){
+      cancel();
+      if(!scrolled&&e.touches&&e.touches[0]){
+        const dx=e.touches[0].clientX-touchX,dy=e.touches[0].clientY-touchY;
+        if(dx*dx+dy*dy>100)scrolled=true; // >~10px — a drag/scroll, not finger jitter on a tap
+      }
+    },{passive:true});
     el.addEventListener('touchcancel',function(){cancel();held=false;});
     el.addEventListener('mousedown',press);
     el.addEventListener('click',function(e){

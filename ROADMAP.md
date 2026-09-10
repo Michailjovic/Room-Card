@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.12.1** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.12.2** (2026-09-09, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -89,6 +89,7 @@ failure broke HACS installs.
 | **v6.11.4** | **`state_images` attribute matching** — an entry can now match an entity's attribute (e.g. a media_player's `app_id`) instead of only its own state |
 | **v6.12.0** | **Cockpit tile `hold_action`/`double_tap_action`** — tiles now support the same long-press/double-tap actions as zones/icons/labels/gauges/vacuum_widgets, so e.g. a tap can navigate while a long-press opens more-info |
 | **v6.12.1** | **`icons[].chip`** — an icon can now render as the same frosted-glass circular badge the vacuum status widget uses, instead of a bare glyph, so a row of section-launcher icons can read as a consistent set of buttons |
+| **v6.12.2** | **Fix** — scrolling on touch no longer accidentally fires a tap_action; a real page-scroll drag is now told apart from a tap by travel distance, across every tappable element type |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 
