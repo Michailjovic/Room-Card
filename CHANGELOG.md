@@ -1,5 +1,18 @@
 # Changelog
 
+## [6.15.1] - 2026-09-11
+
+### Fix: `glows[]` didn't react to brightness/colour changes on an already-on light
+
+A glow's strength and colour are driven by its light's `brightness` and `rgb_color` /
+`color_temp_kelvin` attributes, but the incremental `hass` update only re-ran when an entity's
+*state* changed (or when explicitly tracked attributes did) — `glows[]` was never added to that
+attribute list. Dimming, re-colouring, or otherwise changing an already-`on` light produced no
+visible change until something else forced a full re-render (e.g. moving the glow in edit mode).
+Turning the light fully on/off already worked, since that's a state change. Fixed by tracking
+`brightness`, `rgb_color`, `color_temp_kelvin` and `color_temp` for every `glows[].entity`. Purely
+a bug fix — no configuration change. See docs/releases/RELEASE_NOTES_v6.15.1.md.
+
 ## [6.15.0] - 2026-09-10
 
 ### `nav_mini: false` — opt a single element out of `nav.live: full`'s mini thumbnail

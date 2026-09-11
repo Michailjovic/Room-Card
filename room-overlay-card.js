@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.0';
+const ROC_VERSION='6.15.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1143,6 +1143,11 @@ class RoomOverlayCard extends HTMLElement{
     (cfg.labels||[]).forEach(function(l){add(l.entity,l.attribute);});
     (cfg.icons||[]).forEach(function(ico){add(ico.entity,ico.attribute);});
     (cfg.blinds||[]).forEach(function(bl){add(bl.entity,bl.attribute);});
+    // Glow strength/colour come from brightness + colour attributes, not the
+    // on/off state alone — without these, dimming or re-colouring an already-on
+    // light never re-triggers _update() (only a state flip, or a forced
+    // re-render such as dragging the glow in edit mode, did).
+    (cfg.glows||[]).forEach(function(g){add(g.entity,'brightness');add(g.entity,'rgb_color');add(g.entity,'color_temp_kelvin');add(g.entity,'color_temp');});
     return out;
   }
 
