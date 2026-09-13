@@ -1,5 +1,28 @@
 # Changelog
 
+## [6.15.5] - 2026-09-13
+
+### Editor: structured fields for cockpit tiles (B2)
+
+Fourth release following the bug/UX audit (`BUG_UX_ANALYSIS_v6.15.1.md`), covering the report's Part
+2 item B2. See docs/releases/RELEASE_NOTES_v6.15.5.md for full details.
+
+- **Cockpit tiles now get real form fields for their most-used properties** — Name, Entity, Icon,
+  Icon animation, Active state, State class, Value text, Progress entity, and the Quick actions list
+  — instead of typing all of it into one combined YAML box. This applies everywhere a tile can
+  appear: a tagged element's `tile:` (zones/icons/elements/blinds tagged into a section) and a
+  section's own declared `tiles:`. The leftover YAML box under each tile now only ever holds
+  `tap_action`/`hold_action`/`hold_delay`/`double_tap_action`-style keys.
+- Editing a structured field never disturbs the leftover box's own content, and editing the leftover
+  box never disturbs the structured fields — the same KEEP-list guarantee bug #2 established for
+  element fields, now applied to tiles too. An invalid leftover box still keeps the last-good config,
+  same as always.
+- Quick actions round-trip through their own icon/label/service/target row, with a `+`/`×` to
+  add/remove one — but a `data:` key or a `target:` too complex for that simplified single-entity
+  field is preserved untouched unless you actually edit it.
+- No configuration changes, and no risk to your existing YAML — everything the new fields show is
+  read from (and written back to) the exact same keys as before.
+
 ## [6.15.4] - 2026-09-13
 
 ### Editor: inline YAML error text, and a first (scoped) `<ha-yaml-editor>` upgrade

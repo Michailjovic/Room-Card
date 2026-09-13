@@ -1703,9 +1703,16 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   t('the declared tile ID field is prefilled',
     edDt.querySelector('[data-dtile-id="0:0"]').value==='tv1');
   const dtYaml=edDt.querySelector('[data-dtile-yaml="0:0"]').value;
-  t('the declared tile YAML box carries name/entity/icon/tap_action but not id/image/image_ratio/overlays',
-    /name:\s*Ložnice/.test(dtYaml)&&/entity:\s*media_player\.tv1/.test(dtYaml)&&
+  t('the declared tile YAML box carries only leftover keys (tap_action) -- not name/entity/icon/id/image/image_ratio/overlays (B2)',
+    /tap_action/.test(dtYaml)&&
+    !/name/.test(dtYaml)&&!/entity/.test(dtYaml)&&!/icon/.test(dtYaml)&&
     !/image/.test(dtYaml)&&!/overlays/.test(dtYaml)&&!/^id:/m.test(dtYaml));
+  t('the declared tile\'s Name field is prefilled via the structured field (B2)',
+    edDt.querySelector('[data-tf-name="0:0"]').value==='Ložnice');
+  t('the declared tile\'s Entity field is prefilled via the structured field (B2)',
+    edDt.querySelector('[data-tf-entity="0:0"]').value==='media_player.tv1');
+  t('the declared tile\'s Icon field is prefilled via the structured field (B2)',
+    edDt.querySelector('[data-tf-icon="0:0"]').value==='mdi:television');
   t('the declared tile Image field is prefilled from tile.image',
     edDt.querySelector('[data-tile-img="dt:0_0"]').value==='/local/tv1.webp');
   t('the declared tile Aspect ratio field is prefilled from tile.image_ratio (v6.11.2)',
@@ -2301,6 +2308,99 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     edNoUp._tab='elements';edNoUp._render();
     t('B1 spike: falls back to a plain textarea when ha-yaml-editor is never defined',
       edNoUp.querySelector('[data-z-tap="0"]').tagName==='TEXTAREA');
+  }
+
+  // ---- B2: structured cockpit-tile fields (BUG_UX_ANALYSIS_v6.15.1.md §Part 2) --
+  // Covers a tagged element's item.tile (zone z:0, via _secTile) end to end:
+  // the dedicated fields are prefilled, the leftover YAML box holds only
+  // non-dedicated keys, editing a dedicated field doesn't touch the leftover
+  // box (and vice versa -- the KEEP-list from bug #2 applied to tiles), an
+  // invalid leftover box doesn't wipe the dedicated fields, quick actions
+  // round-trip through the structured icon/name/service/target inputs while
+  // preserving a `data:` key the simplified target UI can't represent, and
+  // the +/- quick-action buttons mutate the right tile via _tileRefForKey.
+  {
+    const b2Cfg={base_image:'/local/x.webp',
+      sections:[{id:'sec1',title:'Sec'}],
+      zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%',section:'sec1',
+        tile:{name:'Ventilátor',entity:'fan.a',icon:'mdi:fan',icon_animation:'spin',
+          active_state:'on',state_class:'run',value:'Rychlost 2',progress:'sensor.fan_speed',
+          hold_action:{action:'more-info'},
+          quick:[
+            {icon:'mdi:power',service:'fan.turn_on',target:{entity_id:'fan.a'}},
+            {icon:'mdi:cog',service:'fan.set_speed',data:{percentage:50},target:{entity_id:'fan.a'}}
+          ]}}]};
+    const edB2=w.document.createElement('room-overlay-card-editor');
+    edB2.setConfig(b2Cfg);
+    edB2.hass={states:{},user:{name:'x'}};
+    edB2._tab='elements';edB2._render();
+
+    t('B2: the dedicated Name/Entity/Icon/Animation/Active state/State class/Value/Progress fields are prefilled from a tagged element\'s tile',
+      edB2.querySelector('[data-tf-name="z:0"]').value==='Ventilátor'&&
+      edB2.querySelector('[data-tf-entity="z:0"]').value==='fan.a'&&
+      edB2.querySelector('[data-tf-icon="z:0"]').value==='mdi:fan'&&
+      edB2.querySelector('[data-tf-anim="z:0"]').value==='spin'&&
+      edB2.querySelector('[data-tf-active="z:0"]').value==='on'&&
+      edB2.querySelector('[data-tf-sclass="z:0"]').value==='run'&&
+      edB2.querySelector('[data-tf-value="z:0"]').value==='Rychlost 2'&&
+      edB2.querySelector('[data-tf-progress="z:0"]').value==='sensor.fan_speed');
+    const b2LeftoverBox=edB2.querySelector('[data-sec-tile="z:0"]');
+    t('B2: the leftover YAML box carries only non-dedicated keys (hold_action) -- not name/entity/icon/etc',
+      /hold_action/.test(b2LeftoverBox.value)&&!/name/.test(b2LeftoverBox.value)&&
+      !/entity/.test(b2LeftoverBox.value)&&!/icon/.test(b2LeftoverBox.value)&&!/quick/.test(b2LeftoverBox.value));
+    t('B2: the quick-action rows are prefilled, including the one with data: (not representable in the simple target field)',
+      edB2.querySelector('[data-tf-q-icon="z:0:0"]').value==='mdi:power'&&
+      edB2.querySelector('[data-tf-q-svc="z:0:0"]').value==='fan.turn_on'&&
+      edB2.querySelector('[data-tf-q-target="z:0:0"]').value==='fan.a'&&
+      edB2.querySelector('[data-tf-q-icon="z:0:1"]').value==='mdi:cog');
+
+    // Editing a dedicated field must not disturb the leftover box's own
+    // content (hold_action), and vice versa -- same KEEP-list guarantee
+    // bug #2 established for EL_DEDICATED_KEYS.
+    edB2.querySelector('[data-tf-name="z:0"]').value='Ventilátor 2';
+    let out1=edB2._collectConfig();
+    t('B2: editing the Name field round-trips and leaves the leftover-box key (hold_action) untouched',
+      out1.zones[0].tile.name==='Ventilátor 2'&&
+      JSON.stringify(out1.zones[0].tile.hold_action)===JSON.stringify({action:'more-info'}));
+
+    b2LeftoverBox.value='{}';
+    let out2=edB2._collectConfig();
+    t('B2: clearing the leftover box drops hold_action but leaves the dedicated fields (name/entity/icon) untouched',
+      out2.zones[0].tile.hold_action===undefined&&out2.zones[0].tile.name==='Ventilátor 2'&&
+      out2.zones[0].tile.entity==='fan.a');
+
+    // Non-destructive quick-action edit: changing only the icon of the
+    // data:-bearing quick item must preserve its data: and target -- the
+    // simplified single-entity target field never touches a target the
+    // structured UI can't fully represent unless the user actually edits it.
+    edB2.querySelector('[data-tf-q-icon="z:0:1"]').value='mdi:cog-outline';
+    let out3=edB2._collectConfig();
+    t('B2: editing only a quick action\'s icon preserves its data: key and target (non-destructive)',
+      out3.zones[0].tile.quick[1].icon==='mdi:cog-outline'&&
+      JSON.stringify(out3.zones[0].tile.quick[1].data)===JSON.stringify({percentage:50})&&
+      out3.zones[0].tile.quick[1].target.entity_id==='fan.a');
+
+    // Invalid leftover-box YAML must not wipe the dedicated fields or the
+    // quick actions -- same non-destructive-parse contract as bug #9/C1.
+    b2LeftoverBox.value='not: valid: yaml: here';
+    let out4=edB2._collectConfig();
+    t('B2: invalid leftover-box YAML keeps the dedicated fields and quick actions (non-destructive, unchanged)',
+      out4.zones[0].tile.name==='Ventilátor 2'&&out4.zones[0].tile.entity==='fan.a'&&
+      Array.isArray(out4.zones[0].tile.quick)&&out4.zones[0].tile.quick.length===2);
+
+    // Reset to a clean render before exercising the +/- quick-action buttons,
+    // which re-render internally (self._render()) after collecting+mutating.
+    edB2.setConfig(b2Cfg);edB2._tab='elements';edB2._render();
+    let b2Out=null;
+    edB2.addEventListener('config-changed',function(e){b2Out=e.detail.config;});
+    edB2.querySelector('[data-add-tquick="z:0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    t('B2: + Quick action appends a new quick item to the right tile (_tileRefForKey resolves a tagged element\'s item.tile)',
+      !!b2Out&&Array.isArray(b2Out.zones[0].tile.quick)&&b2Out.zones[0].tile.quick.length===3&&
+      b2Out.zones[0].tile.quick[2].icon==='mdi:play');
+    b2Out=null;
+    edB2.querySelector('[data-rm-tquick="z:0:0"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    t('B2: the × button on a quick action removes just that one item',
+      !!b2Out&&b2Out.zones[0].tile.quick.length===2&&b2Out.zones[0].tile.quick[0].service==='fan.set_speed');
   }
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');

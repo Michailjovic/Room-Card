@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.4';
+const ROC_VERSION='6.15.5';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -17,6 +17,17 @@ window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',descr
 // elements KEEP list so the two can't drift apart again (they did once:
 // portrait:/landscape: were silently dropped on every editor save).
 const EL_DEDICATED_KEYS=['id','top','bottom','left','width','height','group','nav_mini','section','tile'];
+
+// Cockpit tile (`tile:`) fields promoted to their own dedicated editor input
+// (B2, BUG_UX_ANALYSIS_v6.15.1.md §Part 2) — shared between the tile-field
+// renderer and the two tile collectors (a tagged element's item.tile, and a
+// section's own declared tiles) so they can't drift apart, same reasoning as
+// EL_DEDICATED_KEYS above. `id`/`image`/`image_ratio`/`overlays` are handled
+// entirely separately already (own inputs/editor predating this list) and are
+// not repeated here. Everything else on a tile (tap_action, hold_action,
+// hold_delay, double_tap_action, and any future/unknown key) is owned by the
+// leftover YAML box, exactly like EL_DEDICATED_KEYS owns elements' leftovers.
+const TILE_DEDICATED_KEYS=['name','entity','icon','icon_animation','active_state','state_class','value','progress','quick'];
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 // Default glyph for vacuum_widgets when no custom `icon:` is set — a compact top-down
@@ -5220,15 +5231,63 @@ class RoomOverlayCardEditor extends HTMLElement{
     // Cockpit sections (v6.8.0): shared `section`/`tile` reader for zones,
     // icons, elements and blinds — the only element kinds that may be tagged
     // into a section (COCKPIT_PLAN.md kap.3.2; badges are not in that list).
+    // Structured tile fields (B2, BUG_UX_ANALYSIS_v6.15.1.md §Part 2) — reads
+    // back everything _tileFieldsHtml() renders for TILE_DEDICATED_KEYS,
+    // mutating `tile` in place. Shared by both _secTile (tagged element's
+    // item.tile) and _collectDeclTile (a section's own flat declared tile),
+    // keyed the same composite way each of those already keys its own inputs.
+    const _collectTileFields=function(key,tile){
+      const nameEl=q('[data-tf-name="'+key+'"]');if(nameEl){if(nameEl.value.trim())tile.name=nameEl.value.trim();else delete tile.name;}
+      const entEl=q('[data-tf-entity="'+key+'"]');if(entEl){if(entEl.value.trim())tile.entity=entEl.value.trim();else delete tile.entity;}
+      const iconEl=q('[data-tf-icon="'+key+'"]');if(iconEl){if(iconEl.value.trim())tile.icon=iconEl.value.trim();else delete tile.icon;}
+      const animEl=q('[data-tf-anim="'+key+'"]');if(animEl){if(animEl.value)tile.icon_animation=animEl.value;else delete tile.icon_animation;}
+      const actEl=q('[data-tf-active="'+key+'"]');if(actEl){if(actEl.value.trim())tile.active_state=actEl.value.trim();else delete tile.active_state;}
+      const sclEl=q('[data-tf-sclass="'+key+'"]');if(sclEl){if(sclEl.value&&sclEl.value!=='auto')tile.state_class=sclEl.value;else delete tile.state_class;}
+      const valEl=q('[data-tf-value="'+key+'"]');if(valEl){if(valEl.value.trim())tile.value=valEl.value.trim();else delete tile.value;}
+      const progEl=q('[data-tf-progress="'+key+'"]');if(progEl){if(progEl.value.trim())tile.progress=progEl.value.trim();else delete tile.progress;}
+      // Quick actions: rebuild each from ITS OWN previous full object (so a
+      // `data:` key, or a `target:` too complex for the single-entity field
+      // below, isn't silently dropped) plus whatever the structured
+      // icon/name/service/target fields currently say.
+      const prevQuick=Array.isArray(tile.quick)?tile.quick:[];
+      const newQuick=[];
+      for(let qi=0;;qi++){
+        const iEl=q('[data-tf-q-icon="'+key+':'+qi+'"]');
+        if(!iEl)break;
+        const prevQ=prevQuick[qi]||{};
+        const qo=Object.assign({},prevQ);
+        const ic=iEl.value.trim();if(ic)qo.icon=ic;else delete qo.icon;
+        const nmEl=q('[data-tf-q-name="'+key+':'+qi+'"]');const nm=nmEl?nmEl.value.trim():'';if(nm)qo.name=nm;else delete qo.name;
+        const svcEl=q('[data-tf-q-svc="'+key+':'+qi+'"]');const svc=svcEl?svcEl.value.trim():'';if(svc)qo.service=svc;else delete qo.service;
+        const tgtEl=q('[data-tf-q-target="'+key+':'+qi+'"]');
+        if(tgtEl){
+          const prevSimple=(prevQ.target&&prevQ.target.entity_id&&Object.keys(prevQ.target).length===1)?prevQ.target.entity_id:(typeof prevQ.target==='string'?prevQ.target:'');
+          const tv=tgtEl.value.trim();
+          if(tv!==prevSimple){if(tv)qo.target={entity_id:tv};else delete qo.target;}
+        }
+        newQuick.push(qo);
+      }
+      if(newQuick.length)tile.quick=newQuick;else delete tile.quick;
+    };
     const _secTile=function(kind,i,o){
       const linkEl=q('[data-sec-link="'+kind+':'+i+'"]');
       if(linkEl&&linkEl.value)o.section=linkEl.value;else delete o.section;
+      const tile=Object.assign({},o.tile||{});
+      // The leftover YAML box owns every key except the ones with a dedicated
+      // input in _tileFieldsHtml() (TILE_DEDICATED_KEYS) — same KEEP-list
+      // pattern as EL_DEDICATED_KEYS (bug #2): keys removed from the box are
+      // removed from the tile too; keys with a dedicated field are refreshed
+      // by _collectTileFields() below regardless of what the box says.
       const tileR=self._pYaml(q('[data-sec-tile="'+kind+':'+i+'"]'));
-      const tile=(tileR.ok&&tileR.val)?tileR.val:{};
+      if(tileR.ok){
+        for(const k of Object.keys(tile))if(!TILE_DEDICATED_KEYS.includes(k))delete tile[k];
+        if(tileR.val)Object.assign(tile,tileR.val);
+      }
+      _collectTileFields(kind+':'+i,tile);
       // Image mode (v6.9.0, D3 scheme b): `image` is its own field, `overlays`
-      // its own structured list -- both live OUTSIDE the tile: YAML box, read
-      // from the current array on `o.tile` (the last render's, so add/remove/
-      // reorder always start from what is actually on screen).
+      // its own structured list -- both live OUTSIDE the tile fields above,
+      // read from the current array on `o.tile` (the last render's, so
+      // add/remove/reorder always start from what is actually on screen).
       const imgEl=q('[data-tile-img="'+kind+':'+i+'"]');
       const imgV=imgEl?imgEl.value.trim():'';
       if(imgV)tile.image=imgV;else delete tile.image;
@@ -5248,19 +5307,23 @@ class RoomOverlayCardEditor extends HTMLElement{
     const _collectDeclTile=function(secIdx,ti,prevTile){
       const dtKey=secIdx+'_'+ti;
       const skey=secIdx+':'+ti;
-      const o={};
-      const idEl=q('[data-dtile-id="'+skey+'"]');if(idEl&&idEl.value.trim())o.id=idEl.value.trim();
+      const o=Object.assign({},prevTile||{});
+      const idEl=q('[data-dtile-id="'+skey+'"]');if(idEl&&idEl.value.trim())o.id=idEl.value.trim();else delete o.id;
       const yaR=self._pYaml(q('[data-dtile-yaml="'+skey+'"]'));
-      if(yaR.ok&&yaR.val)Object.assign(o,yaR.val);
+      if(yaR.ok){
+        for(const k of Object.keys(o))if(!TILE_DEDICATED_KEYS.includes(k)&&k!=='id'&&k!=='image'&&k!=='image_ratio'&&k!=='overlays')delete o[k];
+        if(yaR.val)Object.assign(o,yaR.val);
+      }
+      _collectTileFields(skey,o);
       const imgEl=q('[data-tile-img="dt:'+dtKey+'"]');
       const imgV=imgEl?imgEl.value.trim():'';
-      if(imgV)o.image=imgV;
+      if(imgV)o.image=imgV;else delete o.image;
       const imgrEl=q('[data-tile-imgr="dt:'+dtKey+'"]');
       const imgrV=imgrEl?imgrEl.value.trim():'';
-      if(imgrV)o.image_ratio=imgrV;
+      if(imgrV)o.image_ratio=imgrV;else delete o.image_ratio;
       const prevOvs=Array.isArray(prevTile&&prevTile.overlays)?prevTile.overlays:[];
       const ovs=prevOvs.map(function(ov,oi){return self._collectTileOverlay('dt',dtKey,oi,ov);});
-      if(ovs.length)o.overlays=ovs;
+      if(ovs.length)o.overlays=ovs;else delete o.overlays;
       return o;
     };
     // Multi-room: sections write into the room being edited; shared keys stay top-level
@@ -7390,13 +7453,15 @@ class RoomOverlayCardEditor extends HTMLElement{
     const open=this._openPanels&&this._openPanels.has('dtile-'+skey);
     const scalar=Object.assign({},t||{});
     delete scalar.id;delete scalar.image;delete scalar.image_ratio;delete scalar.overlays;
+    TILE_DEDICATED_KEYS.forEach(function(k){delete scalar[k];});
     const scalarYaml=Object.keys(scalar).length?_yaml.s(scalar):'';
     const idPlaceholder=(secId||'section')+'_tile_'+ti;
     let h='<details style="margin-bottom:6px;" data-panel="dtile-'+skey+'"'+(open?' open':'')+'>';
     h+='<summary style="cursor:pointer;padding:8px;background:var(--secondary-background-color);border-radius:6px;font-size:13px;font-weight:500;list-style:none;display:flex;align-items:center;gap:6px;">&#9654; Tile: '+this._e((t&&(t.name||t.id))||'tile_'+ti)+'</summary>';
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">ID (optional — falls back to "'+this._e(idPlaceholder)+'")</label><input data-dtile-id="'+skey+'" type="text" placeholder="'+this._e(idPlaceholder)+'" value="'+this._e((t&&t.id)||'')+'"'+this._inp('')+'></div>';
-    h+='<div style="margin-bottom:8px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action / hold_action / hold_delay / double_tap_action</label><textarea data-dtile-yaml="'+skey+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
+    h+=this._tileFieldsHtml(skey,t||{});
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Other tile fields — tap_action / hold_action / hold_delay / double_tap_action (YAML)</label><textarea data-dtile-yaml="'+skey+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
     h+=this._tileImageBox('dt',dtKey,{tile:t||{}});
     h+='<div style="display:flex;gap:6px;margin-top:8px;">';
     h+='<button type="button" data-mv-dtile="'+skey+':up" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9650;</button>';
@@ -7408,11 +7473,12 @@ class RoomOverlayCardEditor extends HTMLElement{
     return h;
   }
 
-  // Section select + `tile:` YAML box, shared by zone/icon/element/blind
+  // Section select + `tile:` fields, shared by zone/icon/element/blind
   // editors (COCKPIT_PLAN.md kap.5.2 — badges are not taggable). `kind` is the
   // same short letter used by _mvKinds ('z'/'ico'/'el'/'bl'), so the generic
-  // [data-sec-link]/[data-sec-tile] wiring in _listen() and the _secTile()
-  // reader in _collectConfig() both key off "kind:i" without per-kind code.
+  // [data-sec-link]/[data-sec-tile]/[data-tf-*] wiring in _listen() and the
+  // _secTile() reader in _collectConfig() both key off "kind:i" without
+  // per-kind code.
   _secTileHtml(kind,i,item){
     const self=this;
     const secs=(this._config&&this._config.sections)||[];
@@ -7421,15 +7487,69 @@ class RoomOverlayCardEditor extends HTMLElement{
     secs.forEach(function(s){h+='<option value="'+self._e(s.id||'')+'"'+(item.section===s.id?' selected':'')+'>'+self._e(s.title||s.id||'')+'</option>';});
     h+='</select>';
     if(!secs.length)h+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0 0;">No sections yet — add one in the Sections tab first.</p>';
-    // The tile YAML box carries the icon-scheme fields only (D3 scheme a) —
+    // The tile fields carry the icon-scheme fields only (D3 scheme a) —
     // `image`/`overlays` (scheme b, v6.9.0) get their own structured editor
     // below, reusing the overlay editor's UI (COCKPIT_PLAN.md kap.5.2).
     const tileScalar=Object.assign({},item.tile||{});
     delete tileScalar.image;delete tileScalar.image_ratio;delete tileScalar.overlays;
+    TILE_DEDICATED_KEYS.forEach(function(k){delete tileScalar[k];});
     const tileYaml=Object.keys(tileScalar).length?_yaml.s(tileScalar):'';
-    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;"><label class="roc-l">Tile (YAML) — name / entity / icon / icon_animation / state / state_class / active_state / value / progress / quick / tap_action / hold_action / hold_delay / double_tap_action</label><textarea data-sec-tile="'+kind+':'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
+    h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;">';
+    h+=this._tileFieldsHtml(kind+':'+i,item.tile||{});
+    h+='<label class="roc-l">Other tile fields — tap_action / hold_action / hold_delay / double_tap_action (YAML)</label><textarea data-sec-tile="'+kind+':'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
     h+=this._tileImageBox(kind,i,item);
     h+='</div>';
+    h+='</div>';
+    return h;
+  }
+
+  // Structured tile-field editor (B2, BUG_UX_ANALYSIS_v6.15.1.md §Part 2) —
+  // promotes the most commonly-edited `tile:` keys to real inputs instead of
+  // making every tile a 13-key YAML box. `key` is the same composite key
+  // ("kind:i" for a tagged element, "secIdx:ti" for a declared tile) both
+  // callers already use for their own dedicated inputs (id/image/overlays),
+  // so _collectTileFields() in _collectConfig() can read them back uniformly.
+  // See TILE_DEDICATED_KEYS for exactly which keys this owns.
+  _tileFieldsHtml(key,tile){
+    const self=this;
+    const e=function(s){return self._e(s);};
+    let h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Name</label><input data-tf-name="'+key+'" type="text" value="'+e(tile.name||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Entity</label><input data-tf-entity="'+key+'" type="text" list="roc-entities" value="'+e(tile.entity||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Icon</label><input data-tf-icon="'+key+'" type="text" placeholder="mdi:..." value="'+e(tile.icon||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Icon animation</label><select data-tf-anim="'+key+'"'+this._inp('')+'>';
+    [['','— none —'],['spin','Spin'],['pulse','Pulse'],['blink','Blink']].forEach(function(o){
+      h+='<option value="'+o[0]+'"'+((tile.icon_animation||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';
+    });
+    h+='</select></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Active state (e.g. "on", "running")</label><input data-tf-active="'+key+'" type="text" value="'+e(tile.active_state===undefined?'':tile.active_state)+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">State class</label><select data-tf-sclass="'+key+'"'+this._inp('')+'>';
+    [['auto','Auto (from active state)'],['run','Force: Run (blue)'],['done','Force: Done (green)']].forEach(function(o){
+      h+='<option value="'+o[0]+'"'+((tile.state_class===undefined?'auto':tile.state_class)===o[0]?' selected':'')+'>'+o[1]+'</option>';
+    });
+    h+='</select></div>';
+    h+='</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    h+='<div><label class="roc-l">Value text (optional — overrides the live entity state text)</label><input data-tf-value="'+key+'" type="text" value="'+e(tile.value===undefined?'':tile.value)+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Progress entity (0-100 sensor, optional)</label><input data-tf-progress="'+key+'" type="text" list="roc-entities" value="'+e(tile.progress||'')+'"'+this._inp('')+'></div>';
+    h+='</div>';
+    const quick=Array.isArray(tile.quick)?tile.quick:[];
+    h+='<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><label class="roc-l" style="margin:0;">Quick actions (small buttons on the tile)</label>';
+    h+='<button type="button" data-add-tquick="'+key+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Quick action</button></div>';
+    quick.forEach(function(q,qi){
+      const tgtSimple=(q.target&&q.target.entity_id&&Object.keys(q.target).length===1)?q.target.entity_id:(typeof q.target==='string'?q.target:'');
+      h+='<div style="display:grid;grid-template-columns:70px 1fr 1fr 1fr auto;gap:6px;align-items:center;margin-bottom:4px;">';
+      h+='<input data-tf-q-icon="'+key+':'+qi+'" type="text" placeholder="mdi:..." value="'+e(q.icon||'')+'"'+self._inp('')+'>';
+      h+='<input data-tf-q-name="'+key+':'+qi+'" type="text" placeholder="Label" value="'+e(q.name||'')+'"'+self._inp('')+'>';
+      h+='<input data-tf-q-svc="'+key+':'+qi+'" type="text" placeholder="domain.service" value="'+e(q.service||'')+'"'+self._inp('')+'>';
+      h+='<input data-tf-q-target="'+key+':'+qi+'" type="text" list="roc-entities" placeholder="target entity_id" value="'+e(tgtSimple)+'"'+self._inp('')+'>';
+      h+='<button type="button" data-rm-tquick="'+key+':'+qi+'" title="Remove quick action" style="padding:4px 8px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:11px;">&#10005;</button>';
+      h+='</div>';
+    });
     h+='</div>';
     return h;
   }
@@ -7713,6 +7833,44 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(!Array.isArray(item.tile.overlays))item.tile.overlays=[];
       return item.tile.overlays;
     };
+    // Quick actions (B2, BUG_UX_ANALYSIS_v6.15.1.md §Part 2) -- resolves the
+    // actual tile object (a tagged element's item.tile, or a section's own
+    // flat declared tile) for the composite key _tileFieldsHtml() renders:
+    // "kind:i" for the former (kind is one of the _mvKinds letters, never
+    // numeric), "secIdx:ti" for the latter (both numeric) -- a purely numeric
+    // first segment is what tells the two apart.
+    const _tileRefForKey=function(c,key){
+      const parts=key.split(':');
+      if(/^\d+$/.test(parts[0])){
+        if(!Array.isArray(c.sections))return null;
+        const sec=c.sections[parseInt(parts[0],10)];if(!sec||!Array.isArray(sec.tiles))return null;
+        return sec.tiles[parseInt(parts[1],10)]||null;
+      }
+      const arrKey=_mvKinds[parts[0]];if(!arrKey)return null;
+      const arr=A(c,arrKey);const item=arr[parseInt(parts[1],10)];if(!item)return null;
+      if(!item.tile)item.tile={};
+      return item.tile;
+    };
+    this.querySelectorAll('[data-add-tquick]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const c=self._collectConfig();
+        const tile=_tileRefForKey(c,btn.dataset.addTquick);if(!tile)return;
+        if(!Array.isArray(tile.quick))tile.quick=[];
+        tile.quick.push({icon:'mdi:play'});
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-rm-tquick]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        const parts=btn.dataset.rmTquick.split(':');
+        const qi=parseInt(parts.pop(),10);
+        const c=self._collectConfig();
+        const tile=_tileRefForKey(c,parts.join(':'));if(!tile||!Array.isArray(tile.quick))return;
+        tile.quick.splice(qi,1);
+        self._config=c;self._render();self._fire(c);
+      });
+    });
+    this.querySelectorAll('[data-tf-name],[data-tf-entity],[data-tf-icon],[data-tf-anim],[data-tf-active],[data-tf-sclass],[data-tf-value],[data-tf-progress],[data-tf-q-icon],[data-tf-q-name],[data-tf-q-svc],[data-tf-q-target]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-tile-img]').forEach(function(el){
       el.addEventListener('input',function(){
         const box=self.querySelector('[data-tile-ov-box="'+el.dataset.tileImg+'"]');
