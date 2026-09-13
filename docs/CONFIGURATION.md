@@ -608,10 +608,10 @@ badges:
       - condition: { entity: sensor.temperature, operator: ">", value: 26 }
         value: "orange"
       - value: "white"
-    label:
-      - condition: { entity: sensor.temperature, operator: ">", value: 26 }
-        value: "Hot!"
-      - value: "{{ states('sensor.temperature') | round(1) }} °C"
+    # label: is a plain conditional value list — it does NOT evaluate {{ }} templates
+    # (only label_template does, below); a bare "{{ ... }}" string under label: renders
+    # literally instead of being computed.
+    label_template: "{{ states('sensor.temperature') | round(1) }} °C"
     visible: { entity: binary_sensor.someone_home, state: "on" }
     tap_action: { action: more-info, entity: sensor.temperature }
 ```
@@ -1520,8 +1520,7 @@ badges:
   - id: humidity
     position: bottom-left
     icon: mdi:water-percent
-    label:
-      - value: "{{ states('sensor.bedroom_humidity') | round(0) }} %"
+    label_template: "{{ states('sensor.bedroom_humidity') | round(0) }} %"
     tap_action: { action: more-info, entity: sensor.bedroom_humidity }
 ```
 

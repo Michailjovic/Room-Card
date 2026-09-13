@@ -1,5 +1,60 @@
 # Changelog
 
+## [6.15.3] - 2026-09-13
+
+### Fix: eight more bugs found during the same bug/UX audit
+
+Second of the two patch releases following the project-wide bug and editor-UX audit
+(`BUG_UX_ANALYSIS_v6.15.1.md`); this one covers the remaining independent, self-contained fixes —
+badge gesture wiring, `glows[].visible`, a keyboard-handler leak, id/checkbox/editor-control
+cleanups, and some housekeeping. See docs/releases/RELEASE_NOTES_v6.15.3.md for full details of
+each. The report's three larger items (replacing the hand-rolled YAML box parser with
+`<ha-yaml-editor>`, structured tile forms, the stale editor preview and drag-drop perf) remain
+tracked for later stages.
+
+- **Badges bypassed the shared tap/hold/double-tap listener helper.** They wired `click`/`touchend`
+  straight to `_exec()`, so a finger-drag that started on a badge still fired `tap_action` on
+  release, `hold_action`/`double_tap_action`/`hold_delay` were silently ignored even when
+  configured, and badges had no `tabindex`/keyboard support unlike every other tappable element.
+  Now routed through `_addZoneListeners()` exactly like zones/icons/labels/gauges/vacuum widgets.
+- **`glows[].visible` (the non-template form) was never evaluated.** The docs and the glow YAML box
+  label both promise `visible:` support "as on every other element", but `_update()`'s glow loop only
+  ever looked at `entity` state/brightness — a glow configured with `visible:{entity:...,state:'on'}`
+  stayed visible regardless of that condition. Now mirrors the icon loop's visibility check.
+- **Escape/arrow keys stopped working for section panels after HA moved the card in the DOM.**
+  `_tmKeyHandler`/`_secKeyHandler` were removed *and nulled* on disconnect, so `connectedCallback`
+  never got a chance to re-arm them — unlike every other window/document listener in the file, which
+  are removed-but-not-nulled and safely re-added on reconnect. Now these two follow the same pattern.
+- **Duplicating an already-duplicated icon/label/gauge/blind/element/zone/glow/vacuum widget could
+  produce two elements with the same id.** All eight "Duplicate" handlers did a naive `id+'_2'` with
+  no uniqueness check; duplicating an original a second time produced `id_2` twice. Now shared via a
+  single `rocDupId()` helper (same approach the section duplicator already used), plus a one-time
+  console warning if a duplicate id is ever detected in a loaded config.
+- **A badge's "Hide from mini" checkbox had no effect until something else also touched the YAML
+  box.** `_collectConfig` applied the checkbox's `nav_mini` write *before* merging the badge's
+  freeform YAML box back in, so the merge silently overwrote it. Labels/gauges/blinds already did
+  this in the correct order; badges now do too.
+- **Dead and stale editor controls.** Nav *Position*'s `auto (rail on wide)` option was a no-op (the
+  card always maps `auto` to `top`); the *Auto breakpoint (px)* field wrote a config key
+  (`nav.auto_breakpoint`) that the v4 migration deletes and nothing in the render path reads; the
+  onboarding and Layout-tab copy still referred to "Interactive preview" / "Test mode" instead of
+  the current name, "Edit mode" (unchanged since v5.9.0); the file header comment still said
+  `v4.0.0`. All four cleaned up.
+- **Docs: a badge `label:` example used a Jinja value that isn't actually rendered as a template.**
+  `resolveVal` returns plain `label:` strings verbatim — only `label_template` is subscribed for
+  live updates — so the documented example would show the literal `{{ states(...) }} °C` text
+  rather than a value. Fixed the two affected examples in `docs/CONFIGURATION.md` to use
+  `label_template`.
+- **Housekeeping (three small fixes bundled together):**
+  the test-mode Save overlay dumped `JSON.stringify` output (since `window.YAML` is never present in
+  HA) while telling the user to "paste in YAML editor" — now uses the card's own `_yaml.s()` dumper,
+  which always produces real YAML; `_scanUntagged` missed entities that are used only inside a
+  declared section tile (it read `t.item.entity`, which is `undefined` for that shape) — now
+  resolves the tile the same way rendering does; opening a glow's section panel didn't flash it in
+  the live preview like every other element kind — the preview's kind-maps now include `glow`.
+
+No configuration changes in any of these — pure bug fixes, safe to update without touching YAML.
+
 ## [6.15.2] - 2026-09-13
 
 ### Fix: six independent bugs found during a full bug/UX audit

@@ -2072,6 +2072,142 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   const emptyTxt2=elEmptyPanel.shadowRoot.querySelector('.roc-panel-empty').textContent;
   t('empty-panel copy is English, not Czech (bug #11 if FAIL)',
     !/Zatím|přidej|místnosti/.test(emptyTxt2));
+
+  // ---- v6.15.3 patch: bugs #5, #8, #10, #12, #13, #14, #16, #17 -------------
+
+  // Bug #5: badges now go through _addZoneListeners like every other tappable
+  // element — scroll-vs-tap, hold ring and keyboard all apply.
+  const elBadgeHold=mkCard({base_image:'/local/x.webp',layout:LY,
+    badges:[{id:'bh',icon:'mdi:x',label:'x',hold_action:{action:'toggle',entity:'light.bh'}}]});
+  elBadgeHold.hass={states:{'light.bh':stS('off')},callService(){},user:{name:'x'}};
+  const badgeHoldEl=elBadgeHold.shadowRoot.querySelector('[data-b="bh"]');
+  t('a badge with only hold_action gets a11y/tabindex (bug #5 if FAIL)',
+    badgeHoldEl.getAttribute('tabindex')==='0');
+  badgeHoldEl.dispatchEvent(new w.MouseEvent('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,200));
+  t('...and mousedown starts a hold ring (bug #5 if FAIL)',
+    !!badgeHoldEl.querySelector('.roc-hold'));
+  const badgeScrollCalls=[];
+  const elBadgeScroll=mkCard({base_image:'/local/x.webp',layout:LY,
+    badges:[{id:'bs',icon:'mdi:x',label:'x',tap_action:{action:'toggle',entity:'light.bs'}}]});
+  elBadgeScroll.hass={states:{'light.bs':stS('off')},callService(d,s,data){badgeScrollCalls.push([d,s,data]);},user:{name:'x'}};
+  const badgeScrollEl=elBadgeScroll.shadowRoot.querySelector('[data-b="bs"]');
+  const mkTouch2=(type,x,y)=>{const e=new w.Event(type,{bubbles:true,cancelable:true});e.touches=[{clientX:x,clientY:y}];e.changedTouches=e.touches;return e;};
+  badgeScrollEl.dispatchEvent(mkTouch2('touchstart',10,10));
+  badgeScrollEl.dispatchEvent(mkTouch2('touchmove',10,130));
+  badgeScrollEl.dispatchEvent(mkTouch2('touchend',10,130));
+  t('a finger scroll starting on a badge does NOT fire tap_action (bug #5 if FAIL)',
+    badgeScrollCalls.length===0);
+
+  // Bug #8: glows[].visible is now evaluated (previously only visible_template worked).
+  const elGlowVis=mkCard({base_image:'/local/x.webp',layout:LY,
+    glows:[{id:'gv',entity:'light.gv',top:'50%',left:'50%',size:'20%',visible:{entity:'binary_sensor.gvhome',state:'on'}}]});
+  elGlowVis.hass={states:{'light.gv':stS('on',{brightness:255}),'binary_sensor.gvhome':stS('off')},callService(){},user:{name:'x'}};
+  const glowVisEl=elGlowVis.shadowRoot.querySelector('[data-glow="gv"]');
+  t('glow honours visible: (bug #8 if FAIL)',
+    glowVisEl.style.display==='none'||glowVisEl.style.visibility==='hidden');
+
+  // Bug #10: Escape / arrow-nudge key handlers used to be nulled (not just
+  // detached) in disconnectedCallback, so they never came back after HA moves
+  // the card between DOM parents (its edit-mode toggle does exactly this).
+  const elMove=mkCard({base_image:'/local/x.webp',layout:LY,
+    sections:[{id:'mv',title:'MV'}],zones:[{id:'zmv',top:'1%',left:'1%',width:'5%',height:'5%',section:'mv'}]});
+  elMove.hass={states:{},callService(){},user:{name:'x'}};
+  elMove._openSection('mv');
+  const moveWrap=w.document.createElement('div');w.document.body.appendChild(moveWrap);moveWrap.appendChild(elMove); // simulates HA's edit-mode re-parent
+  await new Promise(r=>setTimeout(r,10));
+  w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  await new Promise(r=>setTimeout(r,10));
+  t('Escape still closes an open panel after the card is moved to a new DOM parent (bug #10 if FAIL)',
+    elMove._sectionOpen===null);
+
+  // Bug #12: duplicating the same item twice must not collide on id.
+  const edDup=w.document.createElement('room-overlay-card-editor');
+  edDup.setConfig({base_image:'/local/x.webp',layout:LY,icons:[{id:'lamp',icon:'mdi:x',top:'5%',left:'5%'}]});
+  edDup.hass={states:{},user:{name:'x'}};
+  edDup.querySelector('[data-dup-ico="0"]').click();
+  edDup.querySelector('[data-dup-ico="0"]').click();
+  const dupIds=edDup._config.icons.map(function(i){return i.id;});
+  t('duplicating the same icon twice never produces a duplicate id (bug #12 if FAIL)',
+    new Set(dupIds).size===dupIds.length);
+
+  // Bug #13: badge "Hide from mini" checkbox used to be overridden back on by
+  // the YAML box merge that ran after it.
+  const edBadgeNm=w.document.createElement('room-overlay-card-editor');
+  edBadgeNm.setConfig({base_image:'/local/x.webp',layout:LY,
+    nav:{live:'full'},badges:[{id:'bn',icon:'mdi:x',label:'x',nav_mini:false}]});
+  edBadgeNm.hass={states:{},user:{name:'x'}};
+  edBadgeNm._tab='elements';edBadgeNm._render();
+  const bnCheckbox=edBadgeNm.querySelector('[data-b-nav-mini="0"]');
+  // live:'full' is opt-OUT: nav_mini:false means "already hidden", so the
+  // "Hide from mini" checkbox is prefilled CHECKED.
+  t('badge Hide-from-mini checkbox is prefilled checked (nav_mini:false, live:full)',
+    !!bnCheckbox&&bnCheckbox.checked===true);
+  bnCheckbox.checked=false; // uncheck it ("show in mini again" -> nav_mini should be removed)
+  const bnOut=edBadgeNm._collectConfig();
+  t('unchecking it actually removes nav_mini from the collected badge (bug #13 if FAIL)',
+    bnOut.badges[0].nav_mini===undefined);
+
+  // Bug #14: dead nav controls are gone; Edit-mode copy no longer says "Interactive preview"/"Test mode".
+  const edDead=w.document.createElement('room-overlay-card-editor');
+  edDead.setConfig({base_image:'/local/x.webp',layout:LY});
+  edDead.hass={states:{},user:{name:'x'}};
+  edDead._tab='rooms';edDead._render();
+  t('nav Position select no longer offers the dead "auto" option (bug #14 if FAIL)',
+    !/value="auto"/.test((edDead.querySelector('#nav-position')||{}).innerHTML||''));
+  t('the dead "Auto breakpoint" field is gone (bug #14 if FAIL)',
+    !edDead.querySelector('#nav-auto-bp'));
+  edDead._tab='image';edDead._render();
+  t('onboarding copy says "Edit mode", not "Interactive preview" (bug #14 if FAIL)',
+    !/Interactive preview/.test(edDead.innerHTML));
+  edDead._tab='layout';edDead._render();
+  t('Layout intro says "Edit mode", not "Test mode" (bug #14 if FAIL)',
+    !/Turn on <b>Test mode<\/b>/.test(edDead.innerHTML));
+
+  // Bug #17 (partial, testable slice): the test-mode Save overlay now dumps
+  // real YAML via _yaml.s(), not JSON.stringify — no window.YAML in this harness.
+  const elSaveOv=mkCard({base_image:'/local/x.webp',layout:LY,test_mode:true,
+    icons:[{id:'sov',icon:'mdi:x',top:'5%',left:'5%'}]});
+  elSaveOv.hass={states:{},callService(){},user:{name:'x'}};
+  const saveBtn=elSaveOv.shadowRoot.querySelector('.tm-save');
+  if(saveBtn)saveBtn.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  const ovTa=elSaveOv.shadowRoot.querySelector('.tm-cfg-ov textarea');
+  const ovPre=elSaveOv.shadowRoot.querySelector('.tm-cfg-ov pre');
+  const ovTxt=ovTa?(ovTa.value||''):(ovPre?(ovPre.textContent||''):'');
+  t('test-mode Save overlay dumps YAML, not a JSON blob (bug #17 if FAIL)',
+    !saveBtn||(!/^\{/.test(ovTxt.trim())&&/icons:/.test(ovTxt)));
+
+  // ---- Generic editor round-trip (report's suggested test, all 7 item types
+  // that build one combined "everything else" YAML box): a fixture using
+  // several of each type's documented non-dedicated fields must survive
+  // setConfig -> _render -> _collectConfig unchanged. This is exactly the
+  // mechanism bug #2 (elements/portrait+landscape) broke, generalised so a
+  // future whitelist-vs-KEEP-list drift on any of these 7 types gets caught
+  // here instead of being found by hand per bug.
+  const genCfg={base_image:'/local/x.webp',layout:LY,
+    badges:[{id:'b1',position:'top-left',icon:'mdi:x',label:[{value:'Hi'}],visible:{entity:'binary_sensor.x',state:'on'},icon_color:'red',tap_action:{action:'toggle',entity:'light.a'},group:'grp1'}],
+    elements:[{id:'e1',top:'1%',left:'1%',width:'10%',height:'10%',card:{type:'markdown',content:'x'},visible_template:'{{ true }}',fade:1.2,slide:'up',mobile:{top:'2%'},portrait:{top:'3%'},landscape:{width:'20%'},z_index:5,border_radius:'8px',overflow:'hidden'}],
+    labels:[{id:'l1',top:'1%',left:'1%',entity:'sensor.temp',font_size:'14px',color:'red',visible_template:'{{ true }}',format:'relative',tap_action:{action:'more-info',entity:'sensor.temp'},fade:0.8,z_index:3}],
+    gauges:[{id:'g1',top:'1%',left:'1%',width:'10%',height:'10%',entity:'sensor.temp',background:'#222',transition:'1s',visible_template:'{{ true }}',tap_action:{action:'more-info',entity:'sensor.temp'},fade:0.5,z_index:2}],
+    blinds:[{id:'bl1',top:'1%',left:'1%',width:'10%',height:'10%',entity:'cover.x',background:'#333',border_radius:'6px',transition:'0.5s',visible:{entity:'binary_sensor.x',state:'on'}}],
+    glows:[{id:'gw1',entity:'light.x',top:'1%',left:'1%',fallback_color:'#fff',border_radius:'4px',visible_template:'{{ true }}',fade:0.3,slide:'down',portrait:{top:'5%'},landscape:{left:'6%'}}],
+    vacuum_widgets:[{id:'vw1',top:'1%',left:'1%',tap_action:{action:'more-info',entity:'vacuum.x'},hold_action:{action:'toggle',entity:'vacuum.x'},double_tap_action:{action:'toggle',entity:'vacuum.x'},visible_template:'{{ true }}',fade:0.4,slide:'left',portrait:{top:'9%'},landscape:{left:'10%'}}]};
+  const edGen=w.document.createElement('room-overlay-card-editor');
+  edGen.setConfig(JSON.parse(JSON.stringify(genCfg)));
+  edGen.hass={states:{},user:{name:'x'}};
+  edGen._tab='elements';edGen._render();
+  const genOut=edGen._collectConfig();
+  const subsetEq=function(actual,expected){
+    return Object.keys(expected).every(function(k){
+      return JSON.stringify(actual&&actual[k])===JSON.stringify(expected[k]);
+    });
+  };
+  for(const gk of Object.keys(genCfg)){
+    if(gk==='base_image'||gk==='layout')continue;
+    const got=(genOut[gk]||[])[0];
+    t('generic round-trip: '+gk+'[0] keeps every fixture field unchanged',
+      subsetEq(got,genCfg[gk][0]));
+  }
 }
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
