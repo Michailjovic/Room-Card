@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.15.4] - 2026-09-13
+
+### Editor: inline YAML error text, and a first (scoped) `<ha-yaml-editor>` upgrade
+
+Third release following the bug/UX audit (`BUG_UX_ANALYSIS_v6.15.1.md`), covering the report's
+Part 2 items B1 + C1. See docs/releases/RELEASE_NOTES_v6.15.4.md for full details.
+
+- **Every YAML box now shows the actual parse error as text under the field**, instead of only a
+  red border with a hover-only `title` tooltip (invisible on touch devices). The parser already
+  produced a useful message (`bad indent`, `bad line: …`); it's now visible. Invalid input still
+  keeps the previous config value — nothing new is lost, same as before.
+- **The zone `tap_action` YAML box upgrades to Home Assistant's own `<ha-yaml-editor>`** (real
+  `js-yaml` parsing, proper syntax handling) whenever that component is actually available in your
+  HA frontend — with a safe fallback to the existing plain-textarea box otherwise (older HA, or any
+  environment where it never loads). This is a **deliberately scoped first step**, not a full
+  rollout: only this one box is upgraded for now, so it can be verified against a real dashboard
+  before extending the same pattern to the ~25 other YAML boxes in the editor (actions on icons,
+  badge/element/tile bodies, conditions, …). If it's not causing you any trouble, no action needed
+  — you'll only notice a difference if your HA already has `ha-yaml-editor` loaded, in which case
+  that one box gets real syntax highlighting and validation instead of the plain textarea.
+
+No configuration changes. If the `<ha-yaml-editor>` upgrade causes any layout or usability issue on
+your setup, please flag it before the pattern is extended further.
+
 ## [6.15.3] - 2026-09-13
 
 ### Fix: eight more bugs found during the same bug/UX audit

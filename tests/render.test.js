@@ -2210,6 +2210,99 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   }
 }
 
+  // ---- Stage 3: C1 (inline YAML error text) + B1 spike (<ha-yaml-editor>
+  // upgrade for the zone tap_action box) — BUG_UX_ANALYSIS_v6.15.1.md §Part 2.
+
+  // C1: invalid YAML in a plain box shows inline error text (not just a
+  // hover-only title tooltip) and still keeps the previous config value;
+  // fixing the box clears the error again.
+  {
+    const edC1=w.document.createElement('room-overlay-card-editor');
+    edC1.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
+      width:'20%',height:'20%',hold_action:{action:'toggle',entity:'light.a'}}]});
+    edC1.hass={states:{},user:{name:'x'}};
+    edC1._tab='elements';edC1._render();
+    const holdBox=edC1.querySelector('[data-z-hold="0"]');
+    holdBox.value='not valid yaml here\n  bad indent line';
+    const badOut=edC1._collectConfig();
+    t('C1: invalid YAML box keeps the previous hold_action (non-destructive, unchanged)',
+      JSON.stringify(badOut.zones[0].hold_action)===JSON.stringify({action:'toggle',entity:'light.a'}));
+    const errEl=holdBox.nextElementSibling;
+    t('C1: invalid YAML shows a visible inline error message under the box',
+      !!errEl&&errEl.classList.contains('roc-yaml-err')&&errEl.style.display==='block'&&errEl.textContent.length>0);
+    holdBox.value='action: toggle\nentity: light.c';
+    edC1._collectConfig();
+    t('C1: fixing the box clears the inline error message again',
+      errEl.style.display==='none'&&errEl.textContent==='');
+  }
+
+  // B1 spike: with a stub <ha-yaml-editor> registered (mirrors HA's real
+  // component contract — .value holds the PARSED value, 'value-changed'
+  // carries {value,isValid}), the zone tap_action box upgrades to it and
+  // behaves exactly like the textarea path: valid edits round-trip, invalid
+  // edits keep the last-good value instead of deleting it. A separate JSDOM
+  // realm is used so registering the stub can't affect any other test in
+  // this file (which all rely on ha-yaml-editor staying undefined, i.e. the
+  // plain-textarea fallback this repo can actually regression-test).
+  {
+    const dom2=new JSDOM('<html><body></body></html>',{pretendToBeVisual:true,runScripts:'outside-only'});
+    const w2=dom2.window;
+    w2.innerWidth=1920;w2.innerHeight=1080;
+    w2.requestIdleCallback=f=>setTimeout(f,0);
+    w2.eval(`
+      class StubYamlEditor extends HTMLElement {
+        constructor(){super();this._value=undefined;}
+        get value(){return this._value;}
+        set value(v){this._value=v;}
+        simulateChange(value,isValid){
+          this._value=isValid===false?undefined:value;
+          this.dispatchEvent(new CustomEvent('value-changed',{detail:{value:this._value,isValid:isValid!==false}}));
+        }
+      }
+      customElements.define('ha-yaml-editor',StubYamlEditor);
+    `);
+    w2.eval(code);
+    const edB1=w2.document.createElement('room-overlay-card-editor');
+    let lastCfg=null;
+    edB1.addEventListener('config-changed',function(e){lastCfg=e.detail.config;});
+    edB1.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
+      width:'20%',height:'20%',tap_action:{action:'toggle',entity:'light.a'}}]});
+    edB1.hass={states:{},user:{name:'x'}};
+    edB1._tab='elements';edB1._render();
+    await new Promise(r=>setTimeout(r,20));
+    const tapBox=()=>edB1.querySelector('[data-z-tap="0"]');
+    t('B1 spike: zone tap_action box upgrades to <ha-yaml-editor> when it is defined',
+      tapBox().tagName==='HA-YAML-EDITOR');
+    t('B1 spike: upgraded box is pre-filled with the parsed (not stringified) config value',
+      JSON.stringify(tapBox().value)===JSON.stringify({action:'toggle',entity:'light.a'}));
+    tapBox().simulateChange({action:'toggle',entity:'light.b'},true);
+    await new Promise(r=>setTimeout(r,20));
+    t('B1 spike: a valid value-changed round-trips into the collected config',
+      JSON.stringify(lastCfg.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
+    const echo=JSON.parse(JSON.stringify(lastCfg));delete echo.type;
+    edB1.setConfig(echo);
+    await new Promise(r=>setTimeout(r,20));
+    tapBox().simulateChange(undefined,false);
+    await new Promise(r=>setTimeout(r,20));
+    const afterInvalid=edB1._collectConfig();
+    t('B1 spike: an invalid value-changed keeps the last-good value (non-destructive, unchanged)',
+      JSON.stringify(afterInvalid.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
+  }
+
+  // Sanity check the other way round: without ha-yaml-editor ever defined
+  // (this file's main `w`, used by every other test), the same box must stay
+  // a plain textarea — i.e. every box not yet listed in ROC_YAML_EDITOR_BOXES,
+  // and this one too on any HA/harness that never loads the component.
+  {
+    const edNoUp=w.document.createElement('room-overlay-card-editor');
+    edNoUp.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
+      width:'20%',height:'20%',tap_action:{action:'toggle',entity:'light.a'}}]});
+    edNoUp.hass={states:{},user:{name:'x'}};
+    edNoUp._tab='elements';edNoUp._render();
+    t('B1 spike: falls back to a plain textarea when ha-yaml-editor is never defined',
+      edNoUp.querySelector('[data-z-tap="0"]').tagName==='TEXTAREA');
+  }
+
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');
   process.exit(fails?1:0);
 })();

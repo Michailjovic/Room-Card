@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.3';
+const ROC_VERSION='6.15.4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4715,8 +4715,35 @@ const _yaml={
     try{if(window.YAML&&window.YAML.parse){const r=window.YAML.parse(s);if(r!==undefined)return r;}}catch(_){}
     try{return JSON.parse(s);}catch(_){}
     try{return _yParse(s);}catch(_){return null;}
+  },
+  // Same fallback chain as .p, but surfaces a human-readable parse error
+  // instead of swallowing it — bug/UX report #9 + C1: a red border with a
+  // hover-only title tooltip is invisible on touch, so the actual message
+  // (the parser already throws 'bad indent' / 'bad line: …') is shown as
+  // inline text under the box instead.
+  pe:function(s){
+    try{if(window.YAML&&window.YAML.parse){const r=window.YAML.parse(s);if(r!==undefined)return{val:r,err:null};}}catch(_){}
+    try{return{val:JSON.parse(s),err:null};}catch(_){}
+    try{
+      const v=_yParse(s);
+      return(v===null||v===undefined)?{val:null,err:'Empty or unparsable YAML'}:{val:v,err:null};
+    }catch(e){return{val:null,err:(e&&e.message)||'Invalid YAML'};}
   }
 };
+
+// B1 spike (BUG_UX_ANALYSIS_v6.15.1.md report, §Part 2 B1): YAML boxes whose
+// data-* attribute name is listed here get upgraded from a plain <textarea>
+// (parsed by the hand-rolled _yParse above) to HA's real <ha-yaml-editor>
+// (js-yaml under the hood) whenever that component is actually defined in the
+// running HA frontend — see _upgradeYamlBoxes()/_upgradeOneYamlBox(). Scoped
+// to a single box on purpose: HA's Lit custom elements only upgrade correctly
+// if .hass/.value are set AFTER customElements.whenDefined() resolves — an
+// earlier, unguarded attempt at <ha-entity-picker> in this same editor (the
+// dead .ep-placeholder branch in _bindHassComponents) failed for exactly this
+// reason. Add more attribute names here once this one is confirmed working
+// live in a real HA dashboard (not just in the jsdom test harness, which never
+// defines ha-yaml-editor and always exercises the plain-textarea fallback).
+const ROC_YAML_EDITOR_BOXES=['data-z-tap'];
 
 const FILTER_PROPS=[
   {key:'brightness', label:'Brightness', min:0,max:4,  step:0.05,dflt:1,unit:''},
@@ -4825,20 +4852,99 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
-  // Parse a YAML textarea non-destructively: invalid input keeps the previous
-  // config value and flags the field red instead of silently deleting data.
+  // Parse a YAML textarea — or an upgraded <ha-yaml-editor> (B1 spike, see
+  // ROC_YAML_EDITOR_BOXES) — non-destructively: invalid input keeps the
+  // previous config value and flags the field instead of silently deleting
+  // data. For the plain-textarea path this also shows the actual parse error
+  // as inline text under the box (C1) — a red border with a hover-only title
+  // tooltip is invisible on touch.
   _pYaml(el){
     if(!el)return{ok:false,val:undefined};
+    if(el.tagName==='HA-YAML-EDITOR'){
+      // Real HA component: .value is already the parsed JS value, not raw
+      // text — no parsing needed here. It also sets .value to undefined on
+      // invalid input (indistinguishable from "the box was cleared"), so we
+      // track our own isValid flag from its 'value-changed' event to still
+      // preserve the last-good config value on a parse error, same contract
+      // as the textarea path below.
+      const st=this._yamlEdState&&this._yamlEdState.get(el);
+      if(st&&st.isValid===false)return{ok:false,val:undefined};
+      const v=st?st.value:el.value;
+      return{ok:true,val:(v===undefined||v===null)?undefined:v};
+    }
     const t=el.value.trim();
-    if(!t){el.style.borderColor='';el.title='';return{ok:true,val:undefined};}
-    const p=_yaml.p(el.value);
-    if(p===null||p===undefined){
+    if(!t){el.style.borderColor='';el.title='';this._yErr(el,'');return{ok:true,val:undefined};}
+    const r=_yaml.pe(el.value);
+    if(r.val===null||r.val===undefined){
+      const msg=r.err||'Invalid YAML';
       el.style.borderColor='var(--error-color,#d33)';
-      el.title='Invalid YAML — previous value kept';
+      el.title=msg+' — previous value kept';
+      this._yErr(el,msg+' — previous value kept');
       return{ok:false,val:undefined};
     }
-    el.style.borderColor='';el.title='';
-    return{ok:true,val:p};
+    el.style.borderColor='';el.title='';this._yErr(el,'');
+    return{ok:true,val:r.val};
+  }
+
+  // Inline error text right under a YAML textarea (C1): lazily creates/reuses
+  // a sibling <div class="roc-yaml-err"> right after it. Rebuilt on every
+  // full editor re-render along with the textarea itself, same as the border
+  // color already was — nothing to clean up separately.
+  _yErr(el,msg){
+    let e=el.nextElementSibling;
+    const has=e&&e.classList&&e.classList.contains('roc-yaml-err');
+    if(!msg){if(has){e.textContent='';e.style.display='none';}return;}
+    if(!has){
+      e=document.createElement('div');
+      e.className='roc-yaml-err';
+      e.style.cssText='color:var(--error-color,#d33);font-size:11px;line-height:1.4;margin:2px 0 6px;';
+      el.parentNode.insertBefore(e,el.nextSibling);
+    }
+    e.textContent=msg;e.style.display='block';
+  }
+
+  // B1 spike: upgrade every textarea whose data-* attribute is listed in
+  // ROC_YAML_EDITOR_BOXES to a real <ha-yaml-editor>, but only once that
+  // component is actually defined in this HA frontend session — see the
+  // constant's comment for why the ordering matters. Called once per _render()
+  // (from _bindHassComponents's call site); a no-op forever if the component
+  // never defines (old HA, or this repo's jsdom test harness), which is what
+  // keeps the plain-textarea path exercised and regression-tested.
+  _upgradeYamlBoxes(){
+    const self=this;
+    if(!customElements.get('ha-yaml-editor')){
+      if(!this._yamlEdWaiting){
+        this._yamlEdWaiting=true;
+        customElements.whenDefined('ha-yaml-editor').then(function(){
+          self._yamlEdWaiting=false;
+          if(self.isConnected)self._upgradeYamlBoxes();
+        }).catch(function(){});
+      }
+      return;
+    }
+    ROC_YAML_EDITOR_BOXES.forEach(function(attr){
+      self.querySelectorAll('textarea['+attr+']').forEach(function(ta){self._upgradeOneYamlBox(ta,attr);});
+    });
+  }
+
+  _upgradeOneYamlBox(ta,attr){
+    const self=this;
+    const key=ta.getAttribute(attr);
+    let parsed;
+    try{const t=ta.value.trim();parsed=t?_yaml.p(ta.value):undefined;}catch(_){parsed=undefined;}
+    const ed=document.createElement('ha-yaml-editor');
+    ed.setAttribute(attr,key);
+    ed.style.display='block';
+    if(this._hass)try{ed.hass=this._hass;}catch(_){}
+    try{ed.value=parsed;}catch(_){}
+    this._yamlEdState=this._yamlEdState||new WeakMap();
+    const st=this._yamlEdState;
+    ed.addEventListener('value-changed',function(ev){
+      const d=ev.detail||{};
+      st.set(ed,{value:d.value,isValid:d.isValid!==false});
+      self._fire(self._collectConfig());
+    });
+    ta.replaceWith(ed);
   }
 
   // One tile overlay's fields, read back from its composite-keyed
@@ -4996,6 +5102,9 @@ class RoomOverlayCardEditor extends HTMLElement{
   set hass(h){
     this._hass=h;
     if(this._prevCard)try{this._prevCard.hass=h;}catch(_){}
+    // Upgraded <ha-yaml-editor> boxes (B1 spike) persist across hass updates
+    // that don't trigger a full _render() — keep their .hass current too.
+    this.querySelectorAll('ha-yaml-editor').forEach(function(ed){try{ed.hass=h;}catch(_){}});
     const dl=this.querySelector('#roc-entities');
     if(dl&&!dl.hasChildNodes())
       dl.innerHTML=this._dlOptions();
@@ -7068,6 +7177,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this._listen();
     this._bindHassComponents();
+    this._upgradeYamlBoxes();
     this._mountPreview();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
