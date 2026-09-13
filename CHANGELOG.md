@@ -1,5 +1,30 @@
 # Changelog
 
+## [6.15.7] - 2026-09-13
+
+### Fix: the upgraded `tap_action` box refreshed on every keystroke, and could still lose your typing
+
+Found during more live testing right after v6.15.6, on the same zone `tap_action` box
+(`<ha-yaml-editor>` spike, v6.15.4). Two symptoms, one root cause: typing into the box caused a
+visible refresh with every single letter, and the box could still end up losing whatever you'd typed.
+
+- **Root cause:** `<ha-yaml-editor>` fires its `value-changed` event on every keystroke — unlike
+  every other field in this editor, which only reacts on blur (`change`). The box's handler fired
+  `config-changed` immediately on each of those events, which fed straight into HA's own live
+  preview — a full instance of the card — forcing it through a complete, expensive re-render on
+  every letter. Because most single keystrokes are, on their own, incomplete/invalid YAML, this also
+  meant the box's own value could be read back and recomputed constantly mid-edit rather than once
+  you actually paused, which is what made it possible to lose progress while still typing.
+- **The fix:** the box now goes through the same 150ms debounce every other live-typing field in this
+  editor already uses (sliders, text inputs, …) — `config-changed` (and the live preview update it
+  triggers) now fires once you pause typing, not on every letter.
+- No configuration changes.
+
+Verified with a new regression test: a burst of simulated keystrokes fires zero config updates
+synchronously and exactly one, carrying the final value, once the debounce settles — confirmed this
+test fails against the previous code and passes with the fix. Full test suite, all 4 probes and
+`npm run build:verify` all re-run clean.
+
 ## [6.15.6] - 2026-09-13
 
 ### Fix: the upgraded zone `tap_action` box (B1 spike) went blank on reopening the editor

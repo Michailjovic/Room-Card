@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.6';
+const ROC_VERSION='6.15.7';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4980,10 +4980,23 @@ class RoomOverlayCardEditor extends HTMLElement{
     try{ed.value=parsed;}catch(_){}
     this._yamlEdState=this._yamlEdState||new WeakMap();
     const st=this._yamlEdState;
+    // Live-found bug (2026-09-13): unlike every other field in this editor,
+    // <ha-yaml-editor>'s 'value-changed' fires on EVERY keystroke (it's a live
+    // CodeMirror-backed editor), not just on blur/change. Firing config-changed
+    // synchronously per keystroke made HA's own live preview card (a full,
+    // heavy RoomOverlayCard instance) re-render on every letter -- visible as
+    // "the whole page refreshes while typing" -- and, because most single
+    // keystrokes are transiently invalid YAML, it also meant _collectConfig()
+    // ran (and this box got read back) constantly mid-edit instead of once the
+    // user actually paused. Routed through the same 150ms _fireDebounced()
+    // every other live-typing field (sliders, text inputs, …) already uses —
+    // the WeakMap itself still updates synchronously below, so an on-demand
+    // _collectConfig() (e.g. from another field's change, or Save) always sees
+    // the box's true current state regardless of the debounce.
     ed.addEventListener('value-changed',function(ev){
       const d=ev.detail||{};
       st.set(ed,{value:d.value,isValid:d.isValid!==false});
-      self._fire(self._collectConfig());
+      self._fireDebounced();
     });
     ta.replaceWith(ed);
   }

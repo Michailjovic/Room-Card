@@ -2282,15 +2282,41 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       tapBox().tagName==='HA-YAML-EDITOR');
     t('B1 spike: upgraded box is pre-filled with the parsed (not stringified) config value',
       JSON.stringify(tapBox().value)===JSON.stringify({action:'toggle',entity:'light.a'}));
+
+    // Regression (live-tested 2026-09-13): 'value-changed' fires on EVERY
+    // keystroke (unlike every other field's box, which only reacts on blur
+    // via 'change') -- firing config-changed synchronously per keystroke made
+    // HA's own live preview card (a full, heavy RoomOverlayCard) re-render on
+    // every letter, reported as "the whole page refreshes while typing", and
+    // is why the box (and its saved value) could get stomped mid-edit. Fixed
+    // by routing through the same _fireDebounced() (150ms) every other
+    // live-typing field already uses. A burst of keystrokes must fire
+    // config-changed zero times synchronously and exactly once after the
+    // debounce settles, carrying only the FINAL value.
+    let fireCount=0;
+    edB1.addEventListener('config-changed',function(){fireCount++;});
+    tapBox().simulateChange({action:'toggle',entity:'light.x'},true);
+    tapBox().simulateChange({action:'toggle',entity:'light.y'},true);
+    tapBox().simulateChange({action:'toggle',entity:'light.z'},true);
+    t('B1 spike: rapid keystrokes do not each fire config-changed synchronously (regression: "refreshes on every letter")',
+      fireCount===0);
+    await new Promise(r=>setTimeout(r,200));
+    t('B1 spike: after the debounce settles, config-changed fired exactly once, carrying the final keystroke\'s value',
+      fireCount===1&&JSON.stringify(lastCfg.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.z'}));
+
+    // value-changed is debounced through _fireDebounced() (150ms) -- same
+    // pattern every other live-typing field in this editor already uses, see
+    // the "refresh on every letter" fix above -- so waits after a
+    // simulateChange() must clear that window.
     tapBox().simulateChange({action:'toggle',entity:'light.b'},true);
-    await new Promise(r=>setTimeout(r,20));
+    await new Promise(r=>setTimeout(r,200));
     t('B1 spike: a valid value-changed round-trips into the collected config',
       JSON.stringify(lastCfg.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
     const echo=JSON.parse(JSON.stringify(lastCfg));delete echo.type;
     edB1.setConfig(echo);
     await new Promise(r=>setTimeout(r,20));
     tapBox().simulateChange(undefined,false);
-    await new Promise(r=>setTimeout(r,20));
+    await new Promise(r=>setTimeout(r,200));
     const afterInvalid=edB1._collectConfig();
     t('B1 spike: an invalid value-changed keeps the last-good value (non-destructive, unchanged)',
       JSON.stringify(afterInvalid.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
