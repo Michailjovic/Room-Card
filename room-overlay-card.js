@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.5';
+const ROC_VERSION='6.15.6';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4755,6 +4755,25 @@ const _yaml={
 // live in a real HA dashboard (not just in the jsdom test harness, which never
 // defines ha-yaml-editor and always exercises the plain-textarea fallback).
 const ROC_YAML_EDITOR_BOXES=['data-z-tap'];
+// Paired with the list above: how to fetch the CURRENT, real config value for
+// a given box's key, straight from this._config — used instead of re-parsing
+// the textarea's own serialized YAML text. Confirmed live (2026-09-13): using
+// the textarea-parse round-trip (_yaml.s() to build the box's display text,
+// then _yaml.p() -- this project's own subset parser, not js-yaml -- to turn
+// it back into an object for the upgraded box) meant every re-render handed
+// <ha-yaml-editor> a value produced by OUR parser, which silently fails to
+// round-trip several shapes (bug #9) -- so the saved config was correct (the
+// live card worked fine, because _pYaml() for an upgraded box reads the
+// component's own value-changed state, never our parser) but the box looked
+// EMPTY every time the editor was reopened. Reading straight from _config
+// sidesteps our parser entirely for the box's initial/refreshed value.
+const ROC_YAML_EDITOR_GETTERS={
+  'data-z-tap':function(self,key){
+    const z=(self._config&&Array.isArray(self._config.zones))?self._config.zones:[];
+    const zone=z[parseInt(key,10)];
+    return zone?zone.tap_action:undefined;
+  }
+};
 
 const FILTER_PROPS=[
   {key:'brightness', label:'Brightness', min:0,max:4,  step:0.05,dflt:1,unit:''},
@@ -4941,8 +4960,19 @@ class RoomOverlayCardEditor extends HTMLElement{
   _upgradeOneYamlBox(ta,attr){
     const self=this;
     const key=ta.getAttribute(attr);
+    // Prefer the live config value (see ROC_YAML_EDITOR_GETTERS above) over
+    // re-parsing the textarea's own serialized text with our own subset
+    // parser -- the getter is what actually fixed the "box looks empty after
+    // reopening the editor" bug. The textarea-parse fallback below only runs
+    // if a box is ever added to ROC_YAML_EDITOR_BOXES without a matching
+    // getter, which should not normally happen.
+    const getter=ROC_YAML_EDITOR_GETTERS[attr];
     let parsed;
-    try{const t=ta.value.trim();parsed=t?_yaml.p(ta.value):undefined;}catch(_){parsed=undefined;}
+    if(getter){
+      try{const v=getter(self,key);parsed=(v===undefined||v===null)?undefined:rocClone(v);}catch(_){parsed=undefined;}
+    }else{
+      try{const t=ta.value.trim();parsed=t?_yaml.p(ta.value):undefined;}catch(_){parsed=undefined;}
+    }
     const ed=document.createElement('ha-yaml-editor');
     ed.setAttribute(attr,key);
     ed.style.display='block';

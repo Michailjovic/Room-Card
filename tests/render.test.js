@@ -2294,6 +2294,30 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     const afterInvalid=edB1._collectConfig();
     t('B1 spike: an invalid value-changed keeps the last-good value (non-destructive, unchanged)',
       JSON.stringify(afterInvalid.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
+
+    // Regression (live-tested 2026-09-13): re-opening the editor showed the
+    // upgraded box EMPTY even though the saved config (and the live card)
+    // were correct. Root cause -- _upgradeOneYamlBox() was re-deriving the
+    // box's initial value by re-parsing the textarea's own _yaml.s() output
+    // with this project's own subset YAML parser (_yaml.p()), not js-yaml --
+    // and that parser doesn't round-trip every shape (bug #9), e.g. a
+    // multi-line string: _yScalar() only quotes a string that STARTS/ENDS
+    // with whitespace, so an embedded '\n' passes through unquoted; _yDump()
+    // then emits a literal newline into the middle of a "key: value" line,
+    // and _yParse() (which splits on '\n') sees the second physical line as
+    // "Line two" with no ':' and throws 'bad line: ...' -- so the box would
+    // get undefined, not the actual value. The fix (ROC_YAML_EDITOR_GETTERS)
+    // reads the value straight from _config instead of re-parsing at all.
+    // Simulates "close and reopen the editor": a fresh setConfig()+_render()
+    // (not a value-changed event) is what previously exposed the bug.
+    const mlValue={action:'call-service',service:'notify.mobile_app_x',
+      data:{message:'Line one\nLine two'}};
+    edB1.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
+      width:'20%',height:'20%',tap_action:mlValue}]});
+    edB1._tab='elements';edB1._render();
+    await new Promise(r=>setTimeout(r,20));
+    t('B1 spike: a value _yaml.s()/_yaml.p() cannot round-trip (multi-line string) still pre-fills correctly on reopen (bug found 2026-09-13)',
+      JSON.stringify(tapBox().value)===JSON.stringify(mlValue));
   }
 
   // Sanity check the other way round: without ha-yaml-editor ever defined

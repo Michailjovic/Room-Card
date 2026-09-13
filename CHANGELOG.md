@@ -1,5 +1,26 @@
 # Changelog
 
+## [6.15.6] - 2026-09-13
+
+### Fix: the upgraded zone `tap_action` box (B1 spike) went blank on reopening the editor
+
+Found during live testing of v6.15.5's `<ha-yaml-editor>` spike on the zone `tap_action` box
+(v6.15.4). The saved value was always correct and the zone worked correctly on the actual card — only
+the *editor box itself* showed empty after closing and reopening it.
+
+- **Root cause:** on every re-render, the upgraded box's starting value was produced by taking its own
+  displayed YAML text and re-parsing it with this project's own hand-rolled subset YAML parser (the
+  same parser bug #9 is about) — not with real `js-yaml`. That parser doesn't round-trip every shape
+  correctly (multi-line strings in particular), so anything beyond the simplest `action`/`entity` pair
+  could come back empty or wrong on reopen, even though the actual saved config was never affected.
+- **The fix:** the box's value is now read directly from the live config object instead of being
+  reconstructed by re-parsing text. No more round-trip through the subset parser for this box at all.
+- No configuration changes, and nothing to redo — anything you already saved was correct all along;
+  only the box's own display on reopen was affected.
+
+Thanks for testing this live and catching it — verified with a new regression test that reproduces
+the exact multi-line-string case, plus the full existing test suite.
+
 ## [6.15.5] - 2026-09-13
 
 ### Editor: structured fields for cockpit tiles (B2)
