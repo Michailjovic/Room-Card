@@ -2,7 +2,7 @@
  * room-overlay-card v4.0.0 — MIT License
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.1';
+const ROC_VERSION='6.15.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -11,6 +11,12 @@ window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',descr
     if(entityId.split('.')[0]!=='camera')return null;
     return{config:{type:'custom:room-overlay-card',base_camera:entityId,aspect_ratio:'16/9'}};
   }});
+
+// Element (`elements:`) fields that have their own dedicated editor input —
+// shared between _elItem()'s YAML-box builder and _collectConfig()'s
+// elements KEEP list so the two can't drift apart again (they did once:
+// portrait:/landscape: were silently dropped on every editor save).
+const EL_DEDICATED_KEYS=['id','top','bottom','left','width','height','group','nav_mini','section','tile'];
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 // Default glyph for vacuum_widgets when no custom `icon:` is set — a compact top-down
@@ -2097,7 +2103,7 @@ class RoomOverlayCard extends HTMLElement{
     const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="badge" data-b="'+escA(b.id)+'" style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(b.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
-    const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const isChip=!!ico.chip;const _ibg=isChip?'border-radius:50%;padding:9px;box-sizing:content-box;':(ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'');const a11y=ico.tap_action?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico'+(isChip?' ico-chip':'')+'" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(ico.tap_action?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;"></ha-icon></div>';}).join('');
+    const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const isChip=!!ico.chip;const _ibg=isChip?'border-radius:50%;padding:9px;box-sizing:content-box;':(ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'');const _icoAct=ico.tap_action||ico.hold_action||ico.double_tap_action;const a11y=_icoAct?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico'+(isChip?' ico-chip':'')+'" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(_icoAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;"></ha-icon></div>';}).join('');
 
     const vwHtml=(_isGhost||_isMini)?'':(c.vacuum_widgets||[]).map(vw0=>{
       const vw=tApply(vw0,_tier);
@@ -2304,7 +2310,7 @@ class RoomOverlayCard extends HTMLElement{
       const tiles=_secResolved[d.id]||sx.tiles;
       const tilesHtml=tiles.length?tiles.map(_secTileHtml).join(''):'';
       const cardHtml=d.card?'<div class="roc-card-tile-host" data-section-card="'+escA(d.id)+'"></div>':'';
-      if(!tilesHtml&&!cardHtml)return'<div class="roc-panel-empty">Zatím sem nic nepatří — přidej <code>section: '+escA(d.id)+'</code> některému prvku v místnosti.</div>';
+      if(!tilesHtml&&!cardHtml)return'<div class="roc-panel-empty">Nothing here yet — tag an element in this room with <code>section: '+escA(d.id)+'</code>.</div>';
       return tilesHtml+cardHtml;
     };
     const secPanelHtml=!_secList.length?'':(
@@ -2623,7 +2629,7 @@ class RoomOverlayCard extends HTMLElement{
       // icon per tick — 20 icons meant 20 querySelector calls on every state
       // change, for a node that cannot change between renders.
       this._icoIconEls[ico.id]=el.querySelector('ha-icon');
-      if(ico.tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
+      if(ico.tap_action||ico.hold_action||ico.double_tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
     }
     this._vwEls={};this._vwBgEls={};this._vwIconEls={};this._vwCountEls={};
     for(const vw of(c.vacuum_widgets||[])){
@@ -2679,7 +2685,7 @@ class RoomOverlayCard extends HTMLElement{
     const hacard=this.shadowRoot.querySelector('ha-card');
     if(hacard&&c.tap_action){
       hacard.addEventListener('click',e=>{
-        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')||n.classList?.contains('badge')||n.classList?.contains('tm-flip')||n.classList?.contains('tm-save')))this._exec(c.tap_action,e);
+        if(!e.composedPath().some(n=>n.classList?.contains('zone')||n.classList?.contains('elcont')||n.classList?.contains('ico')||n.classList?.contains('badge')||n.classList?.contains('tm-flip')||n.classList?.contains('tm-save')||n.classList?.contains('roc-panel')||n.classList?.contains('roc-panel-backdrop')))this._exec(c.tap_action,e);
       });
     }
     if(tm){
@@ -3018,6 +3024,18 @@ class RoomOverlayCard extends HTMLElement{
     const _ex=this._extractEntities(c);
     if(c.light_controls&&c.light_controls.lux_sensor)_ex.ids.add(c.light_controls.lux_sensor);
     for(const _b of(c.blinds||[]))if(_b&&_b.entity&&_b.control)_ex.ids.add(_b.entity);
+    // Cockpit sections are deliberately cross-room (COCKPIT_PLAN.md kap.4): a
+    // tile's entity may live in another room, be `source: auto` (no config
+    // entity at all), or use `progress:` (a key _extractEntities doesn't
+    // recognise). None of that is in `c`, so without this loop the panel
+    // silently stops updating the moment its content isn't the active room's
+    // own tagged elements (bug: cockpit tiles don't update live).
+    for(const _secId in _secResolved)for(const _te of _secResolved[_secId]){
+      const _td=rocTileDef(_te);
+      if(_td.entity)_ex.ids.add(_td.entity);
+      if(_td.progress)_ex.ids.add(_td.progress);
+      for(const _ov of(_td.overlays||[]))this._extractEntities(_ov,_ex.ids,_ex.attrs);
+    }
     const _reCfg=cAll.room_entity;
     if(typeof _reCfg==='string')_ex.ids.add(_reCfg);
     else if(_reCfg&&typeof _reCfg==='object'){
@@ -5408,8 +5426,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const hEl=q('[data-el-h="'+i+'"]');if(hEl)o.height=hEl.value;
       const yaR=self._pYaml(q('[data-el-yaml="'+i+'"]'));
       if(yaR.ok){
-        const KEEP=['id','top','bottom','left','width','height','group'];
-        for(const k of Object.keys(o))if(!KEEP.includes(k))delete o[k];
+        for(const k of Object.keys(o))if(!EL_DEDICATED_KEYS.includes(k))delete o[k];
         if(yaR.val)Object.assign(o,yaR.val);
       }
       const elGrpEl=q('[data-el-grp="'+i+'"]');if(elGrpEl&&elGrpEl.value.trim())o.group=elGrpEl.value.trim();else delete o.group;
@@ -5994,16 +6011,13 @@ class RoomOverlayCardEditor extends HTMLElement{
   }
 
   _elItem(el,i){
-    const elCopy={};
-    if(el.card)elCopy.card=el.card;
-    if(el.visible!==undefined)elCopy.visible=el.visible;
-    if(el.visible_template!==undefined)elCopy.visible_template=el.visible_template;
-    if(el.fade!==undefined)elCopy.fade=el.fade;
-    if(el.slide!==undefined)elCopy.slide=el.slide;
-    if(el.mobile!==undefined)elCopy.mobile=el.mobile;
-    if(el.z_index!==undefined)elCopy.z_index=el.z_index;
-    if(el.border_radius)elCopy.border_radius=el.border_radius;
-    if(el.overflow)elCopy.overflow=el.overflow;
+    // Everything minus the fields with their own dedicated input — same
+    // shape every other item type's YAML box uses (_lblItem/_gaugeItem/
+    // _vwItem/_glowItem/_badgeItem). A whitelist here previously dropped
+    // `portrait:`/`landscape:` (and any future key) the first time the
+    // editor re-collected the config.
+    const elCopy=Object.assign({},el);
+    for(const k of EL_DEDICATED_KEYS)delete elCopy[k];
     const elYaml=Object.keys(elCopy).length?_yaml.s(elCopy):'';
     const elOpen=this._openPanels&&this._openPanels.has('el-'+i);
     let h='<details style="margin-bottom:6px;" data-panel="el-'+i+'"'+(elOpen?' open':'')+' >';
@@ -6017,7 +6031,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Width</label><input data-el-w="'+i+'" type="text" value="'+this._e(el.width||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Height</label><input data-el-h="'+i+'" type="text" value="'+this._e(el.height||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
-    h+='<div><label class="roc-l">card / visible / z_index / border_radius (YAML)</label>';
+    h+='<div><label class="roc-l">card / visible / visible_template / fade / slide / mobile / portrait / landscape / z_index / border_radius / overflow (YAML)</label>';
     h+='<textarea data-el-yaml="'+i+'" rows="6"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(elYaml)+'</textarea></div>';
     h+='<div style="margin-top:6px;"><label class="roc-l">Group (optional)</label><input data-el-grp="'+i+'" type="text" placeholder="group id" value="'+this._e((typeof el.group==='string'?el.group:''))+'"'+this._inp('')+'></div>';
     h+=this._navMiniField('el',i,el.nav_mini);
@@ -6991,7 +7005,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(st.indexOf('monospace')>=0){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
     });
     const migBtn=this.querySelector('#roc-mig-save');
-    if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;fire();});
+    if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;self._fire(self._collectConfig());self._render();});
     const advT=this.querySelector('#roc-adv-toggle');
     if(advT)advT.addEventListener('click',function(){
       self._showAdv=!self._showAdv;

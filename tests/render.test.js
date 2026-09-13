@@ -107,6 +107,18 @@ t('editor per-profile aspect inputs',!!ed.querySelector('#aspect_ratio__portrait
 t('editor rows prefilled from migration',ed.querySelector('#ly-rows__landscape').value.length>0);
 t('base_image label has no bare unexplained asterisk',!/Base image URL \*/.test(ed.innerHTML));
 t('base_image field has a /local/ placeholder',ed.querySelector('#base_image').placeholder.indexOf('/local/')===0);
+// v6.15.2: "Save migrated config" called an undefined local `fire()` (it only
+// exists inside _listen(), while the banner button is wired in _render()) —
+// clicking it threw instead of saving. It must now clear the migrated flag
+// and fire config-changed with no error.
+let migOut=null;
+ed.addEventListener('config-changed',e=>{migOut=e.detail.config;});
+let migThrew=false;
+try{ed.querySelector('#roc-mig-save').dispatchEvent(new w.Event('click',{bubbles:true}));}
+catch(_){migThrew=true;}
+t('"Save migrated config" button does not throw (fire() was out of scope)',!migThrew);
+t('...and it actually fires config-changed with a migrated layout',!!migOut&&!!migOut.layout&&!!migOut.layout.landscape);
+t('...and the migration banner is gone after saving',ed._wasMigrated===false);
 
 // --- editor: Layout tab — Portrait/Landscape sub-tabs + illustrative mini grid preview ---
 t('layout sub-tab buttons present',!!ed.querySelector('[data-rocsub="portrait"]')&&!!ed.querySelector('[data-rocsub="landscape"]'));
@@ -1983,6 +1995,83 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     touchTap([50,50],[54,52])==='/x/scrolled');
   t('a real drag (page scroll) starting on the element does NOT fire tap_action',
     touchTap([50,50],[50,140])===null);
+
+  // ---- v6.15.2 patch: cockpit tiles are cross-room but change-detection was
+  // active-room-only (bug #1) ------------------------------------------------
+  const LY={portrait:{rows:[100],place:{image:{row:1}}},landscape:{rows:[100],place:{image:{row:1}}}};
+  const stS=(state,attrs)=>({state,attributes:Object.assign({friendly_name:'n'},attrs||{})});
+  const secLiveCfg={base_image:'/local/x.webp',layout:LY,
+    sections:[{id:'appliances',title:'Appliances',source:'auto',domain:'climate'}],
+    zones:[{id:'z',top:'10%',left:'10%',width:'10%',height:'10%',section:'appliances',
+      tile:{name:'Washer',entity:'sensor.washer',progress:'sensor.washer_prog'}}]};
+  const elSecLive=mkCard(secLiveCfg);
+  elSecLive.hass={states:{'sensor.washer':stS('idle'),'sensor.washer_prog':stS('10'),'climate.hall':stS('heat')},callService(){},user:{name:'x'}};
+  elSecLive._openSection('appliances');
+  t('cross-room/auto/progress tile entities are in the change-detection set',
+    elSecLive._relevantEntities.includes('sensor.washer')&&
+    elSecLive._relevantEntities.includes('sensor.washer_prog'));
+  elSecLive.hass={states:{'sensor.washer':stS('run'),'sensor.washer_prog':stS('75'),'climate.hall':stS('heat')},callService(){},user:{name:'x'}};
+  await new Promise(r=>setTimeout(r,60));
+  const tileStateEl=elSecLive.shadowRoot.querySelector('[data-tile-state]');
+  const tileProgEl=elSecLive.shadowRoot.querySelector('[data-tile-progress]');
+  t('a cross-room tile updates live once its entity changes (bug #1 if FAIL)',
+    !!tileStateEl&&tileStateEl.textContent==='run');
+  t('...and its progress bar updates too (bug #1 if FAIL)',
+    !!tileProgEl&&tileProgEl.style.width==='75%');
+
+  // ---- v6.15.2 patch: editor dropped element portrait:/landscape: on every
+  // collect (bug #2) ----------------------------------------------------------
+  const edEl2=w.document.createElement('room-overlay-card-editor');
+  edEl2.setConfig({base_image:'/local/x.webp',layout:LY,
+    elements:[{id:'e1',top:'10%',left:'10%',width:'20%',height:'20%',card:{type:'markdown',content:'x'},
+      visible_template:'{{ true }}',portrait:{top:'50%'},landscape:{width:'40%'}}]});
+  edEl2.hass={states:{},user:{name:'x'}};
+  edEl2._tab='elements';edEl2._render();
+  let el2Out=null;
+  edEl2.addEventListener('config-changed',e=>{el2Out=e.detail.config;});
+  edEl2.querySelector('[data-el-id="0"]').dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('collectConfig keeps element portrait: override (bug #2 if FAIL)',
+    !!el2Out&&!!el2Out.elements[0].portrait&&el2Out.elements[0].portrait.top==='50%');
+  t('collectConfig keeps element landscape: override (bug #2 if FAIL)',
+    !!el2Out&&!!el2Out.elements[0].landscape&&el2Out.elements[0].landscape.width==='40%');
+  t('collectConfig keeps element visible_template (no regression)',
+    !!el2Out&&el2Out.elements[0].visible_template==='{{ true }}');
+
+  // ---- v6.15.2 patch: an open cockpit panel's own chrome (header/backdrop)
+  // bubbled into the room's tap_action (bug #4) --------------------------------
+  const panelCalls=[];
+  const elPanelTap=mkCard({base_image:'/local/x.webp',layout:LY,tap_action:{action:'toggle',entity:'light.room'},
+    sections:[{id:'app2',title:'App2'}],
+    icons:[{id:'o2',icon:'mdi:x',top:'5%',left:'5%',tap_action:{action:'open-section',section:'app2'}}],
+    zones:[{id:'z2',top:'10%',left:'10%',width:'10%',height:'10%',section:'app2',tile:{name:'W',entity:'sensor.w2'}}]});
+  elPanelTap.hass={states:{'sensor.w2':stS('idle'),'light.room':stS('off')},callService(d,s,data){panelCalls.push([d,s,data]);},user:{name:'x'}};
+  elPanelTap._openSection('app2');
+  panelCalls.length=0;
+  elPanelTap.shadowRoot.querySelector('.roc-panel-hd-txt').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));
+  t('clicking an open panel\'s header does NOT fire the room tap_action (bug #4 if FAIL)',panelCalls.length===0);
+  panelCalls.length=0;
+  elPanelTap.shadowRoot.querySelector('[data-section-backdrop]').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));
+  t('clicking the panel backdrop does NOT fire the room tap_action (bug #4 if FAIL)',panelCalls.length===0);
+
+  // ---- v6.15.2 patch: an icon with only hold_action/double_tap_action was
+  // never wired for gestures (bug #6) ------------------------------------------
+  const elIcoHold=mkCard({base_image:'/local/x.webp',layout:LY,
+    icons:[{id:'ih',icon:'mdi:x',top:'5%',left:'5%',hold_action:{action:'toggle',entity:'light.ih'}}]});
+  elIcoHold.hass={states:{'light.ih':stS('off')},callService(){},user:{name:'x'}};
+  const icoHoldEl=elIcoHold.shadowRoot.querySelector('[data-ico="ih"]');
+  t('an icon with only hold_action gets a11y/tabindex (bug #6 if FAIL)',
+    icoHoldEl.getAttribute('tabindex')==='0');
+  icoHoldEl.dispatchEvent(new w.MouseEvent('mousedown',{bubbles:true}));
+  await new Promise(r=>setTimeout(r,200));
+  t('...and mousedown starts a hold ring (bug #6 if FAIL)',
+    !!icoHoldEl.querySelector('.roc-hold'));
+
+  // ---- v6.15.2 patch: hardcoded Czech copy in the empty-panel state (bug #11)
+  const elEmptyPanel=mkCard({base_image:'/local/x.webp',layout:LY,sections:[{id:'empty2',title:'E2'}]});
+  elEmptyPanel.hass={states:{},callService(){},user:{name:'x'}};
+  const emptyTxt2=elEmptyPanel.shadowRoot.querySelector('.roc-panel-empty').textContent;
+  t('empty-panel copy is English, not Czech (bug #11 if FAIL)',
+    !/Zatím|přidej|místnosti/.test(emptyTxt2));
 }
 
   console.log(fails?('FAILURES: '+fails):'ALL RENDER TESTS PASSED');

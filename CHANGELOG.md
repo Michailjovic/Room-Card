@@ -1,5 +1,40 @@
 # Changelog
 
+## [6.15.2] - 2026-09-13
+
+### Fix: six independent bugs found during a full bug/UX audit
+
+First of two patch releases following a project-wide bug and editor-UX audit
+(`BUG_UX_ANALYSIS_v6.15.1.md`); this one covers the small, self-contained fixes, prioritized so the
+two most commonly hit ship first. See docs/releases/RELEASE_NOTES_v6.15.2.md for full details of
+each.
+
+- **Cockpit tiles didn't update live unless their entity belonged to the active room.**
+  `_render()`'s change-detection set was built from the merged active room only, but sections are
+  deliberately cross-room: a tagged element in another room, a `source: auto` tile (no config
+  entity at all), and any tile's `progress:` sensor were all invisible to it. A panel left open
+  while its content changed elsewhere (or a `progress:` bar, in any room) simply never updated.
+  Now every resolved tile's entity/progress/overlay entities are added to the relevant-entity set.
+- **The editor silently deleted an element's `portrait:`/`landscape:` per-profile overrides.**
+  `_elItem()` built its "everything else" YAML box from an incomplete whitelist that predated the
+  v4 `portrait:`/`landscape:` fields, so anything not on that list — including them — was dropped
+  the first time the editor re-collected the config for any reason. It now builds that box the
+  same way every other item type does: a full clone minus the fields with their own dedicated
+  input, so no current or future element key can be silently dropped again.
+- **"Save migrated config" threw instead of saving.** The banner's button called a `fire()` that
+  only exists inside a different method's closure — clicking it raised a `ReferenceError` and never
+  saved anything.
+- **Tapping a cockpit panel's own header, body or backdrop could also fire the room's
+  `tap_action`.** The `ha-card` click handler's exclusion list didn't know about panel chrome, so
+  opening/using/closing a section could double as a tap on the room behind it.
+- **An icon with only `hold_action:` (or only `double_tap_action:`) was completely inert.** Both
+  the accessibility attributes and the gesture-listener wiring were gated on `tap_action` alone;
+  zones already checked all three actions, icons now do too.
+- **A hardcoded Czech string leaked into an English-language editor/card.** The empty-section-panel
+  placeholder is now in English like the rest of the UI.
+
+No configuration changes in any of these — pure bug fixes, safe to update without touching YAML.
+
 ## [6.15.1] - 2026-09-11
 
 ### Fix: `glows[]` didn't react to brightness/colour changes on an already-on light
