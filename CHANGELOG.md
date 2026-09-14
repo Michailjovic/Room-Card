@@ -1,5 +1,43 @@
 # Changelog
 
+## [6.15.8] - 2026-09-13
+
+### Revert: the `<ha-yaml-editor>` upgrade for the zone `tap_action` box (B1 spike)
+
+Live testing after v6.15.7 reported both previously "fixed" symptoms still happening: the box was
+still blank on reopening the editor, and it still refreshed on every keystroke. Two independent,
+carefully-diagnosed, test-verified fixes (v6.15.6, v6.15.7) both passed every regression test written
+for them, yet both failed against the real HA dashboard. Rather than attempt a third blind fix, the
+zone `tap_action` box has been **reverted to a plain `<textarea>`** — identical to every other YAML
+box in this editor — at the user's explicit request.
+
+- **What changed:** removed the `<ha-yaml-editor>` upgrade mechanism entirely (`_upgradeYamlBoxes()`,
+  `_upgradeOneYamlBox()`, the `_pYaml()` branch that read an upgraded box's tracked state, the
+  `.hass` forwarding to `ha-yaml-editor` elements, and the `ROC_YAML_EDITOR_BOXES`/
+  `ROC_YAML_EDITOR_GETTERS` extension-point constants). The zone `tap_action` box is now a plain
+  textarea again, same as it was before v6.15.4.
+- **What's unaffected:** C1 (inline YAML error text under an invalid box) still applies to this box
+  exactly like every other YAML box in the editor — nothing about that behavior changed.
+- **Why this class of bug proved unfixable from here:** both fix attempts were correctly diagnosed
+  and passed every jsdom regression test written for them, but the actual cause lives somewhere this
+  project's test harness cannot see at all — there is no real HA frontend, no real
+  `<ha-yaml-editor>`/CodeMirror component, and no real Lovelace dashboard DOM in this repo's tests.
+  The leading (never confirmed) suspect is this card's own aggressive `_wireLayoutObservers()`
+  `MutationObserver`, which watches the surrounding Lovelace DOM for any mutation and synchronously
+  re-pins the whole layout — quite possibly reacting to the box's own auto-grow-while-typing DOM
+  changes, entirely independent of anything either fix touched.
+- **No configuration changes.**
+- B3/B4 (the two other planned upgrades from the same audit item, which shared this same
+  `<ha-yaml-editor>`-in-a-custom-editor risk) are on hold and should not be attempted again without
+  first getting real diagnostic data from the user's own browser devtools — two blind, well-reasoned
+  attempts on this same box both failed live.
+
+Verified: removed the entire B1-spike test block (the stub `<ha-yaml-editor>` registered in a
+dedicated jsdom realm, and every test that exercised it) and replaced it with one sanity check that
+the box is back to a plain textarea. Full three-tier test suite, all 4 reproduction probes (same
+pre-existing FAILs as always — unrelated to this revert) and `npm run build:verify` against the
+rebuilt minified `dist/` all re-run clean.
+
 ## [6.15.7] - 2026-09-13
 
 ### Fix: the upgraded `tap_action` box refreshed on every keystroke, and could still lose your typing

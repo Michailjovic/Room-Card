@@ -2217,8 +2217,13 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   }
 }
 
-  // ---- Stage 3: C1 (inline YAML error text) + B1 spike (<ha-yaml-editor>
-  // upgrade for the zone tap_action box) — BUG_UX_ANALYSIS_v6.15.1.md §Part 2.
+  // ---- Stage 3: C1 (inline YAML error text) — BUG_UX_ANALYSIS_v6.15.1.md
+  // §Part 2. (B1, the <ha-yaml-editor> upgrade for this same zone tap_action
+  // box, was spiked in v6.15.4 and reverted in v6.15.8 after two independent,
+  // test-verified fix attempts both failed against the user's real HA
+  // dashboard — see CHANGELOG.md [6.15.8] and RELEASE_NOTES_v6.15.8.md. The
+  // box is back to being a plain textarea like every other YAML box, so
+  // there is nothing B1-specific left to regression-test here.)
 
   // C1: invalid YAML in a plain box shows inline error text (not just a
   // hover-only title tooltip) and still keeps the previous config value;
@@ -2243,120 +2248,15 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       errEl.style.display==='none'&&errEl.textContent==='');
   }
 
-  // B1 spike: with a stub <ha-yaml-editor> registered (mirrors HA's real
-  // component contract — .value holds the PARSED value, 'value-changed'
-  // carries {value,isValid}), the zone tap_action box upgrades to it and
-  // behaves exactly like the textarea path: valid edits round-trip, invalid
-  // edits keep the last-good value instead of deleting it. A separate JSDOM
-  // realm is used so registering the stub can't affect any other test in
-  // this file (which all rely on ha-yaml-editor staying undefined, i.e. the
-  // plain-textarea fallback this repo can actually regression-test).
-  {
-    const dom2=new JSDOM('<html><body></body></html>',{pretendToBeVisual:true,runScripts:'outside-only'});
-    const w2=dom2.window;
-    w2.innerWidth=1920;w2.innerHeight=1080;
-    w2.requestIdleCallback=f=>setTimeout(f,0);
-    w2.eval(`
-      class StubYamlEditor extends HTMLElement {
-        constructor(){super();this._value=undefined;}
-        get value(){return this._value;}
-        set value(v){this._value=v;}
-        simulateChange(value,isValid){
-          this._value=isValid===false?undefined:value;
-          this.dispatchEvent(new CustomEvent('value-changed',{detail:{value:this._value,isValid:isValid!==false}}));
-        }
-      }
-      customElements.define('ha-yaml-editor',StubYamlEditor);
-    `);
-    w2.eval(code);
-    const edB1=w2.document.createElement('room-overlay-card-editor');
-    let lastCfg=null;
-    edB1.addEventListener('config-changed',function(e){lastCfg=e.detail.config;});
-    edB1.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
-      width:'20%',height:'20%',tap_action:{action:'toggle',entity:'light.a'}}]});
-    edB1.hass={states:{},user:{name:'x'}};
-    edB1._tab='elements';edB1._render();
-    await new Promise(r=>setTimeout(r,20));
-    const tapBox=()=>edB1.querySelector('[data-z-tap="0"]');
-    t('B1 spike: zone tap_action box upgrades to <ha-yaml-editor> when it is defined',
-      tapBox().tagName==='HA-YAML-EDITOR');
-    t('B1 spike: upgraded box is pre-filled with the parsed (not stringified) config value',
-      JSON.stringify(tapBox().value)===JSON.stringify({action:'toggle',entity:'light.a'}));
-
-    // Regression (live-tested 2026-09-13): 'value-changed' fires on EVERY
-    // keystroke (unlike every other field's box, which only reacts on blur
-    // via 'change') -- firing config-changed synchronously per keystroke made
-    // HA's own live preview card (a full, heavy RoomOverlayCard) re-render on
-    // every letter, reported as "the whole page refreshes while typing", and
-    // is why the box (and its saved value) could get stomped mid-edit. Fixed
-    // by routing through the same _fireDebounced() (150ms) every other
-    // live-typing field already uses. A burst of keystrokes must fire
-    // config-changed zero times synchronously and exactly once after the
-    // debounce settles, carrying only the FINAL value.
-    let fireCount=0;
-    edB1.addEventListener('config-changed',function(){fireCount++;});
-    tapBox().simulateChange({action:'toggle',entity:'light.x'},true);
-    tapBox().simulateChange({action:'toggle',entity:'light.y'},true);
-    tapBox().simulateChange({action:'toggle',entity:'light.z'},true);
-    t('B1 spike: rapid keystrokes do not each fire config-changed synchronously (regression: "refreshes on every letter")',
-      fireCount===0);
-    await new Promise(r=>setTimeout(r,200));
-    t('B1 spike: after the debounce settles, config-changed fired exactly once, carrying the final keystroke\'s value',
-      fireCount===1&&JSON.stringify(lastCfg.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.z'}));
-
-    // value-changed is debounced through _fireDebounced() (150ms) -- same
-    // pattern every other live-typing field in this editor already uses, see
-    // the "refresh on every letter" fix above -- so waits after a
-    // simulateChange() must clear that window.
-    tapBox().simulateChange({action:'toggle',entity:'light.b'},true);
-    await new Promise(r=>setTimeout(r,200));
-    t('B1 spike: a valid value-changed round-trips into the collected config',
-      JSON.stringify(lastCfg.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
-    const echo=JSON.parse(JSON.stringify(lastCfg));delete echo.type;
-    edB1.setConfig(echo);
-    await new Promise(r=>setTimeout(r,20));
-    tapBox().simulateChange(undefined,false);
-    await new Promise(r=>setTimeout(r,200));
-    const afterInvalid=edB1._collectConfig();
-    t('B1 spike: an invalid value-changed keeps the last-good value (non-destructive, unchanged)',
-      JSON.stringify(afterInvalid.zones[0].tap_action)===JSON.stringify({action:'toggle',entity:'light.b'}));
-
-    // Regression (live-tested 2026-09-13): re-opening the editor showed the
-    // upgraded box EMPTY even though the saved config (and the live card)
-    // were correct. Root cause -- _upgradeOneYamlBox() was re-deriving the
-    // box's initial value by re-parsing the textarea's own _yaml.s() output
-    // with this project's own subset YAML parser (_yaml.p()), not js-yaml --
-    // and that parser doesn't round-trip every shape (bug #9), e.g. a
-    // multi-line string: _yScalar() only quotes a string that STARTS/ENDS
-    // with whitespace, so an embedded '\n' passes through unquoted; _yDump()
-    // then emits a literal newline into the middle of a "key: value" line,
-    // and _yParse() (which splits on '\n') sees the second physical line as
-    // "Line two" with no ':' and throws 'bad line: ...' -- so the box would
-    // get undefined, not the actual value. The fix (ROC_YAML_EDITOR_GETTERS)
-    // reads the value straight from _config instead of re-parsing at all.
-    // Simulates "close and reopen the editor": a fresh setConfig()+_render()
-    // (not a value-changed event) is what previously exposed the bug.
-    const mlValue={action:'call-service',service:'notify.mobile_app_x',
-      data:{message:'Line one\nLine two'}};
-    edB1.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
-      width:'20%',height:'20%',tap_action:mlValue}]});
-    edB1._tab='elements';edB1._render();
-    await new Promise(r=>setTimeout(r,20));
-    t('B1 spike: a value _yaml.s()/_yaml.p() cannot round-trip (multi-line string) still pre-fills correctly on reopen (bug found 2026-09-13)',
-      JSON.stringify(tapBox().value)===JSON.stringify(mlValue));
-  }
-
-  // Sanity check the other way round: without ha-yaml-editor ever defined
-  // (this file's main `w`, used by every other test), the same box must stay
-  // a plain textarea — i.e. every box not yet listed in ROC_YAML_EDITOR_BOXES,
-  // and this one too on any HA/harness that never loads the component.
+  // Sanity check: the zone tap_action box is a plain textarea (B1 reverted,
+  // v6.15.8) — same as every other YAML box in this editor.
   {
     const edNoUp=w.document.createElement('room-overlay-card-editor');
     edNoUp.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
       width:'20%',height:'20%',tap_action:{action:'toggle',entity:'light.a'}}]});
     edNoUp.hass={states:{},user:{name:'x'}};
     edNoUp._tab='elements';edNoUp._render();
-    t('B1 spike: falls back to a plain textarea when ha-yaml-editor is never defined',
+    t('zone tap_action box is a plain textarea (B1 reverted, v6.15.8)',
       edNoUp.querySelector('[data-z-tap="0"]').tagName==='TEXTAREA');
   }
 

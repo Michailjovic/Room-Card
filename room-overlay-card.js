@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.7';
+const ROC_VERSION='6.15.8';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -4742,38 +4742,29 @@ const _yaml={
   }
 };
 
-// B1 spike (BUG_UX_ANALYSIS_v6.15.1.md report, §Part 2 B1): YAML boxes whose
-// data-* attribute name is listed here get upgraded from a plain <textarea>
-// (parsed by the hand-rolled _yParse above) to HA's real <ha-yaml-editor>
-// (js-yaml under the hood) whenever that component is actually defined in the
-// running HA frontend — see _upgradeYamlBoxes()/_upgradeOneYamlBox(). Scoped
-// to a single box on purpose: HA's Lit custom elements only upgrade correctly
-// if .hass/.value are set AFTER customElements.whenDefined() resolves — an
-// earlier, unguarded attempt at <ha-entity-picker> in this same editor (the
-// dead .ep-placeholder branch in _bindHassComponents) failed for exactly this
-// reason. Add more attribute names here once this one is confirmed working
-// live in a real HA dashboard (not just in the jsdom test harness, which never
-// defines ha-yaml-editor and always exercises the plain-textarea fallback).
-const ROC_YAML_EDITOR_BOXES=['data-z-tap'];
-// Paired with the list above: how to fetch the CURRENT, real config value for
-// a given box's key, straight from this._config — used instead of re-parsing
-// the textarea's own serialized YAML text. Confirmed live (2026-09-13): using
-// the textarea-parse round-trip (_yaml.s() to build the box's display text,
-// then _yaml.p() -- this project's own subset parser, not js-yaml -- to turn
-// it back into an object for the upgraded box) meant every re-render handed
-// <ha-yaml-editor> a value produced by OUR parser, which silently fails to
-// round-trip several shapes (bug #9) -- so the saved config was correct (the
-// live card worked fine, because _pYaml() for an upgraded box reads the
-// component's own value-changed state, never our parser) but the box looked
-// EMPTY every time the editor was reopened. Reading straight from _config
-// sidesteps our parser entirely for the box's initial/refreshed value.
-const ROC_YAML_EDITOR_GETTERS={
-  'data-z-tap':function(self,key){
-    const z=(self._config&&Array.isArray(self._config.zones))?self._config.zones:[];
-    const zone=z[parseInt(key,10)];
-    return zone?zone.tap_action:undefined;
-  }
-};
+// B1 (BUG_UX_ANALYSIS_v6.15.1.md report, §Part 2 B1) — REVERTED 2026-09-13.
+// The zone tap_action YAML box was spiked as an upgrade from a plain
+// <textarea> to HA's real <ha-yaml-editor> (v6.15.4), then given two
+// follow-up fixes after live testing (v6.15.6: box went blank on reopen;
+// v6.15.7: typing caused a full refresh on every keystroke). BOTH fixes
+// passed every jsdom test written for them (a stub <ha-yaml-editor> in a
+// dedicated realm) yet BOTH problems persisted live in the user's real HA
+// dashboard afterwards — meaning the actual cause lives somewhere this
+// project's test harness cannot see at all (no real HA frontend, no real
+// <ha-yaml-editor>/CodeMirror, no real Lovelace dashboard DOM). The prime
+// remaining suspect, never confirmed: this card's own aggressive
+// MutationObserver (_wireLayoutObservers, watching hui-panel-view.shadowRoot
+// + hui-card-options.shadowRoot for ANY DOM mutation to synchronously
+// re-pin layout) reacting to the box's own auto-grow-while-typing behavior,
+// entirely independent of this editor's own config-changed/setConfig cycle
+// — which would explain why fixing that cycle twice didn't help.
+// Rather than keep guessing at further live-tested fixes, the box has been
+// reverted to a plain <textarea> (identical to every other YAML box in this
+// editor) at the user's request. C1 (inline error text) is UNAFFECTED and
+// still applies to this box like every other. Do not re-attempt an
+// <ha-yaml-editor>/B3/B4-style upgrade without first getting real diagnostic
+// data from the user's own browser devtools (Elements/Console while typing)
+// — two blind attempts based on jsdom-only theories both failed live.
 
 const FILTER_PROPS=[
   {key:'brightness', label:'Brightness', min:0,max:4,  step:0.05,dflt:1,unit:''},
@@ -4882,26 +4873,13 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _toHex(c){if(!c)return'#ffffff';if(c.startsWith('#'))return c.length===4?'#'+c[1]+c[1]+c[2]+c[2]+c[3]+c[3]:c.slice(0,7);const m=c.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);return m?'#'+parseInt(m[1]).toString(16).padStart(2,'0')+parseInt(m[2]).toString(16).padStart(2,'0')+parseInt(m[3]).toString(16).padStart(2,'0'):'#ffffff';}
 
-  // Parse a YAML textarea — or an upgraded <ha-yaml-editor> (B1 spike, see
-  // ROC_YAML_EDITOR_BOXES) — non-destructively: invalid input keeps the
+  // Parse a YAML textarea non-destructively: invalid input keeps the
   // previous config value and flags the field instead of silently deleting
-  // data. For the plain-textarea path this also shows the actual parse error
-  // as inline text under the box (C1) — a red border with a hover-only title
-  // tooltip is invisible on touch.
+  // data. Also shows the actual parse error as inline text under the box
+  // (C1) — a red border with a hover-only title tooltip is invisible on
+  // touch.
   _pYaml(el){
     if(!el)return{ok:false,val:undefined};
-    if(el.tagName==='HA-YAML-EDITOR'){
-      // Real HA component: .value is already the parsed JS value, not raw
-      // text — no parsing needed here. It also sets .value to undefined on
-      // invalid input (indistinguishable from "the box was cleared"), so we
-      // track our own isValid flag from its 'value-changed' event to still
-      // preserve the last-good config value on a parse error, same contract
-      // as the textarea path below.
-      const st=this._yamlEdState&&this._yamlEdState.get(el);
-      if(st&&st.isValid===false)return{ok:false,val:undefined};
-      const v=st?st.value:el.value;
-      return{ok:true,val:(v===undefined||v===null)?undefined:v};
-    }
     const t=el.value.trim();
     if(!t){el.style.borderColor='';el.title='';this._yErr(el,'');return{ok:true,val:undefined};}
     const r=_yaml.pe(el.value);
@@ -4931,74 +4909,6 @@ class RoomOverlayCardEditor extends HTMLElement{
       el.parentNode.insertBefore(e,el.nextSibling);
     }
     e.textContent=msg;e.style.display='block';
-  }
-
-  // B1 spike: upgrade every textarea whose data-* attribute is listed in
-  // ROC_YAML_EDITOR_BOXES to a real <ha-yaml-editor>, but only once that
-  // component is actually defined in this HA frontend session — see the
-  // constant's comment for why the ordering matters. Called once per _render()
-  // (from _bindHassComponents's call site); a no-op forever if the component
-  // never defines (old HA, or this repo's jsdom test harness), which is what
-  // keeps the plain-textarea path exercised and regression-tested.
-  _upgradeYamlBoxes(){
-    const self=this;
-    if(!customElements.get('ha-yaml-editor')){
-      if(!this._yamlEdWaiting){
-        this._yamlEdWaiting=true;
-        customElements.whenDefined('ha-yaml-editor').then(function(){
-          self._yamlEdWaiting=false;
-          if(self.isConnected)self._upgradeYamlBoxes();
-        }).catch(function(){});
-      }
-      return;
-    }
-    ROC_YAML_EDITOR_BOXES.forEach(function(attr){
-      self.querySelectorAll('textarea['+attr+']').forEach(function(ta){self._upgradeOneYamlBox(ta,attr);});
-    });
-  }
-
-  _upgradeOneYamlBox(ta,attr){
-    const self=this;
-    const key=ta.getAttribute(attr);
-    // Prefer the live config value (see ROC_YAML_EDITOR_GETTERS above) over
-    // re-parsing the textarea's own serialized text with our own subset
-    // parser -- the getter is what actually fixed the "box looks empty after
-    // reopening the editor" bug. The textarea-parse fallback below only runs
-    // if a box is ever added to ROC_YAML_EDITOR_BOXES without a matching
-    // getter, which should not normally happen.
-    const getter=ROC_YAML_EDITOR_GETTERS[attr];
-    let parsed;
-    if(getter){
-      try{const v=getter(self,key);parsed=(v===undefined||v===null)?undefined:rocClone(v);}catch(_){parsed=undefined;}
-    }else{
-      try{const t=ta.value.trim();parsed=t?_yaml.p(ta.value):undefined;}catch(_){parsed=undefined;}
-    }
-    const ed=document.createElement('ha-yaml-editor');
-    ed.setAttribute(attr,key);
-    ed.style.display='block';
-    if(this._hass)try{ed.hass=this._hass;}catch(_){}
-    try{ed.value=parsed;}catch(_){}
-    this._yamlEdState=this._yamlEdState||new WeakMap();
-    const st=this._yamlEdState;
-    // Live-found bug (2026-09-13): unlike every other field in this editor,
-    // <ha-yaml-editor>'s 'value-changed' fires on EVERY keystroke (it's a live
-    // CodeMirror-backed editor), not just on blur/change. Firing config-changed
-    // synchronously per keystroke made HA's own live preview card (a full,
-    // heavy RoomOverlayCard instance) re-render on every letter -- visible as
-    // "the whole page refreshes while typing" -- and, because most single
-    // keystrokes are transiently invalid YAML, it also meant _collectConfig()
-    // ran (and this box got read back) constantly mid-edit instead of once the
-    // user actually paused. Routed through the same 150ms _fireDebounced()
-    // every other live-typing field (sliders, text inputs, …) already uses —
-    // the WeakMap itself still updates synchronously below, so an on-demand
-    // _collectConfig() (e.g. from another field's change, or Save) always sees
-    // the box's true current state regardless of the debounce.
-    ed.addEventListener('value-changed',function(ev){
-      const d=ev.detail||{};
-      st.set(ed,{value:d.value,isValid:d.isValid!==false});
-      self._fireDebounced();
-    });
-    ta.replaceWith(ed);
   }
 
   // One tile overlay's fields, read back from its composite-keyed
@@ -5156,9 +5066,6 @@ class RoomOverlayCardEditor extends HTMLElement{
   set hass(h){
     this._hass=h;
     if(this._prevCard)try{this._prevCard.hass=h;}catch(_){}
-    // Upgraded <ha-yaml-editor> boxes (B1 spike) persist across hass updates
-    // that don't trigger a full _render() — keep their .hass current too.
-    this.querySelectorAll('ha-yaml-editor').forEach(function(ed){try{ed.hass=h;}catch(_){}});
     const dl=this.querySelector('#roc-entities');
     if(dl&&!dl.hasChildNodes())
       dl.innerHTML=this._dlOptions();
@@ -7283,7 +7190,6 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
     this._listen();
     this._bindHassComponents();
-    this._upgradeYamlBoxes();
     this._mountPreview();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
