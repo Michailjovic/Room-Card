@@ -535,6 +535,44 @@ const _miniC0=cardNavCustom.shadowRoot.querySelector('[data-thumb-mini="0"] room
 t('nav.live:custom mounts a mini too (same mechanism as full)',!!_miniC0);
 t('nav.live:custom mini config is pre-filtered to only nav_mini:true elements',_miniC0._config.gauges.length===1&&_miniC0._config.gauges[0].id==='g1');
 
+// --- bug: nav mini was mounted as "non-interactive" (see the mount comment in
+// the main render path) but nothing actually enforced that for three element
+// types whose interactivity is wired with an explicit pointer-events:auto
+// override, which wins over the inherited pointer-events:none the
+// [data-thumb-mini] host sets on everything else: an embedded elements[].card
+// (its own live custom element, own DOM, own tap handling — room-overlay-card
+// never controls it) plus a label/gauge with a tap_action (both flip
+// pointer-events to 'auto' explicitly once they have an action). Reported by
+// the user: an atmospheric-weather-card embedded via `elements:` could be
+// tapped straight through the nav thumbnail, switching nothing and instead
+// firing the embedded card's own interaction. ---
+{
+  const _navFullInteractiveCfg={type:'custom:room-overlay-card',card_id:'navfullint',
+    nav:{style:'thumbnails',live:'full'},
+    elements:[{id:'e1',top:'10%',left:'10%',width:'30%',height:'30%',card:{type:'markdown',content:'hi'}}],
+    labels:[{id:'l1',top:'5%',left:'5%',tap_action:{action:'more-info'}}],
+    gauges:[{id:'g1',entity:'sensor.g',top:'5%',left:'5%',width:'10%',height:'10%',tap_action:{action:'more-info'}}],
+    rooms:[{id:'r0',base_image:'/a.webp'},{id:'r1',base_image:'/b.webp'}]};
+  const cardNavFullInt=mkCard(_navFullInteractiveCfg);
+  const _miniInt0=cardNavFullInt.shadowRoot.querySelector('[data-thumb-mini="0"] room-overlay-card');
+  t('nav.live:full mini mounts the embedded elements[].card too (full = everything)',!!_miniInt0&&!!_miniInt0.shadowRoot.querySelector('.elcont'));
+  const _miniElcont=_miniInt0.shadowRoot.querySelector('.elcont');
+  t('bug #18: embedded elements[].card inside a nav mini is non-interactive (pointer-events:none wins over .elcont\'s CSS)',_miniElcont.style.pointerEvents==='none');
+  const _miniLabel=_miniInt0.shadowRoot.querySelector('[data-lbl="l1"]');
+  t('bug #18: a tap_action label inside a nav mini stays non-interactive (no pointer-events:auto override)',_miniLabel.style.pointerEvents!=='auto');
+  const _miniGauge=_miniInt0.shadowRoot.querySelector('[data-gauge="g1"]');
+  t('bug #18: a tap_action gauge inside a nav mini stays non-interactive (no pointer-events:auto override)',_miniGauge.style.pointerEvents!=='auto');
+  // sanity: the exact same config on a normal (non-mini) card is unaffected —
+  // this must stay fully interactive, or the fix above overreached.
+  const cardNormalInt=mkCard({type:'custom:room-overlay-card',base_image:'/local/x.webp',
+    elements:[{id:'e1',top:'10%',left:'10%',width:'30%',height:'30%',card:{type:'markdown',content:'hi'}}],
+    labels:[{id:'l1',top:'5%',left:'5%',tap_action:{action:'more-info'}}],
+    gauges:[{id:'g1',entity:'sensor.g',top:'5%',left:'5%',width:'10%',height:'10%',tap_action:{action:'more-info'}}]});
+  t('sanity: a normal (non-mini) card keeps the embedded elcont interactive (fix is mini-scoped)',cardNormalInt.shadowRoot.querySelector('.elcont').style.pointerEvents!=='none');
+  t('sanity: a normal (non-mini) card keeps a tap_action label interactive (fix is mini-scoped)',cardNormalInt.shadowRoot.querySelector('[data-lbl="l1"]').style.pointerEvents==='auto');
+  t('sanity: a normal (non-mini) card keeps a tap_action gauge interactive (fix is mini-scoped)',cardNormalInt.shadowRoot.querySelector('[data-gauge="g1"]').style.pointerEvents==='auto');
+}
+
 // v5.0: coalesced pin entry + shared row-span helpers
 t('requestPin exists',typeof cardRH._requestPin==='function');
 let _rpThrew=false;try{cardRH._requestPin('test');cardRH._requestPin('test2');}catch(_){_rpThrew=true;}

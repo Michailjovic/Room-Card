@@ -1,5 +1,38 @@
 # Changelog
 
+## [6.15.9] - 2026-09-23
+
+### Fix: embedded cards (and tap-actionable labels/gauges) were clickable inside the nav mini thumbnails
+
+The nav strip's live mini `<room-overlay-card>` instances (`nav.live: full` / `custom`) were built
+to be a "persistent, non-interactive" preview per thumbnail — the whole point of a nav mini is that
+tapping it switches rooms, nothing inside it should react on its own. That was never actually
+enforced: the `[data-thumb-mini]` host wrapper sets `pointer-events:none`, which every ordinary
+element (zone, icon, badge) correctly inherits, but three things override it back to `auto`
+explicitly and were never given a mini-mode exception:
+
+- An embedded `elements[].card` (e.g. `custom:atmospheric-weather-card`) — its wrapper (`.elcont`)
+  always has `pointer-events:auto` in the stylesheet, because the card is a real, separate custom
+  element with its own DOM and its own interactivity that this card doesn't control. Reported by the
+  user: a weather card embedded via `elements:` could be tapped straight through the nav thumbnail.
+- A `labels[]` item with a `tap_action`/`hold_action`/`double_tap_action`.
+- A `gauges[]` item (including blind gauges) with a `tap_action`/`hold_action`/`double_tap_action`.
+
+All three now check the existing `_isMini` flag (already used to strip nav/zoom/cards_above etc. for
+minis) and skip the `pointer-events:auto` override — and, for labels/gauges, skip wiring up the tap
+handlers at all — whenever they're rendering inside a nav mini. A normal (non-mini) card is
+unaffected; the guard only fires when `_isMini` is true.
+
+- **What changed:** `room-overlay-card.js` — the `elements[].card` wrapper (`.elcont`), the label
+  tap-handler block, and the gauge tap-handler block each gained a `!_isMini` condition.
+- **No configuration changes.**
+
+Verified: added a dedicated regression test (`tests/render.test.js`, "bug #18") that mounts a
+`nav.live: full` config with an embedded card, a tap-actionable label and a tap-actionable gauge,
+and asserts all three stay `pointer-events: none` inside the mounted mini while the identical config
+on a normal card stays fully interactive. Full three-tier test suite (`smoke`, `render`, `lifecycle`)
+re-run clean.
+
 ## [6.15.8] - 2026-09-13
 
 ### Revert: the `<ha-yaml-editor>` upgrade for the zone `tap_action` box (B1 spike)

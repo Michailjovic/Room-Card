@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.15.8';
+const ROC_VERSION='6.15.9';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -2689,7 +2689,7 @@ class RoomOverlayCard extends HTMLElement{
       this._lblEls[lbl.id]=this.shadowRoot.querySelector('[data-lbl="'+escSel(lbl.id)+'"]');
       if(lbl.color_gradient)this._sortedLblGrads[lbl.id]=lbl.color_gradient.slice().sort((a,b)=>a.value-b.value);
       const lel=this._lblEls[lbl.id];
-      if(lel&&(lbl.tap_action||lbl.hold_action||lbl.double_tap_action)){
+      if(lel&&!_isMini&&(lbl.tap_action||lbl.hold_action||lbl.double_tap_action)){
         lel.style.pointerEvents='auto';lel.style.cursor='pointer';
         lel.setAttribute('tabindex','0');lel.setAttribute('role','button');
         this._addZoneListeners(lel,lbl.tap_action,lbl.hold_action,lbl.double_tap_action,lbl.hold_delay);
@@ -2700,7 +2700,7 @@ class RoomOverlayCard extends HTMLElement{
     // Gauges with actions become interactive (default stays pointer-events: none)
     for(const g of[...(c.gauges||[]),...this._blindGaugeCfgs]){
       const gel=this._gaugeEls[g.id];
-      if(gel&&(g.tap_action||g.hold_action||g.double_tap_action)){
+      if(gel&&!_isMini&&(g.tap_action||g.hold_action||g.double_tap_action)){
         gel.style.pointerEvents='auto';gel.style.cursor='pointer';
         gel.setAttribute('tabindex','0');gel.setAttribute('role','button');
         this._addZoneListeners(gel,g.tap_action,g.hold_action,g.double_tap_action,g.hold_delay);
@@ -2713,7 +2713,7 @@ class RoomOverlayCard extends HTMLElement{
       cont.className='elcont';cont.setAttribute('data-el',el.id);
       const _elVPos=el.bottom!==undefined?'bottom:'+el.bottom+';':'top:'+(el.top||'0')+';';
       const _elH=el.height?('height:'+el.height+';'):(el.bottom!==undefined?'height:auto;':'height:auto;');
-      cont.style.cssText=_elVPos+'left:'+el.left+';width:'+el.width+';'+_elH+'z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(tm?'outline:2px dashed blue;':'');
+      cont.style.cssText=_elVPos+'left:'+el.left+';width:'+el.width+';'+_elH+'z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(_isMini?'pointer-events:none;':'')+(tm?'outline:2px dashed blue;':'');
       if(tm)cont.title='[element] '+el.id;
       const self=this,elId=el.id;
       const wrap=makeHACard(el.card,function(cardEl){
