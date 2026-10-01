@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.15.0** (2026-09-10, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.16.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -93,6 +93,8 @@ failure broke HACS installs.
 | **v6.13.0** | **`layout.height: fill`** — opts portrait into the same full-viewport pin landscape always had (portrait otherwise sizes to content), so a cockpit's section panels get real screen height on phones too |
 | **v6.14.0** | **`image_align`** — `top`/`center`/`bottom`, controls where the photo sits when its box is taller than needed (e.g. under `layout.height: fill`), instead of always centering the letterbox/crop |
 | **v6.15.0** | **`nav_mini: false` under `nav.live: full`** — per-element opt-OUT of a room's own live mini thumbnail (mirrors `custom`'s existing opt-in); editor checkbox becomes "Hide from mini" in this tier |
+| v6.15.1–6.15.9 | Bug + editor-UX audit fixes (see `BUG_UX_ANALYSIS_v6.15.1.md`), structured tile fields, the reverted `<ha-yaml-editor>` spike, nav-mini interactivity fix |
+| **v6.16.0** | **Design refresh, part 1** (`ANALYSIS_v6.15.9.md`) — one HA-native value formatter for labels/chips/tiles, neutral idle tiles, progress only while running, section-launcher ring + badge, design tokens (`--roc-*`), calmer nav chips; five logic fixes |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

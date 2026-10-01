@@ -1,5 +1,73 @@
 # Changelog
 
+## [6.16.0] - 2026-10-01
+
+### Design refresh, part 1: values read like Home Assistant, colour only means "something is happening"
+
+First batch of the design review in `ANALYSIS_v6.15.9.md` — everything that does **not** change
+the card's layout. Lights and the cover control (which do take space) come in a later release,
+after testing on a wall tablet.
+
+#### One value formatter for labels, nav chips and cockpit tiles
+Each of the three used to do its own `parseFloat()` + suffix, so an ISO timestamp state printed
+as `2026`, `12:30` as `12`, a sensor that dropped out as `unavailable°`, and text states raw
+(`off`, `inactive`, `ready`). They now share `rocFmtState()`:
+- `unavailable` / `unknown` → `—` (no prefix/unit); `unavailable_text:` changes it.
+- A number with explicit `decimals:` or `suffix:`/`unit:` keeps its old output (rounded to an
+  integer when `decimals:` is not set), but with the decimal separator of the user's HA number
+  format (`21,6` in Czech).
+- Everything else → `hass.formatEntityState()`: translated, device-class aware (a door `on` →
+  *Open*), with the entity's own unit and display precision.
+- `format: raw` restores the pre-v6.16.0 output byte for byte.
+- **Behaviour change:** a label/chip *without* `decimals:`/`suffix:` now shows `21.6 °C` (HA's own
+  formatting) instead of a bare rounded `22`.
+
+#### Cockpit tiles
+- The state line is HA-formatted (*Washing*, *Docked*) instead of the raw machine string.
+- `state_class: auto` only colours a **running** tile (state text + a thin outline, in the new
+  active colour). Every other state stays neutral — previously any non-active state was painted
+  green ("done"), so idle machines looked like good news. `state_class: done` still exists.
+- `active_state` accepts a list: `active_state: [washing, drying]` (editor: comma-separated).
+- With `active_state` set, the progress bar shows **only while the tile runs** (an idle oven no
+  longer shows a full bar). `progress_always: true` keeps the old always-on bar.
+
+#### Section launchers
+An icon whose `tap_action` is `open-section` now shows the section's live status, with no extra
+config: a progress ring while a tile with a `progress:` sensor runs, a count badge when more
+than one tile runs (or one runs without progress), and the icon in the active colour. Opt out
+with `section_status: false`.
+
+#### Nav thumbnails
+- Chips use the card's font (no more forced monospace), tabular numbers, and a default rounded
+  pill (`--roc-chip-bg`) — any `background`/`border_radius`/`padding` set on a chip still wins.
+- The other rooms' thumbnails are slightly dimmed so the active room reads at a glance;
+  `nav.dim_inactive: false` turns it off.
+
+#### Design tokens
+New CSS custom properties, overridable from an HA theme or card-mod: `--roc-active` (default
+`#ffb35c`), `--roc-cold`, `--roc-alert`, `--roc-text`, `--roc-text-2`, `--roc-chip-bg`,
+`--roc-surface`, `--roc-border`. See *Theming* in `docs/CONFIGURATION.md`.
+
+### Fixes (from ANALYSIS_v6.15.9.md, Part 1)
+- **Conditions:** `state: [heat, heat_cool]` (a list) now matches, like `state_not` already did.
+- **Groups:** `grouping_code` exclusivity read the top-level `groups:` instead of the active room's
+  — with per-room groups, radio-style groups never hid each other.
+- **Groups:** the first `toggle-group` on a group that elements use but `groups:` doesn't declare
+  did nothing (render treated it as visible, the toggle as hidden).
+- **Console:** the invalid/duplicate-id warnings were printed on every `setConfig` of every
+  instance (6× per room switch with `nav.live: full`). Now once per page, and never for derived
+  instances (nav minis, swipe ghosts, editor previews).
+- **Actions:** new `fire-dom-event` — dispatches the action as Lovelace's standard `ll-custom`
+  event (browser_mod 2 popups and other custom actions).
+
+### Tests
+New tier `tests/design.test.js` (47 assertions: formatter unit tests, labels, chips, tiles,
+launchers, the five fixes, editor round-trip of an `active_state` list), wired into `npm test`,
+`npm run build:verify` and CI. All four tiers green on the source and the minified `dist/`.
+Verified live on the dev dashboard (HA 2026.9.4) by mounting the new build side by side with the
+installed one: tile states read *On / Off / Inactive / Ready / Docked*, unavailable media players
+show `—`, and the climate launcher shows a count badge while the boiler heats.
+
 ## [6.15.9] - 2026-09-23
 
 ### Fix: embedded cards (and tap-actionable labels/gauges) were clickable inside the nav mini thumbnails

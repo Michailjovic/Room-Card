@@ -33,6 +33,11 @@ jobs:
       - name: Lifecycle tests (jsdom)
         run: node tests/lifecycle.test.js
 
+      # v6.16.0 design refresh: shared value formatter, tile states, section
+      # launcher status, nav chip/thumbnail styling + the analysis fixes.
+      - name: Design tests (jsdom)
+        run: node tests/design.test.js
+
       # The release asset is the MINIFIED bundle, so the minified bundle is what
       # has to be green — not just the source. All three tiers accept a path
       # argument for exactly this reason. Catches a terser setting that silently

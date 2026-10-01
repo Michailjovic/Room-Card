@@ -160,6 +160,10 @@ Used throughout the config to drive visual state.
 entity: binary_sensor.window
 state: "on"
 
+# Any of several states (v6.16.0 — same list form as state_not)
+entity: climate.living_room
+state: [heat, heat_cool]
+
 # Negation
 entity: light.bedroom
 state_not: "unavailable"
@@ -573,6 +577,7 @@ zones:
 | `toggle-group` / `show-group` / `hide-group` | `group` | Control element groups |
 | `switch-room` / `next-room` / `prev-room` / `follow-room` | — / `room` | Multi-room navigation |
 | `open-section` / `close-section` | `section` / — | Open/close a [cockpit panel](#sections--panels-cockpit-tiles) |
+| `fire-dom-event` | anything | Dispatches the action as a Lovelace `ll-custom` event (v6.16.0) — browser_mod 2 popups and other custom actions |
 | `none` | — | Do nothing |
 
 Any action may carry `confirmation: true` (or `confirmation: {text: "..."}`). A `hold_action`
@@ -686,6 +691,36 @@ labels:
     format: relative         # "5 minutes ago", localized, refreshes every 30 s
     prefix: "Motion: "
 ```
+
+### How values are formatted (v6.16.0)
+
+Labels, [nav thumbnail chips](#multi-room-one-card--whole-home) and
+[cockpit tiles](#sections--panels-cockpit-tiles) share one formatter:
+
+| Value | Shown as |
+|---|---|
+| `unavailable` / `unknown` | `—` (no prefix or unit) — change with `unavailable_text: "n/a"` |
+| A number **with** `decimals:` or `suffix:`/`unit:` | the number (rounded to an integer when `decimals:` is not set), then the suffix — with the decimal separator of your HA profile's number format |
+| Anything else | exactly what Home Assistant itself shows: translated, device-class aware (a door `on` → *Open*), with its unit and its own display precision |
+
+Before v6.16.0 every value went through `parseFloat`, so a timestamp state printed as `2026`,
+`12:30` as `12`, a sensor that dropped out as `unavailable°`, and text states raw (`off`,
+`inactive`). `format: raw` restores that old output byte for byte if you depended on it.
+
+A label or chip **without** `decimals:`/`suffix:` now shows the entity's own precision and unit
+(`21.6 °C`) instead of a bare rounded `22`.
+
+### Section launchers (v6.16.0)
+
+An icon whose `tap_action` is `open-section` shows what is happening inside that section — no
+extra configuration:
+
+- a **progress ring** around the icon while a tile with a `progress:` sensor is running,
+- a **count badge** when more than one tile runs (or one runs without a progress sensor),
+- the icon in the **active colour** (`--roc-active`, amber by default) while anything runs.
+
+"Running" is each tile's own `active_state`. Opt out per icon with `section_status: false`.
+Pairs naturally with `chip: true`.
 
 ---
 
@@ -1201,9 +1236,10 @@ to the tagged element itself:
 | `icon_animation` | `none` \| `spin` \| `pulse` \| `blink` | `none` | `spin` |
 | `state` | string or Jinja template | the entity's live state | `"{{ states('sensor.washer_program') }}"` |
 | `state_class` | `auto` \| `run` \| `done` \| `""` | `auto` | `done` |
-| `active_state` | string | — (tile is never "active") | `run` |
+| `active_state` | string or list (v6.16.0) | — (tile is never "active") | `run` · `[washing, drying]` |
 | `value` | string or Jinja template | — (hidden) | `"{{ state_attr('sensor.washer_program','time_remaining') }}"` |
 | `progress` | entity id (0–100) | — (no progress bar) | `sensor.washer_progress` |
+| `progress_always` | bool | `false` — with `active_state` set, the bar shows only while the tile runs (v6.16.0) | `true` |
 | `quick` | list of `{name, icon, service, data, target}` | — (no quick buttons) | see below |
 | `tap_action` | action object | — (tile is not tappable) | `{ action: more-info }` |
 | `hold_action` | action object | — (long-press is inert) | `{ action: more-info }` |
@@ -1231,10 +1267,12 @@ tiles:
 A tile gets the tappable cursor/keyboard-focus treatment as soon as it has *any* of
 `tap_action`/`hold_action`/`double_tap_action`, not only `tap_action`.
 
-A tile with no matching entity (or an entity missing from `hass.states`) renders with a dimmed
-`unavailable` state rather than going blank. `state_class: auto` colours the state text blue while
-`state` equals `active_state` ("running"), green once it has moved past `active_state` to some
-other known state ("done"), and plain otherwise; set `run`/`done`/`""` directly to override that
+A tile with no matching entity (or an entity missing from `hass.states`) renders dimmed with `—`
+rather than going blank. The state line is the entity's state **as Home Assistant formats it**
+(v6.16.0: *Washing*, *Docked*, *Open* — not `washing`, `docked`, `on`). `state_class: auto` colours
+it in the active colour, and outlines the tile, only while it matches `active_state` ("running");
+every other state stays neutral — before v6.16.0 any other known state turned green ("done"), which
+made idle machines look like good news. Set `run`/`done`/`""` directly to override that
 logic, or set `state`/`active_state` to a `{{ }}` template for full Jinja control (templates are
 evaluated the same way as elsewhere in this card, and only refresh while the panel is open).
 
@@ -1365,6 +1403,7 @@ nav:
   live: composite               # thumbnails become MINI-ROOMS: base + active overlays + filters
   chips:                        # {room} → room id; per-room `chips:` overrides
     - { entity: sensor.{room}_temperature, decimals: 1, suffix: "°" }
+  dim_inactive: true            # v6.16.0 default: the other rooms' thumbnails are slightly dimmed
 rooms:
   - id: livingroom
     name: Obývák
@@ -1467,6 +1506,28 @@ straight there, and browser back/forward navigates rooms. Updates, templates and
 run only for the active room. Top-level room-scoped keys act as defaults for every room. Without
 `rooms:` the card behaves as a single room; the editor has a one-click **Convert to multi-room**
 button, and you can **reorder rooms** with the ▲▼ buttons in the *Rooms & menu* tab.
+
+---
+
+## Theming (design tokens, v6.16.0)
+
+Every floating element — chips, launcher icons, tile states, the panel badge — reads its colours
+from a small set of CSS custom properties. Set them in your HA theme (or with card-mod) to restyle
+the card without touching its config:
+
+| Variable | Default | Used for |
+|---|---|---|
+| `--roc-active` | `#ffb35c` | "running / on / heating": launcher ring + badge, running tile state and outline, panel count badge |
+| `--roc-cold` | `#6cb8ff` | reserved for below-range values |
+| `--roc-alert` | `#ff7a6e` | reserved for above-range values and errors |
+| `--roc-text` | `#f2f3f5` | text over the photo (chips) |
+| `--roc-text-2` | `#9aa3ad` | muted text — a chip whose sensor is unavailable |
+| `--roc-chip-bg` | `rgba(10,12,15,.55)` | default background of nav thumbnail chips |
+| `--roc-surface` / `--roc-border` | `rgba(20,22,26,.85)` / `rgba(255,255,255,.08)` | reserved for floating panels |
+
+A chip's own `background`, `border_radius`, `padding` and `color_gradient` keys still win over the
+defaults. Tip: give the normal range of a `color_gradient` a neutral colour (e.g. `#f2f3f5`) and
+only the out-of-range ends a real colour — the eye then goes straight to what's unusual.
 
 ---
 
