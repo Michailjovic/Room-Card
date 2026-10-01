@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.17.1';
+const ROC_VERSION='6.18.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -27,7 +27,10 @@ const EL_DEDICATED_KEYS=['id','top','bottom','left','width','height','group','na
 // not repeated here. Everything else on a tile (tap_action, hold_action,
 // hold_delay, double_tap_action, and any future/unknown key) is owned by the
 // leftover YAML box, exactly like EL_DEDICATED_KEYS owns elements' leftovers.
-const TILE_DEDICATED_KEYS=['name','entity','icon','icon_animation','active_state','state_class','value','progress','quick'];
+const TILE_DEDICATED_KEYS=['name','entity','icon','icon_animation','active_state','state_class','value','progress','quick','tap_action','double_tap_action','hold_action'];
+// Action builder types (v6.18.0) — [value, editor label]. '' = key not set;
+// 'custom' = raw YAML for anything the builder doesn't model.
+const ROC_ACT_TYPES=[['','— not set —'],['more-info','More info'],['toggle','Toggle'],['navigate','Navigate'],['url','Open URL'],['perform-action','Perform action'],['open-section','Open section'],['close-section','Close section'],['switch-room','Switch room'],['next-room','Next room'],['prev-room','Previous room'],['follow-room','Follow room'],['toggle-group','Toggle group'],['show-group','Show group'],['hide-group','Hide group'],['none','Do nothing (none)'],['custom','Custom (YAML)']];
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 // Default glyph for vacuum_widgets when no custom `icon:` is set — a compact top-down
@@ -5526,6 +5529,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         newQuick.push(qo);
       }
       if(newQuick.length)tile.quick=newQuick;else delete tile.quick;
+      self._applyActs('tf:'+key,tile);
     };
     const _secTile=function(kind,i,o){
       const linkEl=q('[data-sec-link="'+kind+':'+i+'"]');
@@ -5689,8 +5693,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(_ftV&&_ftV!=='2s ease')c.filter_transition=_ftV;else delete c.filter_transition;
     const tm=q('#test_mode');if(tm&&tm.checked)c.test_mode=true;else delete c.test_mode;
     const hpEl=q('#haptic');if(hpEl&&!hpEl.checked)c.haptic=false;else delete c.haptic; // default on — only write when explicitly turned off
-    const _taR=this._pYaml(q('#tap_action_yaml'));
-    if(_taR.ok){if(_taR.val)tgt.tap_action=_taR.val;else delete tgt.tap_action;}
+    this._applyActs('room',tgt,['tap']);
     const _caR=this._pYaml(q('#cards_above_yaml'));
     if(_caR.ok){if(_caR.val)tgt.cards_above=_caR.val;else delete tgt.cards_above;}
     const _cbR=this._pYaml(q('#cards_below_yaml'));
@@ -5868,12 +5871,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const lefEl=q('[data-z-left="'+i+'"]');if(lefEl)o.left=lefEl.value;
       const wEl=q('[data-z-w="'+i+'"]');if(wEl)o.width=wEl.value;
       const hEl=q('[data-z-h="'+i+'"]');if(hEl)o.height=hEl.value;
-      const tapR=self._pYaml(q('[data-z-tap="'+i+'"]'));
-      if(tapR.ok){if(tapR.val)o.tap_action=tapR.val;else delete o.tap_action;}
-      const holdR=self._pYaml(q('[data-z-hold="'+i+'"]'));
-      if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
-      const dtapR=self._pYaml(q('[data-z-dtap="'+i+'"]'));
-      if(dtapR.ok){if(dtapR.val)o.double_tap_action=dtapR.val;else delete o.double_tap_action;}
+      self._applyActs('z:'+i,o);
       const hdelEl=q('[data-z-hdelay="'+i+'"]');
       if(hdelEl&&hdelEl.value&&parseInt(hdelEl.value)!==500)o.hold_delay=parseInt(hdelEl.value);else delete o.hold_delay;
       const visR=self._pYaml(q('[data-z-vis="'+i+'"]'));
@@ -5943,12 +5941,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(colorR.ok){if(colorR.val)o.color=colorR.val;else delete o.color;}
       const visR=self._pYaml(q('[data-ico-vis="'+i+'"]'));
       if(visR.ok){if(visR.val)o.visible=visR.val;else delete o.visible;}
-      const tapR=self._pYaml(q('[data-ico-tap="'+i+'"]'));
-      if(tapR.ok){if(tapR.val)o.tap_action=tapR.val;else delete o.tap_action;}
-      const dtapR=self._pYaml(q('[data-ico-dtap="'+i+'"]'));
-      if(dtapR.ok){if(dtapR.val)o.double_tap_action=dtapR.val;else delete o.double_tap_action;}
-      const holdR=self._pYaml(q('[data-ico-hold="'+i+'"]'));
-      if(holdR.ok){if(holdR.val)o.hold_action=holdR.val;else delete o.hold_action;}
+      self._applyActs('ico:'+i,o);
       const icoGrpEl=q('[data-ico-grp="'+i+'"]');if(icoGrpEl&&icoGrpEl.value.trim())o.group=icoGrpEl.value.trim();else delete o.group;
       const icoNmEl=q('[data-ico-nav-mini="'+i+'"]');self._navMiniSet(icoNmEl,o);
       _secTile('ico',i,o);
@@ -6428,10 +6421,144 @@ class RoomOverlayCardEditor extends HTMLElement{
     else delete o.nav_mini;
   }
 
+  // Action builder (v6.18.0) — tap / double tap / hold actions as a type
+  // select plus the few fields that type needs, instead of a raw YAML box.
+  // Anything the builder doesn't model (fire-dom-event, browser-mod-popup,
+  // conditional {condition,then,else}, unknown types) shows as "Custom
+  // (YAML)" so nothing is lost. `key` is a composite owner key ("z:3",
+  // "ico:0", "room", "tf:<tileKey>"); each row is `[data-act="key|slot"]`.
+  // The action as rendered is stashed in this._actOrig so _collectAct() can
+  // return it untouched when the row wasn't edited — an old `call-service`
+  // action or extra keys (confirmation, data, …) never get rewritten just
+  // because some other field in the editor changed.
+  _actType(a){
+    if(a===undefined||a===null||a==='')return'';
+    if(typeof a!=='object'||Array.isArray(a)||'condition'in a)return'custom';
+    const t=a.action;
+    if(t==='call-service')return(a.service||a.perform_action)?'perform-action':'custom';
+    return ROC_ACT_TYPES.some(function(x){return x[0]===t;})?t:'custom';
+  }
+  _actFieldsHtml(key,acts,opt){
+    const self=this;
+    opt=opt||{};
+    const e=function(s){return self._e(s==null?'':String(s));};
+    if(!this._actOrig)this._actOrig={};
+    const c=this._config||{};
+    const cR=(this._roomView&&this._roomView())||c;
+    const secs=Array.isArray(c.sections)?c.sections:[];
+    const rooms=Array.isArray(c.rooms)?c.rooms:[];
+    const grpIds=[];
+    [].concat(cR.groups||[],c.groups||[]).forEach(function(g){if(g&&g.id&&grpIds.indexOf(g.id)<0)grpIds.push(g.id);});
+    const slots=opt.slots||['tap','double_tap','hold'];
+    const names={tap:'Tap',double_tap:'Double tap',hold:'Hold'};
+    const inS='font-size:12px;';
+    const fld=function(label,inner,grow){return'<div style="flex:'+(grow||'1 1 150px')+';min-width:0;"><label class="roc-l" style="font-size:11px;margin-bottom:2px;">'+label+'</label>'+inner+'</div>';};
+    const opts=function(list,cur){
+      let o='';let found=false;
+      list.forEach(function(x){if(x[0]===cur)found=true;o+='<option value="'+e(x[0])+'"'+(x[0]===cur?' selected':'')+'>'+e(x[1])+'</option>';});
+      if(cur&&!found)o='<option value="'+e(cur)+'" selected>'+e(cur)+' (not found)</option>'+o;
+      return o;
+    };
+    let h='<div data-act-box="'+e(key)+'" style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px;">';
+    slots.forEach(function(slot){
+      const a=acts?acts[slot]:undefined;
+      self._actOrig[key+'|'+slot]=a===undefined?undefined:JSON.parse(JSON.stringify(a));
+      const t=self._actType(a);
+      const isCur=function(x){return t===x;};
+      const A=(a&&typeof a==='object')?a:{};
+      // values for the current type; other types start empty (or with the
+      // owner's entity as a sensible default for more-info / toggle)
+      const val=function(x,v,dflt){return isCur(x)?(v==null?'':v):(dflt||'');};
+      const tgtEnt=(A.target&&typeof A.target==='object'&&!Array.isArray(A.target.entity_id))?(A.target.entity_id||''):(A.target&&Array.isArray(A.target.entity_id)?A.target.entity_id.join(', '):'');
+      const dataObj=A.data!==undefined?A.data:A.service_data;
+      const dataYaml=(isCur('perform-action')&&dataObj&&typeof dataObj==='object'&&Object.keys(dataObj).length)?_yaml.s(dataObj):'';
+      const customYaml=isCur('custom')&&a!==undefined?_yaml.s(a):'';
+      const ent=opt.entity||'';
+      h+='<div data-act="'+e(key+'|'+slot)+'" style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;padding:6px 8px;border:1px solid var(--divider-color);border-radius:6px;">';
+      h+=fld(e(opt.labels&&opt.labels[slot]||names[slot]),'<select data-act-type'+self._inp(inS)+'>'+ROC_ACT_TYPES.map(function(x){return'<option value="'+x[0]+'"'+(x[0]===t?' selected':'')+'>'+e(x[1])+'</option>';}).join('')+'</select>','1 1 170px');
+      const grp=function(type,inner){return'<div data-act-fs="'+type+'" style="display:'+(t===type?'flex':'none')+';flex-wrap:wrap;gap:6px;flex:3 1 240px;min-width:0;">'+inner+'</div>';};
+      h+=grp('more-info',fld('Entity','<input data-act-f="entity" type="text" list="roc-entities" placeholder="sensor.xyz" value="'+val('more-info',A.entity,ent)+'"'+self._inp(inS)+'>'));
+      h+=grp('toggle',fld('Entity','<input data-act-f="entity" type="text" list="roc-entities" placeholder="light.xyz" value="'+val('toggle',A.entity,ent)+'"'+self._inp(inS)+'>'));
+      h+=grp('navigate',fld('Path','<input data-act-f="navigation_path" type="text" placeholder="/lovelace/0" value="'+val('navigate',A.navigation_path!==undefined?A.navigation_path:A.path)+'"'+self._inp(inS)+'>'));
+      h+=grp('url',fld('URL','<input data-act-f="url_path" type="text" placeholder="https://…" value="'+val('url',A.url_path!==undefined?A.url_path:A.url)+'"'+self._inp(inS)+'>'));
+      h+=grp('perform-action',
+        fld('Action (domain.service)','<input data-act-f="perform_action" type="text" placeholder="script.turn_on" value="'+val('perform-action',A.perform_action!==undefined?A.perform_action:A.service)+'"'+self._inp(inS)+'>')
+        +fld('Target entity','<input data-act-f="target" type="text" list="roc-entities" placeholder="light.xyz" value="'+e(isCur('perform-action')?tgtEnt:'')+'"'+self._inp(inS)+'>')
+        +fld('Data (YAML, optional)','<textarea data-act-f="data" data-act-yaml rows="2" placeholder="brightness_pct: 50"'+self._inp(inS+'font-family:monospace;resize:vertical;')+'>'+e(dataYaml)+'</textarea>','1 1 100%'));
+      h+=grp('open-section',fld('Section','<select data-act-f="section"'+self._inp(inS)+'><option value="">— choose —</option>'+opts(secs.map(function(s){return[s.id||'',s.title||s.id||''];}),isCur('open-section')?(A.section||''):'')+'</select>'));
+      h+=grp('switch-room',fld('Room','<select data-act-f="room"'+self._inp(inS)+'><option value="">— choose —</option>'+opts(rooms.map(function(r){return[r.id||'',r.name||r.id||''];}),isCur('switch-room')?(A.room==null?'':String(A.room)):'')+'</select>'));
+      ['toggle-group','show-group','hide-group'].forEach(function(gt){
+        h+=grp(gt,fld('Group','<select data-act-f="group"'+self._inp(inS)+'><option value="">— choose —</option>'+opts(grpIds.map(function(g){return[g,g];}),isCur(gt)?(A.group||''):'')+'</select>'));
+      });
+      h+=grp('custom',fld('Action (YAML)','<textarea data-act-f="yaml" data-act-yaml rows="3" placeholder="action: fire-dom-event&#10;browser_mod: …"'+self._inp(inS+'font-family:monospace;resize:vertical;')+'>'+e(customYaml)+'</textarea>','1 1 100%'));
+      h+='</div>';
+    });
+    h+='</div>';
+    return h;
+  }
+  // Read one builder row back. Returns {keep:true} when the row isn't on
+  // screen or wasn't touched (caller leaves the config value alone), else
+  // {val} — undefined meaning "remove the key".
+  _collectAct(key,slot){
+    const row=this.querySelector('[data-act="'+key+'|'+slot+'"]');
+    if(!row)return{keep:true};
+    const orig=this._actOrig?this._actOrig[key+'|'+slot]:undefined;
+    const sel=row.querySelector('[data-act-type]');
+    if(!sel)return{keep:true};
+    const t=sel.value;
+    const fs=row.querySelector('[data-act-fs="'+t+'"]');
+    const fields=fs?Array.prototype.slice.call(fs.querySelectorAll('[data-act-f]')):[];
+    const changed=function(el){
+      if(el.tagName==='SELECT'){const o=el.options[el.selectedIndex];return!!o&&!o.defaultSelected;}
+      return el.value!==el.defaultValue;
+    };
+    const selDirty=(function(){const o=sel.options[sel.selectedIndex];return!o||!o.defaultSelected;})();
+    if(!selDirty&&!fields.some(changed))return{keep:false,val:orig===undefined?undefined:JSON.parse(JSON.stringify(orig))};
+    if(t==='')return{val:undefined};
+    const f=function(n){const el=fs&&fs.querySelector('[data-act-f="'+n+'"]');return el?el.value.trim():'';};
+    if(t==='custom'){
+      const r=this._pYaml(fs.querySelector('[data-act-f="yaml"]'));
+      if(!r.ok)return{keep:true};
+      return{val:r.val};
+    }
+    const base=(this._actType(orig)===t&&orig&&typeof orig==='object')?JSON.parse(JSON.stringify(orig)):{};
+    const o=Object.assign({action:t},base);
+    o.action=t;
+    const setK=function(k,v){if(v)o[k]=v;else delete o[k];};
+    switch(t){
+      case'more-info':case'toggle':setK('entity',f('entity'));break;
+      case'navigate':delete o.path;setK('navigation_path',f('navigation_path'));break;
+      case'url':delete o.url;setK('url_path',f('url_path'));break;
+      case'perform-action':{
+        delete o.service;
+        if(o.service_data!==undefined&&o.data===undefined)o.data=o.service_data;
+        delete o.service_data;
+        setK('perform_action',f('perform_action'));
+        const tv=f('target');
+        const tg=(o.target&&typeof o.target==='object')?Object.assign({},o.target):{};
+        if(tv){const l=tv.split(',').map(function(x){return x.trim();}).filter(Boolean);tg.entity_id=l.length===1?l[0]:l;}
+        else delete tg.entity_id;
+        if(Object.keys(tg).length)o.target=tg;else delete o.target;
+        const dr=this._pYaml(fs.querySelector('[data-act-f="data"]'));
+        if(dr.ok){if(dr.val&&typeof dr.val==='object')o.data=dr.val;else delete o.data;}
+      }break;
+      case'open-section':setK('section',f('section'));break;
+      case'switch-room':setK('room',f('room'));break;
+      case'toggle-group':case'show-group':case'hide-group':setK('group',f('group'));break;
+    }
+    return{val:o};
+  }
+  // Apply every builder row of `key` onto obj (tap_action/double_tap_action/hold_action).
+  _applyActs(key,obj,slots){
+    const self=this;
+    (slots||['tap','double_tap','hold']).forEach(function(slot){
+      const r=self._collectAct(key,slot);
+      if(r.keep)return;
+      const k=slot+'_action';
+      if(r.val!==undefined)obj[k]=r.val;else delete obj[k];
+    });
+  }
   _zoneItem(z,i){
-    const tapYaml=z.tap_action?_yaml.s(z.tap_action):'';
-    const holdYaml=z.hold_action?_yaml.s(z.hold_action):'';
-    const dtapYaml=z.double_tap_action?_yaml.s(z.double_tap_action):'';
     const visYaml=z.visible?_yaml.s(z.visible):'';
     const zOpen=this._openPanels&&this._openPanels.has('z-'+i);
     let h='<details style="margin-bottom:6px;" data-panel="z-'+i+'"'+(zOpen?' open':'')+' >';
@@ -6445,10 +6572,8 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Height</label><input data-z-h="'+i+'" type="text" value="'+this._e(z.height||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">hold_delay (ms)</label><input data-z-hdelay="'+i+'" type="number" value="'+this._e(String(z.hold_delay||500))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;">';
-    h+='<div><label class="roc-l">tap_action (YAML)</label><textarea data-z-tap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
-    h+='<div><label class="roc-l">double_tap_action (YAML)</label><textarea data-z-dtap="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
-    h+='<div><label class="roc-l">hold_action (YAML)</label><textarea data-z-hold="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
+    h+=this._actFieldsHtml('z:'+i,{tap:z.tap_action,double_tap:z.double_tap_action,hold:z.hold_action},{entity:z.slider&&z.slider.entity});
+    h+='<div style="display:grid;grid-template-columns:1fr;gap:8px;">';
     h+='<div><label class="roc-l">visible (YAML)</label><textarea data-z-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-top:8px;">';
@@ -6535,9 +6660,6 @@ class RoomOverlayCardEditor extends HTMLElement{
   }
 
   _icoItem(ico,i){
-    const tapYaml=ico.tap_action?_yaml.s(ico.tap_action):'';
-    const holdYaml=ico.hold_action?_yaml.s(ico.hold_action):'';
-    const dtapYaml=ico.double_tap_action?_yaml.s(ico.double_tap_action):'';
     const colorYaml=ico.color?_yaml.s(ico.color):'';
     const visYaml=ico.visible?_yaml.s(ico.visible):'';
     const icoOpen=this._openPanels&&this._openPanels.has('ico-'+i);
@@ -6559,11 +6681,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">color (YAML condition list)</label><textarea data-ico-color="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(colorYaml)+'</textarea></div>';
     h+='<div><label class="roc-l">visible (YAML condition)</label><textarea data-ico-vis="'+i+'" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(visYaml)+'</textarea></div>';
     h+='</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">';
-    h+='<div><label class="roc-l">tap_action (YAML)</label><textarea data-ico-tap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
-    h+='<div><label class="roc-l">double_tap_action (YAML)</label><textarea data-ico-dtap="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(dtapYaml)+'</textarea></div>';
-    h+='<div><label class="roc-l">hold_action (YAML)</label><textarea data-ico-hold="'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(holdYaml)+'</textarea></div>';
-    h+='</div>';
+    h+=this._actFieldsHtml('ico:'+i,{tap:ico.tap_action,double_tap:ico.double_tap_action,hold:ico.hold_action});
     h+='<div style="margin-bottom:6px;"><label class="roc-l">Group (optional)</label><input data-ico-grp="'+i+'" type="text" placeholder="group id" value="'+this._e(ico.group||'')+'"'+this._inp('')+'></div>';
     h+=this._navMiniField('ico',i,ico.nav_mini);
     h+=this._secTileHtml('ico',i,ico);
@@ -6861,6 +6979,7 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   _render(){
     if(!this._config)return;
+    this._actOrig={};
     const c=this._config;
     const cR=this._roomView();
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
@@ -6869,7 +6988,6 @@ class RoomOverlayCardEditor extends HTMLElement{
     this._openPanels=open;
     const firstRender=open.size===0;
 
-    const tapYaml=cR.tap_action?_yaml.s(cR.tap_action):'';
     const sec=function(id,label,count,inner,icon){
       const isOpen=open.has(id)||(firstRender&&(id==='basic'||id==='room-identity'));
       const _d=label.indexOf(' — ');
@@ -6908,7 +7026,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div><label class="roc-l">Base camera (live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Snapshot refresh (s) — a periodic photo, not a continuous video stream</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(cR.camera_refresh??10)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
-    basicInner+='<div><label class="roc-l">tap_action (YAML)</label><textarea id="tap_action_yaml" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tapYaml)+'</textarea></div>';
+    basicInner+='<div style="margin-top:8px;">'+this._actFieldsHtml('room',{tap:cR.tap_action},{slots:['tap'],labels:{tap:'Tap on the image'}})+'</div>';
     const _caY=cR.cards_above?_yaml.s(cR.cards_above):'';
     const _cbY=cR.cards_below?_yaml.s(cR.cards_below):'';
     basicInner+='<div class="roc-adv" style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;"><label class="roc-l" style="margin-bottom:2px;">Companion cards — paste card YAML to stack full Home Assistant cards above / below the image (handy on mobile). A YAML list; each item is a card config, or <code>{card: {...}, height, media: all|mobile|tablet|desktop|ultrawide}</code>.</label></div>';
@@ -7493,7 +7611,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     // hide them (declutter — basic fields stay visible). Monospace = YAML field.
     this.querySelectorAll('textarea').forEach(function(ta){
       const st=ta.getAttribute('style')||'';
-      if(st.indexOf('monospace')>=0){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
+      if(st.indexOf('monospace')>=0&&!ta.hasAttribute('data-act-yaml')){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
     });
     const migBtn=this.querySelector('#roc-mig-save');
     if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;self._fire(self._collectConfig());self._render();});
@@ -7728,7 +7846,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="padding:10px;border:1px solid var(--divider-color);border-radius:0 0 6px 6px;margin-top:-1px;">';
     h+='<div style="margin-bottom:8px;"><label class="roc-l">ID (optional — falls back to "'+this._e(idPlaceholder)+'")</label><input data-dtile-id="'+skey+'" type="text" placeholder="'+this._e(idPlaceholder)+'" value="'+this._e((t&&t.id)||'')+'"'+this._inp('')+'></div>';
     h+=this._tileFieldsHtml(skey,t||{});
-    h+='<div style="margin-bottom:8px;"><label class="roc-l">Other tile fields — tap_action / hold_action / hold_delay / double_tap_action (YAML)</label><textarea data-dtile-yaml="'+skey+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
+    h+='<div style="margin-bottom:8px;"><label class="roc-l">Other tile fields — hold_delay etc. (YAML)</label><textarea data-dtile-yaml="'+skey+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(scalarYaml)+'</textarea></div>';
     h+=this._tileImageBox('dt',dtKey,{tile:t||{}});
     h+='<div style="display:flex;gap:6px;margin-top:8px;">';
     h+='<button type="button" data-mv-dtile="'+skey+':up" style="padding:4px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;">&#9650;</button>';
@@ -7763,7 +7881,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const tileYaml=Object.keys(tileScalar).length?_yaml.s(tileScalar):'';
     h+='<div data-sec-tile-box="'+kind+':'+i+'" style="'+(item.section?'':'display:none;')+'margin-top:6px;">';
     h+=this._tileFieldsHtml(kind+':'+i,item.tile||{});
-    h+='<label class="roc-l">Other tile fields — tap_action / hold_action / hold_delay / double_tap_action (YAML)</label><textarea data-sec-tile="'+kind+':'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
+    h+='<label class="roc-l">Other tile fields — hold_delay etc. (YAML)</label><textarea data-sec-tile="'+kind+':'+i+'" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(tileYaml)+'</textarea>';
     h+=this._tileImageBox(kind,i,item);
     h+='</div>';
     h+='</div>';
@@ -7804,6 +7922,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Value text (optional — overrides the live entity state text)</label><input data-tf-value="'+key+'" type="text" value="'+e(tile.value===undefined?'':tile.value)+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Progress entity (0-100 sensor, optional)</label><input data-tf-progress="'+key+'" type="text" list="roc-entities" value="'+e(tile.progress||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
+    h+=this._actFieldsHtml('tf:'+key,{tap:tile.tap_action,double_tap:tile.double_tap_action,hold:tile.hold_action},{entity:tile.entity});
     const quick=Array.isArray(tile.quick)?tile.quick:[];
     h+='<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><label class="roc-l" style="margin:0;">Quick actions (small buttons on the tile)</label>';
     h+='<button type="button" data-add-tquick="'+key+'" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Quick action</button></div>';
@@ -8137,6 +8256,16 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
+    // Action builder rows: switching the type only swaps which field group
+    // is visible (no re-render, keeps focus) and fires like any other field.
+    this.querySelectorAll('[data-act-type]').forEach(function(sel){
+      sel.addEventListener('change',function(){
+        const row=sel.closest('[data-act]');
+        if(row)row.querySelectorAll('[data-act-fs]').forEach(function(g){g.style.display=g.getAttribute('data-act-fs')===sel.value?'flex':'none';});
+        fire();
+      });
+    });
+    this.querySelectorAll('[data-act-f]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-tf-name],[data-tf-entity],[data-tf-icon],[data-tf-anim],[data-tf-active],[data-tf-sclass],[data-tf-value],[data-tf-progress],[data-tf-q-icon],[data-tf-q-name],[data-tf-q-svc],[data-tf-q-target]').forEach(function(el){el.addEventListener('change',fire);});
     this.querySelectorAll('[data-tile-img]').forEach(function(el){
       el.addEventListener('input',function(){
@@ -8305,7 +8434,6 @@ class RoomOverlayCardEditor extends HTMLElement{
       });
     }
     const hpEl2=this.querySelector('#haptic');if(hpEl2)hpEl2.addEventListener('change',fire);
-    const ta=this.querySelector('#tap_action_yaml');if(ta)ta.addEventListener('change',fire);
     const caTa=this.querySelector('#cards_above_yaml');if(caTa)caTa.addEventListener('change',fire);
     const cbTa=this.querySelector('#cards_below_yaml');if(cbTa)cbTa.addEventListener('change',fire);
     // Light controls
@@ -8463,7 +8591,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-tap],[data-z-hold],[data-z-dtap],[data-z-hdelay],[data-z-vis],[data-z-slider],[data-z-grp]').forEach(function(el){
+    this.querySelectorAll('[data-z-id],[data-z-top],[data-z-left],[data-z-w],[data-z-h],[data-z-hdelay],[data-z-vis],[data-z-slider],[data-z-grp]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 
@@ -8503,7 +8631,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         self._config=c;self._render();self._fire(c);
       });
     });
-    this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis],[data-ico-tap],[data-ico-dtap],[data-ico-hold]').forEach(function(el){
+    this.querySelectorAll('[data-ico-id],[data-ico-icon],[data-ico-size],[data-ico-z],[data-ico-top],[data-ico-left],[data-ico-hdelay],[data-ico-color],[data-ico-vis]').forEach(function(el){
       el.addEventListener('change',fire);
     });
 

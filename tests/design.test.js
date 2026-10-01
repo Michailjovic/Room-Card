@@ -223,6 +223,94 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const vHtml=w.coverCtlHtml({id:'b',entity:'cover.x',buttons:['up','stop','down'],presets:[],slider:true,top:'1%',left:'1%',height:'10%',width:'52px',name:''},false,'dock');
   t('vertical dock still fills its column (flex:1 1 0)',/flex:1 1 0;/.test(vHtml)&&!/flex:0 0 auto/.test(vHtml));
 
+  // ---- 10. v6.18.0 action builder ---------------------------------------------
+  const abCfg={base_image:'/local/x.webp',layout:LY,
+    sections:[{id:'clean',title:'Úklid'},{id:'media',title:'Média'}],
+    rooms:[{id:'obyvak',name:'Obývák',base_image:'/local/a.webp',
+      groups:[{id:'svetla'}],
+      tap_action:{action:'navigate',navigation_path:'/x/room'},
+      zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%',
+        tap_action:{action:'toggle',entity:'light.a',confirmation:{text:'Sure?'}},
+        hold_action:{action:'call-service',service:'script.turn_on',service_data:{variables:{x:1}},target:{entity_id:'script.go'}},
+        double_tap_action:{action:'fire-dom-event',browser_mod:{service:'browser_mod.popup'}}}],
+      icons:[{id:'i1',icon:'mdi:robot',top:'1%',left:'1%',tap_action:{action:'open-section',section:'clean'}}]},
+      {id:'loznice',name:'Ložnice',base_image:'/local/b.webp'}]};
+  const ab=w.document.createElement('room-overlay-card-editor');
+  ab.setConfig(JSON.parse(JSON.stringify(abCfg)));ab.hass={states:{},user:{name:'x'}};w.document.body.appendChild(ab);ab._tab='elements';ab._render();await sleep(10);
+  const row=(k)=>ab.querySelector('[data-act="'+k+'"]');
+  const typ=(k)=>row(k)&&row(k).querySelector('[data-act-type]');
+  const fld=(k,f)=>{const r=row(k);const tv=typ(k).value;return r&&r.querySelector('[data-act-fs="'+tv+'"] [data-act-f="'+f+'"]');};
+  t('builder: zone rows for tap / double tap / hold',!!row('z:0|tap')&&!!row('z:0|double_tap')&&!!row('z:0|hold'));
+  t('builder: no raw zone action textareas left',!ab.querySelector('[data-z-tap],[data-z-hold],[data-z-dtap]'));
+  t('builder: toggle prefilled',typ('z:0|tap').value==='toggle'&&fld('z:0|tap','entity').value==='light.a');
+  t('builder: call-service shown as Perform action',typ('z:0|hold').value==='perform-action'&&fld('z:0|hold','perform_action').value==='script.turn_on'&&fld('z:0|hold','target').value==='script.go');
+  t('builder: fire-dom-event falls back to Custom (YAML)',typ('z:0|double_tap').value==='custom'&&/fire-dom-event/.test(fld('z:0|double_tap','yaml').value));
+  t('builder: icon open-section prefilled with the section select',typ('ico:0|tap').value==='open-section'&&fld('ico:0|tap','section').value==='clean');
+  t('builder: room-level Tap on image row',!!row('room|tap')&&typ('room|tap').value==='navigate'&&fld('room|tap','navigation_path').value==='/x/room');
+  t('builder: custom YAML box is not hidden as "advanced"',!fld('z:0|double_tap','yaml').parentElement.classList.contains('roc-adv'));
+  // untouched rows return the exact original objects (no call-service rewrite)
+  let ao=ab._collectConfig();const az=ao.rooms[0].zones[0];
+  t('builder: untouched save keeps every action byte-for-byte',
+    JSON.stringify(az.hold_action)===JSON.stringify(abCfg.rooms[0].zones[0].hold_action)&&
+    JSON.stringify(az.tap_action)===JSON.stringify(abCfg.rooms[0].zones[0].tap_action)&&
+    JSON.stringify(az.double_tap_action)===JSON.stringify(abCfg.rooms[0].zones[0].double_tap_action)&&
+    JSON.stringify(ao.rooms[0].tap_action)===JSON.stringify(abCfg.rooms[0].tap_action),az);
+  // editing the entity keeps confirmation
+  fld('z:0|tap','entity').value='light.b';
+  ao=ab._collectConfig();
+  t('builder: editing the entity keeps extra keys (confirmation)',ao.rooms[0].zones[0].tap_action.entity==='light.b'&&ao.rooms[0].zones[0].tap_action.confirmation&&ao.rooms[0].zones[0].tap_action.confirmation.text==='Sure?',ao.rooms[0].zones[0].tap_action);
+  // editing a call-service action modernises it and keeps data + target
+  fld('z:0|hold','perform_action').value='script.other';
+  ao=ab._collectConfig();const ah=ao.rooms[0].zones[0].hold_action;
+  t('builder: edited call-service becomes perform-action with data + target kept',
+    ah.action==='perform-action'&&ah.perform_action==='script.other'&&ah.service===undefined&&ah.service_data===undefined&&
+    ah.data&&ah.data.variables&&ah.data.variables.x===1&&ah.target.entity_id==='script.go',ah);
+  // switch type → fresh object
+  typ('ico:0|tap').value='switch-room';typ('ico:0|tap').dispatchEvent(new w.Event('change'));
+  t('builder: changing the type shows that type\'s fields only',row('ico:0|tap').querySelector('[data-act-fs="switch-room"]').style.display==='flex'&&row('ico:0|tap').querySelector('[data-act-fs="open-section"]').style.display==='none');
+  fld('ico:0|tap','room').value='loznice';
+  ao=ab._collectConfig();
+  t('builder: new type writes a fresh action',JSON.stringify(ao.rooms[0].icons[0].tap_action)===JSON.stringify({action:'switch-room',room:'loznice'}),ao.rooms[0].icons[0].tap_action);
+  // not set → key removed
+  typ('room|tap').value='';
+  ao=ab._collectConfig();
+  t('builder: "not set" removes the key',ao.rooms[0].tap_action===undefined);
+  // switching back to the original type + values restores the original object
+  typ('room|tap').value='navigate';
+  ao=ab._collectConfig();
+  t('builder: back to the rendered state → original object',JSON.stringify(ao.rooms[0].tap_action)===JSON.stringify({action:'navigate',navigation_path:'/x/room'}));
+  // custom YAML edit + invalid YAML keeps the previous value
+  fld('z:0|double_tap','yaml').value='action: none';
+  ao=ab._collectConfig();
+  t('builder: custom YAML edit is parsed',JSON.stringify(ao.rooms[0].zones[0].double_tap_action)===JSON.stringify({action:'none'}));
+  // group select lists the room's groups
+  typ('z:0|tap').value='toggle-group';
+  const gs=row('z:0|tap').querySelector('[data-act-fs="toggle-group"] [data-act-f="group"]');
+  t('builder: group select lists the room groups',!!gs&&Array.from(gs.options).some(o=>o.value==='svetla'));
+  gs.value='svetla';
+  ao=ab._collectConfig();
+  t('builder: toggle-group written',JSON.stringify(ao.rooms[0].zones[0].tap_action)===JSON.stringify({action:'toggle-group',group:'svetla'}),ao.rooms[0].zones[0].tap_action);
+  // perform-action from scratch with data YAML + entity list
+  typ('z:0|tap').value='perform-action';
+  fld('z:0|tap','perform_action').value='light.turn_on';
+  fld('z:0|tap','target').value='light.a, light.b';
+  fld('z:0|tap','data').value='brightness_pct: 40';
+  ao=ab._collectConfig();
+  t('builder: perform-action from scratch (target list + data)',JSON.stringify(ao.rooms[0].zones[0].tap_action)===JSON.stringify({action:'perform-action',perform_action:'light.turn_on',target:{entity_id:['light.a','light.b']},data:{brightness_pct:40}}),ao.rooms[0].zones[0].tap_action);
+  // tile builder (tagged zone) defaults more-info entity to the tile entity
+  const tb=w.document.createElement('room-overlay-card-editor');
+  tb.setConfig({base_image:'/local/x.webp',layout:LY,sections:[{id:'s',title:'S'}],zones:[{id:'z',top:'1%',left:'1%',width:'5%',height:'5%',section:'s',tile:{name:'Pračka',entity:'sensor.pracka'}}]});
+  tb.hass={states:{},user:{name:'x'}};w.document.body.appendChild(tb);tb._tab='elements';tb._render();await sleep(10);
+  const tr=tb.querySelector('[data-act="tf:z:0|tap"]');
+  t('builder: tile rows exist',!!tr);
+  t('builder: tile more-info defaults to the tile entity',tr&&tr.querySelector('[data-act-fs="more-info"] [data-act-f="entity"]').value==='sensor.pracka');
+  let to=tb._collectConfig();
+  t('builder: untouched tile has no actions added',to.zones[0].tile.tap_action===undefined&&to.zones[0].tile.hold_action===undefined);
+  tr.querySelector('[data-act-type]').value='more-info';
+  to=tb._collectConfig();
+  t('builder: tile more-info written with the default entity',JSON.stringify(to.zones[0].tile.tap_action)===JSON.stringify({action:'more-info',entity:'sensor.pracka'}),to.zones[0].tile.tap_action);
+  t('builder: tile leftover YAML box does not carry tap_action',!/tap_action/.test(tb.querySelector('[data-sec-tile="z:0"]').value));
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

@@ -1741,8 +1741,8 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   t('the declared tile ID field is prefilled',
     edDt.querySelector('[data-dtile-id="0:0"]').value==='tv1');
   const dtYaml=edDt.querySelector('[data-dtile-yaml="0:0"]').value;
-  t('the declared tile YAML box carries only leftover keys (tap_action) -- not name/entity/icon/id/image/image_ratio/overlays (B2)',
-    /tap_action/.test(dtYaml)&&
+  t('the declared tile YAML box carries no dedicated keys -- not tap_action (action builder, v6.18.0)/name/entity/icon/id/image/image_ratio/overlays (B2)',
+    !/tap_action/.test(dtYaml)&&
     !/name/.test(dtYaml)&&!/entity/.test(dtYaml)&&!/icon/.test(dtYaml)&&
     !/image/.test(dtYaml)&&!/overlays/.test(dtYaml)&&!/^id:/m.test(dtYaml));
   t('the declared tile\'s Name field is prefilled via the structured field (B2)',
@@ -1959,12 +1959,17 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
   edHoldTile._tab='sections';edHoldTile._render();
   const holdDtLabel=edHoldTile.querySelector('[data-dtile-yaml="0:0"]').previousElementSibling
     ||edHoldTile.querySelector('label[for=""],.roc-l');
-  t('the declared-tile YAML box label now mentions hold_action/double_tap_action',
-    /hold_action/.test(edHoldTile.querySelector('[data-panel="dtile-0:0"]').innerHTML)&&
-    /double_tap_action/.test(edHoldTile.querySelector('[data-panel="dtile-0:0"]').innerHTML));
-  const holdDtYaml=edHoldTile.querySelector('[data-dtile-yaml="0:0"]').value;
-  t('a declared tile\'s hold_action round-trips through the freeform YAML box untouched',
-    /hold_action:/.test(holdDtYaml)&&/more-info/.test(holdDtYaml));
+  // v6.18.0: tap/hold/double tap moved from the YAML box to the action builder.
+  t('the declared tile shows Tap / Hold / Double tap action builder rows',
+    !!edHoldTile.querySelector('[data-act="tf:0:0|tap"]')&&!!edHoldTile.querySelector('[data-act="tf:0:0|hold"]')&&
+    !!edHoldTile.querySelector('[data-act="tf:0:0|double_tap"]'));
+  t('the hold_action builder row is prefilled (more-info + entity)',
+    edHoldTile.querySelector('[data-act="tf:0:0|hold"] [data-act-type]').value==='more-info'&&
+    edHoldTile.querySelector('[data-act="tf:0:0|hold"] [data-act-fs="more-info"] [data-act-f="entity"]').value==='vacuum.s6');
+  const holdOut=edHoldTile._collectConfig();
+  t('a declared tile\'s hold_action / tap_action round-trip through the builder untouched',
+    JSON.stringify(holdOut.sections[0].tiles[0].hold_action)===JSON.stringify({action:'more-info',entity:'vacuum.s6'})&&
+    JSON.stringify(holdOut.sections[0].tiles[0].tap_action)===JSON.stringify({action:'navigate',navigation_path:'/x/vacuum'}));
 
   // ---- Icon "chip" style (v6.12.1) -----------------------------------------
   // The cockpit's section-opener icons (and any other plain `icons:` entry)
@@ -2272,7 +2277,10 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       width:'20%',height:'20%',hold_action:{action:'toggle',entity:'light.a'}}]});
     edC1.hass={states:{},user:{name:'x'}};
     edC1._tab='elements';edC1._render();
-    const holdBox=edC1.querySelector('[data-z-hold="0"]');
+    // v6.18.0: actions use the builder; its "Custom (YAML)" box is the
+    // remaining plain YAML box for an action.
+    edC1.querySelector('[data-act="z:0|hold"] [data-act-type]').value='custom';
+    const holdBox=edC1.querySelector('[data-act="z:0|hold"] [data-act-fs="custom"] [data-act-f="yaml"]');
     holdBox.value='not valid yaml here\n  bad indent line';
     const badOut=edC1._collectConfig();
     t('C1: invalid YAML box keeps the previous hold_action (non-destructive, unchanged)',
@@ -2286,16 +2294,17 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       errEl.style.display==='none'&&errEl.textContent==='');
   }
 
-  // Sanity check: the zone tap_action box is a plain textarea (B1 reverted,
-  // v6.15.8) — same as every other YAML box in this editor.
+  // v6.18.0: the zone tap_action is edited with the action builder (type
+  // select + fields), prefilled from the config.
   {
     const edNoUp=w.document.createElement('room-overlay-card-editor');
     edNoUp.setConfig({base_image:'/local/x.webp',zones:[{id:'z1',top:'10%',left:'10%',
       width:'20%',height:'20%',tap_action:{action:'toggle',entity:'light.a'}}]});
     edNoUp.hass={states:{},user:{name:'x'}};
     edNoUp._tab='elements';edNoUp._render();
-    t('zone tap_action box is a plain textarea (B1 reverted, v6.15.8)',
-      edNoUp.querySelector('[data-z-tap="0"]').tagName==='TEXTAREA');
+    t('zone tap_action is shown in the action builder (toggle + entity prefilled)',
+      edNoUp.querySelector('[data-act="z:0|tap"] [data-act-type]').value==='toggle'&&
+      edNoUp.querySelector('[data-act="z:0|tap"] [data-act-fs="toggle"] [data-act-f="entity"]').value==='light.a');
   }
 
   // ---- B2: structured cockpit-tile fields (BUG_UX_ANALYSIS_v6.15.1.md §Part 2) --
@@ -2313,7 +2322,7 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%',section:'sec1',
         tile:{name:'Ventilátor',entity:'fan.a',icon:'mdi:fan',icon_animation:'spin',
           active_state:'on',state_class:'run',value:'Rychlost 2',progress:'sensor.fan_speed',
-          hold_action:{action:'more-info'},
+          hold_delay:800,
           quick:[
             {icon:'mdi:power',service:'fan.turn_on',target:{entity_id:'fan.a'}},
             {icon:'mdi:cog',service:'fan.set_speed',data:{percentage:50},target:{entity_id:'fan.a'}}
@@ -2333,8 +2342,8 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
       edB2.querySelector('[data-tf-value="z:0"]').value==='Rychlost 2'&&
       edB2.querySelector('[data-tf-progress="z:0"]').value==='sensor.fan_speed');
     const b2LeftoverBox=edB2.querySelector('[data-sec-tile="z:0"]');
-    t('B2: the leftover YAML box carries only non-dedicated keys (hold_action) -- not name/entity/icon/etc',
-      /hold_action/.test(b2LeftoverBox.value)&&!/name/.test(b2LeftoverBox.value)&&
+    t('B2: the leftover YAML box carries only non-dedicated keys (hold_delay) -- not name/entity/icon/etc',
+      /hold_delay/.test(b2LeftoverBox.value)&&!/name/.test(b2LeftoverBox.value)&&
       !/entity/.test(b2LeftoverBox.value)&&!/icon/.test(b2LeftoverBox.value)&&!/quick/.test(b2LeftoverBox.value));
     t('B2: the quick-action rows are prefilled, including the one with data: (not representable in the simple target field)',
       edB2.querySelector('[data-tf-q-icon="z:0:0"]').value==='mdi:power'&&
@@ -2347,14 +2356,13 @@ t('vacuum widget: absent from nav.live full/custom mini instances',!miniEl.shado
     // bug #2 established for EL_DEDICATED_KEYS.
     edB2.querySelector('[data-tf-name="z:0"]').value='Ventilátor 2';
     let out1=edB2._collectConfig();
-    t('B2: editing the Name field round-trips and leaves the leftover-box key (hold_action) untouched',
-      out1.zones[0].tile.name==='Ventilátor 2'&&
-      JSON.stringify(out1.zones[0].tile.hold_action)===JSON.stringify({action:'more-info'}));
+    t('B2: editing the Name field round-trips and leaves the leftover-box key (hold_delay) untouched',
+      out1.zones[0].tile.name==='Ventilátor 2'&&out1.zones[0].tile.hold_delay===800);
 
     b2LeftoverBox.value='{}';
     let out2=edB2._collectConfig();
-    t('B2: clearing the leftover box drops hold_action but leaves the dedicated fields (name/entity/icon) untouched',
-      out2.zones[0].tile.hold_action===undefined&&out2.zones[0].tile.name==='Ventilátor 2'&&
+    t('B2: clearing the leftover box drops hold_delay but leaves the dedicated fields (name/entity/icon) untouched',
+      out2.zones[0].tile.hold_delay===undefined&&out2.zones[0].tile.name==='Ventilátor 2'&&
       out2.zones[0].tile.entity==='fan.a');
 
     // Non-destructive quick-action edit: changing only the icon of the

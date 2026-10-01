@@ -14,6 +14,7 @@ Still open: #8 YAML parser (→ vendored js-yaml), #9/#10 editor preview, `_rend
 nav on room switch, editor redesign (action builder, entity picker, Sections WYSIWYG, phone grids),
 README/AI_SPEC/HACS. v6.17.0: light strip as built-in pills (`light_controls.style: native`, opt-in until
 tested on a wall tablet) + cover control restyled with the tokens (same size).
+v6.18.0: editor action builder (zones, icons, tiles, room tap) — done.
 Design mockup: Claude artifact "Room Card – návrh designu".
 
 **Baseline:** `smoke` + `render` (773 PASS) + `lifecycle` (42 PASS) all green. Every finding in

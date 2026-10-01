@@ -75,9 +75,9 @@ mock-up.*
 
   Each section also has its own **Declared tiles** list (v6.11.3) — content the section owns
   outright, no room/zone/icon tag needed at all (a TV summary, a projector remote). *+ Tile* adds
-  one; each gets an ID field (optional — falls back to `<section id>_tile_<index>`), a YAML box
-  for the scalar fields (name/entity/icon/state/value/quick/tap_action/hold_action/hold_delay/
-  double_tap_action/…), and the exact same
+  one; each gets an ID field (optional — falls back to `<section id>_tile_<index>`), the same
+  structured tile fields and [action builder](#actions-tap--double-tap--hold) as a tagged tile, a
+  small YAML box for whatever has no field of its own (`hold_delay`, …), and the exact same
   **Image** field / **Aspect ratio** override / **Overlays** editor a tagged element's tile gets —
   plus ▲▼ reorder, Duplicate and Remove. See
   [Configuration → Declared tiles](CONFIGURATION.md#declared-tiles-tiles).
@@ -107,6 +107,33 @@ mock-up.*
   offers to bootstrap the whole `rooms:` list from `hass.areas` in one click, with each area's
   entities pre-assigned as icons — see
   [Configuration → Onboarding](CONFIGURATION.md#onboarding-editor-only).
+
+### Actions (tap / double tap / hold)
+
+Since v6.18.0 every zone, icon and cockpit tile — and the room's own *Tap on the image* — sets its
+actions with a small builder instead of a YAML box: one row per gesture (**Tap**, **Double tap**,
+**Hold**), a type select, and only the fields that type needs.
+
+| Type | Fields |
+|---|---|
+| More info / Toggle | Entity (a tile pre-fills its own entity) |
+| Navigate | Path (`/lovelace/…`) |
+| Open URL | URL |
+| Perform action | Action (`domain.service`), target entity (comma-separated for several), optional data (YAML) |
+| Open section / Close section | Section (select from the Sections tab) |
+| Switch room / Next / Previous / Follow room | Room (select) |
+| Toggle / Show / Hide group | Group (select from the room's groups) |
+| Do nothing (none) | — |
+| Custom (YAML) | the whole action as YAML — anything the builder doesn't model |
+
+- **Nothing is lost.** Actions the builder doesn't model (`fire-dom-event`, `browser-mod-popup`, a
+  conditional `{condition, then, else}`, …) open as *Custom (YAML)*. Extra keys such as
+  `confirmation:` or `data:` are kept when you edit a field, and a row you didn't touch is saved
+  exactly as it was — an old `call-service` action is only rewritten to `perform-action` once you
+  edit it.
+- **— not set —** removes the key.
+- Changing the type swaps the fields in place (no re-render, focus stays put).
+- Labels, gauges, badges and vacuum widgets still take their actions in their combined YAML box.
 
 ### Live navigation thumbnails (`nav.live`)
 

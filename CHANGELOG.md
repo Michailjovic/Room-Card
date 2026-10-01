@@ -1,5 +1,34 @@
 # Changelog
 
+## [6.18.0] - 2026-10-01
+
+### Editor: action builder for tap / double tap / hold
+
+Zones, icons, cockpit tiles (tagged and declared) and the room's own tap action are now set with a
+builder — one row per gesture with a type select and only the fields that type needs — instead of
+three raw YAML boxes per item. Point 1 of the editor part of `ANALYSIS_v6.15.9.md`.
+
+- **Types:** More info, Toggle, Navigate, Open URL, Perform action (action, target entity/entities,
+  optional data YAML), Open/Close section (section select), Switch/Next/Previous/Follow room (room
+  select), Toggle/Show/Hide group (group select), Do nothing, and **Custom (YAML)** for anything
+  else.
+- **Non-destructive:** unmodelled actions (`fire-dom-event`, `browser-mod-popup`, conditional
+  actions, unknown types) open as Custom (YAML); extra keys (`confirmation`, `data`, a richer
+  `target`) survive a field edit; a row that wasn't touched is saved byte-for-byte (the rendered
+  action is kept per row), so a legacy `call-service` is only modernised to `perform-action`
+  (`service_data` → `data`) when it is actually edited.
+- **Tiles:** `tap_action` / `double_tap_action` / `hold_action` joined `TILE_DEDICATED_KEYS`, so the
+  tile's leftover YAML box now holds only keys without a field (`hold_delay`, …). More info /
+  Toggle default to the tile's own entity.
+- The builder's YAML boxes (Custom, Data) stay visible when *advanced* fields are hidden.
+- Labels, gauges, badges and vacuum widgets keep their combined YAML boxes for now.
+- **No configuration changes.**
+
+Verified: 24 new assertions in `tests/design.test.js` (prefill per type, byte-for-byte untouched
+save, KEEP of `confirmation`/`data`/`target`, call-service modernisation on edit, type switch,
+not-set removal, return to the rendered state, custom YAML, group/room/section selects, tile
+defaults); render tests updated for the removed YAML boxes.
+
 ## [6.17.1] - 2026-10-01
 
 ### Fix: a horizontal docked cover control collapsed to its padding
