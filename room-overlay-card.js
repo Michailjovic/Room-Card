@@ -2,8 +2,20 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.20.0';
+const ROC_VERSION='6.21.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
+// Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
+// added card — the old '/local/room.webp' stub doesn't exist on anyone's
+// install, so the picker showed an empty card. Treated like that old stub
+// everywhere: it never counts as a real background (the editor still opens
+// on its "set a background" step).
+const ROC_STUB_IMG='data:image/svg+xml,'+encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 180'><rect width='320' height='180' fill='#263039'/><rect y='118' width='320' height='62' fill='#3a2f27'/><path d='M0 118h320' stroke='#151a1f' stroke-width='2'/><rect x='196' y='26' width='74' height='58' rx='3' fill='#7fb4d9' opacity='.55'/><path d='M233 26v58M196 55h74' stroke='#263039' stroke-width='3'/><ellipse cx='104' cy='152' rx='72' ry='12' fill='#4a3b30'/><rect x='38' y='92' width='104' height='34' rx='8' fill='#4f6273'/><rect x='30' y='100' width='16' height='30' rx='5' fill='#5a6f81'/><rect x='134' y='100' width='16' height='30' rx='5' fill='#5a6f81'/><circle cx='172' cy='76' r='30' fill='#ffb35c' opacity='.12'/><path d='M172 128V72' stroke='#9aa3ad' stroke-width='2'/><path d='M162 72h20l-5-14h-10z' fill='#ffb35c'/><rect x='284' y='104' width='14' height='18' rx='2' fill='#6b4f3a'/><circle cx='291' cy='98' r='12' fill='#4f7a52'/></svg>");
+const rocIsStubImg=function(u){return!u||u==='/local/room.webp'||u===ROC_STUB_IMG;};
+// A freshly added / card-picker card (stub sketch, single room): sized by its
+// aspect ratio like the editor preview instead of pinning to the viewport —
+// a viewport-tall placeholder in the picker grid or on a new dashboard is
+// mostly empty space.
+const rocIsStubCfg=function(c){return!!c&&c.base_image===ROC_STUB_IMG&&!c.base_camera&&!(Array.isArray(c.rooms)&&c.rooms.length);};
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
   getEntitySuggestion:function(hass,entityId){
@@ -36,6 +48,18 @@ const TILE_DEDICATED_KEYS=['name','entity','icon','icon_animation','active_state
 const ROC_ENT_LISTS={light_switch:['light','switch'],cover:['cover'],camera:['camera'],weather:['weather'],sensor:['sensor'],progress:['sensor','number','input_number']};
 // Editor inputs holding an element id, one list per attribute (ids must be
 // unique within their own list, per room — same rule setConfig() warns about).
+// Element-id lists whose ids nothing else in the config points at — safe to
+// rename with the one-click fix. Sections and groups are referenced by
+// `section:` / `group:` / actions, so those only get the message.
+const ROC_ID_FIXABLE=['data-z-id','data-ico-id','data-lbl-id','data-b-id','data-bl-id','data-el-id','data-g-id','data-gw-id','data-ov-id','data-vw-id'];
+// "Roleta Ložnice" → "roleta_loznice": accents dropped, anything outside
+// A-Za-z0-9_- collapsed to "_", lower-case.
+function rocSlugId(v){
+  let s=String(v||'');
+  try{s=s.normalize('NFD').replace(/[\u0300-\u036f]/g,'');}catch(_){}
+  s=s.toLowerCase().replace(/[^a-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'');
+  return s||'item';
+}
 const ROC_ID_ATTRS=['data-z-id','data-ico-id','data-lbl-id','data-b-id','data-bl-id','data-el-id','data-g-id','data-grp-id','data-gw-id','data-ov-id','data-sec-id','data-vw-id'];
 // Editor on a phone / narrow dialog (v6.19.0): the editor root is an
 // inline-size container, so its multi-column field rows fold to two columns
@@ -1230,7 +1254,7 @@ class RoomOverlayCard extends HTMLElement{
     this._navAttrSources=null;this._navBmSorted={};
   }
 
-  static getStubConfig(){return{base_image:'/local/room.webp',aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[],vacuum_widgets:[]};}
+  static getStubConfig(){return{base_image:ROC_STUB_IMG,layout:{},aspect_ratio:'16/9',border_radius:'12px',filter_conditions:[],overlays:[],zones:[],badges:[],elements:[],icons:[],test_mode:false,labels:[],gauges:[],vacuum_widgets:[]};}
 
   setConfig(cfg){
     cfg=rocMigrateLayout(cfg);
@@ -1742,7 +1766,7 @@ class RoomOverlayCard extends HTMLElement{
   _layoutRootHeight(){
     if(!this.shadowRoot||!this._config)return;
     const c=this._roomCfg||this._config;
-    if(c._roc_ghost||c._roc_preview||c._roc_mini)return;
+    if(c._roc_ghost||c._roc_preview||c._roc_mini||rocIsStubCfg(this._config))return;
     const _lh=(this._config.layout&&this._config.layout.height)||'viewport';
     if(_lh!=='viewport'&&_lh!=='fill')return;
     if(this._profile==='portrait'&&_lh==='viewport')return; // natural content height — nothing to pin ('fill' pins portrait too)
@@ -2210,12 +2234,13 @@ class RoomOverlayCard extends HTMLElement{
     // the phone screen genuinely pinned full-height too, so its bottom sheet
     // has real screen to open into — 'fill' behaves exactly like 'viewport'
     // but also opts portrait INTO the pin instead of sizing to content.
+    const _isStubCard=rocIsStubCfg(cAll);
     const _pinHeight=_lhRaw==='viewport'||_lhRaw==='fill';
     const _naturalRoot=!_isGhost&&!_isMini&&!c._roc_preview&&_rt==='portrait'&&_lhRaw==='viewport';
     let _rootH;
     if(_isGhost)_rootH='100%';
     else if(_isMini)_rootH='auto';       // aspect-derived, via _wrapAspect below — never stretched
-    else if(c._roc_preview)_rootH='auto';  // aspect-derived, via _wrapAspect below — was a guessed fixed 420px, left blank space under shorter content
+    else if(c._roc_preview||_isStubCard)_rootH='auto';  // aspect-derived, via _wrapAspect below — was a guessed fixed 420px, left blank space under shorter content
     else if(_naturalRoot)_rootH='auto';
     else if(_pinHeight)_rootH=this._rootHPx?this._rootHPx+'px':'calc(100svh - var(--header-height,56px))'; // pinned px survives re-renders (room switch); CSS calc is first-paint only, refined by _layoutRootHeight()
     else if(_lhRaw==='container')_rootH='100%';
@@ -2478,7 +2503,7 @@ class RoomOverlayCard extends HTMLElement{
     // Mini: _rootH is 'auto', so the image box needs its own intrinsic size —
     // lock it to the room's design aspect ratio at the fixed reference width
     // (NAV_LIVE_FULL_PLAN.md §6), same mechanism natural-portrait already uses.
-    const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini||c._roc_preview)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
+    const _wrapAspect=(rocImgAutoRow(_lp)||_naturalRoot||_isMini||c._roc_preview||_isStubCard)?' style="height:auto;aspect-ratio:'+(rocRatio(_arResolved)||16/9).toFixed(4)+';"':'';
     const _regPre='<div class="roc-reg" data-reg="image" style="'+rocRegionCss(_imgPl)+(tm?'outline:1px dashed rgba(255,110,110,0.85);outline-offset:-1px;':'')+'">';
     // ----- Cockpit sections: panel chrome (v6.8.0) --------------------------
     // One panel node per declared section (COCKPIT_PLAN.md kap.4 asks for a
@@ -5232,6 +5257,22 @@ class RoomOverlayCardEditor extends HTMLElement{
         if(!msg){if(n)n.style.display='none';return;}
         if(!n){n=document.createElement('div');n.className='roc-id-err';n.style.cssText='color:var(--error-color,#d33);font-size:11px;line-height:1.3;margin-top:2px;';el.parentNode.insertBefore(n,el.nextSibling);}
         n.textContent=msg;n.style.display='block';
+        // One-click fix for invalid / duplicate ids (not for empty ones, and
+        // not for lists other config keys point at — see ROC_ID_FIXABLE).
+        if(v&&ROC_ID_FIXABLE.indexOf(attr)>=0){
+          const taken={};els.forEach(function(o){if(o!==el)taken[o.value.trim()]=1;});
+          const base=rocSlugId(v);let sug=base,k=2;
+          while(taken[sug])sug=base+'_'+(k++);
+          const b=document.createElement('button');b.type='button';b.setAttribute('data-id-fix','');
+          b.textContent='Use "'+sug+'"';
+          b.style.cssText='margin-left:8px;padding:1px 8px;border-radius:4px;border:1px solid currentColor;background:none;color:inherit;font-size:11px;cursor:pointer;';
+          b.addEventListener('click',function(){
+            el.value=sug;
+            el.dispatchEvent(new Event('change',{bubbles:true}));
+            self._idHints();
+          });
+          n.appendChild(b);
+        }
       });
     });
   }
@@ -7304,7 +7345,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const entry=_secCollectedAll.find(function(x){return x.def.id===sec.id;});
       sectionsInner+=self._sectionItem(sec,i,(entry&&entry.tiles)||[]);
     });
-    sectionsInner+='</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><button id="add-section" style="'+btnStyle+'">+ Add section</button><select id="add-section-recipe"'+this._inp('width:auto;')+'><option value="">Recipe\u2026</option><option value="appliances">Appliances</option><option value="cleaning">Cleaning</option><option value="media">Media</option><option value="heating">Heating</option><option value="covers">Covers</option><option value="electricity">Electricity</option><option value="weather">Weather</option></select></div>';
+    sectionsInner+='</div><div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px;"><button id="add-section" style="'+btnStyle+'">+ Add section</button><select id="add-section-recipe"'+this._inp('width:auto;')+'><option value="">Recipe\u2026</option><option value="appliances">Appliances</option><option value="cleaning">Cleaning</option><option value="media">Media</option><option value="heating">Heating</option><option value="covers">Covers</option>'+(customElements.get('electricity-panel-card')?'<option value="electricity">Electricity</option>':'<option value="electricity" disabled>Electricity (needs electricity-panel-card)</option>')+'<option value="weather">Weather</option></select></div>';
     if(!(c.sections||[]).length)sectionsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:10px 0 0;">Sections are user-defined buckets for things that aren\'t one room — appliances, media, heating\u2026 Add one, then tag a zone/icon/element/blind in any room with its id via the Section field (Elements tab), pick a Recipe above, or use the scan below.</p>';
     // Onboarding (v6.10.0, COCKPIT_PLAN.md kap.5.3.2) — devices HA knows
     // about in the four spatial-ish domains that aren't reachable from any
@@ -7455,7 +7496,7 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     // ---- First-run onboarding + tabbed editor (v1.14.1) ---------------------
     const _nArr=function(k){return Array.isArray(cR[k])?cR[k].length:0;};
-    const _realImg=cR.base_image&&cR.base_image!=='/local/room.webp';
+    const _realImg=!rocIsStubImg(cR.base_image);
     const _isEmpty=!hasRooms&&!_realImg&&!cR.base_camera&&(_nArr('zones')+_nArr('icons')+_nArr('labels')+_nArr('badges')+_nArr('gauges')+_nArr('blinds')+_nArr('elements')+_nArr('overlays')+_nArr('vacuum_widgets'))===0;
     const _onboardHtml=
       '<div style="padding:18px 14px;border:1px dashed var(--divider-color);border-radius:10px;text-align:center;">'
@@ -7902,6 +7943,9 @@ class RoomOverlayCardEditor extends HTMLElement{
       electricity:{title:'Electricity',icon:'mdi:flash',placement:'full',card:{type:'custom:electricity-panel-card'}},
       weather:{title:'Weather',icon:'mdi:weather-partly-cloudy',placement:'sheet-right'}
     };
+    // Electricity embeds a third-party card — offer it only when that card is
+    // actually registered, otherwise the new section is a "not registered" error.
+    if(kind==='electricity'&&!customElements.get('electricity-panel-card'))return null;
     return R[kind]||null;
   }
   // Devices in the four spatial-ish domains (kap.5.3.2) that aren't reachable

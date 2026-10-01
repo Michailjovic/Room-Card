@@ -398,6 +398,56 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const rsel=pm.querySelector('#room-select');rsel.value='1';rsel.dispatchEvent(new w.Event('change',{bubbles:true}));
   t('preview: switching the edited room shows that room',!!pm._prevCard&&pm._prevCard._roomIdx===1);
 
+  // ---- 13. v6.21.0 stub image, Electricity recipe guard, id one-click fix ------------
+  const Card=w.customElements.get('room-overlay-card');
+  const stub=Card.getStubConfig();
+  t('stub: picker/new-card image is an inline SVG sketch, not /local/room.webp',/^data:image\/svg\+xml,/.test(stub.base_image));
+  const stubCard=await mount(Object.assign({layout:LY},stub),{});
+  const stubBase=stubCard.shadowRoot.querySelector('.base');
+  // (the background is applied in the preload Image's onload — jsdom never loads images)
+  t('stub: the card renders with the sketch configured as its background',!!stubBase&&/^data:image\/svg\+xml,/.test(stubCard._config.base_image));
+  t('stub: a new card starts on the v4 layout (no "migrated v3 config" banner)',!!stub.layout&&typeof stub.layout==='object');
+  const stubWrap=stubCard.shadowRoot.querySelector('.wrap');
+  t('stub: sized by aspect ratio (16:9), not pinned to the viewport',!!stubWrap&&/aspect-ratio/.test(stubWrap.getAttribute('style')||'')&&/1\.7778/.test(stubWrap.getAttribute('style')||''),stubWrap&&stubWrap.getAttribute('style'));
+  const realCard=await mount({base_image:'/local/x.webp',layout:{}},{});
+  const realWrap=realCard.shadowRoot.querySelector('.wrap');
+  t('stub sizing does not leak to a card with a real image (landscape stays viewport-pinned)',!!realWrap&&!/aspect-ratio/.test(realWrap.getAttribute('style')||''),realWrap&&realWrap.getAttribute('style'));
+  const se=w.document.createElement('room-overlay-card-editor');w.document.body.appendChild(se);
+  const infos=[];const _ci=w.console.info;w.console.info=function(m){infos.push(String(m));};
+  se.setConfig(Object.assign({},stub));
+  w.console.info=_ci;se.hass=mkHass({});
+  const seBg=se.querySelector('#base_image');
+  t('stub: no "auto-migrated" notice for a brand-new card',!infos.some(m=>/auto-migrated/.test(m))&&!se._wasMigrated,infos);
+  t('stub: the editor still opens on the "set a background" step, field empty',!!seBg&&seBg.value===''&&/Build your room card/.test(se.textContent),seBg&&seBg.value);
+  const rs=w.document.createElement('room-overlay-card-editor');w.document.body.appendChild(rs);
+  rs.setConfig({base_image:'/local/x.webp',layout:LY});rs.hass=mkHass({});rs._tab='sections';rs._render();
+  // (jsdom resolves "#id descendant" document-wide — several editors are mounted here)
+  const elOpt=rs.querySelector('#add-section-recipe').querySelector('option[value="electricity"]');
+  t('recipe: Electricity disabled while electricity-panel-card is not installed',!!elOpt&&elOpt.disabled&&/needs electricity-panel-card/.test(elOpt.textContent));
+  t('recipe: no Electricity section can be built without the card',rs._recipeDef('electricity')===null&&!!rs._recipeDef('media'));
+  w.customElements.define('electricity-panel-card',class extends w.HTMLElement{});
+  rs._render();
+  const elOpt2=rs.querySelector('#add-section-recipe').querySelector('option[value="electricity"]');
+  t('recipe: enabled once the card is registered',!!elOpt2&&!elOpt2.disabled&&rs._recipeDef('electricity').card.type==='custom:electricity-panel-card');
+  const fx=w.document.createElement('room-overlay-card-editor');w.document.body.appendChild(fx);
+  let fxOut=null;fx.addEventListener('config-changed',e=>{fxOut=e.detail.config;});
+  fx.setConfig({base_image:'/local/x.webp',layout:LY,sections:[{id:'Moje sekce',title:'S'}],
+    zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%'},{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%'}],
+    blinds:[{id:'Roleta Ložnice',entity:'cover.x',top:'1%',left:'1%',width:'5%',height:'5%'}]});
+  fx.hass=mkHass({});fx._tab='elements';fx._render();
+  const fixOf=sel=>{const el=fx.querySelector(sel);const n=el&&el.nextElementSibling;return n&&n.classList.contains('roc-id-err')&&n.style.display==='block'?n.querySelector('[data-id-fix]'):null;};
+  const blFix=fixOf('[data-bl-id="0"]');
+  t('id fix: invalid id offers a slug (accents dropped, spaces → _)',!!blFix&&blFix.textContent==='Use "roleta_loznice"',blFix&&blFix.textContent);
+  blFix.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('id fix: one click renames it, saves it and clears the message',fx.querySelector('[data-bl-id="0"]').value==='roleta_loznice'&&!!fxOut&&fxOut.blinds[0].id==='roleta_loznice'&&!fixOf('[data-bl-id="0"]'));
+  const zFix=fixOf('[data-z-id="1"]');
+  t('id fix: a duplicate gets a free numbered id',!!zFix&&zFix.textContent==='Use "z1_2"',zFix&&zFix.textContent);
+  zFix.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('id fix: after the fix both zone ids are valid',!fixOf('[data-z-id="0"]')&&!fixOf('[data-z-id="1"]')&&fxOut.zones[1].id==='z1_2');
+  fx._tab='sections';fx._render();
+  const secEl=fx.querySelector('[data-sec-id="0"]');const secErr=secEl&&secEl.nextElementSibling;
+  t('id fix: section ids (referenced elsewhere) get the message but no auto-rename',!!secErr&&secErr.classList.contains('roc-id-err')&&secErr.style.display==='block'&&!secErr.querySelector('[data-id-fix]'));
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

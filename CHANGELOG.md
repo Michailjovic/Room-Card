@@ -1,5 +1,31 @@
 # Changelog
 
+## [6.21.0] - 2026-10-01
+
+### Editor polish: one-click ID fix, Electricity recipe guard, a real card-picker preview
+
+The last small editor items from `ANALYSIS_v6.15.9.md` (Part 4 #2, #5, #6).
+
+- **One-click ID fix.** An invalid or duplicate element ID now offers *Use "roleta_bedroom"* next
+  to the message: accents dropped, anything outside `A-Za-z0-9_-` becomes `_`, lower-case, and a
+  free `_2`, `_3`… suffix if the result is taken. Offered for zones, icons, labels, badges, blinds,
+  embedded cards, gauges, glows, overlays and vacuum widgets — not for sections and groups, whose
+  ids other keys (`section:`, `group:`, actions) point at; those keep just the message.
+- **Electricity recipe** embeds `custom:electricity-panel-card`. Without that card installed the new
+  section was a *not registered* error; the recipe is now shown disabled as *Electricity (needs
+  electricity-panel-card)* and can't be added.
+- **Card picker / new card.** `getStubConfig()` pointed at `/local/room.webp`, which exists on no
+  one's install — the picker showed an empty card. It now uses a small inline SVG room sketch
+  (`ROC_STUB_IMG`), sized 16:9 by its width instead of filling the viewport, and starts with
+  `layout: {}` (no "auto-migrated v3 config" notice for a brand-new card). The sketch never counts
+  as a real background — the editor still opens on its *set a background* step, and once a real
+  image is set the normal layout rules apply.
+- **No configuration changes.**
+
+Verified: 15 new assertions in `tests/design.test.js`; all four tiers green on source and `dist/`;
+live: the sketch renders 16:9 (480 px → 271 px, 300 px → 170 px), Electricity stays enabled where
+the card is installed, the fix button proposes `roleta_bedroom` for the existing blind id.
+
 ## [6.20.0] - 2026-10-01
 
 ### Editor: the header preview follows every edit; Remove → Undo bar

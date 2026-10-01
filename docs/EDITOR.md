@@ -83,7 +83,8 @@ mock-up.*
   [Configuration → Declared tiles](CONFIGURATION.md#declared-tiles-tiles).
 
   Next to *+ Add section*, a **Recipe** select pre-fills a whole section for a common case
-  (Appliances, Cleaning, Media, Heating, Covers, Electricity, Weather) — pick one instead of
+  (Appliances, Cleaning, Media, Heating, Covers, Electricity, Weather; Electricity needs
+  `electricity-panel-card` installed and is disabled otherwise) — pick one instead of
   filling in id/title/icon/source by hand. Below the section list, a **Find untagged devices**
   box lists vacuum/climate/cover/media_player entities Home Assistant knows about that aren't in
   any section yet, grouped by domain, each with a one-click button that adds the matching recipe.
@@ -147,7 +148,9 @@ Since v6.19.0:
 - **Entity hint.** Under the field: the entity's friendly name, or an orange *Not found in Home
   Assistant* for an unknown id. Templates (`{{ … }}`) are not checked.
 - **ID check.** An element ID that is empty, uses characters outside `A-Za-z0-9_-`, or repeats an
-  ID in the same list gets a red border and a short message as you type.
+  ID in the same list gets a red border and a short message as you type. Since v6.21.0 the message
+  carries a one-click fix (*Use "roleta_bedroom"*) — except for section and group IDs, which other
+  settings refer to by name.
 - **Phones / narrow dialogs.** Field rows fold to two columns below 500 px of editor width and to
   one below 300 px.
 

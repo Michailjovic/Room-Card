@@ -17,6 +17,7 @@ tested on a wall tablet) + cover control restyled with the tokens (same size).
 v6.18.0: editor action builder (zones, icons, tiles, room tap) — done.
 v6.19.0: entity suggestions with names + domain filter, entity/ID checks, phone-width grids — done.
 v6.20.0: #9/#10 (old #7/#15) editor preview follows every edit, no remount; Remove → Undo bar — done.
+v6.21.0: id auto-fix, Electricity recipe guard, stub/picker preview — done. Next: #8 vendored js-yaml.
 Design mockup: Claude artifact "Room Card – návrh designu".
 
 **Baseline:** `smoke` + `render` (773 PASS) + `lifecycle` (42 PASS) all green. Every finding in
