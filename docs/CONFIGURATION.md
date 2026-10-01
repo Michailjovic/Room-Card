@@ -905,8 +905,31 @@ desktop, so a `vh` value scales across screens (resolved to px at render). When 
 brightness, so `bg_off` is only visible when the light is off. Non-light entities (switches) get
 a toggle pill sharing the same lux ring instead of a brightness slider.
 
-Requires the `material-slider-card` resource to be installed. In the GUI these live in the
-**Elements** tab under *Light controls*.
+Requires the `material-slider-card` resource to be installed — unless you use the built-in pills
+below. In the GUI these live in the **Elements** tab under *Light controls*.
+
+### Built-in pills (`style: native`, v6.17.0)
+
+```yaml
+light_controls:
+  style: native               # built-in pills instead of material-slider-card
+  height: 2.5%                # same height key — the strip takes exactly the same space
+  entities:
+    - entity: light.panel_bedroom_1
+      name: Levá
+    - entity: light.ceiling
+      icon: mdi:ceiling-light # optional; default bulb (lights) / power (switches)
+```
+
+Each pill shows an **icon, the name and the brightness** (`45 %`, or *Off* / *On* as Home
+Assistant words it). The fill grows with the brightness **in the light's own colour** (lighter
+colours are drawn more transparent so the text stays readable), the border keeps the **lux ring**,
+and `bg_off` is the background while off. Gestures: **tap** toggles, a **horizontal drag** sets the
+brightness (drag to the left edge to turn off; only for lights that support brightness), a
+**long press** opens more-info, and a vertical swipe scrolls the page as usual. Keyboard: Enter /
+Space toggle, ← / → change the brightness by 10 %. When a pill gets narrower than ~120 px the name
+is hidden and only the icon and value remain. No external card needed — the
+`material-slider-card` dependency disappears with this style.
 
 ![Editor — Light & switch controls panel](../screenshots/editor-light-controls.png)
 

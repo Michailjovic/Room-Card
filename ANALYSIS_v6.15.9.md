@@ -12,7 +12,8 @@ dashboard through the browser (timings, DOM counts, console) — re-run once HA 
 done (`rocFmtState`), design tokens + section-launcher status + nav chip/thumbnail styling shipped.
 Still open: #8 YAML parser (→ vendored js-yaml), #9/#10 editor preview, `_render()` split + persistent
 nav on room switch, editor redesign (action builder, entity picker, Sections WYSIWYG, phone grids),
-light strip + cover control redesign (needs tablet testing first), README/AI_SPEC/HACS.
+README/AI_SPEC/HACS. v6.17.0: light strip as built-in pills (`light_controls.style: native`, opt-in until
+tested on a wall tablet) + cover control restyled with the tokens (same size).
 Design mockup: Claude artifact "Room Card – návrh designu".
 
 **Baseline:** `smoke` + `render` (773 PASS) + `lifecycle` (42 PASS) all green. Every finding in
@@ -255,6 +256,6 @@ Already rejected earlier, not re-proposed: regrouping Elements by intent, per-se
 | **v6.15.10** | Part 1 #3–#7 (logic one-liners + warning dedupe + `fire-dom-event`), reduced-motion block, `aria-modal`, Czech comments → English, ROADMAP line. Probe items flip to PASS → move them into `render.test.js`. |
 | **v6.16.0** | `rocFmtState()` for labels/chips/tiles (+ `format: raw`), vendored `js-yaml` for all YAML boxes. |
 | **v6.16.x** | Editor: phone-width grids, id validation, preview scalar edits (#7/#15), recipe guard, stub preview. |
-| **v6.17.0** | `_render()` split (no behaviour change) → persistent nav strip/minis on room switch. |
+| **v6.18.0+** | `_render()` split (no behaviour change) → persistent nav strip/minis on room switch. |
 | docs | README cockpit section + screenshots, `AI_SPEC.md` + `llms.txt`, cockpit preset → **HACS submission**. |
 | parked | B3/B4 after the live diagnostic session; floorplan v7 stays parked. |

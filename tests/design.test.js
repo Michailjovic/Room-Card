@@ -153,6 +153,63 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   actIn.value='on';const out2=ed._collectConfig();
   t('editor: a single active_state stays a plain string',out2.sections[0].tiles[0].active_state==='on');
 
+  // ---- 7. v6.17.0 native light pills -----------------------------------------
+  const calls=[];
+  const lcStates={
+    'light.a':Object.assign(st('on',{brightness:128,rgb_color:[255,170,80],supported_color_modes:['brightness']}),{entity_id:'light.a'}),
+    'light.b':Object.assign(st('off',{supported_color_modes:['color_temp']}),{entity_id:'light.b'}),
+    'light.c':Object.assign(st('on',{supported_color_modes:['onoff']}),{entity_id:'light.c'}),
+    'switch.d':Object.assign(st('on'),{entity_id:'switch.d'}),
+    'light.e':Object.assign(st('unavailable'),{entity_id:'light.e'}),
+    'sensor.lux':st('25')};
+  const lcCfg={base_image:'/local/x.webp',
+    layout:{portrait:{rows:[10,90],place:{lights:{row:1},image:{row:2}}},landscape:{rows:[10,90],place:{lights:{row:1},image:{row:2}}}},
+    light_controls:{style:'native',height:30,lux_sensor:'sensor.lux',lux_max:50,
+      entities:[{entity:'light.a',name:'Levá'},{entity:'light.b',name:'Střed'},{entity:'light.c',name:'Onoff'},{entity:'switch.d',name:'Zásuvka'},{entity:'light.e'}]}};
+  const lc=await mount(lcCfg,lcStates,{callService:function(d,sv,data){calls.push([d,sv,data]);}});
+  lc._update();
+  const P=i=>lc.shadowRoot.querySelector('[data-lcp="'+i+'"]');
+  t('pills: native style renders built-in pills, no material-slider-card hosts',!!P(0)&&!lc.shadowRoot.querySelector('[data-lc-card]'));
+  t('pills: keep the configured height (no extra space)',P(0).style.height==='30px');
+  t('pills: dimmable light at brightness 128 → 50 % fill + "50 %"',P(0).querySelector('[data-lcp-fill]').style.width==='50%'&&P(0).querySelector('[data-lcp-val]').textContent==='50 %',[P(0).querySelector('[data-lcp-fill]').style.width,P(0).querySelector('[data-lcp-val]').textContent]);
+  t('pills: fill uses the light\'s own colour',/255,\s*170,\s*80/.test(P(0).style.getPropertyValue('--lcp-col')),P(0).style.getPropertyValue('--lcp-col'));
+  t('pills: on → class on + filled bulb icon',P(0).classList.contains('on')&&P(0).querySelector('[data-lcp-icon]').getAttribute('icon')==='mdi:lightbulb');
+  t('pills: off → HA-formatted value, empty fill, outline icon',P(1).querySelector('[data-lcp-val]').textContent==='Off'&&P(1).querySelector('[data-lcp-fill]').style.width==='0%'&&P(1).querySelector('[data-lcp-icon]').getAttribute('icon')==='mdi:lightbulb-outline');
+  t('pills: on/off-only light → full fill, "On"',P(2).querySelector('[data-lcp-fill]').style.width==='100%'&&P(2).querySelector('[data-lcp-val]').textContent==='On');
+  t('pills: switch → pill with power icon',P(3).querySelector('[data-lcp-icon]').getAttribute('icon')==='mdi:power');
+  t('pills: unavailable → "—" + dimmed',P(4).classList.contains('unavailable')&&P(4).querySelector('[data-lcp-val]').textContent==='—');
+  t('pills: name falls back to friendly_name',P(4).querySelector('.roc-lcp-nm').textContent==='n');
+  t('pills: lux ring colours the border',/^(hsl|rgb)/.test(P(0).style.borderColor),P(0).style.borderColor);
+  const pe=(el,type,x,y)=>el.dispatchEvent(new w.MouseEvent(type,{bubbles:true,clientX:x,clientY:y||10,button:0}));
+  calls.length=0;pe(P(1),'pointerdown',50);pe(P(1),'pointerup',50);
+  t('pills: tap toggles',calls.length===1&&calls[0][0]==='homeassistant'&&calls[0][1]==='toggle'&&calls[0][2].entity_id==='light.b',calls);
+  P(0).getBoundingClientRect=()=>({left:0,top:0,width:200,height:30,right:200,bottom:30});
+  calls.length=0;pe(P(0),'pointerdown',20);pe(P(0),'pointermove',60);pe(P(0),'pointermove',150);pe(P(0),'pointerup',150);
+  t('pills: horizontal drag sets brightness (75 %) and does not toggle',calls.length===1&&calls[0][0]==='light'&&calls[0][1]==='turn_on'&&calls[0][2].brightness_pct===75,calls);
+  calls.length=0;pe(P(0),'pointerdown',150);pe(P(0),'pointermove',100);pe(P(0),'pointermove',-30);pe(P(0),'pointerup',-30);
+  t('pills: drag to the left edge turns the light off',calls.length===1&&calls[0][1]==='turn_off',calls);
+  P(2).getBoundingClientRect=()=>({left:0,top:0,width:200,height:30,right:200,bottom:30});
+  calls.length=0;pe(P(2),'pointerdown',20);pe(P(2),'pointermove',120);pe(P(2),'pointerup',120);
+  t('pills: on/off-only light ignores a drag (no dim, no accidental toggle)',calls.length===0,calls);
+  calls.length=0;pe(P(1),'pointerdown',20,10);pe(P(1),'pointermove',22,60);pe(P(1),'pointerup',22,60);
+  t('pills: vertical swipe (page scroll) does nothing',calls.length===0,calls);
+  // editor
+  const ed2=w.document.createElement('room-overlay-card-editor');
+  const edCfg=JSON.parse(JSON.stringify(lcCfg));edCfg.light_controls.entities[0].icon='mdi:ceiling-light';
+  ed2.setConfig(edCfg);ed2.hass={states:{},user:{name:'x'}};w.document.body.appendChild(ed2);ed2._tab='elements';ed2._render();await sleep(10);
+  const sty=ed2.querySelector('#lc-style');
+  t('editor: Style select shows "native"',!!sty&&sty.value==='native',sty&&sty.value);
+  const lout=ed2._collectConfig().light_controls;
+  t('editor: style survives a save',lout&&lout.style==='native');
+  t('editor: an entity\'s icon: (no GUI field) survives a save',lout&&lout.entities[0].icon==='mdi:ceiling-light'&&lout.entities[0].name==='Levá',lout&&lout.entities[0]);
+  sty.value='';const lout2=ed2._collectConfig().light_controls;
+  t('editor: choosing material-slider-card removes style',lout2&&lout2.style===undefined);
+
+  // ---- 8. v6.17.0 cover control uses the design tokens ---------------------------
+  const cv=await mount({base_image:'/local/x.webp',layout:LY,blinds:[{id:'b',entity:'cover.x',top:'10%',left:'10%',width:'10%',height:'20%',control:{placement:'float'}}]},{'cover.x':st('open',{current_position:40})});
+  const ccEl=cv.shadowRoot.querySelector('.roc-cc');
+  t('cover control: surface + border tokens',!!ccEl&&/--roc-surface-c/.test(ccEl.getAttribute('style'))&&/--roc-border-c/.test(ccEl.getAttribute('style')));
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

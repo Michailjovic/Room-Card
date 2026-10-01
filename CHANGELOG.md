@@ -1,5 +1,50 @@
 # Changelog
 
+## [6.17.0] - 2026-10-01
+
+### Design refresh, part 2: built-in light pills + cover control in the shared look
+
+The second half of the design review (`ANALYSIS_v6.15.9.md`) — the two parts that live in their own
+layout regions. Both keep their existing size, so a dashboard doesn't reflow.
+
+#### Light controls — `style: native` (opt-in)
+A built-in pill per light/switch instead of mounting the external `material-slider-card`:
+- **icon, name and brightness** (`45 %`; *Off* / *On* in Home Assistant's own wording);
+- the fill grows with the brightness **in the light's own colour** (`rgb_color`, else colour
+  temperature) — near-white light is drawn more transparent so the white text stays readable
+  (the old strip could end up with yellow text on a white fill);
+- the **lux ring** on the border and `bg_off` work exactly as before;
+- **tap** toggles, **horizontal drag** dims (left edge = off; only lights that support brightness;
+  on/off-only lights ignore a drag instead of toggling by accident), **long press** opens
+  more-info, a **vertical swipe** scrolls the page; Enter/Space and ←/→ (±10 %) from the keyboard;
+- same `height:` as before, so the strip takes the same space; below ~120 px per pill the name is
+  hidden (container query) and icon + value remain;
+- optional per-entity `icon:`; default bulb / bulb-outline for lights, power / power-off for
+  switches;
+- no `material-slider-card` dependency with this style.
+The default stays `material-slider-card` until the pills have been tried on a wall tablet.
+
+#### Cover control (roleta)
+Restyled with the v6.16.0 design tokens — `--roc-surface` background with a hairline border,
+token text colour, tabular percentage, softer buttons and presets, a neutral fill instead of the
+brown one. **Every dimension is unchanged** (buttons, rail, presets, padding), so a docked control
+keeps its width.
+
+#### Editor
+- *Light controls* gets a **Style** select (material-slider-card / built-in pills).
+- **Fix:** saving the Light controls panel rebuilt the block from its fields only, silently
+  dropping any key without a field (e.g. an entity's `icon:`). It now starts from the previous
+  block (the same KEEP pattern as every other panel).
+
+### Tests
+`tests/design.test.js` grows to 68 assertions: pill rendering (height, fill %, light colour,
+on/off/unavailable, switches, friendly-name fallback, lux ring), gestures (tap → toggle, drag →
+`brightness_pct`, drag to the edge → off, no-op on on/off-only lights and on a vertical swipe),
+the editor Style select + `icon:` round-trip, and the cover control tokens. All four tiers green
+on the source and the minified `dist/`. Checked live on the dev dashboard by mounting the new
+build next to the installed one with `style: native` set in memory: 21 px pills (the configured
+`2.5%`), lux ring, fill/colour with simulated states — no real light was switched.
+
 ## [6.16.0] - 2026-10-01
 
 ### Design refresh, part 1: values read like Home Assistant, colour only means "something is happening"
