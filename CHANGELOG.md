@@ -1,5 +1,35 @@
 # Changelog
 
+## [6.19.0] - 2026-10-01
+
+### Editor: entity suggestions with names, entity / ID checks, phone-width layout
+
+Editor point 1 of `ANALYSIS_v6.15.9.md`, continued — plain native fields, no dependency on Home
+Assistant's internal picker components.
+
+- **Entity suggestions show friendly names.** The suggestion list is
+  `<option value="light.x" label="Lamp">`, so the dropdown shows and matches the name, not just
+  the id.
+- **Suggestions filtered by domain** where the field only makes sense for one: light-control and
+  light-glow entities → `light`/`switch`, blind → `cover`, base camera → `camera`, weather overlay →
+  `weather`, lux sensor → `sensor`, tile progress → `sensor`/`number`/`input_number`. Only the
+  suggestions are filtered — anything typed is still accepted.
+- **Entity hint:** under an entity field, the entity's friendly name; an entity Home Assistant
+  doesn't know (typo, renamed) gets an orange border and *Not found in Home Assistant*. Templates
+  are not checked; comma-separated lists are checked one by one.
+- **ID check:** empty IDs, characters outside `A-Za-z0-9_-` and duplicates within the same list
+  get a red border and a one-line message, re-checked while typing (the card has only warned in
+  the browser console so far).
+- **Narrow editor:** the editor root is an inline-size container — 3- and 4-column field rows fold
+  to two columns below 500 px and everything to one column below 300 px (phone, narrow dialog).
+- **Faster render:** the suggestion lists are filled on the first focus of a field that uses them
+  instead of on every editor render (~4 000 entities measured: about 60–100 ms less per render).
+- **No configuration changes.**
+
+Verified: 17 new assertions in `tests/design.test.js`; all four tiers green on source and `dist/`;
+live in the dashboard with the real config (6 rooms × 2 tabs): no false *Not found* hints, and the
+ID check found two existing blind IDs with spaces.
+
 ## [6.18.0] - 2026-10-01
 
 ### Editor: action builder for tap / double tap / hold

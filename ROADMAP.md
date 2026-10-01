@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.18.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.19.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -98,6 +98,7 @@ failure broke HACS installs.
 | **v6.17.0** | **Design refresh, part 2** — built-in light pills (`light_controls.style: native`: icon · name · %, fill in the light's colour, drag to dim, no external card), cover control in the shared tokens (same size), editor Style select + KEEP fix |
 | **v6.17.1** | Fix: horizontal docked cover control (phone bar) sized to its buttons |
 | **v6.18.0** | **Editor: action builder** — tap / double tap / hold of zones, icons, tiles and the room set via type select + fields (sections/rooms/groups as selects), Custom (YAML) fallback, untouched rows saved byte-for-byte |
+| **v6.19.0** | **Editor: entity fields** — suggestions with friendly names, domain-filtered where it makes sense, "not found" hint, ID check (empty / invalid / duplicate), phone-width field rows, lazily filled suggestion lists |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

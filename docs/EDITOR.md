@@ -135,6 +135,22 @@ actions with a small builder instead of a YAML box: one row per gesture (**Tap**
 - Changing the type swaps the fields in place (no re-render, focus stays put).
 - Labels, gauges, badges and vacuum widgets still take their actions in their combined YAML box.
 
+### Entity fields and ID checks
+
+Since v6.19.0:
+
+- **Suggestions with names.** Typing in an entity field suggests matching entities with their
+  friendly names (type part of the name or the id). Fields that only make sense for one domain
+  suggest only that domain: blind → `cover`, light controls and light glows → `light`/`switch`,
+  base camera → `camera`, weather overlay → `weather`, lux sensor → `sensor`, tile progress →
+  `sensor`/`number`/`input_number`. You can still type anything.
+- **Entity hint.** Under the field: the entity's friendly name, or an orange *Not found in Home
+  Assistant* for an unknown id. Templates (`{{ … }}`) are not checked.
+- **ID check.** An element ID that is empty, uses characters outside `A-Za-z0-9_-`, or repeats an
+  ID in the same list gets a red border and a short message as you type.
+- **Phones / narrow dialogs.** Field rows fold to two columns below 500 px of editor width and to
+  one below 300 px.
+
 ### Live navigation thumbnails (`nav.live`)
 
 One of the more popular settings, and easy to miss: on the **Navigation menu** accordion, the

@@ -311,6 +311,47 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   t('builder: tile more-info written with the default entity',JSON.stringify(to.zones[0].tile.tap_action)===JSON.stringify({action:'more-info',entity:'sensor.pracka'}),to.zones[0].tile.tap_action);
   t('builder: tile leftover YAML box does not carry tap_action',!/tap_action/.test(tb.querySelector('[data-sec-tile="z:0"]').value));
 
+  // ---- 11. v6.19.0 entity suggestions, entity / id hints, narrow editor ----------
+  const eh=w.document.createElement('room-overlay-card-editor');
+  eh.setConfig({base_image:'/local/x.webp',layout:LY,
+    zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%'},{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%'}],
+    blinds:[{id:'b1',entity:'cover.okno',top:'1%',left:'1%',width:'5%',height:'5%'}],
+    glows:[{id:'g1',entity:'light.neni'}]});
+  w.document.body.appendChild(eh);eh._tab='elements';eh._render();await sleep(10);
+  t('entity lists: empty before hass arrives',!!eh.querySelector('#roc-ent-cover')&&!eh.querySelector('#roc-ent-cover').hasChildNodes());
+  eh.hass=mkHass({'cover.okno':st('open',{friendly_name:'Okno ložnice'},'cover.okno'),'light.a':st('on',{friendly_name:'Lampa'},'light.a'),'sensor.t':st('21',{friendly_name:'Teplota'},'sensor.t')});
+  t('entity lists: still empty until a field using them is focused',!eh.querySelector('#roc-ent-cover').hasChildNodes()&&!eh.querySelector('#roc-entities').hasChildNodes());
+  const focus=el=>el.dispatchEvent(new w.FocusEvent('focusin',{bubbles:true}));
+  focus(eh.querySelector('[data-bl-entity="0"]'));focus(eh.querySelector('[data-gw-ent="0"]'));focus(eh.querySelector('input[list="roc-entities"]'));
+  const allOpts=Array.from(eh.querySelectorAll('#roc-entities option'));
+  t('entity lists: the full list carries friendly names as labels',allOpts.length===3&&allOpts.some(o=>o.value==='light.a'&&o.getAttribute('label')==='Lampa'),allOpts.map(o=>o.outerHTML));
+  const covOpts=Array.from(eh.querySelectorAll('#roc-ent-cover option')).map(o=>o.value);
+  t('entity lists: the cover list holds only covers',covOpts.length===1&&covOpts[0]==='cover.okno',covOpts);
+  t('entity lists: light/switch list holds only lights',Array.from(eh.querySelectorAll('#roc-ent-light_switch option')).map(o=>o.value).join()==='light.a');
+  const blEnt=eh.querySelector('[data-bl-entity="0"]');
+  t('blind entity field suggests covers',blEnt.getAttribute('list')==='roc-ent-cover');
+  const blHint=blEnt.nextElementSibling;
+  t('entity hint: friendly name shown under the field (after hass arrives)',!!blHint&&blHint.classList.contains('roc-ent-hint')&&blHint.textContent==='Okno ložnice'&&blHint.style.display==='block');
+  const gwEnt=eh.querySelector('[data-gw-ent="0"]');
+  t('entity hint: unknown entity flagged',gwEnt.hasAttribute('data-roc-ent-bad')&&/Not found/.test(gwEnt.nextElementSibling.textContent),gwEnt.nextElementSibling&&gwEnt.nextElementSibling.textContent);
+  gwEnt.value='light.a';gwEnt.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('entity hint: fixing the entity clears the warning',!gwEnt.hasAttribute('data-roc-ent-bad')&&gwEnt.nextElementSibling.textContent==='Lampa'&&gwEnt.style.borderColor==='');
+  gwEnt.value='{{ states("x") }}';gwEnt.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('entity hint: templates are not checked',!gwEnt.hasAttribute('data-roc-ent-bad')&&gwEnt.nextElementSibling.style.display==='none');
+  t('entity hint: the hint never ends up in the saved config',eh._collectConfig().blinds[0].entity==='cover.okno');
+  const z0=eh.querySelector('[data-z-id="0"]'),z1=eh.querySelector('[data-z-id="1"]');
+  const errOf=el=>{const n=el.nextElementSibling;return n&&n.classList.contains('roc-id-err')&&n.style.display==='block'?n.textContent:'';};
+  t('id check: duplicate zone ids flagged on both',/Duplicate/.test(errOf(z0))&&/Duplicate/.test(errOf(z1)));
+  z1.value='z 2';z1.dispatchEvent(new w.Event('input',{bubbles:true}));
+  t('id check: typing re-checks — duplicate gone, bad characters flagged',errOf(z0)===''&&/letters, digits/.test(errOf(z1)),[errOf(z0),errOf(z1)]);
+  z1.value='z2';z1.dispatchEvent(new w.Event('input',{bubbles:true}));
+  t('id check: valid ids → no message',errOf(z0)===''&&errOf(z1)==='');
+  z1.value='';z1.dispatchEvent(new w.Event('input',{bubbles:true}));
+  t('id check: empty id flagged',/required/.test(errOf(z1)));
+  t('id check: blind ids are checked too (other list, no clash)',errOf(eh.querySelector('[data-bl-id="0"]'))==='');
+  const edCss=Array.from(eh.querySelectorAll('style')).map(x=>x.textContent).join('');
+  t('narrow editor: container query folds 4/3-column rows',/container-type:inline-size/.test(edCss)&&/@container \(max-width:500px\)/.test(edCss)&&/@container \(max-width:300px\)/.test(edCss));
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

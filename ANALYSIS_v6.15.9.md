@@ -15,6 +15,7 @@ nav on room switch, editor redesign (action builder, entity picker, Sections WYS
 README/AI_SPEC/HACS. v6.17.0: light strip as built-in pills (`light_controls.style: native`, opt-in until
 tested on a wall tablet) + cover control restyled with the tokens (same size).
 v6.18.0: editor action builder (zones, icons, tiles, room tap) — done.
+v6.19.0: entity suggestions with names + domain filter, entity/ID checks, phone-width grids — done.
 Design mockup: Claude artifact "Room Card – návrh designu".
 
 **Baseline:** `smoke` + `render` (773 PASS) + `lifecycle` (42 PASS) all green. Every finding in

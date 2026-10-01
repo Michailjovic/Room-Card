@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.18.0';
+const ROC_VERSION='6.19.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -30,6 +30,20 @@ const EL_DEDICATED_KEYS=['id','top','bottom','left','width','height','group','na
 const TILE_DEDICATED_KEYS=['name','entity','icon','icon_animation','active_state','state_class','value','progress','quick','tap_action','double_tap_action','hold_action'];
 // Action builder types (v6.18.0) — [value, editor label]. '' = key not set;
 // 'custom' = raw YAML for anything the builder doesn't model.
+// Domain-filtered entity suggestion lists (v6.19.0): datalist id suffix →
+// domains. A field bound to one of these only *suggests* those domains —
+// anything typed is still accepted.
+const ROC_ENT_LISTS={light_switch:['light','switch'],cover:['cover'],camera:['camera'],weather:['weather'],sensor:['sensor'],progress:['sensor','number','input_number']};
+// Editor inputs holding an element id, one list per attribute (ids must be
+// unique within their own list, per room — same rule setConfig() warns about).
+const ROC_ID_ATTRS=['data-z-id','data-ico-id','data-lbl-id','data-b-id','data-bl-id','data-el-id','data-g-id','data-grp-id','data-gw-id','data-ov-id','data-sec-id','data-vw-id'];
+// Editor on a phone / narrow dialog (v6.19.0): the editor root is an
+// inline-size container, so its multi-column field rows fold to two columns
+// below 500 px and to one below 300 px — the inline grid styles are matched
+// by attribute selector, no markup change needed.
+const ROC_ED_NARROW_CSS='.roc-ed{container-type:inline-size;}'
+  +'@container (max-width:500px){.roc-ed [style*="grid-template-columns:repeat(4,1fr)"],.roc-ed [style*="grid-template-columns:1fr 1fr 1fr"],.roc-ed [style*="grid-template-columns:repeat(3,1fr)"],.roc-ed [style*="grid-template-columns:2fr 1fr 1fr"]{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}'
+  +'@container (max-width:300px){.roc-ed [style*="grid-template-columns:repeat(4,1fr)"],.roc-ed [style*="grid-template-columns:1fr 1fr"],.roc-ed [style*="grid-template-columns:repeat(3,1fr)"],.roc-ed [style*="grid-template-columns:repeat(2,1fr)"],.roc-ed [style*="grid-template-columns:2fr 1fr"],.roc-ed [style*="grid-template-columns:1fr 2fr"]{grid-template-columns:minmax(0,1fr)!important;}}';
 const ROC_ACT_TYPES=[['','— not set —'],['more-info','More info'],['toggle','Toggle'],['navigate','Navigate'],['url','Open URL'],['perform-action','Perform action'],['open-section','Open section'],['close-section','Close section'],['switch-room','Switch room'],['next-room','Next room'],['prev-room','Previous room'],['follow-room','Follow room'],['toggle-group','Toggle group'],['show-group','Show group'],['hide-group','Hide group'],['none','Do nothing (none)'],['custom','Custom (YAML)']];
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
@@ -5106,13 +5120,96 @@ class RoomOverlayCardEditor extends HTMLElement{
 
   // Entity datalist options — cached; rebuilding ~2k <option> strings on every
   // editor re-render is measurable with large state machines
-  _dlOptions(){
+  // Entity suggestions: <option value="light.x" label="Friendly name"> so the
+  // browser's dropdown shows (and matches on) the name too. `key` picks a
+  // ROC_ENT_LISTS domain filter; no key = every entity.
+  _dlOptions(key){
     const h=this._hass;if(!h)return'';
     const ids=Object.keys(h.states);
-    if(this._dlCache&&this._dlCache.n===ids.length)return this._dlCache.s;
-    const s=ids.sort().map(function(id){return'<option value="'+id+'">';}).join('');
-    this._dlCache={n:ids.length,s:s};
+    if(!this._dlCache||this._dlCache.n!==ids.length)this._dlCache={n:ids.length,by:{}};
+    const k=key||'*';
+    if(this._dlCache.by[k]!==undefined)return this._dlCache.by[k];
+    const doms=key?ROC_ENT_LISTS[key]:null;
+    const s=ids.filter(function(id){return!doms||doms.indexOf(id.slice(0,id.indexOf('.')))>=0;}).sort().map(function(id){
+      const st=h.states[id];const fn=st&&st.attributes&&st.attributes.friendly_name;
+      return'<option value="'+escA(id)+'"'+(fn&&fn!==id?' label="'+escA(String(fn))+'"':'')+'>';
+    }).join('');
+    this._dlCache.by[k]=s;
     return s;
+  }
+  // The lists are emitted empty and filled on the first focus of a field that
+  // uses them (_dlFill) — a few thousand <option>s per list would otherwise
+  // be re-parsed on every editor render (measured ~60-100 ms on a 4k-entity
+  // install).
+  _dlAll(){
+    return'<datalist id="roc-entities"></datalist>'
+      +Object.keys(ROC_ENT_LISTS).map(function(k){return'<datalist id="roc-ent-'+k+'"></datalist>';}).join('');
+  }
+  _dlFill(id){
+    if(!this._hass||!/^roc-ent/.test(id||''))return;
+    const dl=this.querySelector('#'+id);
+    if(!dl||dl.hasChildNodes())return;
+    dl.innerHTML=this._dlOptions(id==='roc-entities'?undefined:id.slice(8));
+  }
+  // Under every entity field: the entity's friendly name, or "not found"
+  // when Home Assistant doesn't know it (typo, renamed entity). Templates and
+  // empty fields get no hint. Fields sitting directly in a grid/flex row get
+  // only the border + tooltip so the row layout isn't disturbed.
+  _entHint(inp){
+    const h=this._hass;if(!h||!inp)return;
+    const v=(inp.value||'').trim();
+    const parent=inp.parentElement;
+    const inline=!!parent&&/grid|flex/.test(parent.style&&parent.style.display||'');
+    let hint=inp.nextElementSibling;
+    if(!(hint&&hint.classList&&hint.classList.contains('roc-ent-hint')))hint=null;
+    const ids=v?v.split(',').map(function(x){return x.trim();}).filter(Boolean):[];
+    let msg='',bad=false;
+    if(ids.length&&!/[{}]/.test(v)){
+      const miss=ids.filter(function(id){return!h.states[id];});
+      if(miss.length){bad=true;msg='Not found in Home Assistant: '+miss.join(', ');}
+      else if(ids.length===1){const fn=h.states[ids[0]].attributes&&h.states[ids[0]].attributes.friendly_name;if(fn&&fn!==ids[0])msg=String(fn);}
+    }
+    if(bad||inp.hasAttribute('data-roc-ent-bad'))inp.style.borderColor=bad?'var(--warning-color,#ffa600)':'';
+    if(bad)inp.setAttribute('data-roc-ent-bad','');else inp.removeAttribute('data-roc-ent-bad');
+    if(msg||inp.hasAttribute('data-roc-hint-t')){inp.title=msg;if(msg)inp.setAttribute('data-roc-hint-t','');else inp.removeAttribute('data-roc-hint-t');}
+    if(inline)return;
+    if(!msg){if(hint)hint.style.display='none';return;}
+    if(!hint){
+      hint=document.createElement('div');hint.className='roc-ent-hint';
+      hint.style.cssText='font-size:11px;line-height:1.3;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+      inp.parentNode.insertBefore(hint,inp.nextSibling);
+    }
+    hint.textContent=msg;hint.style.display='block';
+    hint.style.color=bad?'var(--warning-color,#ffa600)':'var(--secondary-text-color)';
+  }
+  _entHints(){
+    const self=this;
+    if(!this._hass)return;
+    this.querySelectorAll('input[list^="roc-ent"]').forEach(function(i){self._entHint(i);});
+    this._hintsDone=true;
+  }
+  // Element ids: empty, characters outside A-Za-z0-9_-, or a duplicate within
+  // the same list → red border + a one-line message under the field.
+  _idHints(){
+    const self=this;
+    ROC_ID_ATTRS.forEach(function(attr){
+      const els=Array.prototype.slice.call(self.querySelectorAll('input['+attr+']'));
+      const count={};
+      els.forEach(function(el){const v=el.value.trim();if(v)count[v]=(count[v]||0)+1;});
+      els.forEach(function(el){
+        const v=el.value.trim();
+        let msg='';
+        if(!v)msg='ID is required';
+        else if(/[^A-Za-z0-9_-]/.test(v))msg='Use only letters, digits, _ and -';
+        else if(count[v]>1)msg='Duplicate ID — another item in this list uses "'+v+'"';
+        el.style.borderColor=msg?'var(--error-color,#d33)':'';
+        let n=el.nextElementSibling;
+        if(!(n&&n.classList&&n.classList.contains('roc-id-err')))n=null;
+        if(!msg){if(n)n.style.display='none';return;}
+        if(!n){n=document.createElement('div');n.className='roc-id-err';n.style.cssText='color:var(--error-color,#d33);font-size:11px;line-height:1.3;margin-top:2px;';el.parentNode.insertBefore(n,el.nextSibling);}
+        n.textContent=msg;n.style.display='block';
+      });
+    });
   }
 
   // Active room view for editing (the room whose sections are shown)
@@ -5373,9 +5470,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   set hass(h){
     this._hass=h;
     if(this._prevCard)try{this._prevCard.hass=h;}catch(_){}
-    const dl=this.querySelector('#roc-entities');
-    if(dl&&!dl.hasChildNodes())
-      dl.innerHTML=this._dlOptions();
+    if(!this._hintsDone)this._entHints();
   }
 
   // Interactive preview inside the editor — a real card instance mirroring
@@ -6707,7 +6802,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div style="height:26px;border-radius:6px;background:#101014;position:relative;overflow:hidden;margin-bottom:8px;"><div style="position:absolute;inset:0;background:'+prevBg+';"></div></div>';
     h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">ID</label><input data-gw-id="'+i+'" type="text" value="'+this._e(g.id||'')+'"'+this._inp('')+'></div>';
-    h+='<div><label class="roc-l">Light / switch entity</label><input data-gw-ent="'+i+'" type="text" list="roc-entities" placeholder="light.xyz" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Light / switch entity</label><input data-gw-ent="'+i+'" type="text" list="roc-ent-light_switch" placeholder="light.xyz" value="'+this._e(g.entity||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Shape</label><select data-gw-shape="'+i+'"'+this._inp('')+'>';
     [['circle','circle — lamp / bulb'],['ellipse','ellipse — LED strip / window'],['wash','wash — directional spill on a wall']]
       .forEach(function(o){h+='<option value="'+o[0]+'"'+((g.shape||'circle')===o[0]?' selected':'')+'>'+o[1]+'</option>';});
@@ -6897,7 +6992,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='<div><label class="roc-l">Height</label><input data-bl-h="'+i+'" type="text" value="'+this._e(b.height||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">z-index</label><input data-bl-z="'+i+'" type="number" value="'+this._e(String(b.z_index??6))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">';
-    h+='<div><label class="roc-l">Entity</label><input type="text" list="roc-entities" data-bl-entity="'+i+'" value="'+this._e(b.entity||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Entity</label><input type="text" list="roc-ent-cover" data-bl-entity="'+i+'" value="'+this._e(b.entity||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Attribute</label><input data-bl-attr="'+i+'" type="text" value="'+this._e(b.attribute||'')+'"'+this._inp('')+'></div>';
     h+='<div><label class="roc-l">Min</label><input data-bl-min="'+i+'" type="number" value="'+this._e(String(b.min??0))+'"'+this._inp('font-size:12px;')+'></div>';
     h+='<div><label class="roc-l">Max</label><input data-bl-max="'+i+'" type="number" value="'+this._e(String(b.max??100))+'"'+this._inp('font-size:12px;')+'></div>';
@@ -6980,6 +7075,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   _render(){
     if(!this._config)return;
     this._actOrig={};
+    this._hintsDone=false;
     const c=this._config;
     const cR=this._roomView();
     const hasRooms=Array.isArray(c.rooms)&&c.rooms.length>0;
@@ -7023,7 +7119,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div style="margin-top:8px;"><label class="roc-l">Base image conditions (optional — swap image by entity state)</label><textarea id="base_image_conditions" rows="3"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_bicYaml)+'</textarea></div>';
     basicInner+='</div>';
     basicInner+='<div id="bg-pane-camera" style="display:'+(_bgMode==='camera'?'grid':'none')+';grid-template-columns:2fr 1fr;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Base camera (live snapshot as background)</label><input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Base camera (live snapshot as background)</label><input id="base_camera" type="text" list="roc-ent-camera" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Snapshot refresh (s) — a periodic photo, not a continuous video stream</label><input id="camera_refresh" type="number" min="2" step="1" value="'+(cR.camera_refresh??10)+'"'+this._inp('')+'></div>';
     basicInner+='</div>';
     basicInner+='<div style="margin-top:8px;">'+this._actFieldsHtml('room',{tap:cR.tap_action},{slots:['tap'],labels:{tap:'Tap on the image'}})+'</div>';
@@ -7034,7 +7130,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     basicInner+='<div><label class="roc-l">Cards below image (YAML)</label><textarea id="cards_below_yaml" rows="4"'+this._inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+this._e(_cbY)+'</textarea></div>';
     const _woEd=typeof cR.weather_overlay==='string'?{entity:cR.weather_overlay}:(cR.weather_overlay||{});
     basicInner+='<div style="border-top:1px dashed var(--divider-color);margin-top:6px;padding-top:8px;display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;">';
-    basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-entities" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
+    basicInner+='<div><label class="roc-l">Weather overlay entity (optional — rain/snow effect)</label><input id="weather_entity" type="text" list="roc-ent-weather" placeholder="weather.home" value="'+this._e(_woEd.entity||'')+'"'+this._inp('')+'></div>';
     basicInner+='<div><label class="roc-l">Effect</label><select id="weather_effect"'+this._inp('')+'>';
     ['auto','rain','rain-heavy','snow','snow-heavy','fog','lightning'].forEach(function(ef){basicInner+='<option value="'+ef+'"'+((_woEd.effect||'auto')===ef?' selected':'')+'>'+ef+'</option>';});
     basicInner+='</select></div>';
@@ -7317,7 +7413,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<label class="roc-l">Background image URL *</label>'
       +'<input id="base_image" type="text" placeholder="/local/room.webp or https://…" value="'+this._e(_realImg?cR.base_image:'')+'"'+this._inp('')+'>'
       +'<div style="font-size:11px;color:var(--secondary-text-color);margin:10px 0 4px;">… or use a live camera snapshot instead:</div>'
-      +'<input id="base_camera" type="text" list="roc-entities" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'>'
+      +'<input id="base_camera" type="text" list="roc-ent-camera" placeholder="camera.living_room" value="'+this._e(cR.base_camera||'')+'"'+this._inp('')+'>'
       +'</div></div>';
     // Layout tab (v4) — two profiles (portrait/landscape) on a % grid of the viewport
     const _ly=c.layout||{};
@@ -7418,14 +7514,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     lcInner+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><label style="font-size:12px;font-weight:500;">Lights &amp; switches</label><button id="add-lc-ent" style="padding:2px 10px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:11px;">+ Entity</button></div>';
     for(let i=0;i<_lcEnts.length;i++){
       lcInner+='<div style="display:grid;grid-template-columns:1fr 130px 28px;gap:6px;align-items:center;margin-bottom:4px;">';
-      lcInner+='<input type="text" list="roc-entities" data-lc-ent="'+i+'" placeholder="light.bedroom_1 · switch.lamp" value="'+this._e(_lcEnts[i].entity||'')+'"'+this._inp('font-size:12px;')+'>';
+      lcInner+='<input type="text" list="roc-ent-light_switch" data-lc-ent="'+i+'" placeholder="light.bedroom_1 · switch.lamp" value="'+this._e(_lcEnts[i].entity||'')+'"'+this._inp('font-size:12px;')+'>';
       lcInner+='<input type="text" data-lc-name="'+i+'" placeholder="Name (optional)" value="'+this._e(_lcEnts[i].name||'')+'"'+this._inp('font-size:12px;')+'>';
       lcInner+='<button data-rm-lc-ent="'+i+'" style="background:none;border:none;cursor:pointer;color:var(--error-color);font-size:18px;line-height:1;padding:0;">&#x2715;</button>';
       lcInner+='</div>';
     }
     if(!_lcEnts.length)lcInner+='<p style="font-size:11px;color:var(--secondary-text-color);margin:4px 0;">No entities yet — add a light or switch.</p>';
     lcInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px;">';
-    lcInner+='<div><label class="roc-l">Lux sensor</label><input id="lc-lux" type="text" list="roc-entities" placeholder="sensor.kitchen_illuminance" value="'+this._e(_lc.lux_sensor||'')+'"'+this._inp('')+'></div>';
+    lcInner+='<div><label class="roc-l">Lux sensor</label><input id="lc-lux" type="text" list="roc-ent-sensor" placeholder="sensor.kitchen_illuminance" value="'+this._e(_lc.lux_sensor||'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Lux max (full brightness)</label><input id="lc-luxmax" type="number" min="1" placeholder="50" value="'+this._e(_lc.lux_max!=null?String(_lc.lux_max):'')+'"'+this._inp('')+'></div>';
     lcInner+='<div><label class="roc-l">Style</label><select id="lc-style"'+this._inp('')+'><option value=""'+(_lc.style==='native'?'':' selected')+'>material-slider-card (external)</option><option value="native"'+(_lc.style==='native'?' selected':'')+'>Built-in pills (icon · name · %)</option></select></div>';
     lcInner+='<div><label class="roc-l">Columns</label><input id="lc-cols" type="number" min="1" placeholder="'+(_lcEnts.length||3)+'" value="'+this._e(_lc.columns!=null?String(_lc.columns):'')+'"'+this._inp('')+'></div>';
@@ -7483,9 +7579,8 @@ class RoomOverlayCardEditor extends HTMLElement{
       +_panel('responsive',respInner)
       +_panel('rooms',roomsInner)
       +_panel('sections',sectionsInner);
-    const _dlOpts=this._dlOptions();
-    this.innerHTML='<datalist id="roc-entities">'+_dlOpts+'</datalist>'
-      +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}.roc-ed.roc-hideadv .roc-adv{display:none;}</style>'
+    this.innerHTML=this._dlAll()
+      +'<style>.roc-ed .roc-in{width:100%;padding:6px;border-radius:4px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);box-sizing:border-box;}.roc-ed .roc-l{font-size:12px;display:block;margin-bottom:4px;}.roc-ed.roc-hideadv .roc-adv{display:none;}'+ROC_ED_NARROW_CSS+'</style>'
       +'<div class="roc-ed'+(this._showAdv?'':' roc-hideadv')+'" style="padding:8px;">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 8px;">'
       +'<span style="display:flex;align-items:baseline;gap:8px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span><span style="font-size:11px;color:var(--secondary-text-color);">v'+ROC_VERSION+'</span></span>'
@@ -7625,6 +7720,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       advT.style.color=self._showAdv?'var(--primary-color)':'var(--primary-text-color)';
     });
     this._listen();
+    this._entHints();
+    this._idHints();
+    if(!this._hintBound){
+      this._hintBound=true;
+      const hSelf=this;
+      this.addEventListener('change',function(e){const t=e.target;if(t&&t.tagName==='INPUT'&&/^roc-ent/.test(t.getAttribute('list')||''))hSelf._entHint(t);});
+      this.addEventListener('focusin',function(e){const t=e.target;if(t&&t.tagName==='INPUT')hSelf._dlFill(t.getAttribute('list'));});
+      this.addEventListener('input',function(e){const t=e.target;if(t&&t.tagName==='INPUT')hSelf._dlFill(t.getAttribute('list'));if(t&&t.tagName==='INPUT'&&ROC_ID_ATTRS.some(function(a){return t.hasAttribute(a);}))hSelf._idHints();});
+    }
     this._bindHassComponents();
     this._mountPreview();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
@@ -7920,7 +8024,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
     h+='<div><label class="roc-l">Value text (optional — overrides the live entity state text)</label><input data-tf-value="'+key+'" type="text" value="'+e(tile.value===undefined?'':tile.value)+'"'+this._inp('')+'></div>';
-    h+='<div><label class="roc-l">Progress entity (0-100 sensor, optional)</label><input data-tf-progress="'+key+'" type="text" list="roc-entities" value="'+e(tile.progress||'')+'"'+this._inp('')+'></div>';
+    h+='<div><label class="roc-l">Progress entity (0-100 sensor, optional)</label><input data-tf-progress="'+key+'" type="text" list="roc-ent-progress" value="'+e(tile.progress||'')+'"'+this._inp('')+'></div>';
     h+='</div>';
     h+=this._actFieldsHtml('tf:'+key,{tap:tile.tap_action,double_tap:tile.double_tap_action,hold:tile.hold_action},{entity:tile.entity});
     const quick=Array.isArray(tile.quick)?tile.quick:[];
