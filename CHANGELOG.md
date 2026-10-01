@@ -1,5 +1,31 @@
 # Changelog
 
+## [6.23.0] - 2026-10-01
+
+### Performance: the nav strip survives a room switch
+
+`ANALYSIS_v6.15.9.md` Part 3: a room switch re-ran the whole `_render()` — including the nav
+strip, and with `nav.live: full`/`custom` one complete mini `room-overlay-card` per room, all
+thrown away and mounted again on every switch. That was most of the switch's cost.
+
+- On a room switch, when the nav markup is the same apart from which room is active (same rooms,
+  style, size, profile, follow button…), the **existing strip is carried over** into the new DOM:
+  thumbnails, chips (with their current values), live mini cards, `nav.cards` and the follow
+  button stay mounted. Only the active marker moves (`data-act`, border / dot / tab colour, new
+  `aria-current`). Horizontal/vertical scroll position of the strip is kept.
+- Every other full render (config change, profile flip, editor) still rebuilds the strip from
+  scratch, so nothing can go stale.
+- Measured live on the 6-room dashboard (`nav.live: full`), synchronous `_switchRoom()` cost:
+  **~33 ms → ~9 ms** (median, 2×8 switches per version); the mini cards are the same instances
+  before and after.
+- The bigger refactor of `_render()` into per-region renders is not needed for this and stays on
+  the backlog.
+- **No configuration changes.**
+
+Verified: 10 new assertions in `tests/design.test.js` (same nav element and chip elements after a
+switch, active marker moved, clicks on the kept strip, rebuild on other renders, live minis kept,
+dots style); all four tiers green on source and `dist/`.
+
 ## [6.22.0] - 2026-10-01
 
 ### Editor: a real YAML parser (vendored js-yaml) for every YAML box

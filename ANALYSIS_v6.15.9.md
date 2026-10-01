@@ -18,7 +18,8 @@ v6.18.0: editor action builder (zones, icons, tiles, room tap) — done.
 v6.19.0: entity suggestions with names + domain filter, entity/ID checks, phone-width grids — done.
 v6.20.0: #9/#10 (old #7/#15) editor preview follows every edit, no remount; Remove → Undo bar — done.
 v6.21.0: id auto-fix, Electricity recipe guard, stub/picker preview — done.
-v6.22.0: #8 vendored js-yaml for every YAML box — done. Next: `_render()` split + persistent nav.
+v6.22.0: #8 vendored js-yaml for every YAML box — done.
+v6.23.0: persistent nav strip/minis across room switches (switch ~33 → ~9 ms) — done; full `_render()` split deferred.
 Design mockup: Claude artifact "Room Card – návrh designu".
 
 **Baseline:** `smoke` + `render` (773 PASS) + `lifecycle` (42 PASS) all green. Every finding in

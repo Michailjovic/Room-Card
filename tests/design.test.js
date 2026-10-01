@@ -482,6 +482,37 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   vt.value="{{ is_state('a','on') }}";
   t('yaml editor: a one-line template too',ye._collectConfig().sections[0].visible_template==="{{ is_state('a','on') }}");
 
+  // ---- 15. v6.23.0 persistent nav strip across room switches -------------------------
+  const navRooms=[{id:'a',name:'A',base_image:'/a.webp',chips:[{entity:'sensor.t'}]},{id:'b',name:'B',base_image:'/b.webp'},{id:'c',name:'C',base_image:'/c.webp'}];
+  const pn=await mount({layout:LYN,nav:{style:'thumbnails'},rooms:JSON.parse(JSON.stringify(navRooms))},{'sensor.t':st('21.5',{unit_of_measurement:'°C'},'sensor.t')});
+  const nav0=pn.shadowRoot.querySelector('.roc-nav');
+  const chip0=pn.shadowRoot.querySelector('[data-thumb-chips="0"] .roc-navchip');
+  t('nav: thumbnail strip rendered, room 0 active',!!nav0&&pn.shadowRoot.querySelector('[data-thumb="0"]').hasAttribute('data-act'));
+  pn._switchRoom(1,1,true);await sleep(10);
+  const nav1=pn.shadowRoot.querySelector('.roc-nav');
+  t('nav: a room switch keeps the same nav element',nav1===nav0&&pn._roomIdx===1);
+  t('nav: chips survive (same elements, still filled)',pn.shadowRoot.querySelector('[data-thumb-chips="0"] .roc-navchip')===chip0&&chip0.textContent.length>0,chip0&&chip0.textContent);
+  const th=i=>pn.shadowRoot.querySelector('[data-thumb="'+i+'"]');
+  t('nav: the active marker moved',!th(0).hasAttribute('data-act')&&th(1).hasAttribute('data-act')&&th(1).getAttribute('aria-current')==='true'&&/primary-color/.test(th(1).style.borderColor)&&th(0).style.borderColor==='transparent',[th(0).style.borderColor,th(1).style.borderColor]);
+  t('nav: the image region was rebuilt for the new room',pn._roomCfg&&pn._roomCfg.base_image==='/b.webp');
+  th(2).dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await sleep(10);
+  t('nav: clicking a thumbnail of the kept strip still switches',pn._roomIdx===2&&pn.shadowRoot.querySelector('.roc-nav')===nav0&&th(2).hasAttribute('data-act'));
+  pn._render();
+  t('nav: any other full render (config change) rebuilds the strip',pn.shadowRoot.querySelector('.roc-nav')!==nav0&&pn.shadowRoot.querySelector('[data-thumb="2"]').hasAttribute('data-act'));
+  // live minis stay mounted
+  const pl=await mount({layout:LYN,nav:{style:'thumbnails',live:'full'},rooms:JSON.parse(JSON.stringify(navRooms))},{'sensor.t':st('21.5',{},'sensor.t')});
+  const minis0=Object.keys(pl._navMiniEls).map(k=>pl._navMiniEls[k].el);
+  t('nav live: minis mounted',minis0.length===3&&minis0.every(m=>m&&m.isConnected));
+  pl._switchRoom(2,1,true);await sleep(10);
+  const minis1=Object.keys(pl._navMiniEls).map(k=>pl._navMiniEls[k].el);
+  t('nav live: a room switch keeps every mini card (no re-mount)',minis1.length===3&&minis1.every((m,i)=>m===minis0[i]&&m.isConnected));
+  // dots
+  const pd=await mount({layout:LYN,nav:{style:'dots'},rooms:JSON.parse(JSON.stringify(navRooms))},{});
+  const dnav=pd.shadowRoot.querySelector('.roc-nav');
+  pd._switchRoom(1,1,true);await sleep(10);
+  const dots=pd.shadowRoot.querySelectorAll('[data-nav-room]');
+  t('nav dots: strip kept, active dot recoloured',pd.shadowRoot.querySelector('.roc-nav')===dnav&&/primary-color/.test(dots[1].style.background)&&/divider-color/.test(dots[0].style.background),[dots[0].style.background,dots[1].style.background]);
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();
