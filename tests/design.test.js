@@ -513,6 +513,37 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const dots=pd.shadowRoot.querySelectorAll('[data-nav-room]');
   t('nav dots: strip kept, active dot recoloured',pd.shadowRoot.querySelector('.roc-nav')===dnav&&/primary-color/.test(dots[1].style.background)&&/divider-color/.test(dots[0].style.background),[dots[0].style.background,dots[1].style.background]);
 
+  // ---- 16. v6.24.0 reduced motion, aria-modal + focus return, untagged scan ------------
+  const rmCss=Array.from(pn.shadowRoot.querySelectorAll('style')).map(x=>x.textContent).join('');
+  t('reduced motion: CSS block stops decorative animation (hold ring exempt)',/@media \(prefers-reduced-motion:reduce\)\{\*:not\(\.roc-hold\):not\(\.roc-hold \*\)\{animation:none!important;\}/.test(rmCss));
+  const _mm=w.matchMedia,RP=w.customElements.get('room-overlay-card').prototype,_ap=RP._attachParallax;let apCalls=0;
+  RP._attachParallax=function(){apCalls++;return _ap.apply(this,arguments);};
+  w.matchMedia=q=>({matches:/reduce/.test(q),media:q,addListener(){},removeListener(){},addEventListener(){},removeEventListener(){}});
+  await mount({base_image:'/local/x.webp',layout:LY,parallax:true},{});
+  t('reduced motion: parallax tilt not attached',apCalls===0);
+  w.matchMedia=_mm;
+  await mount({base_image:'/local/x.webp',layout:LY,parallax:true},{});
+  t('without the preference parallax still attaches (control)',apCalls>0,apCalls);
+  RP._attachParallax=_ap;
+  // aria-modal + focus return
+  const am=await mount({base_image:'/local/x.webp',layout:LY,
+    sections:[{id:'s1',title:'One'},{id:'s2',title:'Two',backdrop:false},{id:'s3',title:'Three',placement:'full',backdrop:false}],
+    icons:[{id:'i1',icon:'mdi:robot',top:'10%',left:'10%',tap_action:{action:'open-section',section:'s1'}}]},{});
+  const pnl=id=>am.shadowRoot.querySelector('[data-section-panel="'+id+'"]');
+  t('aria-modal on panels with a backdrop (and full-screen ones), not on non-modal sheets',
+    pnl('s1').getAttribute('aria-modal')==='true'&&!pnl('s2').hasAttribute('aria-modal')&&pnl('s3').getAttribute('aria-modal')==='true');
+  const amIco=am.shadowRoot.querySelector('[data-ico="i1"]');amIco.focus();
+  am._openSection('s1');
+  t('panel open moves focus to its close button',am.shadowRoot.activeElement===pnl('s1').querySelector('.roc-panel-close'));
+  am._closeSection();
+  t('closing hands focus back to the launcher that opened it',am.shadowRoot.activeElement===amIco);
+  // untagged scan
+  const us=w.document.createElement('room-overlay-card-editor');w.document.body.appendChild(us);
+  us.setConfig({base_image:'/local/x.webp',layout:LY,sections:[{id:'cv',title:'Covers',card:{type:'entities',entities:['cover.okno',{entity:'cover.dvere'}]}}]});
+  us.hass=mkHass({'cover.okno':st('open',{},'cover.okno'),'cover.dvere':st('open',{},'cover.dvere'),'cover.garaz':st('open',{},'cover.garaz')});
+  const unt=us._scanUntagged(us._config).map(x=>x.entity);
+  t('untagged scan: entities inside a section\'s embedded card count as reachable',unt.indexOf('cover.okno')<0&&unt.indexOf('cover.dvere')<0&&unt.indexOf('cover.garaz')>=0,unt);
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

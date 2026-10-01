@@ -20,6 +20,7 @@ v6.20.0: #9/#10 (old #7/#15) editor preview follows every edit, no remount; Remo
 v6.21.0: id auto-fix, Electricity recipe guard, stub/picker preview — done.
 v6.22.0: #8 vendored js-yaml for every YAML box — done.
 v6.23.0: persistent nav strip/minis across room switches (switch ~33 → ~9 ms) — done; full `_render()` split deferred.
+v6.24.0: reduced motion, aria-modal, Czech comments, untagged scan — done. Open: docs/HACS, native pills default (tablet test), B3/B4 diagnostic.
 Design mockup: Claude artifact "Room Card – návrh designu".
 
 **Baseline:** `smoke` + `render` (773 PASS) + `lifecycle` (42 PASS) all green. Every finding in

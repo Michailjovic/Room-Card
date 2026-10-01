@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.24.0] - 2026-10-01
+
+### Accessibility + small fixes
+
+The small items left from `ANALYSIS_v6.15.9.md`.
+
+- **`prefers-reduced-motion`.** With the OS/browser setting on: decorative animations stop
+  (blink, pulse, glow, spin, weather rain/snow/fog/flash, vacuum motion, light-glow flicker —
+  elements show their static state; the long-press ring still fills, it is feedback), section
+  panels and their backdrop appear without sliding, a room switch crossfades instead of sliding,
+  and the parallax tilt is not attached.
+- **Section panels: `aria-modal` + focus return.** A panel that has a backdrop (the default) or is
+  full-screen is announced as a modal dialog (`aria-modal="true"`); a sheet with `backdrop: false`
+  stays non-modal. Closing a panel returns keyboard focus to the launcher / tile that opened it
+  (opening already moved it to the close button).
+- **"Find untagged devices"** ignored entities that a section shows through its own embedded
+  `card:` (e.g. a covers section built from a `vertical-stack`), so they were offered as untagged.
+  Entity ids anywhere inside a section's card now count as reachable. Live: the two covers of the
+  user's *Covers* section are no longer listed.
+- The last Czech code comments translated to English.
+- **No configuration changes.**
+
+Verified: 7 new assertions in `tests/design.test.js`; all four tiers green on source and `dist/`.
+
 ## [6.23.0] - 2026-10-01
 
 ### Performance: the nav strip survives a room switch

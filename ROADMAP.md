@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.23.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.24.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -103,6 +103,7 @@ failure broke HACS installs.
 | **v6.21.0** | Editor polish — one-click ID fix, Electricity recipe only with its card installed, card-picker preview sketch (16:9) |
 | **v6.22.0** | Editor YAML boxes on vendored **js-yaml** (multi-line strings, block scalars, comments, line-numbered errors); unquoted Jinja still accepted |
 | **v6.23.0** | **Persistent nav strip** — a room switch keeps thumbnails, chips, live minis and nav cards mounted (switch ~33 → ~9 ms on 6 rooms with `nav.live: full`) |
+| **v6.24.0** | Reduced motion, panel `aria-modal` + focus return, untagged scan sees entities in section cards, English-only comments |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 
