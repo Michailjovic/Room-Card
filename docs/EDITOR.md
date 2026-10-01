@@ -196,7 +196,14 @@ preview panel Home Assistant shows on the right is its own and follows live pres
 won't track the room picker), and — because it's saved — the same safe/draggable behaviour
 carries over to the real card on your dashboard until you switch it off again.
 
-The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y).
+Since v6.20.0 the header preview follows **every** edit as you make it (not only Layout and
+drags), and it is no longer rebuilt after a drag, an add/remove or any other editor refresh — no
+image reload or flicker, and the element you selected stays selected. It is rebuilt only when you
+pick a different room in the editor.
+
+The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y). Removing an item shows a short
+**“Removed Zone: … · UNDO”** bar at the bottom of the editor for 10 seconds — the same undo, one
+tap away on a phone.
 
 ---
 

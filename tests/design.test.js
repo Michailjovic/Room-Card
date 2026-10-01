@@ -352,6 +352,52 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const edCss=Array.from(eh.querySelectorAll('style')).map(x=>x.textContent).join('');
   t('narrow editor: container query folds 4/3-column rows',/container-type:inline-size/.test(edCss)&&/@container \(max-width:500px\)/.test(edCss)&&/@container \(max-width:300px\)/.test(edCss));
 
+  // ---- 12. v6.20.0 preview follows every edit, is not remounted; Remove → Undo toast --
+  const pv=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(pv);
+  pv.setConfig({base_image:'/local/x.webp',layout:LY,test_mode:true,card_id:'pvt',
+    zones:[{id:'z1',top:'10%',left:'10%',width:'5%',height:'5%'},{id:'z2',top:'20%',left:'20%',width:'5%',height:'5%'}]});
+  pv.hass=mkHass({});pv._tab='elements';pv._render();await sleep(20);
+  const pc0=pv._prevCard;
+  t('preview: mounted',!!pc0);
+  let scCount=0;const _sc=pc0.setConfig.bind(pc0);pc0.setConfig=function(c){scCount++;return _sc(c);};
+  const zTop=pv.querySelector('[data-z-top="0"]');zTop.value='33%';zTop.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('preview: a plain field edit reaches the preview (old #7)',pv._prevCard===pc0&&pc0._config.zones[0].top==='33%',pc0._config.zones[0].top);
+  pv._render();
+  t('preview: a full editor render keeps the same preview instance (old #15)',pv._prevCard===pc0&&pv.querySelector('#roc-prev-host').contains(pc0));
+  const scBefore=scCount;pv._render();
+  t('preview: re-render with an unchanged config does not reconfigure it',scCount===scBefore);
+  const dragged=JSON.parse(JSON.stringify(pc0._config));dragged.zones[1].left='44%';
+  const scDrag=scCount;
+  w.dispatchEvent(new w.CustomEvent('roc-pos-update',{detail:{config:dragged}}));
+  t('preview: a drag inside the preview lands in the config…',pv._config.zones[1].left==='44%'&&pv._config._roc_preview===undefined);
+  t('…without rebuilding or reconfiguring the preview',pv._prevCard===pc0&&scCount===scDrag);
+  // Remove → toast → Undo
+  pv.querySelector('details[data-panel="z-1"]')&&(pv.querySelector('details[data-panel="z-1"]').open=true);
+  pv.querySelector('[data-rm-z="1"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  const toast=pv.querySelector('.roc-toast');
+  t('remove: zone gone, preview updated in place',pv._config.zones.length===1&&pv._prevCard===pc0&&pc0._config.zones.length===1);
+  t('remove: toast names the removed item and offers Undo',!!toast&&/Removed Zone: z2/.test(toast.textContent)&&!!toast.querySelector('[data-toast-undo]'),toast&&toast.textContent);
+  t('remove: toast is the last child of the editor root (sticky bottom)',!!toast&&toast.parentElement===pv.querySelector('.roc-ed')&&toast.style.position==='sticky');
+  pv._render();
+  t('remove: toast survives an editor re-render',!!pv.querySelector('.roc-toast'));
+  pv.querySelector('[data-toast-undo]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('undo: the zone is back (config + preview), toast gone',pv._config.zones.length===2&&pv._config.zones[1].id==='z2'&&pv._prevCard._config.zones.length===2&&!pv.querySelector('.roc-toast'));
+  // a click on a non-remove button shows nothing
+  const addZ=pv.querySelector('#add-z');if(addZ)addZ.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+  t('add: no toast for non-remove buttons',!pv.querySelector('.roc-toast'));
+  // Edit mode off → preview dropped
+  const tmB=pv.querySelector('#test_mode');tmB.checked=false;tmB.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('preview: Edit mode off unmounts it',!pv._prevCard&&!pv.querySelector('#roc-prev-host'));
+  // multi-room: picking another room in the editor rebuilds the preview on that room
+  const pm=w.document.createElement('room-overlay-card-editor');
+  w.document.body.appendChild(pm);
+  pm.setConfig({layout:LY,test_mode:true,card_id:'pvm',rooms:[{id:'a',name:'A',base_image:'/a.webp'},{id:'b',name:'B',base_image:'/b.webp'}]});
+  pm.hass=mkHass({});pm._render();await sleep(20);
+  const pmc=pm._prevCard;
+  const rsel=pm.querySelector('#room-select');rsel.value='1';rsel.dispatchEvent(new w.Event('change',{bubbles:true}));
+  t('preview: switching the edited room shows that room',!!pm._prevCard&&pm._prevCard._roomIdx===1);
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

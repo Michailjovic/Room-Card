@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.19.0';
+const ROC_VERSION='6.20.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -5188,6 +5188,30 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.querySelectorAll('input[list^="roc-ent"]').forEach(function(i){self._entHint(i);});
     this._hintsDone=true;
   }
+  // Toast at the bottom of the editor (sticky, so it stays in view while
+  // scrolling). Survives the editor's own re-renders until it times out.
+  _showToast(msg,undo){
+    const self=this;
+    this._toast={msg:msg,undo:!!undo};
+    clearTimeout(this._toastT);
+    this._toastT=setTimeout(function(){self._toast=null;self._paintToast();},10000);
+    this._paintToast();
+  }
+  _paintToast(){
+    const self=this;
+    const root=this.querySelector('.roc-ed');
+    let el=this.querySelector('.roc-toast');
+    if(!this._toast||!root){if(el)el.remove();return;}
+    if(!el){
+      el=document.createElement('div');el.className='roc-toast';el.setAttribute('role','status');
+      el.style.cssText='position:sticky;bottom:8px;z-index:5;margin:10px auto 0;max-width:440px;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 14px;border-radius:8px;background:var(--primary-text-color,#222);color:var(--card-background-color,#fff);font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.35);';
+    }
+    if(el.parentElement!==root)root.appendChild(el);
+    el.innerHTML='<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+escA(this._toast.msg)+'</span>'
+      +(this._toast.undo?'<button type="button" data-toast-undo style="background:none;border:none;color:var(--primary-color,#03a9f4);font-weight:600;font-size:13px;letter-spacing:.04em;cursor:pointer;padding:6px 10px;">UNDO</button>':'');
+    const u=el.querySelector('[data-toast-undo]');
+    if(u)u.addEventListener('click',function(e){e.stopPropagation();self._toast=null;clearTimeout(self._toastT);self._undo();self._paintToast();});
+  }
   // Element ids: empty, characters outside A-Za-z0-9_-, or a duplicate within
   // the same list → red border + a one-line message under the field.
   _idHints(){
@@ -5476,31 +5500,67 @@ class RoomOverlayCardEditor extends HTMLElement{
   // Interactive preview inside the editor — a real card instance mirroring
   // Edit mode (config.test_mode); shown here whenever it's on, since it's the
   // same saved config field that also puts the real dashboard card into it.
+  // The config the in-editor preview card gets: Edit mode forced on, no URL
+  // sync, multi-room locked to the edited room, and — while the shared Global
+  // defaults are being edited — the previewed room's own ROOM_KEYS overrides
+  // stripped so the preview falls through to the values being edited.
+  _previewCfg(src){
+    const cfg=rocClone(src);
+    cfg.test_mode=true;cfg._roc_preview=true;
+    delete cfg.url_sync; // editor preview must not hijack the dashboard URL
+    const _multi=Array.isArray(cfg.rooms)&&cfg.rooms.length>0;
+    if(_multi)cfg.follow_mode='manual'; // lock the preview to the room being edited (no presence jumps)
+    if(_multi&&this._editGlobal){
+      const _gvIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
+      const _gvRoom=cfg.rooms[_gvIdx];
+      if(_gvRoom){
+        const KEEP_VISUAL=['id','name','area_match','base_image','base_camera','camera_refresh','base_image_conditions'];
+        Object.keys(_gvRoom).forEach(function(k){if(!KEEP_VISUAL.includes(k))delete _gvRoom[k];});
+      }
+    }
+    return cfg;
+  }
+  // Push a config into the mounted preview (bug #7, v6.20.0): every fired
+  // change reaches it, not just Layout edits. Skipped when the preview already
+  // shows exactly this (its own drag relayed back, or a re-render).
+  _pushPreview(src){
+    const el=this._prevCard;
+    if(!el||!src||!src.test_mode)return;
+    try{
+      const cfg=this._previewCfg(src);
+      const j=JSON.stringify(cfg);
+      if(j===this._prevPushed)return;
+      this._prevPushed=j;
+      el._editGlobal=this._editGlobal;
+      el.setConfig(cfg);
+      if(Array.isArray(cfg.rooms)&&cfg.rooms.length)el._roomIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
+    }catch(e){console.warn('[room-overlay-card] editor preview update failed:',e);}
+  }
+  // Mounted once and then MOVED into each re-rendered editor (bug #15,
+  // v6.20.0): a drag, an add/remove or any other full editor render used to
+  // throw the preview away and build a new one — image reload, flicker, lost
+  // selection. It is only rebuilt when it shows a different room than the one
+  // being edited (room picker) or Edit mode was off.
   _mountPreview(){
     const host=this.querySelector('#roc-prev-host');
+    const old=this._prevCard;
     this._prevCard=null;
-    if(!host||!this._config||!this._config.test_mode)return;
+    if(!host||!this._config||!this._config.test_mode){this._prevPushed=null;return;}
     try{
-      const el=document.createElement('room-overlay-card');
-      const cfg=rocClone(this._config);
-      cfg.test_mode=true;cfg._roc_preview=true;
-      delete cfg.url_sync; // editor preview must not hijack the dashboard URL
-      const _multi=Array.isArray(cfg.rooms)&&cfg.rooms.length>0;
-      if(_multi)cfg.follow_mode='manual'; // lock the preview to the room being edited (no presence jumps)
-      if(_multi&&this._editGlobal){
-        // Editing the shared top-level defaults: strip every ROOM_KEYS override
-        // from the previewed room except its visual identity (image/camera), so
-        // the preview falls through to the global values being edited instead
-        // of silently showing that room's own (possibly shadowing) overrides.
-        const _gvIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
-        const _gvRoom=cfg.rooms[_gvIdx];
-        if(_gvRoom){
-          const KEEP_VISUAL=['id','name','area_match','base_image','base_camera','camera_refresh','base_image_conditions'];
-          Object.keys(_gvRoom).forEach(function(k){if(!KEEP_VISUAL.includes(k))delete _gvRoom[k];});
-        }
+      const multi=Array.isArray(this._config.rooms)&&this._config.rooms.length>0;
+      const want=multi?Math.max(0,Math.min(this._editRoomIdx,this._config.rooms.length-1)):0;
+      if(old&&old._config&&(!multi||old._roomIdx===want)&&!!old._editGlobal===!!this._editGlobal){
+        host.appendChild(old);
+        this._prevCard=old;
+        if(this._hass)old.hass=this._hass;
+        this._pushPreview(this._config);
+        return;
       }
+      const el=document.createElement('room-overlay-card');
+      const cfg=this._previewCfg(this._config);
       el.setConfig(cfg);
-      if(_multi)el._roomIdx=Math.max(0,Math.min(this._editRoomIdx,cfg.rooms.length-1));
+      this._prevPushed=JSON.stringify(cfg);
+      if(multi)el._roomIdx=want;
       el._editGlobal=this._editGlobal;
       if(this._hass)el.hass=this._hass;
       host.appendChild(el);
@@ -5521,6 +5581,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   _fire(c){
     this._pushHist(c);
     this.dispatchEvent(new CustomEvent('config-changed',{bubbles:true,composed:true,detail:{config:Object.assign({type:'custom:room-overlay-card'},c)}}));
+    this._pushPreview(c);
   }
 
   _pushHist(c){
@@ -5562,16 +5623,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const self=this;
     clearTimeout(this._fdT);
     this._fdT=setTimeout(function(){
-      const cfg=self._collectConfig();
-      self._fire(cfg);
-      if(self._prevCard){
-        try{
-          const pc=rocClone(cfg);pc.test_mode=true;pc._roc_preview=true;delete pc.url_sync;
-          if(Array.isArray(pc.rooms)&&pc.rooms.length)pc.follow_mode='manual';
-          self._prevCard.setConfig(pc);
-          if(Array.isArray(pc.rooms)&&pc.rooms.length)self._prevCard._roomIdx=Math.max(0,Math.min(self._editRoomIdx,pc.rooms.length-1));
-        }catch(e){console.warn('[room-overlay-card] editor live layout preview failed:',e);}
-      }
+      self._fire(self._collectConfig()); // _fire() also updates the preview (v6.20.0)
     },150);
   }
 
@@ -7726,11 +7778,29 @@ class RoomOverlayCardEditor extends HTMLElement{
       this._hintBound=true;
       const hSelf=this;
       this.addEventListener('change',function(e){const t=e.target;if(t&&t.tagName==='INPUT'&&/^roc-ent/.test(t.getAttribute('list')||''))hSelf._entHint(t);});
+      // "Removed … · Undo" toast (v6.20.0): note what a Remove button is about
+      // to delete (capture phase — runs before the button's own handler
+      // re-renders the editor), then show the toast if history moved on.
+      this.addEventListener('click',function(e){
+        const b=e.target&&e.target.closest?e.target.closest('button'):null;
+        if(!b||!Array.prototype.some.call(b.attributes,function(a){return/^data-rm-/.test(a.name);})){hSelf._rmPending=null;return;}
+        // whole-item Remove buttons name the item (its panel's summary); row-level × buttons don't
+        const whole=Array.prototype.some.call(b.attributes,function(a){return/^data-rm-(z|b|el|ico|gw|vw|lbl|g|bl|ov|sec|dtile|grp)$/.test(a.name);});
+        const d=whole?b.closest('details'):null;const sm=d&&d.querySelector('summary');
+        const lbl=sm?sm.textContent.replace(/^[\s\u25B6\u25BA]+/,'').trim():'';
+        hSelf._rmPending={idx:hSelf._histIdx,len:hSelf._hist.length,top:hSelf._hist[hSelf._histIdx],label:lbl};
+      },true);
+      this.addEventListener('click',function(){
+        const p=hSelf._rmPending;hSelf._rmPending=null;
+        if(!p||hSelf._hist[hSelf._histIdx]===p.top)return;
+        hSelf._showToast('Removed'+(p.label?' '+p.label:''),true);
+      });
       this.addEventListener('focusin',function(e){const t=e.target;if(t&&t.tagName==='INPUT')hSelf._dlFill(t.getAttribute('list'));});
       this.addEventListener('input',function(e){const t=e.target;if(t&&t.tagName==='INPUT')hSelf._dlFill(t.getAttribute('list'));if(t&&t.tagName==='INPUT'&&ROC_ID_ATTRS.some(function(a){return t.hasAttribute(a);}))hSelf._idHints();});
     }
     this._bindHassComponents();
     this._mountPreview();
+    this._paintToast();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
     if(c.test_mode){
@@ -7751,6 +7821,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       if(!nc)return;
       // Only accept updates from "our" card (two cards in test mode = cross-talk)
       if(cfgKey(nc)!==cfgKey(self._config))return;
+      const _fromPrev=!!nc._roc_preview;
       // Updates from the embedded editor preview carry forced/stripped fields
       // (see _mountPreview: test_mode forced true, url_sync deleted, multi-room
       // follow_mode forced 'manual' — none of that belongs in the real saved
@@ -7769,6 +7840,8 @@ class RoomOverlayCardEditor extends HTMLElement{
           if(nc.rooms[_gvIdx]&&self._config.rooms[_gvIdx])nc.rooms[_gvIdx]=rocClone(self._config.rooms[_gvIdx]);
         }
       }
+      // A drag inside the preview: it already shows this — don't rebuild it.
+      if(_fromPrev)self._prevPushed=JSON.stringify(self._previewCfg(nc));
       self._config=nc;
       self._render(); // refresh position inputs, otherwise the next edit reverts the drag
       self._fire(nc);

@@ -1,5 +1,31 @@
 # Changelog
 
+## [6.20.0] - 2026-10-01
+
+### Editor: the header preview follows every edit; Remove → Undo bar
+
+Old bugs #7 and #15 (`BUG_UX_ANALYSIS_v6.15.1.md`, `ANALYSIS_v6.15.9.md` Part 1 #9/#10).
+
+- **Preview gets every edit (#7).** The Edit-mode preview in the editor header only received
+  Layout-tab edits and drags; any other change (a zone's position typed in, an action, a colour…)
+  showed only after something forced a full editor re-render. Every fired change now reaches it
+  (`_fire()` → `_pushPreview()`); identical configs are skipped.
+- **Preview is not remounted (#15).** Every full editor render (after a drag, add/remove, undo…)
+  threw the preview card away and built a new one — image reload, flicker, lost selection. The
+  mounted preview is now moved into the new editor DOM and reconfigured in place; a drag made in
+  the preview itself doesn't even reconfigure it (it already shows the result). It is rebuilt only
+  when the editor switches to another room or between a room and *Global*.
+- **Remove → Undo bar.** Removing an item shows *“Removed Zone: zone_tv · UNDO”* at the bottom of
+  the editor (sticky, stays in view while scrolling) for 10 s; UNDO is the existing undo step.
+  Row-level × buttons (a quick action, a filter row) get a plain *Removed* bar.
+- Preview config building moved into one place (`_previewCfg`), shared by mount, update and the
+  drag relay.
+- **No configuration changes.**
+
+Verified: 14 new assertions in `tests/design.test.js`; all four tiers green on source and `dist/`;
+live in the dashboard: a typed zone position moves the zone in the preview, Remove/UNDO by real
+clicks, the preview instance stays the same throughout.
+
 ## [6.19.0] - 2026-10-01
 
 ### Editor: entity suggestions with names, entity / ID checks, phone-width layout
