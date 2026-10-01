@@ -210,6 +210,19 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const ccEl=cv.shadowRoot.querySelector('.roc-cc');
   t('cover control: surface + border tokens',!!ccEl&&/--roc-surface-c/.test(ccEl.getAttribute('style'))&&/--roc-border-c/.test(ccEl.getAttribute('style')));
 
+  // ---- 9. v6.17.1 horizontal dock sizes to its buttons ----------------------------
+  w.innerWidth=390;w.innerHeight=844;
+  const dk=await mount({base_image:'/local/x.webp',
+    layout:{height:'fill',portrait:{rows:['auto','auto','1fr'],place:{image:{row:1},cover:{row:2}}},landscape:{rows:[100],columns:[85,15],place:{image:{row:1,col:1},cover:{row:1,col:2}}}},
+    blinds:[{id:'b',entity:'cover.x',top:'10%',left:'10%',width:'10%',height:'20%',control:{placement:'dock'}}]},{'cover.x':st('open',{current_position:40})});
+  const dkEl=dk.shadowRoot.querySelector('.roc-cc[data-cc-mode="dock"]');
+  t('portrait dock is a horizontal bar',!!dkEl&&dkEl.classList.contains('cc-h'));
+  t('horizontal dock does not collapse below its buttons (flex:0 0 auto, not flex-basis 0)',!!dkEl&&/flex:\s*0 0 auto/.test(dkEl.getAttribute('style')),dkEl&&dkEl.getAttribute('style'));
+  w.innerWidth=1920;w.innerHeight=1080;
+  // jsdom's CSS parser drops the `flex:1 1 0` shorthand, so check the generated markup itself
+  const vHtml=w.coverCtlHtml({id:'b',entity:'cover.x',buttons:['up','stop','down'],presets:[],slider:true,top:'1%',left:'1%',height:'10%',width:'52px',name:''},false,'dock');
+  t('vertical dock still fills its column (flex:1 1 0)',/flex:1 1 0;/.test(vHtml)&&!/flex:0 0 auto/.test(vHtml));
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

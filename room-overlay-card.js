@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.17.0';
+const ROC_VERSION='6.17.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 window.customCards=window.customCards||[];
 window.customCards.push({type:'room-overlay-card',name:'Room Overlay Card',description:'Room visualization with image layers, transitions and clickable zones (v'+ROC_VERSION+')',preview:true,documentationURL:'https://github.com/Michailjovic/Room-Card',
@@ -1106,7 +1106,13 @@ function coverCtlHtml(cc,mob,mode){
   const horiz=!!mob; // float: portrait bottom bar · dock: grid-derived (rocCoverHoriz)
   const base='background:var(--roc-surface-c,rgba(20,22,26,.85));border:1px solid var(--roc-border-c,rgba(255,255,255,.08));color:var(--roc-text-c,#fff);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-sizing:border-box;border-radius:14px;'; // v6.17.0: design tokens (same dimensions)
   let pos;
-  if(dock)pos='position:relative;flex:1 1 0;min-width:0;min-height:0;padding:'+(horiz?'4px 10px':'8px 5px')+';'; // permanently visible member of the cover grid region
+  // Permanently visible member of the cover grid region. Vertical dock (side
+  // column): fill the column (flex:1 1 0). Horizontal dock (a bar in an `auto`
+  // row, typically under the photo on a phone): size to the buttons — with
+  // flex-basis 0 the bar collapsed to its padding inside the auto row and the
+  // 30-34px buttons overflowed it, so the region clipped their top/bottom and
+  // the bar's own outline ran through the middle of them (v6.17.1).
+  if(dock)pos='position:relative;'+(horiz?'flex:0 0 auto;':'flex:1 1 0;')+'min-width:0;min-height:0;padding:'+(horiz?'4px 10px':'8px 5px')+';';
   else if(horiz)pos='display:none;position:absolute;z-index:120;left:6px;right:6px;bottom:6px;height:54px;padding:0 12px;';
   else pos='display:none;position:absolute;z-index:120;top:'+cc.top+';left:'+cc.left+';height:'+cc.height+';width:'+cc.width+';padding:8px 5px;';
   const hasUp=cc.buttons.indexOf('up')>=0,hasDown=cc.buttons.indexOf('down')>=0,hasStop=cc.buttons.indexOf('stop')>=0;

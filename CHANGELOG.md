@@ -1,5 +1,24 @@
 # Changelog
 
+## [6.17.1] - 2026-10-01
+
+### Fix: a horizontal docked cover control collapsed to its padding
+
+On a phone (portrait profile, cover control `placement: dock` in an `auto` grid row, i.e. a bar
+under the photo) the control was laid out with `flex: 1 1 0` — right for the vertical dock in a
+side column, wrong for a bar in an `auto` row: the bar collapsed to ~10 px of padding while its
+30–34 px buttons overflowed it. The region clipped the buttons' top and bottom (the active preset's
+outline looked like a pair of brackets) and, since v6.17.0 gave the bar a hairline border, that
+border ran straight through the middle of the buttons. It was there before v6.17.0 too, just
+invisible on a black background.
+
+- **What changed:** a horizontal dock now uses `flex: 0 0 auto` and sizes to its buttons; the
+  vertical dock keeps `flex: 1 1 0` and still fills its column.
+- **No configuration changes.**
+
+Verified: 3 new assertions in `tests/design.test.js` (horizontal bar sizes to content, vertical
+dock unchanged); all four tiers green on source and `dist/`.
+
 ## [6.17.0] - 2026-10-01
 
 ### Design refresh, part 2: built-in light pills + cover control in the shared look
