@@ -448,6 +448,40 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const secEl=fx.querySelector('[data-sec-id="0"]');const secErr=secEl&&secEl.nextElementSibling;
   t('id fix: section ids (referenced elsewhere) get the message but no auto-rename',!!secErr&&secErr.classList.contains('roc-id-err')&&secErr.style.display==='block'&&!secErr.querySelector('[data-id-fix]'));
 
+  // ---- 14. v6.22.0 real YAML parser (vendored js-yaml) ------------------------------
+  const YY={P:w._yParse,D:w._yDump};
+  t('yaml: js-yaml is embedded without leaking a global',typeof w.jsyaml==='undefined'&&typeof YY.P==='function');
+  const mlT={template:"{% if is_state('a','on') %}\n  yes\n{% endif %}",n:1};
+  t('yaml: its own dump of a multi-line template parses back (old #9)',JSON.stringify(YY.P(YY.D(mlT)))===JSON.stringify(mlT),YY.D(mlT));
+  t('yaml: a trailing comment is not part of the value',YY.P('action: toggle # note').action==='toggle');
+  t('yaml: block scalars | and > work',YY.P('a: |\n  x\n  y\nb: >\n  p\n  q').a==='x\ny\n'&&YY.P('a: |\n  x\nb: >\n  p\n  q').b==='p q\n');
+  t('yaml: an unquoted Jinja value is still accepted as a string',YY.P("visible_template: {{ is_state('light.a','on') }}").visible_template==="{{ is_state('light.a','on') }}");
+  t('yaml: Jinja inside a block scalar is left untouched',YY.P("t: |\n  {{ x }}\n  {% if y %}1{% endif %}").t==="{{ x }}\n{% if y %}1{% endif %}\n");
+  t('yaml: flow maps / lists, quoted on stays a string',JSON.stringify(YY.P('target: {entity_id: [light.a, light.b]}\nstate: "on"'))==='{"target":{"entity_id":["light.a","light.b"]},"state":"on"}');
+  let yErrMsg='';try{YY.P('a:\n - x\n  y: [');}catch(e){yErrMsg=w.rocYamlErr(e);}
+  t('yaml: errors name the line',/line \d+/.test(yErrMsg),yErrMsg);
+  // editor boxes
+  const ye=w.document.createElement('room-overlay-card-editor');w.document.body.appendChild(ye);
+  ye.setConfig({base_image:'/local/x.webp',layout:LY,sections:[{id:'s1',title:'S'}],
+    zones:[{id:'z1',top:'1%',left:'1%',width:'5%',height:'5%',visible:{condition:'template',value_template:"{% if is_state('a','on') %}\n1\n{% endif %}"}}]});
+  ye.hass=mkHass({});ye._tab='elements';ye._render();
+  const yo=ye._collectConfig();
+  t('yaml editor: a multi-line template in a YAML box survives an untouched save',yo.zones[0].visible.value_template==="{% if is_state('a','on') %}\n1\n{% endif %}",yo.zones[0].visible);
+  const visBox=ye.querySelector('[data-z-vis="0"]');
+  visBox.value='just some text';
+  const yo2=ye._collectConfig();
+  t('yaml editor: plain text in a mapping box is rejected, previous value kept',JSON.stringify(yo2.zones[0].visible)===JSON.stringify(yo.zones[0].visible)&&/key: value/.test((visBox.nextElementSibling||{}).textContent||''));
+  visBox.value='condition: state  # comment\nentity: light.a\nstate: "on"';
+  const yo3=ye._collectConfig();
+  t('yaml editor: comments are dropped, not glued to the value',yo3.zones[0].visible.condition==='state'&&yo3.zones[0].visible.state==='on');
+  ye._tab='sections';ye._render();
+  const vt=ye.querySelector('[data-sec-vt="0"]');
+  vt.value="{% if is_state('a','on') %}\ntrue\n{% endif %}";
+  const yo4=ye._collectConfig();
+  t('yaml editor: a raw multi-line Jinja template is accepted for visible_template',yo4.sections[0].visible_template==="{% if is_state('a','on') %}\ntrue\n{% endif %}",yo4.sections[0].visible_template);
+  vt.value="{{ is_state('a','on') }}";
+  t('yaml editor: a one-line template too',ye._collectConfig().sections[0].visible_template==="{{ is_state('a','on') }}");
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

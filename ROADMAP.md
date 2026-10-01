@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.21.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.22.0** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -101,6 +101,7 @@ failure broke HACS installs.
 | **v6.19.0** | **Editor: entity fields** — suggestions with friendly names, domain-filtered where it makes sense, "not found" hint, ID check (empty / invalid / duplicate), phone-width field rows, lazily filled suggestion lists |
 | **v6.20.0** | **Editor: preview + undo** — header preview receives every edit (old #7) and is no longer remounted on each editor render (old #15); Remove → *UNDO* bar |
 | **v6.21.0** | Editor polish — one-click ID fix, Electricity recipe only with its card installed, card-picker preview sketch (16:9) |
+| **v6.22.0** | Editor YAML boxes on vendored **js-yaml** (multi-line strings, block scalars, comments, line-numbered errors); unquoted Jinja still accepted |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

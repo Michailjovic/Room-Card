@@ -125,3 +125,6 @@ npm run build:verify    # build, then run the full test suite against the minifi
 ## License
 
 MIT © 2025–2026 Michailjovic
+
+The card embeds [js-yaml](https://github.com/nodeca/js-yaml) 4.3.2 (MIT, © Vitaly Puzrin) for the
+editor's YAML fields; its license text is reproduced in `room-overlay-card.js`.

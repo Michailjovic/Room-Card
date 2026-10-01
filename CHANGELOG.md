@@ -1,5 +1,41 @@
 # Changelog
 
+## [6.22.0] - 2026-10-01
+
+### Editor: a real YAML parser (vendored js-yaml) for every YAML box
+
+`ANALYSIS_v6.15.9.md` Part 1 #8 (old #9). The editor's YAML fields used a hand-rolled subset
+parser that silently got real YAML wrong:
+
+- its own dump of a **multi-line string** (any multi-line Jinja template) parsed back to `null`;
+- **block scalars** `|` / `>` became `null`;
+- `action: toggle # note` became the action **`toggle # note`** — comments were glued to values;
+- anchors stayed as literal text.
+
+All YAML boxes now parse and dump with **js-yaml 4.3.2** — the library Home Assistant's own
+frontend uses for its YAML editor — embedded in the card file (MIT licence text included next to
+it), wrapped so it adds nothing to `window`.
+
+- **Unquoted Jinja values keep working.** `visible_template: {{ is_state(...) }}` is a flow mapping
+  to a real YAML parser, but the old parser accepted it and configs were typed that way — such
+  values are quoted before parsing (never inside a `|` / `>` block).
+- **Plain text in a mapping box is now an error** (*Expected "key: value" lines or a "- " list*),
+  previous value kept — with a real parser a stray line of text is a valid *string* and must not
+  land in the config. `visible_template` of a section accepts a bare template, including a raw
+  multi-line one.
+- **Error messages** come from the parser and name the line and column.
+- Dumped YAML follows js-yaml's style (YAML 1.1 booleans such as `on`/`yes` quoted, multi-line
+  strings as `|-` blocks, long strings never folded).
+- The `window.YAML` hook is gone — it was never present in Home Assistant.
+- Bundle: +16.6 KB gzip (`dist/` 120 KB gzip).
+- **No configuration changes.**
+
+Verified: 13 new assertions in `tests/design.test.js` (the four old failure modes, Jinja quoting
+in and outside block scalars, error line numbers, editor boxes); the existing YAML smoke tests
+pass unchanged against the new parser; all four tiers green on source and `dist/`; live: the real
+6-room config loaded into the new editor and collected back from every tab of every room
+(5 205 YAML boxes rendered) is byte-identical, no box shows an error.
+
 ## [6.21.0] - 2026-10-01
 
 ### Editor polish: one-click ID fix, Electricity recipe guard, a real card-picker preview
