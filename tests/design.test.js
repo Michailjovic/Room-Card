@@ -544,6 +544,35 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   const unt=us._scanUntagged(us._config).map(x=>x.entity);
   t('untagged scan: entities inside a section\'s embedded card count as reachable',unt.indexOf('cover.okno')<0&&unt.indexOf('cover.dvere')<0&&unt.indexOf('cover.garaz')>=0,unt);
 
+  // ---- 17. v6.24.1 full-screen panels in portrait, backdrop click switches sections --------
+  const pmCfg=()=>({base_image:'/local/x.webp',layout:LY,
+    sections:[{id:'s1',title:'One'},{id:'s2',title:'Two',placement:'dialog'},{id:'s3',title:'Three',placement_portrait:'inline'}],
+    icons:[{id:'l1',icon:'mdi:a',top:'10%',left:'10%',tap_action:{action:'open-section',section:'s1'}},{id:'l2',icon:'mdi:b',top:'10%',left:'30%',tap_action:{action:'open-section',section:'s2'}},{id:'l3',icon:'mdi:c',top:'10%',left:'50%',tap_action:{action:'toggle',entity:'light.x'}}]});
+  w.innerWidth=390;w.innerHeight=844;
+  const pp=await mount(pmCfg(),{});
+  const ppn=id=>pp.shadowRoot.querySelector('[data-section-panel="'+id+'"]');
+  t('portrait: panels cover the whole screen (roc-pm, fixed via CSS)',ppn('s1').classList.contains('roc-pm')&&ppn('s2').classList.contains('roc-pm')&&pp.shadowRoot.querySelector('[data-section-backdrop]').classList.contains('roc-pm'));
+  t('portrait: placement_portrait: inline keeps the in-card panel',!ppn('s3').classList.contains('roc-pm'));
+  t('phone: a section without columns: falls back to 1 column, one with columns: keeps it',!ppn('s1').classList.contains('roc-cols-set')&&/@media \(max-width:640px\)\{\.roc-panel:not\(\.roc-cols-set\) \.roc-panel-body\{grid-template-columns:1fr;\}/.test(Array.from(pp.shadowRoot.querySelectorAll('style')).map(x=>x.textContent).join('')));
+  t('portrait: a full-screen panel is aria-modal',ppn('s1').getAttribute('aria-modal')==='true');
+  const ppCss=Array.from(pp.shadowRoot.querySelectorAll('style')).map(x=>x.textContent).join('');
+  t('portrait: the full-screen rule is position:fixed; inset:0',/\.roc-panel\.roc-pm\[data-section-panel\]\{position:fixed;inset:0;/.test(ppCss));
+  w.innerWidth=1920;w.innerHeight=1080;
+  const pl2=await mount(pmCfg(),{});
+  t('landscape: panels stay inside the card',!pl2.shadowRoot.querySelector('[data-section-panel="s1"]').classList.contains('roc-pm'));
+  // backdrop click-through
+  const bd=pl2.shadowRoot.querySelector('[data-section-backdrop]');
+  const icoEl=id=>pl2.shadowRoot.querySelector('[data-ico="'+id+'"]');
+  let under=[];pl2.shadowRoot.elementsFromPoint=function(){return under;};
+  pl2._openSection('s1');
+  under=[bd,icoEl('l2')];bd.dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:10,clientY:10}));
+  t('backdrop click on another section\'s launcher switches straight to it',pl2._sectionOpen==='s2',pl2._sectionOpen);
+  under=[bd,icoEl('l3')];bd.dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:10,clientY:10}));
+  t('backdrop click on a non-section icon only closes (no toggle fired)',pl2._sectionOpen===null);
+  pl2._openSection('s2');
+  under=[bd,icoEl('l2')];bd.dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:10,clientY:10}));
+  t('backdrop click on the open section\'s own launcher closes it',pl2._sectionOpen===null);
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

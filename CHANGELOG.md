@@ -1,5 +1,29 @@
 # Changelog
 
+## [6.24.1] - 2026-10-02
+
+### Fix: section panels on phones; switch sections without closing first
+
+- **Phones (portrait profile): panels cover the whole screen.** A panel was positioned inside the
+  card's image region, which in a portrait cockpit is often a strip a few hundred px tall under the
+  nav and companion cards — the panel was cut off there with the rest of the screen empty. In the
+  portrait profile every panel is now a full-screen overlay (`position: fixed`, safe-area aware,
+  announced as a modal dialog); Home Assistant's more-info dialog still opens on top of it.
+  `placement_portrait: inline` on a section keeps the old in-card panel.
+- **Switching sections with a panel open.** The backdrop sat over the section launchers, so a
+  click on another launcher only closed the open panel. A backdrop click that lands on a launcher
+  (an icon or zone whose `tap_action` is `open-section`) now opens that section directly; on the
+  open section's own launcher it closes it; anywhere else it closes as before. Other actions
+  under the backdrop are never fired.
+- **Phone panel columns.** Below 640 px panels used one column regardless of the section's
+  `columns:`; an explicit `columns:` is now respected (e.g. `columns: 2` for tall photo tiles),
+  sections without it keep one column.
+- **No breaking configuration changes.** New optional section key `placement_portrait`.
+
+Verified: 10 new assertions in `tests/design.test.js`; all four tiers green on source and `dist/`;
+live: phone viewport (390×844) — panel 390×844 over the HA header, more-info on top; desktop — a
+real click on another launcher behind the backdrop switched the open section directly.
+
 ## [6.24.0] - 2026-10-01
 
 ### Accessibility + small fixes

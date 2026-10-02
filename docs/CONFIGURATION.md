@@ -1148,8 +1148,9 @@ icons:
 | `title` | string | `id` | `Appliances` |
 | `icon` | string | — (no icon shown) | `mdi:washing-machine` |
 | `placement` | `sheet-right` \| `sheet-bottom` \| `full` \| `dialog` | `sheet-right` | `dialog` |
+| `placement_portrait` | `screen` \| `inline` | `screen` | `inline` — in the portrait profile (phones) a panel covers the whole screen; `inline` keeps it inside the card's image area (v6.24.1) |
 | `size` | CSS length | `420px` (sheet-right) / `80%` (sheet-bottom) / `620px` (dialog); ignored by `full` | `340px` |
-| `columns` | number | `2` | `3` |
+| `columns` | number | `2` (on screens under 640 px: `1` unless set explicitly) | `3` |
 | `subtitle` | string | — (hidden) | `2 running` |
 | `badge` | `auto` \| `none` | `auto` | `none` |
 | `backdrop` | boolean | `true` | `false` |
