@@ -1,5 +1,40 @@
 # Changelog
 
+## [6.25.0] - 2026-10-05
+
+### Multi-row navigation, sharper thumbnails
+
+- **`nav.rows` — thumbnails in a grid of N rows.** Six rooms on a phone no longer have to share
+  one row: `rows: {portrait: 2}` gives 3 + 3. Plain number or `{portrait, landscape}`; a profile
+  left out keeps one row (no fallback to the other profile). Each row is `mobile_height` tall on
+  portrait, `height` on landscape.
+- **`nav.cards_position: side | below`.** Where the strip cards (`nav.cards`, e.g. an alert
+  ticker) go: beside the grid and as tall as all its rows, or on their own row underneath. Unset
+  keeps the old placement (below on portrait, beside on landscape). Per-profile form accepted.
+- **GUI:** *Rooms & menu → Navigation menu* — *Thumbnail rows — portrait / landscape* and *Strip
+  cards*. The navigation form also stops dropping nav keys it has no field for (`dim_inactive`,
+  `auto_breakpoint`, …) when it saves.
+- **Live minis fill narrow thumbnails.** A `full`/`custom` mini was always scaled to the
+  thumbnail's width; a thumbnail taller than that (a phone strip, a 3-column grid) showed an empty
+  band under the room. It now covers the thumbnail (height-fit, centred) in that case; wide
+  thumbnails are unchanged.
+- **Sharper thumbnails — no moiré.** Fine regular detail (underfloor-heating pipes, slats, tiles)
+  shrunk ~10× by the browser's fast scaler turned into false diagonal patterns. Live minis and
+  `composite` thumbnails now draw every image from a copy resampled once with a high-quality
+  filter to its on-screen size (`createImageBitmap` `resizeQuality: 'high'`, step-down canvas
+  fallback; cached per image + 16-px size bucket; two at a time; original shown until ready, and
+  kept if the browser can't resample). The full-size room always uses the original files.
+- **No breaking configuration changes.** Without `rows`/`cards_position` the strip markup is
+  byte-identical to v6.24.1.
+
+Verified: 18 new assertions in `tests/design.test.js` (grid columns/rows, side/below sizing,
+portrait-only keys leave landscape byte-identical, editor round-trip incl. a preserved
+`dim_inactive`, HQ target sizing); all four tiers green. Headless Chromium (412×860 @2x, 6 rooms,
+`live: full`): `rows: 2` + `side` → 3 + 3 thumbnails 62×48 with the card 197×102 beside them,
+`below` → 129×48 thumbnails and the card under them, minis fill their thumbnails and draw from
+`blob:` HQ copies. The moiré itself was reproduced in the user's Chrome on the real
+`podlahovka-*.webp` overlays and gone with the same `createImageBitmap` resampling.
+
 ## [6.24.1] - 2026-10-02
 
 ### Fix: section panels on phones; switch sections without closing first

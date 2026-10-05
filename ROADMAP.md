@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.24.1** (2026-10-01, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.25.0** (2026-10-05, v5.2.0/v5.3.0 reserved/unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -105,6 +105,7 @@ failure broke HACS installs.
 | **v6.23.0** | **Persistent nav strip** — a room switch keeps thumbnails, chips, live minis and nav cards mounted (switch ~33 → ~9 ms on 6 rooms with `nav.live: full`) |
 | **v6.24.0** | Reduced motion, panel `aria-modal` + focus return, untagged scan sees entities in section cards, English-only comments |
 | **v6.24.1** | Fix: full-screen section panels in portrait (`placement_portrait: inline` to opt out), backdrop click on a launcher switches sections, phone panels honour `columns:` |
+| **v6.25.0** | `nav.rows` + `nav.cards_position` (multi-row thumbnail grid, GUI), live minis cover narrow thumbnails, HQ-resampled thumbnail images (no moiré), GUI keeps nav keys it has no field for |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

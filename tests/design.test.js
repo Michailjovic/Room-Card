@@ -573,6 +573,48 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   under=[bd,icoEl('l2')];bd.dispatchEvent(new w.MouseEvent('click',{bubbles:true,clientX:10,clientY:10}));
   t('backdrop click on the open section\'s own launcher closes it',pl2._sectionOpen===null);
 
+  // ---- 18. v6.25.0 nav.rows / nav.cards_position + HQ thumbnail images --------
+  const r6=['a','b','c','d','e','f'].map(id=>({id,base_image:'/local/'+id+'.webp'}));
+  const nrCfg=nav=>({base_image:'/local/x.webp',layout:LYN,nav:Object.assign({height:'75px',cards:[{card:{type:'custom:nope-card'}}]},nav),rooms:JSON.parse(JSON.stringify(r6))});
+  const navOf=el=>el.shadowRoot.querySelector('.roc-nav');
+  w.innerWidth=390;w.innerHeight=844;
+  const n2=await mount(nrCfg({rows:2,cards_position:'side'}),{});
+  const g2=navOf(n2).querySelector('.roc-thumbgrid');
+  t('rows: 2 → thumbnails live in a grid',!!g2&&g2.querySelectorAll('.roc-thumb').length===6);
+  t('rows: 2 with 6 rooms → 3 stretchy columns on portrait',!!g2&&/grid-template-columns:\s*repeat\(3,\s*minmax\(0(px)?,\s*1fr\)\)/.test(g2.getAttribute('style')),g2&&g2.getAttribute('style'));
+  t('rows: each row is mobile_height (48px default) tall',!!g2&&/grid-auto-rows:\s*48px/.test(g2.getAttribute('style')));
+  const nc2=navOf(n2).querySelector('[data-nav-card="0"]');
+  t('cards_position: side → card spans both rows',!!nc2&&/height:\s*calc\(2 \* 48px \+ 6px\)/.test(nc2.getAttribute('style')),nc2&&nc2.getAttribute('style'));
+  t('cards_position: side → no row break before the card',!navOf(n2).querySelector('div[style*="flex-basis:100%"]'));
+  const nb=await mount(nrCfg({rows:2,cards_position:'below'}),{});
+  t('cards_position: below → a row break, card back at nav.height',!!navOf(nb).querySelector('div[style*="flex-basis:100%"]')&&/height:\s*75px/.test(navOf(nb).querySelector('[data-nav-card="0"]').getAttribute('style')));
+  const nd=await mount(nrCfg({rows:2}),{});
+  t('portrait default (no cards_position) keeps the card on its own row, as before',!!navOf(nd).querySelector('div[style*="flex-basis:100%"]'));
+  w.innerWidth=1920;w.innerHeight=1080;
+  const base=await mount(nrCfg({}),{});
+  const lp=await mount(nrCfg({rows:{portrait:2},cards_position:{portrait:'side'}}),{});
+  t('rows/cards_position for portrait only leave the landscape strip byte-identical',navOf(lp).outerHTML===navOf(base).outerHTML);
+  const l2=await mount(nrCfg({rows:2}),{});
+  const lg=navOf(l2).querySelector('.roc-thumbgrid');
+  t('landscape rows: fixed item width columns (derived from height × aspect)',!!lg&&/repeat\(3,\s*calc\(75px \* /.test(lg.getAttribute('style')),lg&&lg.getAttribute('style'));
+  // editor round-trip
+  const ne=w.document.createElement('room-overlay-card-editor');
+  ne.setConfig(Object.assign(nrCfg({rows:{portrait:2},dim_inactive:false}),{}));ne.hass={states:{},user:{name:'x'}};w.document.body.appendChild(ne);ne._tab='rooms';ne._render();await sleep(10);
+  const rp=ne.querySelector('#nav-rows-portrait'),rl=ne.querySelector('#nav-rows-landscape'),cp=ne.querySelector('#nav-cards-pos');
+  t('editor: rows fields show the per-profile value',!!rp&&rp.value==='2'&&!!rl&&rl.value==='',[rp&&rp.value,rl&&rl.value]);
+  let no=ne._collectConfig();
+  t('editor: rows {portrait: 2} survives a save',JSON.stringify(no.nav.rows)==='{"portrait":2}',no.nav.rows);
+  t('editor: a nav key with no GUI field (dim_inactive) survives a save',no.nav.dim_inactive===false,no.nav);
+  rl.value='2';cp.value='side';no=ne._collectConfig();
+  t('editor: equal rows collapse to a plain number; cards_position written',no.nav.rows===2&&no.nav.cards_position==='side',[no.nav.rows,no.nav.cards_position]);
+  rp.value='1';rl.value='';cp.value='';no=ne._collectConfig();
+  t('editor: rows 1 / auto remove both keys',no.nav.rows===undefined&&no.nav.cards_position===undefined,no.nav);
+  // HQ resampling helpers
+  t('rocHqTarget: 1792 px wide pipes into a 172×97 device-px thumb → 176 px copy',w.rocHqTarget({w:1792,h:1008},172,97)===176,w.rocHqTarget({w:1792,h:1008},172,97));
+  t('rocHqTarget: ≤2× downscale → no copy (0)',w.rocHqTarget({w:800,h:450},420,236)===0);
+  t('rocHqUrl: no createImageBitmap (jsdom) → original URL',w.rocHqUrl('/local/p.webp',100,60)==='/local/p.webp');
+  t('a full-size card never swaps its images (_hq is a no-op outside minis)',base._hq('/local/p.webp')==='/local/p.webp');
+
   console.log(fails?('FAILURES: '+fails):'ALL DESIGN TESTS PASSED');
   process.exit(fails?1:0);
 })();

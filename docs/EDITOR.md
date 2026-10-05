@@ -103,7 +103,10 @@ mock-up.*
   up immediately instead of on save.*
 
 - **Rooms & menu** — four accordions: Room identity, Presence & follow, Navigation menu, and
-  Deep-linking. Add / remove / reorder rooms here. While the card is still single-room and the
+  Deep-linking. *Navigation menu* has **Thumbnail rows — portrait / landscape** and **Strip
+  cards** (beside / below) for a multi-row thumbnail grid (v6.25.0, see
+  [Configuration → Thumbnail rows](CONFIGURATION.md#thumbnail-rows-and-the-strip-cards-v6250)); nav keys
+  the form has no field for (`dim_inactive`, …) are kept on save. Add / remove / reorder rooms here. While the card is still single-room and the
   connected Home Assistant exposes its area registry, a **Create a room for each area** button
   offers to bootstrap the whole `rooms:` list from `hass.areas` in one click, with each area's
   entities pre-assigned as icons — see

@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.24.1';
+const ROC_VERSION='6.25.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -89,6 +89,94 @@ function vwIconHtml(vw){
 function escSel(s){return(typeof CSS!=='undefined'&&CSS.escape)?CSS.escape(String(s)):String(s).replace(/["\\\]]/g,'\\$&');}
 // Escape single quotes for CSS url('...') contexts
 function escUrl(s){return String(s??'').replace(/'/g,'%27');}
+// v6.25.0: high-quality downscaled copies of images for nav thumbnails.
+// A photo or overlay drawn ~10x smaller than its file lets the browser's fast
+// scaler alias fine detail (thin parallel lines: underfloor-heating pipes,
+// slats, tiles) into false diagonal patterns (moire). Every image a thumbnail
+// shows is resampled ONCE with a proper filter to the size it is really drawn
+// at and served from a blob: URL. Only thumbnails use this — the full-size
+// card always gets the original file. Unsupported/failed → the original URL.
+const ROC_HQ_NAT=new Map();   // url → {w,h} | null (probing) | false (give up)
+const ROC_HQ=new Map();       // url|W → blob URL | null (in progress)
+const ROC_HQ_WAIT=new Map();  // key → [callbacks]
+const ROC_HQ_Q=[];let ROC_HQ_RUN=0;
+function rocHqPump(){
+  while(ROC_HQ_RUN<2&&ROC_HQ_Q.length){ // two at a time: decoding a 2k image is not free on a wall tablet
+    const job=ROC_HQ_Q.shift();ROC_HQ_RUN++;
+    Promise.resolve().then(job).catch(function(){}).then(function(){ROC_HQ_RUN--;rocHqPump();});
+  }
+}
+function rocHqWait(key,cb){if(!cb)return;const l=ROC_HQ_WAIT.get(key);if(l)l.push(cb);else ROC_HQ_WAIT.set(key,[cb]);}
+function rocHqFire(key){const l=ROC_HQ_WAIT.get(key);ROC_HQ_WAIT.delete(key);if(l)l.forEach(function(f){try{f();}catch(_){}});}
+function rocHqTarget(nat,devW,devH){
+  const sc=Math.max(devW/nat.w,devH/nat.h);  // background-size: cover
+  if(!(sc<0.5))return 0;                     // ≤2x smaller: the browser's own filter is fine
+  return Math.max(16,Math.ceil(nat.w*sc/16)*16); // 16-px buckets — a 1-px resize never re-samples
+}
+async function rocHqResize(bmp,W,H){
+  let src=bmp;
+  try{
+    src=await createImageBitmap(bmp,0,0,bmp.width,bmp.height,{resizeWidth:W,resizeHeight:H,resizeQuality:'high'});
+  }catch(_){
+    // No resize options (older Safari): halve step by step on a canvas — each
+    // ≤2x step is filtered properly, unlike one big jump.
+    let cw=bmp.width,ch=bmp.height,cur=bmp;
+    while(cw/2>=W){
+      cw=Math.round(cw/2);ch=Math.round(ch/2);
+      const k=document.createElement('canvas');k.width=cw;k.height=ch;
+      const kx=k.getContext('2d');kx.imageSmoothingEnabled=true;kx.imageSmoothingQuality='high';kx.drawImage(cur,0,0,cw,ch);cur=k;
+    }
+    src=cur;
+  }
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const cx=cv.getContext('2d');cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,W,H);
+  if(src!==bmp&&src.close)try{src.close();}catch(_){}
+  const blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
+  return blob?URL.createObjectURL(blob):null;
+}
+// devW/devH: device-pixel size of the box the image covers. Returns the HQ
+// blob URL when it is ready; otherwise the original URL, queues the work and
+// calls onReady once it lands.
+function rocHqUrl(url,devW,devH,onReady){
+  url=String(url||'');
+  if(!url||!(devW>0)||!(devH>0)||/^(data|blob):/i.test(url)||typeof createImageBitmap!=='function'||typeof fetch!=='function'||typeof URL==='undefined'||!URL.createObjectURL)return url;
+  const nat=ROC_HQ_NAT.get(url);
+  if(nat===false)return url;
+  if(nat===null){rocHqWait('n|'+url,onReady);return url;}
+  if(nat){
+    const W=rocHqTarget(nat,devW,devH);if(!W)return url;
+    const key=url+'|'+W,got=ROC_HQ.get(key);
+    if(got)return got;
+    rocHqWait(key,onReady);
+    if(got===undefined){
+      ROC_HQ.set(key,null);
+      ROC_HQ_Q.push(async function(){
+        let bmp=null;
+        try{
+          const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
+          bmp=await createImageBitmap(await r.blob());
+          const u=await rocHqResize(bmp,W,Math.max(1,Math.round(nat.h*W/nat.w)));
+          if(u)ROC_HQ.set(key,u);else ROC_HQ_NAT.set(url,false);
+        }catch(_){ROC_HQ_NAT.set(url,false);}
+        finally{if(bmp&&bmp.close)try{bmp.close();}catch(_){} rocHqFire(key);}
+      });
+      rocHqPump();
+    }
+    return url;
+  }
+  // First sight of this URL: learn its natural size (one decode), then ask again.
+  ROC_HQ_NAT.set(url,null);rocHqWait('n|'+url,onReady);
+  ROC_HQ_Q.push(async function(){
+    try{
+      const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
+      const bmp=await createImageBitmap(await r.blob());
+      ROC_HQ_NAT.set(url,{w:bmp.width,h:bmp.height});if(bmp.close)bmp.close();
+    }catch(_){ROC_HQ_NAT.set(url,false);}
+    finally{rocHqFire('n|'+url);}
+  });
+  rocHqPump();
+  return url;
+}
 // Parse an aspect ratio: number, numeric string, or "W/H" → ratio (w/h) or null
 function rocRatio(r){
   if(r==null||r==='')return null;
@@ -2301,10 +2389,32 @@ class RoomOverlayCard extends HTMLElement{
       const _thSize='height:'+(_navMob?(navCfg.mobile_height||'48px'):nh)+';';
       const _navBreak=_navMob?'<div style="flex-basis:100%;height:0;"></div>':'';
       const _tabFlex=(nwRaw==='auto'&&!_navSide)?'flex:1 1 0;min-width:0;justify-content:center;':'flex:none;';
+      // v6.25.0: nav.rows / nav.cards_position — thumbnails in a grid of N rows
+      // (e.g. 3+3 on a phone) with the strip cards beside the grid (spanning
+      // every row) or on their own row below it. Both take a plain value or
+      // {portrait, landscape}. A profile left out gets the default — on purpose
+      // NOT tVal()'s fallback to the other profile: rows: {portrait: 2} must not
+      // also turn the landscape strip into two rows. Neither key set → the
+      // pre-v6.25.0 strip, byte for byte (the _navGrid=false path below).
+      const _navPV=function(v){return(v!=null&&typeof v==='object'&&!Array.isArray(v))?v[_rt]:v;};
+      const _nRows=Math.max(1,Math.min(6,parseInt(_navPV(navCfg.rows),10)||1));
+      const _cpos=_navPV(navCfg.cards_position);
+      const _navGrid=navStyle==='thumbnails'&&!_navSide&&(_nRows>1||_cpos==='side'||_cpos==='below');
+      const _cardsBelow=_navGrid&&(_cpos==='below'||(_cpos!=='side'&&_navMob));
+      const _rowH=_navMob?(navCfg.mobile_height||'48px'):nh;     // height of ONE thumbnail row
+      const _gridStretch=_navMob||nwRaw==='auto';                // columns share the width vs fixed item width
+      const _gridH=_nRows>1?'calc('+_nRows+' * '+_rowH+' + '+((_nRows-1)*6)+'px)':_rowH;
+      const _gridCols=Math.max(1,Math.ceil((cAll.rooms||[]).length/_nRows));
+      const _gridOpen=_navGrid?'<div class="roc-thumbgrid" style="display:grid;grid-template-columns:repeat('+_gridCols+','+(_gridStretch?'minmax(0,1fr)':((nwRaw&&nwRaw!=='auto')?nwRaw:_thDerived))+');grid-auto-rows:'+_rowH+';gap:6px;min-width:0;'+(_gridStretch?(_cardsBelow?'flex:1 1 100%;':'flex:1 1 0;'):'flex:none;')+'">':'';
+      const _gridClose=_navGrid?'</div>'+(_cardsBelow?'<div style="flex-basis:100%;height:0;"></div>':''):'';
       // nav.cards: arbitrary HA cards inside the strip ({width, card, placement} or plain card config)
       const _navCardOne=function(cc,ci){
         const w=cc&&cc.width;
-        const sz=_navSide
+        const sz=_navGrid
+          ?(_cardsBelow
+            ?('height:'+nh+';'+(w?'flex:none;width:'+w+';':'flex:1 1 0;min-width:0;'))
+            :('height:'+_gridH+';'+(w?'flex:none;width:'+w+';':(_gridStretch?'flex:1 1 0;min-width:0;':'flex:1 1 auto;min-width:140px;'))))
+          :_navSide
           ?('width:100%;'+(w?'height:'+w+';':'min-height:'+nh+';'))
           :('height:'+nh+';'+(w?'flex:none;width:'+w+';':(_navMob?'flex:1 1 0;min-width:0;':'flex:1 1 auto;min-width:140px;')));
         return'<div data-nav-card="'+ci+'" style="'+sz+'overflow:hidden;border-radius:6px;position:relative;"></div>';
@@ -2321,19 +2431,19 @@ class RoomOverlayCard extends HTMLElement{
       // Built twice: for the active room, and with no room active as a key —
       // a room switch whose key is unchanged keeps the existing nav DOM
       // (v6.23.0, see _navOld below) and only moves the "active" marker.
-      const _navBuild=function(navSelfIdx){return'<div class="roc-nav'+(navCfg.dim_inactive===false?'':' roc-dim')+'" style="display:flex;box-sizing:border-box;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;height:100%;':(_navMob?'flex-wrap:wrap;':'overflow-x:auto;'))+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
+      const _navBuild=function(navSelfIdx){return'<div class="roc-nav'+(navCfg.dim_inactive===false?'':' roc-dim')+'" style="display:flex;box-sizing:border-box;'+(_navSide?'flex-direction:column;overflow-y:auto;overflow-x:hidden;height:100%;':(_navGrid?((_cardsBelow?'flex-wrap:wrap;':'')+(_gridStretch?'':'overflow-x:auto;')):(_navMob?'flex-wrap:wrap;':'overflow-x:auto;')))+'gap:6px;padding:6px;align-items:center;scrollbar-width:thin;">'
         +_navCardsStart
-        +cAll.rooms.map(function(r,ri){
+        +_gridOpen+cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
           if(navStyle==='dots')
             return'<button data-nav-room="'+ri+'" aria-label="'+escA(r.name||r.id)+'" style="width:10px;height:10px;border-radius:50%;border:none;cursor:pointer;background:'+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#666)')+';padding:0;flex:none;"></button>';
           if(navStyle==='tabs')
             return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
           // thumbnails — live mini-render: base image + filter + sensor chips
-          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'"'+(act?' data-act':'')+' tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+_thSize+_thFlex+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_navLiveReal?'':(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':''))+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease,opacity .2s ease;">'
+          return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'"'+(act?' data-act':'')+' tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+(_navGrid?'height:'+_rowH+';min-width:0;':_thSize+_thFlex)+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_navLiveReal?'':(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':''))+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease,opacity .2s ease;">'
             +(_navLiveReal?'<div data-thumb-mini="'+ri+'" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;"></div>':'')
             +'<div data-thumb-chips="'+ri+'" style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;padding:3px 5px;pointer-events:none;font-family:inherit;font-weight:600;font-size:11px;line-height:1.35;font-variant-numeric:tabular-nums;text-shadow:0 1px 2px rgba(0,0,0,0.9);color:var(--roc-text-c);"></div></div>';
-        }).join('')+_navBreak+_navCardsEnd+_fbHtml+'</div>';};
+        }).join('')+(_navGrid?_gridClose:_navBreak)+_navCardsEnd+_fbHtml+'</div>';};
       navHtml=_navBuild(navSelfIdx);
       _navKey=_navBuild(-1);
     }
@@ -2634,6 +2744,7 @@ class RoomOverlayCard extends HTMLElement{
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
     this._contentEl=this.shadowRoot.querySelector('.content');
+    if(this._config&&this._config._roc_mini&&this._miniScale>0)this._hqRefresh(); // v6.25.0: a re-render re-wrote the base URL
     this._wrapEl=this.shadowRoot.querySelector('.wrap');
     this._cardEl=this.shadowRoot.querySelector('ha-card');
     const content=this._contentEl;
@@ -2733,17 +2844,29 @@ class RoomOverlayCard extends HTMLElement{
         });
         if(window.ResizeObserver){
           const _miniMap=navSelf._navMiniEls;
+          // Fit: width-fit, top-anchored (as always) — unless the thumb is
+          // TALLER than the width-fitted mini (narrow thumbs: a phone strip, a
+          // 3-column nav.rows grid), which used to leave an empty band under
+          // the room. Then cover by height, centred horizontally (v6.25.0).
+          // Both the thumb AND the mini are observed: the mini only gets its
+          // real height after its first render.
+          const _fit=function(rec){
+            const w=rec.thumb.clientWidth||0,h=rec.thumb.clientHeight||0,mh=rec.el.offsetHeight||0;
+            let sc=w>0?w/rec.widthRef:0,tx=0;
+            if(sc>0&&mh>0&&h>mh*sc+0.5){sc=h/mh;tx=(w-rec.widthRef*sc)/2;}
+            rec.el.style.transform=sc>0?((tx?'translateX('+tx.toFixed(2)+'px) ':'')+'scale('+sc+')'):'';
+            rec.el._miniScale=sc; // v6.25.0: HQ thumbnail images need the real drawn size
+            if(sc>0&&rec.el._hqRefresh)rec.el._hqRefresh();
+          };
           navSelf._navMiniRo=new ResizeObserver(function(entries){
             for(const en of entries){
-              const _ri=en.target.dataset.thumb;
-              const rec=_miniMap[_ri];if(!rec)continue;
-              const w=en.contentRect.width||0;
-              rec.el.style.transform=w>0?'scale('+(w/rec.widthRef)+')':'';
+              for(const _ri in _miniMap){const rec=_miniMap[_ri];if(rec&&(rec.thumb===en.target||rec.el===en.target))_fit(rec);}
             }
           });
           for(const _ri in this._navMiniEls){
+            const rec=this._navMiniEls[_ri];
             const _thumbHost=navSelf.shadowRoot.querySelector('[data-thumb="'+_ri+'"]');
-            if(_thumbHost)navSelf._navMiniRo.observe(_thumbHost);
+            if(_thumbHost&&rec){rec.thumb=_thumbHost;navSelf._navMiniRo.observe(_thumbHost);navSelf._navMiniRo.observe(rec.el);}
           }
         }
       }
@@ -4421,6 +4544,31 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
+  // v6.25.0: nav minis draw their images from HQ-resampled copies (rocHqUrl).
+  // _miniScale is set by the parent's ResizeObserver; the box is measured in
+  // _hqRefresh (not per _update — no layout read on every state change).
+  _hq(url){
+    const c=this._config,b=this._hqBox;
+    if(!url||!c||!c._roc_mini||!b)return url;
+    const self=this;
+    return rocHqUrl(url,b.w,b.h,function(){self._hqRefresh();});
+  }
+  _hqRefresh(){
+    if(!this._config||!this._config._roc_mini)return;
+    clearTimeout(this._hqT);const self=this;
+    this._hqT=setTimeout(function(){
+      if(!self.isConnected||!(self._miniScale>0))return;
+      const st=self._elContent&&self._elContent();if(!st||!st.offsetWidth)return;
+      const d=(window.devicePixelRatio||1)*self._miniScale;
+      self._hqBox={w:st.offsetWidth*d,h:st.offsetHeight*d};
+      const c=self._roomCfg||self._config;
+      if(self._baseEl&&c.base_image&&!c.base_camera&&!(c.base_image_conditions&&c.base_image_conditions.length)){
+        const bg="url('"+escUrl(self._hq(c.base_image))+"')";
+        if(self._baseEl.style.backgroundImage!==bg)self._baseEl.style.backgroundImage=bg;
+      }
+      if(self._hass)try{self._update();}catch(_){}
+    },60);
+  }
   _update(){
     if(!this._hass||!this._config||!this._rendered)return;
     // Throttled root-height re-check piggybacked on state updates: leaving
@@ -4471,7 +4619,7 @@ class RoomOverlayCard extends HTMLElement{
           if(bc.condition===undefined){_bimg=bc.image;continue;}
           if(evalCond(bc.condition,s)){_bimg=bc.image;break;}
         }
-        if(_bimg){const _bbg='url(\''+escUrl(_bimg)+'\')';if(this._baseEl.style.backgroundImage!==_bbg)this._baseEl.style.backgroundImage=_bbg;}
+        if(_bimg){const _bbg='url(\''+escUrl(this._hq(_bimg))+'\')';if(this._baseEl.style.backgroundImage!==_bbg)this._baseEl.style.backgroundImage=_bbg;}
       }
     }
     for(const ov of(c.overlays||[])){
@@ -4480,7 +4628,7 @@ class RoomOverlayCard extends HTMLElement{
       this._setGrpVis(el,gShow);
       if(!gShow)continue;
       if(ov.visible_template!==undefined)setSt(el,'display',(this._tmplVis['o:'+ov.id]??true)?'':'none');
-      const img=this._ovImg(ov);
+      const img=this._hq(this._ovImg(ov));
       if(img){const bg='url(\''+escUrl(img)+'\')';if(el.style.backgroundImage!==bg)el.style.backgroundImage=bg;}
       const rawOp=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
       const showOp=flipped?String(rawOp>0.5?0:1):String(rawOp);if(parseFloat(showOp)>0&&ov.animation){el.style.animation='roc-'+ov.animation+' '+(ov.animation==='blink'?'1s step-end':'2s ease-in-out')+' infinite';el.style.opacity='';}else{el.style.animation='none';el.style.opacity=showOp;}
@@ -4834,8 +4982,12 @@ class RoomOverlayCard extends HTMLElement{
           if(img)stack.push({img:img,z:ov.z_index??oi+1});
         });
         stack.sort(function(a,b){return a.z-b.z;});stack.reverse();
-        const bgs=stack.map(function(o){return'url(\''+escUrl(o.img)+'\')';});
-        if(base)bgs.push('url(\''+escUrl(base)+'\')');
+        // v6.25.0: HQ-resampled copies sized to the thumb (measured once per thumb element)
+        if(!tEl._rocHqBox&&tEl.offsetWidth){const _d=window.devicePixelRatio||1;tEl._rocHqBox={w:tEl.offsetWidth*_d,h:tEl.offsetHeight*_d};}
+        const _hb=tEl._rocHqBox,_self=this;
+        const _hqT=function(u){return _hb?rocHqUrl(u,_hb.w,_hb.h,function(){clearTimeout(_self._hqNavT);_self._hqNavT=setTimeout(function(){if(_self.isConnected)_self._updateNav();},60);}):u;};
+        const bgs=stack.map(function(o){return'url(\''+escUrl(_hqT(o.img))+'\')';});
+        if(base)bgs.push('url(\''+escUrl(_hqT(base))+'\')');
         const bgStr=bgs.join(',');
         if(tEl._rocBg!==bgStr){tEl._rocBg=bgStr;tEl.style.backgroundImage=bgStr;}
       }
@@ -6412,7 +6564,11 @@ class RoomOverlayCardEditor extends HTMLElement{
       const cidEl=q('#card_id');if(cidEl){if(cidEl.value.trim())c.card_id=cidEl.value.trim();else delete c.card_id;}
       // Navigation menu — structured fields (chips/cards stay YAML lists)
       const _oldNav=(this._config.nav&&typeof this._config.nav==='object')?this._config.nav:{};
+      // Keys with no GUI field (dim_inactive, auto_breakpoint, …) survive a GUI
+      // save — before v6.25.0 they were silently dropped here.
+      const _NAV_GUI=['style','position','live','mini','height','width','mobile_height','wheel','follow_button','chips','cards','rows','cards_position'];
       const _navO={};
+      for(const _nk in _oldNav)if(_NAV_GUI.indexOf(_nk)<0)_navO[_nk]=_oldNav[_nk];
       const _ns=v('nav-style','thumbnails');if(_ns&&_ns!=='thumbnails')_navO.style=_ns;
       const _np=v('nav-position','top');if(_np&&_np!=='top')_navO.position=_np;
       const _nlv=v('nav-live','');if(_nlv)_navO.live=_nlv;
@@ -6424,6 +6580,13 @@ class RoomOverlayCardEditor extends HTMLElement{
       const _nh=v('nav-height','').trim();if(_nh)_navO.height=_nh;
       const _nw=v('nav-width','').trim();if(_nw)_navO.width=_nw;
       const _nmh=v('nav-mobile-height','').trim();if(_nmh)_navO.mobile_height=_nmh;
+      // v6.25.0 thumbnail rows (per profile) + where the strip cards go
+      const _nrClamp=function(x){x=parseInt(x,10);return x>1?Math.min(6,x):1;};
+      const _nrP=_nrClamp(v('nav-rows-portrait','')),_nrL=_nrClamp(v('nav-rows-landscape',''));
+      if(_nrP>1||_nrL>1)_navO.rows=(_nrP===_nrL)?_nrP:Object.assign({},_nrP>1?{portrait:_nrP}:{},_nrL>1?{landscape:_nrL}:{});
+      const _ncp=v('nav-cards-pos','');
+      if(_ncp==='side'||_ncp==='below')_navO.cards_position=_ncp;
+      else if(_ncp==='__yaml'&&_oldNav.cards_position!==undefined)_navO.cards_position=_oldNav.cards_position;
       const _nwh=v('nav-wheel','');if(_nwh)_navO.wheel=_nwh;
       const _nfbEl=q('#nav-follow-btn');if(_nfbEl&&!_nfbEl.checked)_navO.follow_button=false;
       const _chR=this._pYaml(q('#nav-chips'));if(_chR.ok){if(_chR.val)_navO.chips=_chR.val;}else if(_oldNav.chips)_navO.chips=_oldNav.chips;
@@ -7478,6 +7641,17 @@ class RoomOverlayCardEditor extends HTMLElement{
       riNav+='<div><label class="roc-l">Item width (css or auto)</label><input id="nav-width" type="text" placeholder="auto / 120px" value="'+this._e(_nav.width||'')+'"'+this._inp('')+'></div>';
       riNav+='<div><label class="roc-l">Mobile height</label><input id="nav-mobile-height" type="text" placeholder="48px" value="'+this._e(_nav.mobile_height||'')+'"'+this._inp('')+'></div>';
       riNav+='</div>';
+      // v6.25.0 thumbnail rows + strip-card position
+      const _nrv=function(p){const r=_nav.rows;const x=(r!=null&&typeof r==='object')?r[p]:r;return parseInt(x,10)>1?parseInt(x,10):'';};
+      const _cpCur=_nav.cards_position;const _cpObj=_cpCur!=null&&typeof _cpCur==='object';
+      riNav+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:4px;">';
+      riNav+='<div><label class="roc-l">Thumbnail rows — portrait</label><input id="nav-rows-portrait" type="number" min="1" max="6" step="1" placeholder="1" value="'+_nrv('portrait')+'"'+this._inp('')+'></div>';
+      riNav+='<div><label class="roc-l">Thumbnail rows — landscape</label><input id="nav-rows-landscape" type="number" min="1" max="6" step="1" placeholder="1" value="'+_nrv('landscape')+'"'+this._inp('')+'></div>';
+      riNav+='<div><label class="roc-l">Strip cards</label><select id="nav-cards-pos"'+this._inp('')+'>';
+      [['','auto — below on portrait, beside on landscape'],['side','beside the thumbnails (all rows tall)'],['below','own row below the thumbnails']].concat(_cpObj?[['__yaml','per profile (set in YAML)']]:[]).forEach(function(o){riNav+='<option value="'+o[0]+'"'+((_cpObj?'__yaml':(_cpCur||''))===o[0]?' selected':'')+'>'+o[1]+'</option>';});
+      riNav+='</select></div>';
+      riNav+='</div>';
+      riNav+='<p style="font-size:11px;color:var(--secondary-text-color);margin:0 0 8px;">Rows split the thumbnails into a grid (6 rooms × 2 rows = 3 + 3). Each row is <i>Height</i> tall (<i>Mobile height</i> on portrait). "Strip cards" are the cards from the YAML list below — e.g. an alert ticker; give one a <code>width</code> to fix its share of the strip.</p>';
       riNav+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;align-items:center;">';
       riNav+='<div><label class="roc-l">Wheel switch</label><select id="nav-wheel"'+this._inp('')+'>';
       const _whCur=(_nav.wheel===true?'horizontal':(_nav.wheel||''));

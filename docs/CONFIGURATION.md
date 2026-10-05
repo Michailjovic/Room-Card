@@ -1428,6 +1428,8 @@ nav:
   chips:                        # {room} → room id; per-room `chips:` overrides
     - { entity: sensor.{room}_temperature, decimals: 1, suffix: "°" }
   dim_inactive: true            # v6.16.0 default: the other rooms' thumbnails are slightly dimmed
+  rows: { portrait: 2 }         # v6.25.0: thumbnails in a grid of N rows (6 rooms → 3 + 3)
+  cards_position: side          # v6.25.0: nav.cards beside the grid (all rows tall) | below
 rooms:
   - id: livingroom
     name: Obývák
@@ -1518,6 +1520,52 @@ in the Basic tab) once `live: custom` is selected. Useful when a room is too bus
 shrunk down in full, or one specific embedded card doesn't belong at thumbnail scale. Note that
 the same `nav_mini` field means the opposite thing depending on the active tier (see `full` above,
 v6.15.0): opt-in under `custom`, opt-out under `full`.
+
+### Thumbnail rows and the strip cards (v6.25.0)
+
+With many rooms the strip runs out of width — on a phone six thumbnails in one row are tiny, and
+a card in the strip (an alert ticker, say) gets squeezed. `nav.rows` splits the thumbnails into a
+grid, and `nav.cards_position` decides where the `nav.cards` go:
+
+```yaml
+nav:
+  style: thumbnails
+  mobile_height: 48px           # height of ONE row on portrait (nav.height on landscape)
+  rows: { portrait: 2 }         # 6 rooms → 3 + 3 on the phone; landscape keeps one row
+  cards_position: side          # side | below
+  cards:
+    - card: { type: custom:alert-ticker-card, ... }
+      width: 45%                # optional — fixes the card's share of the strip
+```
+
+| Key | Values | Default | Meaning |
+|---|---|---|---|
+| `rows` | `1`–`6`, or `{portrait, landscape}` | `1` | Rows of thumbnails; columns = rooms ÷ rows, rounded up |
+| `cards_position` | `side` \| `below`, or `{portrait, landscape}` | below on portrait, beside on landscape (as before) | `side`: the cards sit next to the grid and are as tall as all its rows. `below`: the cards get their own row under the grid, `nav.height` tall |
+
+- Each row is `mobile_height` tall on portrait (default `48px`) and `height` tall on landscape —
+  two rows on a phone take `2 × 48px + 6px`.
+- On portrait (and with `width: auto`) the columns share the width evenly; on landscape each
+  column keeps the usual item width (`width`, or `height` × the image aspect) and the strip
+  scrolls if it runs out of room.
+- A profile left out of the `{portrait, landscape}` form gets the default — `rows: {portrait: 2}`
+  leaves the landscape strip exactly as it was.
+- Only `style: thumbnails` in a horizontal strip; a `left`/`right` side rail ignores both keys.
+- In the GUI: *Rooms & menu → Navigation menu → Thumbnail rows — portrait / landscape* and
+  *Strip cards*.
+
+**Live minis fill narrow thumbnails (v6.25.0).** A `full`/`custom` mini is scaled to the
+thumbnail's width; when the thumbnail is taller than that (narrow columns of a `rows` grid, the
+phone strip) it is now scaled to the height instead and centred, rather than leaving an empty band
+under the room.
+
+**Sharper thumbnails (v6.25.0).** A thumbnail draws the room photo and its overlays ~10× smaller
+than the files. The browser's fast scaler turns fine regular detail — underfloor-heating pipes,
+blind slats, tiles — into false diagonal patterns (moiré). Live minis (`full`/`custom`) and
+`composite` thumbnails now draw each image from a copy resampled once with a high-quality filter
+to the size it is really shown at (cached per image and size, two at a time in the background; the
+original shows until the copy is ready). The full-size room always uses the original file. No
+configuration; if the browser can't do it (or the image can't be fetched), the original is used.
 
 Switching works several ways: nav thumbnails/tabs, the **follow button** (crosshair that lights
 up when you're away from your presence room; `{action: follow-room}`), **finger-attached swipe**
