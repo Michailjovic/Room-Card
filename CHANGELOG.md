@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.25.1] - 2026-10-05
+
+### Fix: Save for the new nav fields; e2e suite in line with v6.24.1
+
+- **Editor:** changing only *Thumbnail rows — portrait / landscape* or *Strip cards* did not
+  enable Home Assistant's Save button — the three fields were never wired to the editor's change
+  handler, so the new value only went out together with some other edit. They now fire
+  `config-changed` on their own.
+- **e2e (CI):** the four "narrow viewport" panel tests still expected the pre-v6.24.1 contract
+  (panel inside the room image). At 375×700 the card is in the portrait profile, where v6.24.1
+  deliberately opens every panel over the whole screen — so the GitHub Actions e2e job has failed
+  since v6.24.1. The narrow tests now check the full-screen panel, and four new ones check that
+  `placement_portrait: inline` still keeps the panel inside the image. The card code is unchanged.
+
+Verified: 3 new assertions in `tests/design.test.js` (each field alone fires `config-changed`
+with its value); e2e 25/25 in headless Chromium (was 21/25); unit tiers green on source and `dist/`.
+
 ## [6.25.0] - 2026-10-05
 
 ### Multi-row navigation, sharper thumbnails

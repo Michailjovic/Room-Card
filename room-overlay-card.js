@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.25.0';
+const ROC_VERSION='6.25.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -8556,7 +8556,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
     const bootstrapAreas=this.querySelector('#bootstrap-areas');
     if(bootstrapAreas)bootstrapAreas.addEventListener('click',function(){self._bootstrapAreas();});
-    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-wheel','nav-follow-btn','nav-chips','nav-cards','nav-mini-templates','nav-mini-camera-refresh','nav-mini-width-ref','url-sync','url-sync-key'].forEach(function(id){
+    ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-rows-portrait','nav-rows-landscape','nav-cards-pos','nav-wheel','nav-follow-btn','nav-chips','nav-cards','nav-mini-templates','nav-mini-camera-refresh','nav-mini-width-ref','url-sync','url-sync-key'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });
     // nav-live needs a full re-render (not just a local panel toggle, unlike

@@ -152,8 +152,32 @@ test.describe('cockpit sections & panels (v6.8.0)',()=>{
       expect(ov.pageOverflow).toBeLessThanOrEqual(1);
     });
 
-    test(placement+': panel opens and stays within the room image (narrow viewport)',async({page})=>{
+    // v6.24.1: a narrow (portrait-profile) viewport opens every panel over the WHOLE screen —
+    // the image region there is often a strip a few hundred px tall. The pre-v6.24.1 contract
+    // (panel inside the image) is still there, opt-in per section: placement_portrait: inline.
+    test(placement+': panel covers the whole screen (narrow viewport, portrait default)',async({page})=>{
       await page.setViewportSize({width:375,height:700});
+      await settle(page,500);
+      await clickShadow(page,'[data-ico="'+launcher+'"]');
+      const g=await panelGeo(page,secId);
+      const ov=await geo(page);
+      expect(g.open).toBe(true);
+      expect(Math.abs(g.panel.l)).toBeLessThanOrEqual(1);
+      expect(Math.abs(g.panel.t)).toBeLessThanOrEqual(1);
+      expect(Math.abs(g.panel.r-375)).toBeLessThanOrEqual(1);
+      expect(Math.abs(g.panel.b-700)).toBeLessThanOrEqual(1);
+      expect(ov.pageOverflow).toBeLessThanOrEqual(1);
+    });
+
+    test(placement+': placement_portrait: inline keeps the panel within the room image (narrow viewport)',async({page})=>{
+      await page.setViewportSize({width:375,height:700});
+      await settle(page,500);
+      await page.evaluate(()=>{
+        const card=window.__harness.card;
+        const c=JSON.parse(JSON.stringify(card._config));
+        (c.sections||[]).forEach(function(s){s.placement_portrait='inline';});
+        card.setConfig(c);
+      });
       await settle(page,500);
       await clickShadow(page,'[data-ico="'+launcher+'"]');
       const g=await panelGeo(page,secId);

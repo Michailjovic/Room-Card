@@ -609,6 +609,15 @@ const mount=async(cfg,states,extra)=>{const el=w.document.createElement('room-ov
   t('editor: equal rows collapse to a plain number; cards_position written',no.nav.rows===2&&no.nav.cards_position==='side',[no.nav.rows,no.nav.cards_position]);
   rp.value='1';rl.value='';cp.value='';no=ne._collectConfig();
   t('editor: rows 1 / auto remove both keys',no.nav.rows===undefined&&no.nav.cards_position===undefined,no.nav);
+  // v6.25.1: changing ONLY one of the new fields must fire config-changed (HA's Save button)
+  for(const id of ['nav-rows-portrait','nav-rows-landscape','nav-cards-pos']){
+    const ne2=w.document.createElement('room-overlay-card-editor');
+    ne2.setConfig(nrCfg({}));ne2.hass={states:{},user:{name:'x'}};w.document.body.appendChild(ne2);ne2._tab='rooms';ne2._render();await sleep(10);
+    let fired=null;ne2.addEventListener('config-changed',e=>{fired=e.detail&&e.detail.config;});
+    const f=ne2.querySelector('#'+id);f.value=id==='nav-cards-pos'?'side':'3';f.dispatchEvent(new w.Event('change',{bubbles:true}));await sleep(10);
+    const nv=fired&&fired.nav;
+    t('editor: changing only #'+id+' fires config-changed with the new value',!!nv&&(id==='nav-cards-pos'?nv.cards_position==='side':JSON.stringify(nv.rows)===(id==='nav-rows-portrait'?'{"portrait":3}':'{"landscape":3}')),nv);
+  }
   // HQ resampling helpers
   t('rocHqTarget: 1792 px wide pipes into a 172×97 device-px thumb → 176 px copy',w.rocHqTarget({w:1792,h:1008},172,97)===176,w.rocHqTarget({w:1792,h:1008},172,97));
   t('rocHqTarget: ≤2× downscale → no copy (0)',w.rocHqTarget({w:800,h:450},420,236)===0);
