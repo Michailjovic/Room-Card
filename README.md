@@ -1,6 +1,6 @@
 # Room Overlay Card
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/Michailjovic/Room-Card.svg)](https://github.com/Michailjovic/Room-Card/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -61,10 +61,15 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 
 ### Via HACS (recommended)
 
-1. Open **HACS → Frontend → ⋮ → Custom repositories**
-2. Add `https://github.com/Michailjovic/Room-Card` — type **Lovelace**
-3. Search for **Room Overlay Card** → Install
-4. Hard-refresh your browser (`Ctrl+Shift+R`)
+Room Overlay Card is in the default HACS store — no custom repository needed.
+
+1. Open **HACS → Frontend** and search for **Room Overlay Card**
+2. Click **Download**
+3. Hard-refresh your browser (`Ctrl+Shift+R`)
+
+To install a specific version (for example to roll back), open the card in HACS → **⋮ → Redownload** and pick the version.
+
+> **Upgrading from the custom-repository install?** Nothing breaks — the resource URL stays the same. You can remove `Michailjovic/Room-Card` from **HACS → ⋮ → Custom repositories**; the card stays installed and keeps updating from the default store.
 
 ### Manual
 
