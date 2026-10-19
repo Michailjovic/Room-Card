@@ -36,6 +36,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Light glow** | Soft pools of light blended onto the photo — colour from the light, strength from its brightness; circle / ellipse / directional wash, optional flicker |
 | **Camera & weather** | Live camera snapshot as the base layer; animated rain/snow overlay |
 | **Multi-room** | One card for the whole home — define rooms, swipe & presence-follow |
+| **Overview page** | Every room on one screen as a live tile with state chips, plus your header (ticker, pills), weather/calendar cards and a dock of section launchers; tap a tile and the room zooms open. Photo tiles or list rows on phones |
 | **Auto navigation menu** | The room switcher (thumbnails / tabs / dots) is generated automatically from your rooms — you never build the menu by hand |
 | **Hold feedback** | A progress ring fills and turns green when a hold gesture registers |
 | **Tabbed GUI editor** | Build everything visually — drag, resize, reorder — without writing YAML |
@@ -98,16 +99,43 @@ aspect_ratio: "16/9"
 
 ---
 
+## The overview page (v6.30.0)
+
+Add one more "room" that is an **overview**: every room on one screen as a tile — its live
+picture, temperature, and round chips for its lights, blinds and media — with an optional header
+(your alert ticker, status pills), a column of cards (clock, weather, calendar) and a dock of
+section launchers. Tap a tile and the room zooms open in its usual view. Any region you leave out
+gives its space to the room grid; on a phone, only the grid scrolls and you pick photo tiles or
+list rows.
+
+```yaml
+rooms:
+  - id: overview
+    name: Overview
+    overview:
+      header: { items: [ { nav_cards: true } ] }   # your ticker, from nav.cards
+      left: { cards: [ { type: weather-forecast, entity: weather.home } ] }
+      grid: { columns: { landscape: 3, portrait: 2 } }
+      dock: {}                                      # one launcher per section
+  - id: bedroom
+    …
+```
+
+In the editor: **Rooms & menu → + Overview**. Full reference:
+[Configuration → Overview page](docs/CONFIGURATION.md#overview-page-v6300).
+
+---
+
 ## Documentation
 
 This README is a landing page — the full reference lives here:
 
 | Doc | What's in it |
 |---|---|
-| **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** | Every YAML key: layout grids, filters, overlays, gauges, blinds & cover control, zones, badges, icons/labels, embedded cards, light controls, multi-room, a complete example |
+| **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** | Every YAML key: layout grids, filters, overlays, gauges, blinds & cover control, zones, badges, icons/labels, embedded cards, light controls, multi-room, the overview page, a complete example |
 | **[docs/EDITOR.md](docs/EDITOR.md)** | The GUI editor tab by tab, Edit mode, and a summary of the editor UX rebuild that shipped in v5.9.0–v5.10.1 |
 | **[LAYOUT.md](LAYOUT.md)** | Layout-engine implementation spec, for the curious or the contributing |
-| **[PRESETS.md](PRESETS.md)** | Copy-paste recipes — day/night filters, weather moods, dimmer zones, door portals, presence multiroom |
+| **[PRESETS.md](PRESETS.md)** | Copy-paste recipes — day/night filters, weather moods, dimmer zones, door portals, presence multiroom, a whole-home overview page |
 
 ---
 
@@ -119,7 +147,7 @@ mangling off) that HACS installs; the repo itself stays readable and needs no bu
 from a manual/local install.
 
 ```bash
-npm test              # smoke + render + lifecycle tiers (node, jsdom)
+npm test              # smoke + render + lifecycle + design + overview tiers (node, jsdom)
 npm run test:e2e       # Playwright geometry regression tests, real Chromium
 npm run build           # build the minified dist/ bundle
 npm run build:verify    # build, then run the full test suite against the minified bundle

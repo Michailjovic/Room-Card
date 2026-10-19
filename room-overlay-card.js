@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.25.1';
+const ROC_VERSION='6.30.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -776,6 +776,170 @@ function rocIcoSection(ico){
   return a&&a.action==='open-section'&&a.section?String(a.section):null;
 }
 
+// ----- Overview page (v6.30.0, OVERVIEW_PLAN.md) ------------------------------
+// One room in `rooms:` can be an overview page: every other room as a tile
+// (its live mini or composite thumbnail, name, info chips and state chips),
+// plus optional header / left / right regions of embedded cards and pills and
+// a dock of section launchers. Nothing here runs for a config without an
+// `overview:` room (OVERVIEW_PLAN.md 1a.1). Pure helpers first; the card wires
+// them in _render()/_update()/_switchRoom().
+function rocOvCfg(cAll,idx){
+  const r=cAll&&Array.isArray(cAll.rooms)?cAll.rooms[idx]:null;
+  if(!r||!r.overview)return null;
+  return typeof r.overview==='object'?r.overview:{};
+}
+function rocOvAny(cAll){
+  return!!(cAll&&Array.isArray(cAll.rooms)&&cAll.rooms.some(function(r){return r&&r.overview;}));
+}
+// {portrait, landscape} or a plain value; a profile left out falls back to def.
+function rocOvPV(v,prof,def){
+  if(v!=null&&typeof v==='object'&&!Array.isArray(v))return v[prof]!==undefined&&v[prof]!==null&&v[prof]!==''?v[prof]:def;
+  return v===undefined||v===null||v===''?def:v;
+}
+// Room indices shown in the grid: `grid.rooms` (ids, in that order) or every
+// room in config order. Overview pages and overview_tile.hidden are never tiles.
+function rocOvRooms(cAll,ov){
+  const rooms=(cAll&&cAll.rooms)||[];
+  const ok=function(i){const r=rooms[i];return!!r&&!r.overview&&!(r.overview_tile&&r.overview_tile.hidden===true);};
+  const g=(ov&&ov.grid)||{};
+  const out=[];
+  if(Array.isArray(g.rooms)){
+    g.rooms.forEach(function(id){
+      let i=-1;for(let k=0;k<rooms.length;k++)if(rooms[k]&&String(rooms[k].id)===String(id)){i=k;break;}
+      if(i>=0&&ok(i)&&out.indexOf(i)<0)out.push(i);
+    });
+    return out;
+  }
+  for(let i=0;i<rooms.length;i++)if(ok(i))out.push(i);
+  return out;
+}
+// "40% 60%" → {x:0.4,y:0.6}; anything unparsable → centre.
+function rocOvFocus(f){
+  const p=String(f==null?'':f).trim().split(/\s+/);
+  const n=function(s){const v=parseFloat(s);return isNaN(v)?0.5:Math.max(0,Math.min(1,v/100));};
+  return{x:p[0]?n(p[0]):0.5,y:p[1]?n(p[1]):(p[0]?n(p[0]):0.5)};
+}
+function rocOvMs(v,def){
+  if(v===undefined||v===null||v==='')return def;
+  const s=String(v).trim(),n=parseFloat(s);
+  if(isNaN(n))return def;
+  return Math.max(0,/ms$/i.test(s)||!/s$/i.test(s)?n:n*1000);
+}
+// Grid tile mode: the overview's own `grid.live`, else the nav's. A row tile's
+// thumbnail is ~72-96 px wide, so a full live mini buys nothing there — it
+// takes `composite` unless the grid asks for more (OVERVIEW_PLAN.md §4).
+function rocOvLive(cAll,ov,style){
+  const g=(ov&&ov.grid)||{},nl=(cAll&&cAll.nav&&cAll.nav.live)||'';
+  const gl=g.live;
+  if(gl&&gl!=='inherit')return gl==='off'?'':gl;
+  if(style==='row')return(nl==='full'||nl==='custom'||nl==='composite')?'composite':nl;
+  return nl;
+}
+const ROC_OV_TOGGLE=['light','switch','fan','input_boolean','cover','siren','humidifier'];
+const ROC_OV_OFF=['off','closed','idle','standby','unavailable','unknown','docked','paused','none',''];
+function rocOvChipActive(ch,states){
+  const ents=ch.entities||[];
+  for(const id of ents){
+    const st=states&&states[id];if(!st)continue;
+    if(ch.active_state!==undefined&&ch.active_state!==null){
+      const a=ch.active_state;
+      if(Array.isArray(a)?a.map(String).includes(st.state):st.state===String(a))return true;
+    }else if(ROC_OV_OFF.indexOf(String(st.state))<0)return true;
+  }
+  return false;
+}
+// Every media_player.* id mentioned anywhere in a room's config.
+function rocOvMediaIds(o,out){
+  out=out||[];
+  if(typeof o==='string'){if(/^media_player\.[a-z0-9_]+$/.test(o)&&out.indexOf(o)<0)out.push(o);}
+  else if(Array.isArray(o))o.forEach(function(x){rocOvMediaIds(x,out);});
+  else if(o&&typeof o==='object')for(const k in o)rocOvMediaIds(o[k],out);
+  return out;
+}
+function rocOvChipDefaultTap(id){
+  const dom=String(id).split('.')[0];
+  return ROC_OV_TOGGLE.indexOf(dom)>=0?{action:'toggle',entity:id}:{action:'more-info',entity:id};
+}
+// State chips of one room tile. `overview_tile.chips`: omitted / 'auto' →
+// derived (lights of light_controls as ONE chip, blinds with a cover control,
+// media players); a list → exactly those; 'none' → no chips. Capped by `max`.
+function rocOvChips(cAll,ri,max){
+  const r=(cAll.rooms||[])[ri];if(!r)return[];
+  const t=r.overview_tile||{};
+  const mode=t.chips===undefined||t.chips===null||t.chips==='auto'?'auto':(Array.isArray(t.chips)?'custom':'none');
+  const out=[];
+  if(mode==='custom'){
+    t.chips.forEach(function(ch,k){
+      if(!ch)return;
+      const id=typeof ch==='string'?ch:ch.entity;
+      const o=typeof ch==='string'?{}:ch;
+      if(!id&&!o.tap_action)return;
+      out.push({key:'c'+k,entities:id?[id]:[],icon:o.icon||'',name:o.name||'',
+        tap_action:o.tap_action!==undefined?o.tap_action:(id?rocOvChipDefaultTap(id):null),
+        hold_action:o.hold_action!==undefined?o.hold_action:(id?{action:'more-info',entity:id}:null),
+        active_state:o.active_state});
+    });
+  }else if(mode==='auto'){
+    const m=roomMerge(cAll,ri);
+    const lights=lcNormEnts(m.light_controls).map(function(e){return e.entity;}).filter(function(id){return/^(light|switch)\./.test(id);});
+    if(lights.length){
+      // One chip for the room's lights: any on → all off, else all on.
+      let cond=null;
+      for(let k=lights.length-1;k>=0;k--){const c0={entity:lights[k],state:'on'};if(cond)c0.or=cond;cond=c0;}
+      out.push({key:'lights',entities:lights,icon:'mdi:lightbulb',kind:'lights',
+        tap_action:{condition:cond,
+          then:{action:'perform-action',perform_action:'homeassistant.turn_off',target:{entity_id:lights}},
+          else:{action:'perform-action',perform_action:'homeassistant.turn_on',target:{entity_id:lights}}},
+        hold_action:{action:'more-info',entity:lights[0]}});
+    }
+    (m.blinds||[]).forEach(function(b){
+      if(!b||!b.control||!b.entity||!/^cover\./.test(b.entity))return;
+      if(out.some(function(o){return o.entities.indexOf(b.entity)>=0;}))return;
+      out.push({key:'bl:'+b.entity,entities:[b.entity],icon:'mdi:window-shutter',
+        tap_action:{action:'toggle',entity:b.entity},hold_action:{action:'more-info',entity:b.entity}});
+    });
+    rocOvMediaIds(r).forEach(function(id){
+      if(out.some(function(o){return o.entities.indexOf(id)>=0;}))return;
+      out.push({key:'mp:'+id,entities:[id],icon:'mdi:cast',
+        tap_action:{action:'more-info',entity:id},hold_action:{action:'more-info',entity:id}});
+    });
+  }
+  const n=Math.max(0,parseInt(max,10));
+  return isNaN(n)?out:out.slice(0,n);
+}
+function rocOvChipIcon(ch,hass){
+  if(ch.icon)return ch.icon;
+  const id=ch.entities&&ch.entities[0];
+  const st=id&&hass&&hass.states?hass.states[id]:null;
+  if(st&&st.attributes&&st.attributes.icon)return st.attributes.icon;
+  const dom=id?String(id).split('.')[0]:'';
+  return(ROC_DOMAIN_ICON&&ROC_DOMAIN_ICON[dom])||'mdi:toggle-switch';
+}
+// Header items: {pill:{…}} | {nav_cards:true} | {card:{…}} | a plain card config.
+function rocOvHdKind(it){
+  if(!it||typeof it!=='object')return'';
+  if(it.pill)return'pill';
+  if(it.nav_cards)return'nav_cards';
+  if(it.card||it.type)return'card';
+  return'';
+}
+// Image-decode gate for the zoom: resolves when the photo is decoded or after
+// `ms`, whichever is first — never blocks the switch on a slow/broken image.
+function rocOvDecode(url,ms){
+  return new Promise(function(res){
+    let done=false;const fin=function(){if(!done){done=true;res();}};
+    setTimeout(fin,ms);
+    if(!url){fin();return;}
+    try{
+      const im=new Image();im.src=url;
+      if(im.decode)im.decode().then(fin,fin);else{im.onload=fin;im.onerror=fin;}
+    }catch(_){fin();}
+  });
+}
+// Overview CSS — injected only when the config has an overview room, so a
+// config without one renders byte-for-byte as before (OVERVIEW_PLAN.md 1a.1).
+const ROC_OV_CSS='.roc-ov{position:absolute;inset:0;display:grid;gap:var(--roc-ov-gap,12px);padding:var(--roc-ov-pad,12px);box-sizing:border-box;color:var(--roc-text-c);z-index:1;min-height:0;}.roc-ov-hd{grid-area:hd;display:flex;align-items:center;gap:8px;min-width:0;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;}.roc-ov-hd::-webkit-scrollbar,.roc-ov-side::-webkit-scrollbar,.roc-ov-grid::-webkit-scrollbar{display:none;}.roc-ov-hdi{flex:0 0 auto;min-width:0;overflow:hidden;border-radius:10px;}.roc-ov-hdi.roc-ov-grow{flex:1 1 0;}.roc-ov-side{display:flex;flex-direction:column;gap:var(--roc-ov-gap,12px);min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;}.roc-ov-side>div{flex:none;border-radius:12px;overflow:hidden;}.roc-ov-grid{grid-area:gr;display:grid;grid-template-columns:repeat(var(--roc-ov-cols,3),minmax(0,1fr));gap:var(--roc-ov-gap,12px);min-height:0;min-width:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:none;align-content:start;}.roc-ov-grid:not(.roc-ov-fill){grid-auto-rows:max-content;}.roc-ov-grid.roc-ov-fill{grid-auto-rows:minmax(var(--roc-ov-minh,110px),1fr);align-content:stretch;}.roc-ov-empty{grid-column:1/-1;padding:24px;text-align:center;color:var(--roc-text-2-c);font-size:13px;}.roc-ovt{position:relative;border-radius:14px;overflow:hidden;cursor:pointer;background:var(--roc-surface-c);border:1px solid var(--roc-border-c);box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent;outline:none;}.roc-ovt:focus-visible{box-shadow:0 0 0 2px var(--primary-color,#03a9f4);}.roc-ov-grid:not(.roc-ov-fill) .roc-ovt-card{aspect-ratio:var(--roc-ov-aspect,4/3);}.roc-ovt-ph{position:absolute;inset:0;background-size:cover;background-position:var(--roc-ov-focus,50% 50%);overflow:hidden;border-radius:inherit;}.roc-ovt-mini{position:absolute;inset:0;overflow:hidden;pointer-events:none;}.roc-ovt-top{position:absolute;top:8px;left:8px;right:8px;z-index:2;display:flex;align-items:flex-start;justify-content:space-between;gap:6px;pointer-events:none;min-width:0;}.roc-ovt-name{font-size:13px;font-weight:600;line-height:1.35;padding:2px 8px;border-radius:6px;background:var(--roc-chip-bg-c);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.roc-ovt-info{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px;font-size:11px;font-weight:600;line-height:1.35;font-variant-numeric:tabular-nums;flex:none;}.roc-ovt-info:empty{display:none;}.roc-ovt-chips{position:absolute;left:8px;bottom:8px;z-index:2;display:flex;gap:6px;}.roc-ovc{position:relative;width:var(--roc-ovc,40px);height:var(--roc-ovc,40px);flex:none;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);color:var(--roc-text-c);display:flex;align-items:center;justify-content:center;padding:0;margin:0;cursor:pointer;--mdc-icon-size:20px;-webkit-tap-highlight-color:transparent;box-sizing:border-box;transition:background .2s ease,color .2s ease;}.roc-ovc>ha-icon{pointer-events:none;}.roc-ovc.on{background:var(--roc-active-c);color:#1a1206;border-color:transparent;}.roc-ovc.na{opacity:.45;}.roc-ov-pm .roc-ovc{--roc-ovc:44px;}.roc-ov-pm .roc-ov-hd{flex-wrap:wrap;overflow:visible;}.roc-ov-pm .roc-ov-hdi.roc-ov-grow{flex:1 1 100%;}.roc-ovt-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px;}.roc-ovt-row .roc-ovt-ph{position:relative;inset:auto;width:var(--roc-ov-thumbw,88px);aspect-ratio:16/9;border-radius:8px;}.roc-ovt-row .roc-ovt-top{position:static;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;}.roc-ovt-row .roc-ovt-name{background:none;padding:0;font-size:14px;max-width:100%;}.roc-ovt-row .roc-ovt-info{justify-content:flex-start;}.roc-ovt-row .roc-ovt-chips{position:static;}.roc-ov-dock{grid-area:dk;display:flex;justify-content:center;align-items:center;gap:var(--roc-ov-dgap,14px);flex-wrap:wrap;padding:2px 0;}.roc-ov-dock .ico{position:relative!important;}.roc-ovp{display:inline-flex;align-items:center;gap:6px;height:var(--roc-ovp-h,32px);padding:0 12px;border-radius:16px;background:var(--roc-chip-bg-c);border:1px solid var(--roc-border-c);color:var(--roc-text-c);font-size:13px;font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums;--mdc-icon-size:18px;box-sizing:border-box;}.roc-ovp[data-tap]{cursor:pointer;}.roc-ov-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--roc-text-2-c);--mdc-icon-size:64px;}.roc-thumb-ov{display:flex;align-items:center;justify-content:center;color:var(--roc-text-c);--mdc-icon-size:22px;background-color:var(--roc-surface-c);}';
+
 // Auto tiles (v6.10.0, COCKPIT_PLAN.md kap.3.1/4) -- a section's `source: auto`
 // + `domain:` derives extra tiles straight from `hass.states` instead of a
 // tagged element, for domains listed in the schema comment. Default icon per
@@ -1403,6 +1567,8 @@ class RoomOverlayCard extends HTMLElement{
     for(const k in(this._secCardEls||{})){try{this._secCardEls[k].hass=h;}catch(_){}}
     for(const el of(this._navCardEls||[]))try{el.hass=h;}catch(_){}
     for(const ri in(this._navMiniEls||{}))try{this._navMiniEls[ri].el.hass=h;}catch(_){}
+    for(const ri in(this._ovMiniEls||{}))try{this._ovMiniEls[ri].el.hass=h;}catch(_){}
+    for(const el of(this._ovCardEls||[]))try{el.hass=h;}catch(_){}
     for(const el of(this._stripCardEls||[]))try{el.hass=h;}catch(_){}
     for(const o of(this._lcEls||[]))try{o.el.hass=h;}catch(_){}
     // Only trust _visible while an IntersectionObserver is actually alive to
@@ -1691,6 +1857,7 @@ class RoomOverlayCard extends HTMLElement{
     const wrap=this._elWrap();
     if(!content||!wrap)return;
     const c=this._roomCfg||this._config;if(!c)return;
+    if(this._ovActive)return; // overview page: .content is inset:0, no photo stage
     const prof=this._vt||'landscape';
     // Design aspect: lock_aspect wins (explicit / auto from image), else aspect_ratio.
     const da=this._designAspect()||rocRatio(tVal(c.aspect_ratio,prof))||16/9;
@@ -1860,7 +2027,7 @@ class RoomOverlayCard extends HTMLElement{
     if(c._roc_ghost||c._roc_preview||c._roc_mini||rocIsStubCfg(this._config))return;
     const _lh=(this._config.layout&&this._config.layout.height)||'viewport';
     if(_lh!=='viewport'&&_lh!=='fill')return;
-    if(this._profile==='portrait'&&_lh==='viewport')return; // natural content height — nothing to pin ('fill' pins portrait too)
+    if(this._profile==='portrait'&&_lh==='viewport'&&!this._ovActive)return; // natural content height — nothing to pin ('fill' pins portrait too; so does an overview page — O9)
     const card=this._elCard();
     if(!card)return;
     const r=this.getBoundingClientRect();
@@ -2287,8 +2454,546 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
+
+  // ----- Overview page (v6.30.0, OVERVIEW_PLAN.md) ---------------------------
+  // One live-mini instance for room `ri`, mounted into `host` at a fixed
+  // reference width. Shared by the nav strip (nav.live: full/custom) and the
+  // overview grid's card tiles — one implementation (OVERVIEW_PLAN.md 1a.4).
+  _mountMini(host,ri,wRef){
+    const cAll=this._config,r=cAll.rooms&&cAll.rooms[ri];
+    try{
+      const mc=document.createElement('room-overlay-card');
+      // Scaled down with transform:scale() to fit the thumbnail. transform
+      // is paint-only — it never affects offsetWidth/offsetHeight, which is
+      // exactly what _layoutStage() now measures with (see its comment) —
+      // so nothing inside the mini ever sees a shrunk box to mis-size
+      // itself against, regardless of the applied scale.
+      mc.style.cssText='display:block;position:absolute;top:0;left:0;width:'+wRef+'px;transform-origin:top left;';
+      // Connect to the document BEFORE setConfig/hass: several layout
+      // reads happen synchronously on the first render/update pass
+      // (_layoutFitWrap/_layoutStage, and — the one that actually bit a
+      // live day_night blind — the gauge fill's el.offsetHeight slat
+      // measurement). offsetHeight/getBoundingClientRect always read 0
+      // on a still-disconnected element, so day_night's `if(_perDN>0)`
+      // guard silently skipped setting any fill at all on first paint.
+      // A later IntersectionObserver-triggered _update() can self-heal
+      // plain percentage-fill gauges, but there's no reason to rely on
+      // that race at all — just connect first.
+      host.appendChild(mc);
+      mc.setConfig(rocBuildMiniConfig(cAll,ri));
+      mc._roomIdx=ri;
+      if(this._hass)try{mc.hass=this._hass;}catch(_){}
+      return{el:mc,host:host,widthRef:wRef};
+    }catch(e){console.warn('[room-overlay-card] nav.live mini mount failed for room '+((r&&r.id)||ri)+':',e);return null;}
+  }
+
+  // One info chip (nav.chips / a room's chips:) into `chipCont` — the nav
+  // thumbnail's own builder, also used by overview tiles (O11). Registered in
+  // _navChipEls, so _updateNav() formats it with the shared value formatter.
+  _navChipInto(chipCont,chCfg,r){
+    const span=document.createElement('span');
+    // Optional pill styling per chip
+    let _cs='pointer-events:none;';
+    if(chCfg.background)_cs+='background:'+chCfg.background+';';
+    if(chCfg.border_radius)_cs+='border-radius:'+chCfg.border_radius+';';
+    if(chCfg.padding)_cs+='padding:'+chCfg.padding+';';
+    if(chCfg.font_size)_cs+='font-size:'+chCfg.font_size+';';
+    if(chCfg.border)_cs+='border:'+chCfg.border+';';
+    span.style.cssText=_cs;
+    span.className='roc-navchip'; // v6.16.0 default pill (token colours); any inline chip style above still wins
+    chipCont.appendChild(span);
+    this._navChipEls.push({el:span,cfg:chCfg,entity:String(chCfg.entity||'').replace(/\{room\}/g,r.id||'')});
+  }
+
+  // Thumbnail painting for nav.live off/composite — filter (brightness model,
+  // filter_conditions) and, for composite, the stacked active overlay images.
+  // Shared by nav thumbnails and overview tiles; `mode` is that strip's live tier.
+  _paintThumb(tEl,r,ri,mode){
+    const s=this._hass.states;
+    const _live=mode==='composite'; // composite draws its own base+overlay stack on tEl, filtered here
+    const _liveReal=mode==='full'||mode==='custom'; // real mounted mini instances — they
+    // apply their own brightness_model/filter_conditions internally (same code path as the main card);
+    // a CSS filter set on the WRAPPER (tEl) would stack on top of the mini's own already-correct
+    // per-layer filter, double-exposing/double-dimming it. So the wrapper must stay filter-free here.
+    let tf='';
+    if(!_liveReal){
+      if(_live){const bf=bmFilter(r.brightness_model,s,this._navBmSorted[ri]);if(bf&&bf!=='none')tf=bf;}
+      if(!tf&&r.filter_conditions?.length){const f=resolveFilter(r.filter_conditions,s);if(f&&f!=='none')tf=f;}
+    }
+    setSt(tEl,'filter',tf);
+    if(!_live)return;
+    // Conditional base image (mirror of the main card's logic)
+    let base=r.base_image||'';
+    if(r.base_image_conditions?.length&&!r.base_camera){
+      for(const bc of r.base_image_conditions){
+        if(bc.condition===undefined){if(bc.image)base=bc.image;continue;}
+        if(evalCond(bc.condition,s)){if(bc.image)base=bc.image;break;}
+      }
+    }
+    // Active overlays, top-most first (CSS: first background layer is on top)
+    const stack=[];
+    (r.overlays||[]).forEach((ov,oi)=>{
+      if(ov.group||ov.visible_template!==undefined)return;
+      const op=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
+      if(!(op>0))return;
+      const img=this._ovImg(ov);
+      if(img)stack.push({img:img,z:ov.z_index??oi+1});
+    });
+    stack.sort(function(a,b){return a.z-b.z;});stack.reverse();
+    // v6.25.0: HQ-resampled copies sized to the thumb (measured once per thumb element)
+    if(!tEl._rocHqBox&&tEl.offsetWidth){const _d=window.devicePixelRatio||1;tEl._rocHqBox={w:tEl.offsetWidth*_d,h:tEl.offsetHeight*_d};}
+    const _hb=tEl._rocHqBox,_self=this;
+    const _hqT=function(u){return _hb?rocHqUrl(u,_hb.w,_hb.h,function(){clearTimeout(_self._hqNavT);_self._hqNavT=setTimeout(function(){if(_self.isConnected)_self._updateNav();},60);}):u;};
+    const bgs=stack.map(function(o){return'url(\''+escUrl(_hqT(o.img))+'\')';});
+    if(base)bgs.push('url(\''+escUrl(_hqT(base))+'\')');
+    const bgStr=bgs.join(',');
+    if(tEl._rocBg!==bgStr){tEl._rocBg=bgStr;tEl.style.backgroundImage=bgStr;}
+  }
+
+  // Overview markup for the active profile. Returns {html, meta}; meta drives
+  // _ovWire() (mounting, listeners) and the dock's synthetic launcher icons.
+  _ovBuild(cAll,ov,prof){
+    const self=this,hass=this._hass;
+    const P=function(v,d){return rocOvPV(v,prof,d);};
+    const g=ov.grid||{};
+    const style=P(g.style,'card')==='row'?'row':'card';
+    const live=rocOvLive(cAll,ov,style);
+    const cols=style==='row'?1:Math.max(1,Math.min(12,parseInt(P(g.columns,prof==='portrait'?2:3),10)||1));
+    const chipsMax=P(g.chips_max,prof==='portrait'?3:4);
+    const showInfo=g.info!==false;
+    const meta={prof:prof,style:style,live:live,tiles:[],pills:[],cards:[],dockIcons:[]};
+    const show=function(media){
+      if(!media||media==='all')return true;
+      if(media==='mobile'||media==='portrait')return prof==='portrait';
+      if(media==='desktop'||media==='landscape')return prof==='landscape';
+      return String(media).split(',').map(function(x){return x.trim();}).indexOf(prof)>=0;
+    };
+    // --- header ---
+    let hdHtml='';
+    const hd=ov.header;
+    if(hd&&typeof hd==='object'){
+      const fixedH=hd.height&&hd.height!=='auto';
+      let inner='';
+      (Array.isArray(hd.items)?hd.items:[]).forEach(function(it,i){
+        const k=rocOvHdKind(it);
+        if(!k||(it.media&&!show(it.media)))return;
+        const w=it.width;
+        const hcss=fixedH?'height:100%;':'';
+        if(k==='pill'){
+          const p=it.pill||{};
+          const tap=p.tap_action!==undefined?p.tap_action:(p.entity?{action:'more-info',entity:p.entity}:null);
+          const hold=p.hold_action!==undefined?p.hold_action:null;
+          inner+='<div class="roc-ovp" data-ovp="'+i+'"'+(tap||hold?' data-tap tabindex="0" role="button"':'')+' style="'+(w?'flex:none;width:'+escA(w)+';':'flex:none;')+(p.color?'color:'+escA(p.color)+';':'')+'">'
+            +(p.icon?'<ha-icon icon="'+escA(p.icon)+'"></ha-icon>':'')+'<span data-ovp-v>'+escA(p.text!=null?p.text:'')+'</span></div>';
+          meta.pills.push({i:i,def:p,tap:tap,hold:hold});
+        }else if(k==='nav_cards'){
+          ((cAll.nav&&cAll.nav.cards)||[]).forEach(function(cc,ci){
+            const cfg=cc&&cc.card?cc.card:cc;
+            if(!cfg||!cfg.type)return;
+            const cw=(cc&&cc.width)||w;
+            inner+='<div class="roc-ov-hdi'+(cw?'':' roc-ov-grow')+'" data-ovc-card="hd'+i+'_'+ci+'" style="'+(cw?'flex:none;width:'+escA(cw)+';':'')+hcss+'"></div>';
+            meta.cards.push({key:'hd'+i+'_'+ci,cfg:cfg});
+          });
+        }else{
+          let cfg=it.card;
+          if(!cfg){cfg=Object.assign({},it);delete cfg.width;delete cfg.media;}
+          if(!cfg||!cfg.type)return;
+          inner+='<div class="roc-ov-hdi'+(w?'':' roc-ov-grow')+'" data-ovc-card="hd'+i+'" style="'+(w?'flex:none;width:'+escA(w)+';':'')+hcss+'"></div>';
+          meta.cards.push({key:'hd'+i,cfg:cfg});
+        }
+      });
+      if(inner)hdHtml='<div class="roc-ov-hd" style="'+(fixedH?'height:'+escA(hd.height)+';':'')+'">'+inner+'</div>';
+    }
+    // --- left / right card columns ---
+    const side=function(key,area){
+      const sd=ov[key];
+      if(!sd||typeof sd!=='object')return null;
+      const pp=prof==='portrait'?(sd.portrait||'top'):'';
+      if(pp==='hidden')return null;
+      let inner='';
+      (Array.isArray(sd.cards)?sd.cards:[]).forEach(function(cc,ci){
+        if(!show(cc&&cc.media))return;
+        const cfg=cc&&cc.card?cc.card:cc;
+        if(!cfg||!cfg.type)return;
+        inner+='<div data-ovc-card="'+key+ci+'" style="'+(cc&&cc.height?'height:'+escA(cc.height)+';':'')+'"></div>';
+        meta.cards.push({key:key+ci,cfg:cfg});
+      });
+      if(!inner)return null;
+      return{html:'<div class="roc-ov-side roc-ov-'+key+'" style="grid-area:'+area+';">'+inner+'</div>',width:sd.width||'28%',pp:pp};
+    };
+    const L=side('left','lt'),R=side('right','rt');
+    // --- room grid ---
+    const rooms=rocOvRooms(cAll,ov);
+    const real=live==='full'||live==='custom';
+    let tilesHtml='';
+    rooms.forEach(function(ri){
+      const r=cAll.rooms[ri];
+      const t=r.overview_tile||{};
+      const name=t.name||r.name||r.id||('Room '+(ri+1));
+      const f=rocOvFocus(t.focus);
+      const chips=rocOvChips(cAll,ri,chipsMax);
+      const base=roomMerge(cAll,ri).base_image||'';
+      const phStyle='--roc-ov-focus:'+Math.round(f.x*100)+'% '+Math.round(f.y*100)+'%;'+((real||live==='composite'||!base)?'':'background-image:url(\''+escA(escUrl(base))+'\');');
+      const chipsHtml=chips.map(function(ch,k){
+        const ic=rocOvChipIcon(ch,hass);
+        return'<button type="button" class="roc-ovc" data-ovchip="'+ri+':'+k+'" aria-pressed="false" aria-label="'+escA(ch.name||ch.entities[0]||ic)+'"><ha-icon icon="'+escA(ic)+'"></ha-icon></button>';
+      }).join('');
+      tilesHtml+='<div class="roc-ovt roc-ovt-'+style+'" data-ovt="'+ri+'" tabindex="0" role="button" aria-label="'+escA(name)+'">'
+        +'<div class="roc-ovt-ph" data-ovt-ph="'+ri+'" style="'+phStyle+'">'+(real?'<div class="roc-ovt-mini" data-ovt-mini="'+ri+'"></div>':'')+'</div>'
+        +'<div class="roc-ovt-top"><div class="roc-ovt-name">'+escA(name)+'</div>'+(showInfo?'<div class="roc-ovt-info" data-ovt-info="'+ri+'"></div>':'')+'</div>'
+        +(chipsHtml?'<div class="roc-ovt-chips">'+chipsHtml+'</div>':'')
+        +'</div>';
+      meta.tiles.push({ri:ri,chips:chips,focus:f,real:real});
+    });
+    if(!rooms.length)tilesHtml='<div class="roc-ov-empty">Rooms appear here — add a room in Rooms &amp; menu.</div>';
+    const fill=prof==='landscape'&&style==='card'&&g.fill!==false;
+    const gridHtml='<div class="roc-ov-grid'+(fill?' roc-ov-fill':'')+'" data-ov-grid style="--roc-ov-cols:'+cols+';'+(g.gap?'gap:'+escA(g.gap)+';':'')+(g.min_height?'--roc-ov-minh:'+escA(g.min_height)+';':'')+(g.aspect_ratio?'--roc-ov-aspect:'+escA(g.aspect_ratio)+';':'')+'">'+tilesHtml+'</div>';
+    // --- dock: one launcher per section, rendered by the icon pipeline ---
+    let dockHtml='';
+    const dk=ov.dock;
+    if(dk&&typeof dk==='object'){
+      const all=this._getSections(cAll).map(function(sx){return sx.def;});
+      const list=Array.isArray(dk.sections)?dk.sections.map(function(id){return all.find(function(d){return d.id===id;});}).filter(Boolean):all;
+      const isz=dk.size||'24px';
+      list.forEach(function(d){
+        const id='__ovdock_'+d.id,ic=d.icon||'mdi:view-dashboard',ttl=d.title||d.id;
+        meta.dockIcons.push({id:id,icon:ic,size:isz,chip:true,tap_action:{action:'open-section',section:d.id},_ovDock:true});
+        dockHtml+='<div class="ico ico-chip" data-ico="'+escA(id)+'" tabindex="0" role="button" aria-label="'+escA(ttl)+'" title="'+escA(ttl)+'" style="position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;border-radius:50%;padding:9px;box-sizing:content-box;">'
+          +'<ha-icon data-icoicon="'+escA(id)+'" icon="'+escA(ic)+'" style="--mdc-icon-size:'+escA(isz)+';width:'+escA(isz)+';height:'+escA(isz)+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;"></ha-icon>'
+          +'<span class="ico-ring" data-ico-ring></span><span class="ico-badge" data-ico-badge></span></div>';
+      });
+      if(dockHtml)dockHtml='<div class="roc-ov-dock">'+dockHtml+'</div>';
+    }
+    // --- region grid (OVERVIEW_PLAN.md §3): absent regions get no track ---
+    const areas=[],cols2=[],rows=[];
+    if(prof==='landscape'){
+      const mid=[];
+      if(L){mid.push('lt');cols2.push(escA(L.width));}
+      mid.push('gr');cols2.push('minmax(0,1fr)');
+      if(R){mid.push('rt');cols2.push(escA(R.width));}
+      const span=function(a){return mid.map(function(){return a;}).join(' ');};
+      if(hdHtml){areas.push(span('hd'));rows.push('auto');}
+      areas.push(mid.join(' '));rows.push('minmax(0,1fr)');
+      if(dockHtml){areas.push(span('dk'));rows.push('auto');}
+    }else{
+      cols2.push('minmax(0,1fr)');
+      if(hdHtml){areas.push('hd');rows.push('auto');}
+      if(L&&L.pp==='top'){areas.push('lt');rows.push('auto');}
+      if(R&&R.pp==='top'){areas.push('rt');rows.push('auto');}
+      areas.push('gr');rows.push('minmax(0,1fr)');
+      if(L&&L.pp==='bottom'){areas.push('lt');rows.push('auto');}
+      if(R&&R.pp==='bottom'){areas.push('rt');rows.push('auto');}
+      if(dockHtml){areas.push('dk');rows.push('auto');}
+    }
+    const html='<div class="roc-ov roc-ov-'+style+(prof==='portrait'?' roc-ov-pm':'')+'" data-ov-root style="grid-template-areas:'+areas.map(function(a){return'\''+a+'\'';}).join(' ')+';grid-template-columns:'+cols2.join(' ')+';grid-template-rows:'+rows.join(' ')+';'+(ov.gap?'--roc-ov-gap:'+escA(ov.gap)+';':'')+(ov.padding!==undefined?'--roc-ov-pad:'+escA(ov.padding)+';':'')+'">'
+      +hdHtml+(L?L.html:'')+gridHtml+(R?R.html:'')+dockHtml+'</div>';
+    return{html:html,meta:meta};
+  }
+
+  // Mount cards / minis and wire listeners for the markup _ovBuild() produced.
+  _ovWire(meta,gen){
+    const self=this,sr=this.shadowRoot,cAll=this._config;
+    this._ovTiles=[];this._ovPills=[];this._ovCardEls=[];this._ovThumbs=[];this._ovMiniEls={};
+    if(this._ovMiniRo){this._ovMiniRo.disconnect();this._ovMiniRo=null;}
+    meta.cards.forEach(function(m){
+      const host=sr.querySelector('[data-ovc-card="'+m.key+'"]');if(!host)return;
+      const w=makeHACard(m.cfg,function(el){
+        if(self._renderGen!==gen)return; // a newer render replaced this DOM
+        self._ovCardEls.push(el);
+        if(self._hass)try{el.hass=self._hass;}catch(_){}
+      });
+      if(w)host.appendChild(w);
+    });
+    meta.pills.forEach(function(p){
+      const el=sr.querySelector('[data-ovp="'+p.i+'"]');if(!el)return;
+      self._ovPills.push({el:el,valEl:el.querySelector('[data-ovp-v]'),def:p.def});
+      if(p.tap||p.hold||p.def.double_tap_action)self._addZoneListeners(el,p.tap,p.hold,p.def.double_tap_action,p.def.hold_delay);
+    });
+    const ovRoom=cAll.rooms[this._roomIdx]||{};
+    const ov=rocOvCfg(cAll,this._roomIdx)||{};
+    const wr=ov.grid&&ov.grid.width_ref;
+    const wAuto=!(Number(wr)>0);
+    const navRef=(cAll.nav&&cAll.nav.mini&&Number(cAll.nav.mini.width_ref))||480;
+    const navCfg=cAll.nav||{};
+    meta.tiles.forEach(function(t){
+      const el=sr.querySelector('[data-ovt="'+t.ri+'"]');if(!el)return;
+      const r=cAll.rooms[t.ri];
+      const tc=r.overview_tile||{};
+      self._addZoneListeners(el,{action:'switch-room',room:r.id||r.name},tc.hold_action||null,tc.double_tap_action||null,tc.hold_delay);
+      const rec={ri:t.ri,el:el,chips:[]};
+      t.chips.forEach(function(ch,k){
+        const b=el.querySelector('[data-ovchip="'+t.ri+':'+k+'"]');if(!b)return;
+        rec.chips.push({el:b,def:ch});
+        if(ch.tap_action||ch.hold_action)self._addZoneListeners(b,ch.tap_action,ch.hold_action,null,null);
+      });
+      const info=sr.querySelector('[data-ovt-info="'+t.ri+'"]');
+      if(info)(r.chips||navCfg.chips||[]).slice(0,3).forEach(function(chCfg){if(chCfg)self._navChipInto(info,chCfg,r);});
+      const ph=sr.querySelector('[data-ovt-ph="'+t.ri+'"]');
+      if(t.real){
+        const host=sr.querySelector('[data-ovt-mini="'+t.ri+'"]');
+        if(host){
+          let wRef=wAuto?(host.clientWidth||0):Number(wr);
+          wRef=wRef>0?(wAuto?Math.max(160,Math.ceil(wRef/40)*40):wRef):navRef;
+          const m=self._mountMini(host,t.ri,wRef);
+          if(m){m.thumb=host;m.focus=t.focus;m.auto=wAuto;self._ovMiniEls[t.ri]=m;}
+        }
+      }else if(ph)self._ovThumbs.push({el:ph,ri:t.ri,mode:meta.live});
+      self._ovTiles.push(rec);
+    });
+    if(window.ResizeObserver&&Object.keys(this._ovMiniEls).length){
+      const map=this._ovMiniEls;
+      this._ovMiniRo=new ResizeObserver(function(entries){
+        for(const en of entries)for(const k in map){const m=map[k];if(m&&(m.thumb===en.target||m.el===en.target))self._ovFit(m);}
+      });
+      for(const k in map){this._ovMiniRo.observe(map[k].thumb);this._ovMiniRo.observe(map[k].el);}
+    }
+    const gridEl=sr.querySelector('[data-ov-grid]');
+    if(gridEl){
+      if(this._ovScroll)gridEl.scrollTop=this._ovScroll;
+      gridEl.addEventListener('scroll',function(){self._ovScroll=gridEl.scrollTop;},{passive:true});
+    }
+    void ovRoom;
+  }
+
+  // Cover-fit a tile's live mini (focus = object-position). With width_ref:
+  // auto the mini is re-laid-out at the width the tile really needs, in 40 px
+  // steps, so a big tile is never an upscaled 480 px render (O13).
+  _ovFit(m){
+    const w=m.thumb.clientWidth||0,h=m.thumb.clientHeight||0;
+    let mh=m.el.offsetHeight||0;
+    if(m.auto&&w>0){
+      const need=mh>0?Math.max(w,h*(m.widthRef/mh)):w;
+      const want=Math.max(160,Math.ceil(need/40)*40);
+      if(Math.abs(want-m.widthRef)>=40){
+        if(mh>0)mh=mh*want/m.widthRef;
+        m.widthRef=want;m.el.style.width=want+'px';
+      }
+    }
+    let sc=w>0?w/m.widthRef:0,tx=0,ty=0;
+    if(sc>0&&mh>0){sc=Math.max(sc,h/mh);tx=(w-m.widthRef*sc)*m.focus.x;ty=(h-mh*sc)*m.focus.y;}
+    m.el.style.transform=sc>0?('translate('+tx.toFixed(2)+'px,'+ty.toFixed(2)+'px) scale('+sc+')'):'';
+    m.el._miniScale=sc;
+    if(sc>0&&m.el._hqRefresh)m.el._hqRefresh();
+  }
+
+  _updateOverview(s){
+    for(const t of(this._ovTiles||[])){
+      let any=false;
+      for(const ch of t.chips){
+        const on=rocOvChipActive(ch.def,s);
+        const ents=ch.def.entities||[];
+        const na=ents.length>0&&ents.every(function(id){return!s[id]||s[id].state==='unavailable';});
+        if(on)any=true;
+        ch.el.classList.toggle('on',on);
+        ch.el.classList.toggle('na',na);
+        const ap=on?'true':'false';
+        if(ch.el.getAttribute('aria-pressed')!==ap)ch.el.setAttribute('aria-pressed',ap);
+      }
+      t.el.classList.toggle('roc-ovt-on',any);
+    }
+    for(const p of(this._ovPills||[])){
+      const d=p.def;
+      if(d.template||!d.entity||!p.valEl)continue;
+      const st=s[d.entity];
+      const txt=st?rocFmtState(this._hass,st,d):'—';
+      if(p.valEl.textContent!==txt)p.valEl.textContent=txt;
+    }
+  }
+
+  _dropNavStash(){
+    const st=this._navStash;this._navStash=null;
+    if(st&&st.ro)try{st.ro.disconnect();}catch(_){}
+  }
+
+  // ----- Overview ↔ room transition (O14, OVERVIEW_PLAN.md §4a) ---------------
+  _ovAnimFinish(){
+    const a=this._ovAnim;this._ovAnim=null;
+    if(a)try{a.finish();}catch(_){}
+  }
+  // Decided BEFORE the room switch re-renders: captures what is on screen now.
+  _ovPlanSwitch(idx,manual){
+    const cAll=this._config,sr=this.shadowRoot;
+    if(!sr)return null;
+    const from=this._roomIdx;
+    const fromOv=this._ovActive?rocOvCfg(cAll,from):null;
+    const toOv=rocOvCfg(cAll,idx);
+    if(!fromOv&&!toOv)return null;
+    const ov=fromOv||toOv;
+    const card=sr.querySelector('ha-card');if(!card)return null;
+    const reduced=rocReducedMotion();
+    let mode=ov.transition||'zoom';
+    if(mode!=='none'&&reduced)mode='fade';
+    if(mode==='none')return{kind:'none'};
+    const dur=reduced?150:rocOvMs(ov.transition_duration,450);
+    const cr=card.getBoundingClientRect();
+    const rel=function(el){const r=el.getBoundingClientRect();return{x:r.left-cr.left,y:r.top-cr.top,w:r.width,h:r.height};};
+    if(fromOv&&!toOv){
+      // The whole overview .content (background layer + grid) is frozen.
+      const root=sr.querySelector('.wrap .content');
+      if(!root||!root.querySelector('[data-ov-root]'))return null;
+      const ph=root.querySelector('.roc-ovt[data-ovt="'+idx+'"] .roc-ovt-ph');
+      if(mode==='zoom'&&manual&&ph){ // presence follow fades; only a switch the user made zooms
+        const T=rel(ph);
+        if(T.w>0&&T.h>0){
+          const tc=((cAll.rooms[idx]||{}).overview_tile)||{};
+          return{kind:'open',root:root,idx:idx,tile:T,radius:parseFloat(getComputedStyle(ph).borderTopLeftRadius)||0,focus:rocOvFocus(tc.focus),dur:dur};
+        }
+      }
+      return{kind:'fade-out',layerEl:root,dur:dur};
+    }
+    if(toOv&&!fromOv){
+      const grid=sr.querySelector('.roc-grid');
+      if(!grid)return null;
+      if(mode==='zoom'&&manual&&rocOvRooms(cAll,toOv).indexOf(from)>=0){
+        const tc=((cAll.rooms[from]||{}).overview_tile)||{};
+        return{kind:'close',grid:grid,idx:from,focus:rocOvFocus(tc.focus),dur:dur};
+      }
+      return{kind:'fade-out',layerEl:grid,dur:dur};
+    }
+    return null;
+  }
+  // FLIP the room's image region onto the tile rect T: transform + clip-path
+  // so the room's own stage, cover-fitted with the tile's focus, sits exactly
+  // where the tile showed it. Returns the {transform, clip} pair.
+  _ovTileXf(reg,T,focus,radius,card){
+    const cr=card.getBoundingClientRect();
+    const rel=function(el){const r=el.getBoundingClientRect();return{x:r.left-cr.left,y:r.top-cr.top,w:r.width,h:r.height};};
+    const R=rel(reg);
+    const content=reg.querySelector('.content');
+    const S=content?rel(content):R;
+    if(!(R.w>0&&R.h>0&&S.w>0&&S.h>0&&T.w>0&&T.h>0))return null;
+    const s=Math.max(T.w/S.w,T.h/S.h);
+    const Sx=T.x+(T.w-S.w*s)*focus.x,Sy=T.y+(T.h-S.h*s)*focus.y;
+    const tx=Sx-R.x-(S.x-R.x)*s,ty=Sy-R.y-(S.y-R.y)*s;
+    const L=(T.x-R.x-tx)/s,Tp=(T.y-R.y-ty)/s;
+    const Rr=R.w-L-T.w/s,B=R.h-Tp-T.h/s;
+    const f=function(n){return n.toFixed(2)+'px';};
+    return{transform:'translate('+f(tx)+','+f(ty)+') scale('+s.toFixed(5)+')',clip:'inset('+f(Tp)+' '+f(Rr)+' '+f(B)+' '+f(L)+' round '+f(radius/s)+')'};
+  }
+  // Runs AFTER the switch rendered the new view. Every path ends in exactly
+  // the plain switch-room DOM (finish() strips every inline style it set).
+  _ovRun(plan){
+    if(!plan||plan.kind==='none')return;
+    const self=this,sr=this.shadowRoot;
+    const card=sr&&sr.querySelector('ha-card');if(!card)return;
+    const cleanups=[];let done=false,timer=null;
+    const anim={finish:function(){
+      if(done)return;done=true;clearTimeout(timer);
+      for(const f of cleanups)try{f();}catch(_){}
+      if(self._ovAnim===anim)self._ovAnim=null;
+    }};
+    this._ovAnim=anim;
+    const setS=function(el,props){
+      const prev={};for(const k in props){prev[k]=el.style[k];el.style[k]=props[k];}
+      cleanups.push(function(){for(const k in prev)el.style[k]=prev[k];});
+    };
+    if(getComputedStyle(card).position==='static')setS(card,{position:'relative'});
+    const ease='cubic-bezier(.2,.8,.2,1)',dur=plan.dur;
+    const layer=document.createElement('div');
+    cleanups.push(function(){layer.remove();});
+    const end=function(ms){timer=setTimeout(anim.finish,ms);};
+    if(plan.kind==='fade-out'){
+      layer.style.cssText='position:absolute;inset:0;z-index:5;pointer-events:none;transition:opacity '+dur+'ms ease;';
+      layer.appendChild(plan.layerEl);card.appendChild(layer);
+      void layer.offsetWidth;layer.style.opacity='0';
+      end(dur+60);return;
+    }
+    const grid=sr.querySelector('.roc-grid');
+    if(plan.kind==='open'){
+      // Frozen overview BELOW the new room; the room grows out of the tile.
+      if(!grid){anim.finish();return;}
+      layer.style.cssText='position:absolute;inset:0;z-index:0;pointer-events:none;';
+      layer.appendChild(plan.root);card.insertBefore(layer,card.firstChild);
+      const src=plan.root.querySelector('.roc-ovt[data-ovt="'+plan.idx+'"] .roc-ovt-ph');
+      if(src)src.style.visibility='hidden';
+      setS(grid,{position:'relative',zIndex:'1'});
+      const img=grid.querySelector('.roc-reg[data-reg="image"]');
+      if(!img){anim.finish();return;}
+      const others=[].slice.call(grid.querySelectorAll('.roc-reg')).filter(function(r){return r!==img;});
+      setS(img,{visibility:'hidden'});
+      const ir=img.getBoundingClientRect();
+      others.forEach(function(o){
+        const r=o.getBoundingClientRect();
+        const off=r.bottom<=ir.top+1?'translateY(-16px)':(r.top>=ir.bottom-1?'translateY(16px)':(r.right<=ir.left+1?'translateX(-16px)':(r.left>=ir.right-1?'translateX(16px)':'none')));
+        setS(o,{opacity:'0',transform:off,transition:'none'});
+      });
+      const base=this._roomCfg&&this._roomCfg.base_image;
+      rocOvDecode(base,150).then(function(){
+        if(done)return;
+        // Start from the room's real state, not from overlays fading in from 0:
+        // apply one state pass with the layers' own transitions off.
+        const lay=[].slice.call(img.querySelectorAll('.layer,.glow'));
+        const tr=lay.map(function(el){const v=el.style.transition;el.style.transition='none';return v;});
+        try{self._update();}catch(_){}
+        void img.offsetWidth;
+        lay.forEach(function(el,k){el.style.transition=tr[k];});
+        const xf=self._ovTileXf(img,plan.tile,plan.focus,plan.radius,card);
+        if(!xf){anim.finish();return;}
+        // The tile shows the room's whole stage; the room view crops it to its
+        // image region. Let the stage overflow the region while clip-path does
+        // the cropping, so the first frame IS the tile and the last IS the room.
+        const wrapEl=img.querySelector('.wrap');
+        if(wrapEl)setS(wrapEl,{overflow:'visible'});
+        setS(img,{overflow:'visible',transformOrigin:'0 0',willChange:'transform,clip-path',transition:'none',transform:xf.transform,clipPath:xf.clip});
+        img.style.visibility='';
+        void img.offsetWidth;
+        img.style.transition='transform '+dur+'ms '+ease+',clip-path '+dur+'ms '+ease;
+        img.style.transform='translate(0px,0px) scale(1)';
+        img.style.clipPath='inset(0px 0px 0px 0px round 0px)';
+        setS(layer,{transition:'opacity '+dur+'ms ease,transform '+dur+'ms '+ease,transformOrigin:(plan.tile.x+plan.tile.w/2)+'px '+(plan.tile.y+plan.tile.h/2)+'px'});
+        layer.style.opacity='0';layer.style.transform='scale(.96)';
+        setTimeout(function(){
+          if(done)return;
+          others.forEach(function(o){o.style.transition='opacity 250ms ease,transform 300ms ease';o.style.opacity='1';o.style.transform='none';});
+        },Math.round(dur*0.7));
+        end(dur+320);
+      });
+      return;
+    }
+    if(plan.kind==='close'){
+      // Frozen old room ABOVE the new overview; its photo shrinks into the tile.
+      const root=sr.querySelector('[data-ov-root]');
+      const tile=root&&root.querySelector('.roc-ovt[data-ovt="'+plan.idx+'"]');
+      const ph=tile&&tile.querySelector('.roc-ovt-ph');
+      if(!root||!ph){anim.finish();return;}
+      layer.style.cssText='position:absolute;inset:0;z-index:5;pointer-events:none;';
+      setS(plan.grid,{height:'100%'});
+      layer.appendChild(plan.grid);card.appendChild(layer);
+      // Bring the tile into view inside the scrolling grid first.
+      const gEl=root.querySelector('[data-ov-grid]');
+      if(gEl){
+        const gr=gEl.getBoundingClientRect(),tr=tile.getBoundingClientRect();
+        if(tr.top<gr.top)gEl.scrollTop-=gr.top-tr.top+8;
+        else if(tr.bottom>gr.bottom)gEl.scrollTop+=tr.bottom-gr.bottom+8;
+      }
+      const cr=card.getBoundingClientRect(),pr=ph.getBoundingClientRect();
+      const T={x:pr.left-cr.left,y:pr.top-cr.top,w:pr.width,h:pr.height};
+      const img=plan.grid.querySelector('.roc-reg[data-reg="image"]');
+      const xf=img&&this._ovTileXf(img,T,plan.focus,parseFloat(getComputedStyle(ph).borderTopLeftRadius)||0,card);
+      if(!xf){anim.finish();return;}
+      setS(ph,{visibility:'hidden'});
+      const wrapOld=img.querySelector('.wrap');
+      if(wrapOld)wrapOld.style.overflow='visible';
+      img.style.overflow='visible';
+      setS(root,{opacity:'0',transform:'scale(.96)',transformOrigin:(T.x+T.w/2)+'px '+(T.y+T.h/2)+'px',transition:'none'});
+      [].slice.call(plan.grid.querySelectorAll('.roc-reg')).forEach(function(o){
+        if(o!==img)o.style.transition='opacity '+Math.round(dur*0.45)+'ms ease';
+      });
+      img.style.transformOrigin='0 0';img.style.willChange='transform,clip-path';
+      img.style.clipPath='inset(0px 0px 0px 0px round 0px)';
+      void img.offsetWidth;
+      img.style.transition='transform '+dur+'ms '+ease+',clip-path '+dur+'ms '+ease;
+      img.style.transform=xf.transform;img.style.clipPath=xf.clip;
+      [].slice.call(plan.grid.querySelectorAll('.roc-reg')).forEach(function(o){if(o!==img)o.style.opacity='0';});
+      root.style.transition='opacity '+Math.round(dur*0.8)+'ms ease,transform '+dur+'ms '+ease;
+      root.style.opacity='1';root.style.transform='scale(1)';
+      end(dur+60);
+    }
+  }
+
   _render(){
     if(!this._config)return;
+    this._ovAnimFinish(); // a running overview zoom ends in its final state first
     const _gen=++this._renderGen; // stale async mounts (card helpers) bail via this
     const cAll=this._config;
     // URL deep-link: the first render honours #<key>=<room> (opt-in via url_sync);
@@ -2324,8 +3029,22 @@ class RoomOverlayCard extends HTMLElement{
     // elsewhere (unaffected by this) — minis opt into those via nav.mini.*.
     const _isGhost=!!c._roc_ghost;
     const _isMini=!!c._roc_mini;
+    // Overview page (v6.30.0, OVERVIEW_PLAN.md): the room's OWN `overview:`
+    // block — a top-level one would make every room an overview. Its content
+    // is the overview, never the room keys it may inherit from top level; a
+    // swipe ghost / nav mini of it draws a placeholder instead of the grid.
+    const _ovDef=rocOvCfg(cAll,this._roomIdx);
+    const _ovOn=!!_ovDef&&!_isGhost&&!_isMini;
+    const _ovPh=!!_ovDef&&!_ovOn;
+    const _ovAny=rocOvAny(cAll);
+    this._ovActive=_ovOn;
+    if(_ovDef){
+      ['overlays','zones','badges','elements','icons','labels','gauges','vacuum_widgets','glows','blinds','groups','cards_above','cards_below'].forEach(function(k){c[k]=[];});
+      c.light_controls=null;c.weather_overlay=null;c.base_camera=null;c.base_image_conditions=null;c.filter_conditions=null;c.brightness_model=null;c.tap_action=null;c.zoom=false;c.parallax=false;
+      c.base_image=_ovDef.background||'';
+    }
     // Grid definition for the active profile (swipe ghosts + minis render the image region only)
-    const _lp=(_isGhost||_isMini)?{columns:[100],rows:[100],place:{image:{row:1,col:1}}}
+    const _lp=(_isGhost||_isMini||_ovOn)?{columns:[100],rows:[100],place:{image:{row:1,col:1}}}
       :(rocProfileDef(cAll,_rt)||{columns:[100],rows:[100],place:{image:{row:1,col:1}}});
     this._lp=_lp;
     const _arResolved=tVal(c.aspect_ratio,_vt)||'16/9';
@@ -2346,7 +3065,7 @@ class RoomOverlayCard extends HTMLElement{
     // but also opts portrait INTO the pin instead of sizing to content.
     const _isStubCard=rocIsStubCfg(cAll);
     const _pinHeight=_lhRaw==='viewport'||_lhRaw==='fill';
-    const _naturalRoot=!_isGhost&&!_isMini&&!c._roc_preview&&_rt==='portrait'&&_lhRaw==='viewport';
+    const _naturalRoot=!_ovOn&&!_isGhost&&!_isMini&&!c._roc_preview&&_rt==='portrait'&&_lhRaw==='viewport';
     let _rootH;
     if(_isGhost)_rootH='100%';
     else if(_isMini)_rootH='auto';       // aspect-derived, via _wrapAspect below — never stretched
@@ -2435,10 +3154,14 @@ class RoomOverlayCard extends HTMLElement{
         +_navCardsStart
         +_gridOpen+cAll.rooms.map(function(r,ri){
           const act=ri===navSelfIdx;
+          if(r&&r.overview&&r.nav_hidden===true)return''; // overview page kept out of the strip (O12)
           if(navStyle==='dots')
             return'<button data-nav-room="'+ri+'" aria-label="'+escA(r.name||r.id)+'" style="width:10px;height:10px;border-radius:50%;border:none;cursor:pointer;background:'+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#666)')+';padding:0;flex:none;"></button>';
           if(navStyle==='tabs')
             return'<button data-nav-room="'+ri+'" style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:16px;border:1px solid '+(act?'var(--primary-color,#03a9f4)':'var(--divider-color,#444)')+';cursor:pointer;background:'+(act?'rgba(3,169,244,0.15)':'none')+';color:var(--primary-text-color,#fff);font-size:12px;'+_tabFlex+'">'+(r.icon?'<ha-icon icon="'+escA(r.icon)+'" style="--mdc-icon-size:16px;"></ha-icon>':'')+escA(r.name||r.id||'')+'</button>';
+          // An overview page shows as an icon thumbnail — a mini of a grid of minis is noise (O12)
+          if(r&&r.overview){const _ovbg=(typeof r.overview==='object'&&r.overview.background)||'';
+            return'<div class="roc-thumb roc-thumb-ov" data-nav-room="'+ri+'" data-thumb="'+ri+'"'+(act?' data-act':'')+' tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+(_navGrid?'height:'+_rowH+';min-width:0;':_thSize+_thFlex)+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_ovbg?'background-image:url(\''+escA(escUrl(_ovbg))+'\');':'')+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,opacity .2s ease;"><ha-icon icon="'+escA(r.icon||'mdi:view-dashboard')+'" style="pointer-events:none;"></ha-icon></div>';}
           // thumbnails — live mini-render: base image + filter + sensor chips
           return'<div class="roc-thumb" data-nav-room="'+ri+'" data-thumb="'+ri+'"'+(act?' data-act':'')+' tabindex="0" role="button" aria-label="'+escA(r.name||r.id)+'" style="position:relative;'+(_navGrid?'height:'+_rowH+';min-width:0;':_thSize+_thFlex)+'border-radius:6px;overflow:hidden;cursor:pointer;background-size:cover;background-position:center;'+(_navLiveReal?'':(r.base_image?'background-image:url(\''+escA(escUrl(r.base_image))+'\');':''))+'border:2px solid '+(act?'var(--primary-color,#03a9f4)':'transparent')+';box-sizing:border-box;transition:border-color .2s ease,filter 1.5s ease,opacity .2s ease;">'
             +(_navLiveReal?'<div data-thumb-mini="'+ri+'" style="position:absolute;inset:0;overflow:hidden;pointer-events:none;"></div>':'')
@@ -2488,6 +3211,12 @@ class RoomOverlayCard extends HTMLElement{
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}const _bAct=b.tap_action||b.hold_action||b.double_tap_action;const _bA11y=_bAct?' tabindex="0" role="button" aria-label="'+escA(b.id)+'"':'';return'<div class="badge" data-b="'+escA(b.id)+'"'+_bA11y+' style="'+makeBadgePos(tApply(b,_tier))+';cursor:'+(_bAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
     const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const isChip=!!ico.chip;const _ibg=isChip?'border-radius:50%;padding:9px;box-sizing:content-box;':(ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'');const _icoAct=ico.tap_action||ico.hold_action||ico.double_tap_action;const a11y=_icoAct?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico'+(isChip?' ico-chip':'')+'" data-ico="'+escA(ico.id)+'"'+a11y+' style="position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(_icoAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;"></ha-icon>'+(rocIcoSection(ico)?'<span class="ico-ring" data-ico-ring></span><span class="ico-badge" data-ico-badge></span>':'')+'</div>';}).join('');
+    // Overview page markup (OVERVIEW_PLAN.md §3). Dock launchers join c.icons
+    // AFTER icoHtml was built, so they get the icon pipeline's listeners and
+    // section status (ring, badge) without being drawn on the photo.
+    let _ovHtml='',_ovMeta=null;
+    if(_ovOn){const _ob=this._ovBuild(cAll,_ovDef,_rt);_ovHtml=_ob.html;_ovMeta=_ob.meta;c.icons=_ovMeta.dockIcons;}
+    else if(_ovPh)_ovHtml='<div class="roc-ov-ph"><ha-icon icon="'+escA(((cAll.rooms||[])[this._roomIdx]||{}).icon||'mdi:view-dashboard')+'"></ha-icon></div>';
 
     const vwHtml=(_isGhost||_isMini)?'':(c.vacuum_widgets||[]).map(vw0=>{
       const vw=tApply(vw0,_tier);
@@ -2736,10 +3465,22 @@ class RoomOverlayCard extends HTMLElement{
     // strip — thumbnails, chips, live mini cards, nav cards — is carried over
     // into the new DOM instead of being rebuilt; that rebuild (re-mounting
     // up to one full mini card per room) was most of a room switch's cost.
-    const _navOld=(this._navKeep&&navHtml&&this._navKey===_navKey&&this.shadowRoot)?this.shadowRoot.querySelector('.roc-nav'):null;
-    const _navScroll=_navOld?[_navOld.scrollLeft,_navOld.scrollTop]:null;
+    let _navOld=(this._navKeep&&navHtml&&this._navKey===_navKey&&this.shadowRoot)?this.shadowRoot.querySelector('.roc-nav'):null;
+    let _navScroll=_navOld?[_navOld.scrollLeft,_navOld.scrollTop]:null;
+    // Overview page (v6.30.0): it shows no strip, so the strip of the room we
+    // came from is parked (detached, its minis no longer fed hass) and put back
+    // on the way out — leaving the overview costs no re-mount of every mini.
+    this._navRestore=null;
+    if(!this._navKeep||(this._navStash&&this._navStash.key!==_navKey))this._dropNavStash();
+    if(_ovOn&&_navOld){
+      this._dropNavStash();
+      this._navStash={el:_navOld,key:_navKey,scroll:_navScroll,thumbs:this._navThumbEls,chips:this._navChipEls,cards:this._navCardEls,minis:this._navMiniEls,ro:this._navMiniRo,follow:this._navFollowEl};
+      this._navMiniRo=null;this._navMiniEls={};this._navCardEls=[];_navOld=null;_navScroll=null;
+    }else if(!_ovOn&&!_navOld&&this._navKeep&&navHtml&&this._navStash&&this._navStash.key===_navKey){
+      _navOld=this._navStash.el;_navScroll=this._navStash.scroll||[0,0];this._navRestore=this._navStash;this._navStash=null;
+    }
     this._navKey=_navKey;
-    this.shadowRoot.innerHTML='<style>:host{display:block;--roc-active-c:var(--roc-active,#ffb35c);--roc-cold-c:var(--roc-cold,#6cb8ff);--roc-alert-c:var(--roc-alert,#ff7a6e);--roc-surface-c:var(--roc-surface,rgba(20,22,26,.85));--roc-border-c:var(--roc-border,rgba(255,255,255,.08));--roc-text-c:var(--roc-text,#f2f3f5);--roc-text-2-c:var(--roc-text-2,#9aa3ad);--roc-chip-bg-c:var(--roc-chip-bg,rgba(10,12,15,.55));}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}.ico.ico-ring{display:none;position:absolute;inset:-3px;border-radius:50%;z-index:3;pointer-events:none;background:conic-gradient(var(--roc-active-c) 0 var(--p,0%),rgba(255,255,255,.14) var(--p,0%) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}.ico-badge{position:absolute;top:-4px;right:-4px;z-index:4;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none;}.ico-badge:empty{display:none;}.roc-lcp-cell{min-width:0;container-type:inline-size;}.roc-lcp{position:relative;box-sizing:border-box;width:100%;border-radius:999px;border:2px solid var(--roc-border-c);background:var(--lcp-bg,#16191d);overflow:hidden;display:flex;align-items:center;gap:8px;padding:0 12px 0 3px;color:var(--roc-text-c);font-size:13px;line-height:1;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .6s ease-in-out;}.roc-lcp.unavailable{opacity:.5;}.roc-lcp-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lcp-col,rgba(255,179,92,.55));transition:width .3s ease,background-color .4s ease;pointer-events:none;}.roc-lcp.dragging .roc-lcp-fill{transition:none;}.roc-lcp-ic{position:relative;flex:none;width:calc(min(var(--lcp-h,30px) - 8px,34px));height:calc(min(var(--lcp-h,30px) - 8px,34px));border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);color:var(--roc-text-2-c);box-sizing:border-box;--mdc-icon-size:calc(min(var(--lcp-h,30px) - 8px,34px) * .6);}.roc-lcp.on .roc-lcp-ic{background:var(--lcp-solid,#ffb35c);border-color:transparent;color:#1a1206;}.roc-lcp-nm{position:relative;flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-lcp-val{position:relative;flex:none;font-variant-numeric:tabular-nums;color:var(--roc-text-2-c);}.roc-lcp.on .roc-lcp-val{color:var(--roc-text-c);font-weight:500;}.roc-lcp:focus-visible{outline:2px solid var(--roc-text-c);outline-offset:2px;}@container (max-width:120px){.roc-lcp-nm{display:none;}.roc-lcp{justify-content:space-between;}}.roc-navchip{background:var(--roc-chip-bg-c);border-radius:4px;padding:1px 5px;}.roc-nav.roc-dim .roc-thumb:not([data-act]){opacity:.8;}.roc-nav.roc-dim .roc-thumb:hover{opacity:1;}.ico-chip{box-shadow:0 3px 8px rgba(0,0,0,.4);}.ico.ico-chip::before{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);}.ico.ico-chip::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}@media (prefers-reduced-motion:reduce){*:not(.roc-hold):not(.roc-hold *){animation:none!important;}.roc-panel,.roc-panel-backdrop,.content{transition:none!important;}.roc-panel.pl-sheet-right,.roc-panel.pl-sheet-bottom{transform:none!important;}}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.roc-pm[data-section-panel]{position:fixed;inset:0;width:auto;height:auto;max-height:none;border-radius:0;transform:translateY(14px);padding-bottom:env(safe-area-inset-bottom,0px);}.roc-panel.roc-pm.open[data-section-panel]{transform:none;}.roc-panel-backdrop.roc-pm{position:fixed;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel:not(.roc-cols-set) .roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:12px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:var(--roc-active-c);font-weight:500;}.roc-tile.is-active{box-shadow:inset 0 0 0 1px var(--roc-active-c);}.roc-tile.is-active .roc-tile-progress-bar{background:var(--roc-active-c);}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-img .roc-tile-quick{flex-direction:row;flex-wrap:wrap;justify-content:center;margin-top:2px;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;--roc-active-c:var(--roc-active,#ffb35c);--roc-cold-c:var(--roc-cold,#6cb8ff);--roc-alert-c:var(--roc-alert,#ff7a6e);--roc-surface-c:var(--roc-surface,rgba(20,22,26,.85));--roc-border-c:var(--roc-border,rgba(255,255,255,.08));--roc-text-c:var(--roc-text,#f2f3f5);--roc-text-2-c:var(--roc-text-2,#9aa3ad);--roc-chip-bg-c:var(--roc-chip-bg,rgba(10,12,15,.55));}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}.ico.ico-ring{display:none;position:absolute;inset:-3px;border-radius:50%;z-index:3;pointer-events:none;background:conic-gradient(var(--roc-active-c) 0 var(--p,0%),rgba(255,255,255,.14) var(--p,0%) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}.ico-badge{position:absolute;top:-4px;right:-4px;z-index:4;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none;}.ico-badge:empty{display:none;}.roc-lcp-cell{min-width:0;container-type:inline-size;}.roc-lcp{position:relative;box-sizing:border-box;width:100%;border-radius:999px;border:2px solid var(--roc-border-c);background:var(--lcp-bg,#16191d);overflow:hidden;display:flex;align-items:center;gap:8px;padding:0 12px 0 3px;color:var(--roc-text-c);font-size:13px;line-height:1;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .6s ease-in-out;}.roc-lcp.unavailable{opacity:.5;}.roc-lcp-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lcp-col,rgba(255,179,92,.55));transition:width .3s ease,background-color .4s ease;pointer-events:none;}.roc-lcp.dragging .roc-lcp-fill{transition:none;}.roc-lcp-ic{position:relative;flex:none;width:calc(min(var(--lcp-h,30px) - 8px,34px));height:calc(min(var(--lcp-h,30px) - 8px,34px));border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);color:var(--roc-text-2-c);box-sizing:border-box;--mdc-icon-size:calc(min(var(--lcp-h,30px) - 8px,34px) * .6);}.roc-lcp.on .roc-lcp-ic{background:var(--lcp-solid,#ffb35c);border-color:transparent;color:#1a1206;}.roc-lcp-nm{position:relative;flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-lcp-val{position:relative;flex:none;font-variant-numeric:tabular-nums;color:var(--roc-text-2-c);}.roc-lcp.on .roc-lcp-val{color:var(--roc-text-c);font-weight:500;}.roc-lcp:focus-visible{outline:2px solid var(--roc-text-c);outline-offset:2px;}@container (max-width:120px){.roc-lcp-nm{display:none;}.roc-lcp{justify-content:space-between;}}.roc-navchip{background:var(--roc-chip-bg-c);border-radius:4px;padding:1px 5px;}.roc-nav.roc-dim .roc-thumb:not([data-act]){opacity:.8;}.roc-nav.roc-dim .roc-thumb:hover{opacity:1;}.ico-chip{box-shadow:0 3px 8px rgba(0,0,0,.4);}.ico.ico-chip::before{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);}.ico.ico-chip::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}@media (prefers-reduced-motion:reduce){*:not(.roc-hold):not(.roc-hold *){animation:none!important;}.roc-panel,.roc-panel-backdrop,.content{transition:none!important;}.roc-panel.pl-sheet-right,.roc-panel.pl-sheet-bottom{transform:none!important;}}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.roc-pm[data-section-panel]{position:fixed;inset:0;width:auto;height:auto;max-height:none;border-radius:0;transform:translateY(14px);padding-bottom:env(safe-area-inset-bottom,0px);}.roc-panel.roc-pm.open[data-section-panel]{transform:none;}.roc-panel-backdrop.roc-pm{position:fixed;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel:not(.roc-cols-set) .roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:12px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:var(--roc-active-c);font-weight:500;}.roc-tile.is-active{box-shadow:inset 0 0 0 1px var(--roc-active-c);}.roc-tile.is-active .roc-tile-progress-bar{background:var(--roc-active-c);}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-img .roc-tile-quick{flex-direction:row;flex-wrap:wrap;justify-content:center;margin-top:2px;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}'+(_ovAny?ROC_OV_CSS:'')+'</style><ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"'+(_ovOn?' style="position:absolute;inset:0;"':'')+'><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+_ovHtml+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(window.innerWidth||0)+'&#215;'+Math.round(window.innerHeight||0)+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button><button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>'+(c._roc_preview?'':'<button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -2764,6 +3505,16 @@ class RoomOverlayCard extends HTMLElement{
         _navNew.replaceWith(_navOld);
         _navOld.scrollLeft=_navScroll[0];_navOld.scrollTop=_navScroll[1];
         _navReused=true;
+        const _nr=this._navRestore;this._navRestore=null;
+        if(_nr){
+          if(this._navMiniRo)this._navMiniRo.disconnect();
+          this._navThumbEls=_nr.thumbs;this._navChipEls=_nr.chips;this._navCardEls=_nr.cards;this._navMiniEls=_nr.minis;this._navMiniRo=_nr.ro;this._navFollowEl=_nr.follow;
+          // Fresh states reach the parked minis after the switch's own frames
+          // (a zoom out of the overview must not share them with 6 mini updates).
+          const _nself=this,_nm=this._navMiniEls,_nc=this._navCardEls;
+          const _npush=function(){if(_nself._ovAnim){setTimeout(_npush,150);return;}if(!_nself._hass)return;for(const _k in _nm)try{_nm[_k].el.hass=_nself._hass;}catch(_){}for(const _ce of _nc)try{_ce.hass=_nself._hass;}catch(_){}};
+          setTimeout(_npush,300);
+        }
         this._navSetActive(this._roomIdx);
       }
     }
@@ -2787,18 +3538,7 @@ class RoomOverlayCard extends HTMLElement{
           const chipCont=navSelf.shadowRoot.querySelector('[data-thumb-chips="'+ri+'"]');
           if(!chipCont)return;
           (r.chips||navCfg.chips||[]).slice(0,3).forEach(function(chCfg){
-            const span=document.createElement('span');
-            // Optional pill styling per chip
-            let _cs='pointer-events:none;';
-            if(chCfg.background)_cs+='background:'+chCfg.background+';';
-            if(chCfg.border_radius)_cs+='border-radius:'+chCfg.border_radius+';';
-            if(chCfg.padding)_cs+='padding:'+chCfg.padding+';';
-            if(chCfg.font_size)_cs+='font-size:'+chCfg.font_size+';';
-            if(chCfg.border)_cs+='border:'+chCfg.border+';';
-            span.style.cssText=_cs;
-            span.className='roc-navchip'; // v6.16.0 default pill (token colours); any inline chip style above still wins
-            chipCont.appendChild(span);
-            navSelf._navChipEls.push({el:span,cfg:chCfg,entity:String(chCfg.entity||'').replace(/\{room\}/g,r.id||'')});
+navSelf._navChipInto(chipCont,chCfg,r);
           });
         });
       }
@@ -2817,30 +3557,8 @@ class RoomOverlayCard extends HTMLElement{
         cAll.rooms.forEach(function(r,ri){
           const host=navSelf.shadowRoot.querySelector('[data-thumb-mini="'+ri+'"]');
           if(!host)return;
-          try{
-            const mc=document.createElement('room-overlay-card');
-            // Scaled down with transform:scale() to fit the thumbnail. transform
-            // is paint-only — it never affects offsetWidth/offsetHeight, which is
-            // exactly what _layoutStage() now measures with (see its comment) —
-            // so nothing inside the mini ever sees a shrunk box to mis-size
-            // itself against, regardless of the applied scale.
-            mc.style.cssText='display:block;position:absolute;top:0;left:0;width:'+_wRef+'px;transform-origin:top left;';
-            // Connect to the document BEFORE setConfig/hass: several layout
-            // reads happen synchronously on the first render/update pass
-            // (_layoutFitWrap/_layoutStage, and — the one that actually bit a
-            // live day_night blind — the gauge fill's el.offsetHeight slat
-            // measurement). offsetHeight/getBoundingClientRect always read 0
-            // on a still-disconnected element, so day_night's `if(_perDN>0)`
-            // guard silently skipped setting any fill at all on first paint.
-            // A later IntersectionObserver-triggered _update() can self-heal
-            // plain percentage-fill gauges, but there's no reason to rely on
-            // that race at all — just connect first.
-            host.appendChild(mc);
-            mc.setConfig(rocBuildMiniConfig(cAll,ri));
-            mc._roomIdx=ri;
-            if(navSelf._hass)try{mc.hass=navSelf._hass;}catch(_){}
-            navSelf._navMiniEls[ri]={el:mc,host:host,widthRef:_wRef};
-          }catch(e){console.warn('[room-overlay-card] nav.live mini mount failed for room '+((r&&r.id)||ri)+':',e);}
+          const _mrec=navSelf._mountMini(host,ri,_wRef); // shared with overview tiles
+          if(_mrec)navSelf._navMiniEls[ri]=_mrec;
         });
         if(window.ResizeObserver){
           const _miniMap=navSelf._navMiniEls;
@@ -2890,6 +3608,10 @@ class RoomOverlayCard extends HTMLElement{
       }
     }
     } // !_navReused
+    // Overview page wiring (cards, pills, tiles, minis) — after the nav block,
+    // which resets _navChipEls that the tiles' info chips register into.
+    if(_ovOn&&_ovMeta)this._ovWire(_ovMeta,_gen);
+    else{this._ovTiles=null;this._ovPills=null;this._ovThumbs=null;this._ovCardEls=[];this._ovMiniEls={};if(this._ovMiniRo){this._ovMiniRo.disconnect();this._ovMiniRo=null;}}
     // Mount companion strip cards (above/below the image)
     this._stripCardEls=[];
     const stSelf=this;
@@ -3017,6 +3739,8 @@ class RoomOverlayCard extends HTMLElement{
         const useY=_whMode==='vertical'||_whMode==='both';
         wrapSw.addEventListener('wheel',function(e){
           if(e.ctrlKey||whSelf._zoomScale>1)return; // leave zoom alone
+          // Overview page: a vertical wheel over the room grid / a side column scrolls it
+          if(whSelf._ovActive&&Math.abs(e.deltaY)>=Math.abs(e.deltaX)&&(e.composedPath?e.composedPath():[]).some(function(n){return n.classList&&(n.classList.contains('roc-ov-grid')||n.classList.contains('roc-ov-side'));}))return;
           let d=0;
           if(useX&&useY)d=Math.abs(e.deltaX)>=Math.abs(e.deltaY)?e.deltaX:e.deltaY;
           else if(useX)d=e.deltaX;
@@ -3494,7 +4218,7 @@ class RoomOverlayCard extends HTMLElement{
     const _navEx={ids:new Set(),attrs:new Set()};
     // nav.live (composite thumbnails) also reacts to other rooms' overlays,
     // conditional base images and brightness model
-    const _navLive=!!(cAll.nav&&cAll.nav.live);
+    const _navLive=!!(cAll.nav&&cAll.nav.live)||!!(this._ovThumbs&&this._ovThumbs.some(function(t){return t.mode==='composite';}));
     this._navBmSorted={};
     if(Array.isArray(cAll.rooms))for(let _ri=0;_ri<cAll.rooms.length;_ri++){
       const _rr=cAll.rooms[_ri];if(!_rr)continue;
@@ -3509,6 +4233,9 @@ class RoomOverlayCard extends HTMLElement{
       }
     }
     for(const ch of this._navChipEls)if(ch.entity)_navEx.ids.add(ch.entity);
+    // Overview chips/pills are the overview page's own state — full updates.
+    for(const _t of(this._ovTiles||[]))for(const _ch of _t.chips)for(const _id of(_ch.def.entities||[]))_ex.ids.add(_id);
+    for(const _p of(this._ovPills||[]))if(_p.def.entity&&!_p.def.template)_ex.ids.add(_p.def.entity);
     this._relevantEntities=[..._ex.ids];
     this._navEntities=[..._navEx.ids].filter(id=>!_ex.ids.has(id));
     this._navAttrSources=[..._navEx.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};});
@@ -3777,9 +4504,13 @@ class RoomOverlayCard extends HTMLElement{
     if(rocReducedMotion())dir=0; // reduced motion: crossfade, no slide
     // Ghost of the old room for the transition (embedded cards render blank in
     // the clone for ~0.3 s — acceptable)
+    this._ovAnimFinish();
+    // Overview page ↔ room (O14): decided on what is on screen NOW; a swipe
+    // (noGhost) keeps its own drag preview.
+    const _ovPlan=(!noGhost&&rocOvAny(cAll))?this._ovPlanSwitch(idx,manual):null;
     const oldContent=this.shadowRoot?this.shadowRoot.querySelector('.wrap .content'):null;
     let ghost=null;
-    if(oldContent&&!noGhost){ // swipe-commit passes noGhost — the drag preview already covers the transition (and a translated clone leaks a sliver under lock_aspect)
+    if(oldContent&&!noGhost&&!_ovPlan){ // swipe-commit passes noGhost — the drag preview already covers the transition (and a translated clone leaks a sliver under lock_aspect)
       ghost=oldContent.cloneNode(true);
       ghost.style.position='absolute';ghost.style.inset='0';ghost.style.zIndex='600';
       ghost.style.pointerEvents='none';
@@ -3795,6 +4526,7 @@ class RoomOverlayCard extends HTMLElement{
     this._rendered=false;
     this._navKeep=true;
     try{this._render();}finally{this._navKeep=false;}
+    if(_ovPlan)this._ovRun(_ovPlan);
     const wrap=this.shadowRoot.querySelector('.wrap');
     const ncontent=this.shadowRoot.querySelector('.content');
     if(ghost&&wrap&&ncontent){
@@ -3887,6 +4619,12 @@ class RoomOverlayCard extends HTMLElement{
         self._tmplUnsubs.push(p);
       }catch(e){console.warn('[room-overlay-card] template subscribe failed:',e);}
     };
+    // Overview header pills with a `template:` (v6.30.0)
+    for(const p of(this._ovPills||[])){
+      if(!p.def.template||!p.valEl)continue;
+      const el=p.valEl;
+      sub(p.def.template,function(r){const v=r!==undefined&&r!==null?String(r):'';if(el.textContent!==v)el.textContent=v;});
+    }
     // Label text templates
     for(const lbl of(c.labels||[])){
       if(!lbl.template)continue;
@@ -4036,7 +4774,7 @@ class RoomOverlayCard extends HTMLElement{
       // Slider zones, embedded HA cards (sliders, covers…) and an open cockpit
       // section sheet (a tile card's own percentage slider must never engage
       // the room-swipe running underneath it — v6.10.1) own their gestures.
-      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&(n.classList.contains('elcont')||n.classList.contains('roc-panel')));}))return;
+      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&(n.classList.contains('elcont')||n.classList.contains('roc-panel')||n.classList.contains('roc-ov-hd')||n.classList.contains('roc-ov-side')));}))return;
       pid=e.pointerId;sx=e.clientX;sy=e.clientY;active=true;engaged=false;dx=0;
       lastX=e.clientX;lastT=Date.now();vx=0;
       w=wrap.getBoundingClientRect().width||1;
@@ -4595,6 +5333,7 @@ class RoomOverlayCard extends HTMLElement{
         }
       }
     }
+    if(this._ovActive)this._updateOverview(s);
     // Follow button: accent colour while we're away from the presence room
     if(this._navFollowEl&&_reId){
       const _fri=roomMatch(cAll,s[_reId]?.state);
@@ -4954,43 +5693,13 @@ class RoomOverlayCard extends HTMLElement{
       // apply their own brightness_model/filter_conditions internally (same code path as the main card);
       // a CSS filter set on the WRAPPER (tEl) would stack on top of the mini's own already-correct
       // per-layer filter, double-exposing/double-dimming it. So the wrapper must stay filter-free here.
+      const _mode=_live?'composite':(_liveReal?_navLiveVal:'');
       for(let ri=0;ri<cAll.rooms.length;ri++){
         const tEl=this._navThumbEls[ri];if(!tEl)continue;
-        const r=cAll.rooms[ri];
-        let tf='';
-        if(!_liveReal){
-          if(_live){const bf=bmFilter(r.brightness_model,s,this._navBmSorted[ri]);if(bf&&bf!=='none')tf=bf;}
-          if(!tf&&r.filter_conditions?.length){const f=resolveFilter(r.filter_conditions,s);if(f&&f!=='none')tf=f;}
-        }
-        setSt(tEl,'filter',tf);
-        if(!_live)continue;
-        // Conditional base image (mirror of the main card's logic)
-        let base=r.base_image||'';
-        if(r.base_image_conditions?.length&&!r.base_camera){
-          for(const bc of r.base_image_conditions){
-            if(bc.condition===undefined){if(bc.image)base=bc.image;continue;}
-            if(evalCond(bc.condition,s)){if(bc.image)base=bc.image;break;}
-          }
-        }
-        // Active overlays, top-most first (CSS: first background layer is on top)
-        const stack=[];
-        (r.overlays||[]).forEach((ov,oi)=>{
-          if(ov.group||ov.visible_template!==undefined)return;
-          const op=ov.conditions?.opacity?Number(resolveVal(ov.conditions.opacity,s,0)):1;
-          if(!(op>0))return;
-          const img=this._ovImg(ov);
-          if(img)stack.push({img:img,z:ov.z_index??oi+1});
-        });
-        stack.sort(function(a,b){return a.z-b.z;});stack.reverse();
-        // v6.25.0: HQ-resampled copies sized to the thumb (measured once per thumb element)
-        if(!tEl._rocHqBox&&tEl.offsetWidth){const _d=window.devicePixelRatio||1;tEl._rocHqBox={w:tEl.offsetWidth*_d,h:tEl.offsetHeight*_d};}
-        const _hb=tEl._rocHqBox,_self=this;
-        const _hqT=function(u){return _hb?rocHqUrl(u,_hb.w,_hb.h,function(){clearTimeout(_self._hqNavT);_self._hqNavT=setTimeout(function(){if(_self.isConnected)_self._updateNav();},60);}):u;};
-        const bgs=stack.map(function(o){return'url(\''+escUrl(_hqT(o.img))+'\')';});
-        if(base)bgs.push('url(\''+escUrl(_hqT(base))+'\')');
-        const bgStr=bgs.join(',');
-        if(tEl._rocBg!==bgStr){tEl._rocBg=bgStr;tEl.style.backgroundImage=bgStr;}
+        if(cAll.rooms[ri]&&cAll.rooms[ri].overview)continue; // icon thumbnail, nothing to paint
+        this._paintThumb(tEl,cAll.rooms[ri],ri,_mode);
       }
+      for(const t of(this._ovThumbs||[]))this._paintThumb(t.el,cAll.rooms[t.ri],t.ri,t.mode);
       for(const ch of this._navChipEls){
         const ent=s[ch.entity];if(!ent)continue;
         const nv=rocNumVal(ent.state);
@@ -6549,6 +7258,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       }
       const rchR=this._pYaml(q('#room-chips'));
       if(rchR.ok){if(rchR.val)tgt.chips=rchR.val;else delete tgt.chips;}
+      this._ovCollect(q,tgt); // overview page / tile (v6.30.0)
       const reEl=q('#room_entity');
       if(reEl&&!(typeof c.room_entity==='object'&&c.room_entity)){ // object mapping is YAML-managed
         if(reEl.value.trim())c.room_entity=reEl.value.trim();else delete c.room_entity;
@@ -7350,6 +8060,363 @@ class RoomOverlayCardEditor extends HTMLElement{
     h+='</div></details>';
     return h;}
 
+
+  // ----- Overview page editor (v6.30.0, OVERVIEW_PLAN.md §5) ----------------
+  // Two accordions in Rooms & menu: "Overview page" for a room with
+  // `overview:`, "Overview tile" for every other room once an overview exists.
+  // Every key the renderer reads has a field here (COCKPIT_PLAN.md D11);
+  // keys without a field survive a save (KEEP — start from the old object).
+  _ovEdHtml(c,er,sec){
+    const self=this,e=function(s){return self._e(s==null?'':String(s));};
+    const inp=function(st){return self._inp(st||'');};
+    const fld=function(label,inner,grow){return'<div style="flex:'+(grow||'1 1 140px')+';min-width:0;"><label class="roc-l">'+label+'</label>'+inner+'</div>';};
+    const row=function(inner){return'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;align-items:flex-end;">'+inner+'</div>';};
+    const chk=function(id,label,on,rr){return'<div style="display:flex;align-items:center;gap:7px;padding-bottom:6px;"><input id="'+id+'" type="checkbox"'+(on?' checked':'')+(rr?' data-ovf-rr':' data-ovf')+' style="width:16px;height:16px;cursor:pointer;"><label for="'+id+'" style="font-size:12px;cursor:pointer;">'+label+'</label></div>';};
+    const sel=function(id,cur,list,rr){return'<select id="'+id+'"'+(rr?' data-ovf-rr':' data-ovf')+inp()+'>'+list.map(function(o){return'<option value="'+e(o[0])+'"'+(String(cur)===String(o[0])?' selected':'')+'>'+e(o[1])+'</option>';}).join('')+'</select>';};
+    const txt=function(id,val,ph,attr){return'<input id="'+id+'" type="text" data-ovf'+(attr||'')+' placeholder="'+e(ph||'')+'" value="'+e(val)+'"'+inp()+'>';};
+    const sub=function(t){return'<div style="font-size:12px;font-weight:600;margin:12px 0 6px;padding-top:8px;border-top:1px dashed var(--divider-color);">'+t+'</div>';};
+    const btn='padding:4px 10px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:12px;';
+    const rooms=Array.isArray(c.rooms)?c.rooms:[];
+    let out='';
+    if(er&&er.overview){
+      const ov=typeof er.overview==='object'?er.overview:{};
+      const PV=function(v,p,d){return rocOvPV(v,p,d);};
+      let h='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">This room is an <b>overview page</b>: every other room as a tile (tap opens the room), plus optional header, side columns and a dock of section launchers. A region you switch off collapses and the room grid takes its space. Its photo and elements are not used.</p>';
+      h+=row(fld('Room → tile transition',sel('ovf-transition',ov.transition||'zoom',[['zoom','zoom — the room grows out of its tile'],['fade','fade'],['none','none']]))
+        +fld('Duration (ms)','<input id="ovf-dur" type="number" min="0" step="50" data-ovf placeholder="450" value="'+e(ov.transition_duration!=null?rocOvMs(ov.transition_duration,450):'')+'"'+inp()+'>')
+        +fld('Background image (optional)',txt('ovf-bg',ov.background||'','/local/overview_bg.webp'),'2 1 220px'));
+      h+=chk('ovf-navhidden','Hide this page from the other rooms&#39; thumbnail strip',er.nav_hidden===true,false);
+      // header
+      const hd=ov.header&&typeof ov.header==='object'?ov.header:null;
+      h+=sub('Header');
+      h+=row(chk('ovf-hd-on','Show a header bar',!!hd,true)+(hd?fld('Height','<input id="ovf-hd-h" type="text" data-ovf placeholder="auto" value="'+e(hd.height&&hd.height!=='auto'?hd.height:'')+'"'+inp()+'>'):''));
+      if(hd){
+        (Array.isArray(hd.items)?hd.items:[]).forEach(function(it,i){
+          const k=rocOvHdKind(it)||'card';
+          let b='<div style="border:1px solid var(--divider-color);border-radius:6px;padding:8px;margin-bottom:6px;">';
+          b+=row(fld('Item','<select data-ovhd-kind="'+i+'" data-ovf-rr'+inp()+'>'+[['pill','Pill — entity value / template'],['nav_cards','Nav strip cards (e.g. your alert ticker)'],['card','Card (YAML)']].map(function(o){return'<option value="'+o[0]+'"'+(o[0]===k?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>','2 1 200px')
+            +fld('Width','<input data-ovhd-w="'+i+'" type="text" data-ovf placeholder="'+(k==='pill'?'auto':'grow')+'" value="'+e(it&&it.width||'')+'"'+inp()+'>','1 1 90px')
+            +fld('Profile','<select data-ovhd-media="'+i+'" data-ovf'+inp()+'>'+[['','both'],['landscape','landscape only'],['portrait','portrait only']].map(function(o){return'<option value="'+o[0]+'"'+((it&&it.media||'')===o[0]?' selected':'')+'>'+o[1]+'</option>';}).join('')+'</select>','1 1 110px'));
+          if(k==='pill'){
+            const p=(it&&it.pill)||{};
+            b+=row(fld('Entity','<input data-ovhd-ent="'+i+'" type="text" list="roc-entities" data-ovf placeholder="sensor.dhw_temperature" value="'+e(p.entity||'')+'"'+inp()+'>','2 1 180px')
+              +fld('Icon','<input data-ovhd-icon="'+i+'" type="text" data-ovf placeholder="mdi:water-boiler" value="'+e(p.icon||'')+'"'+inp()+'>')
+              +fld('Attribute','<input data-ovhd-attr="'+i+'" type="text" data-ovf value="'+e(p.attribute||'')+'"'+inp()+'>','1 1 100px'));
+            b+=row(fld('Prefix','<input data-ovhd-pre="'+i+'" type="text" data-ovf value="'+e(p.prefix||'')+'"'+inp()+'>','1 1 80px')
+              +fld('Suffix','<input data-ovhd-suf="'+i+'" type="text" data-ovf placeholder="auto: entity unit" value="'+e(p.suffix!=null?p.suffix:'')+'"'+inp()+'>','1 1 80px')
+              +fld('Decimals','<input data-ovhd-dec="'+i+'" type="number" min="0" step="1" data-ovf value="'+e(p.decimals!=null?p.decimals:'')+'"'+inp()+'>','1 1 70px')
+              +fld('Template (instead of entity, optional)','<input data-ovhd-tpl="'+i+'" type="text" data-ovf placeholder="{{ states(\'sensor.nameday\') }}" value="'+e(p.template||'')+'"'+inp()+'>','3 1 240px'));
+            b+=self._actFieldsHtml('ovhd'+i,{tap:p.tap_action,hold:p.hold_action},{slots:['tap','hold'],entity:p.entity||'',labels:{tap:'Tap (default: more-info)',hold:'Hold'}});
+          }else if(k==='card'){
+            const cc=it&&it.card?it.card:(function(){const o=Object.assign({},it||{});delete o.width;delete o.media;return o;})();
+            b+='<label class="roc-l">Card (YAML)</label><textarea data-ovhd-card="'+i+'" rows="3" data-ovf placeholder="type: custom:alert-ticker-card"'+inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+e(cc&&cc.type?_yaml.s(cc):'')+'</textarea>';
+          }else{
+            const n=((c.nav&&c.nav.cards)||[]).length;
+            b+='<div style="font-size:11px;color:var(--secondary-text-color);">Shows the '+n+' card'+(n===1?'':'s')+' from <i>Navigation menu → Cards</i> here too — one configuration, used in both places.</div>';
+          }
+          b+='<div><button type="button" data-ovhd-mv="'+i+':-1" style="'+btn+'margin-top:6px;">&#9650;</button> <button type="button" data-ovhd-mv="'+i+':1" style="'+btn+'margin-top:6px;">&#9660;</button> <button type="button" data-ovhd-rm="'+i+'" style="'+btn+'margin-top:6px;color:var(--error-color);border-color:var(--error-color);">Remove</button></div>';
+          h+=b+'</div>';
+        });
+        h+='<div style="display:flex;gap:6px;flex-wrap:wrap;"><button type="button" data-ovhd-add="pill" style="'+btn+'">+ Pill</button><button type="button" data-ovhd-add="nav_cards" style="'+btn+'">+ Nav strip cards</button><button type="button" data-ovhd-add="card" style="'+btn+'">+ Card</button></div>';
+      }
+      // left / right
+      [['left','lt','Left column'],['right','rt','Right column']].forEach(function(x){
+        const sd=ov[x[0]]&&typeof ov[x[0]]==='object'?ov[x[0]]:null;
+        h+=sub(x[2]);
+        h+=row(chk('ovf-'+x[1]+'-on','Show the '+x[2].toLowerCase()+' (cards, e.g. clock, weather, calendar)',!!sd,true));
+        if(sd){
+          h+=row(fld('Width (landscape)',txt('ovf-'+x[1]+'-w',sd.width||'','28%'))
+            +fld('On phones (portrait)',sel('ovf-'+x[1]+'-pp',sd.portrait||'top',[['top','above the room grid'],['bottom','below the room grid'],['hidden','hidden']])));
+          h+='<label class="roc-l">Cards (YAML list — each a card config or {card, height, media: portrait|landscape})</label><textarea id="ovf-'+x[1]+'-cards" rows="4" data-ovf placeholder="- card:&#10;    type: weather-forecast&#10;    entity: weather.home&#10;  media: landscape"'+inp('font-family:monospace;font-size:12px;resize:vertical;')+'>'+e(Array.isArray(sd.cards)&&sd.cards.length?_yaml.s(sd.cards):'')+'</textarea>';
+        }
+      });
+      // grid
+      const g=ov.grid&&typeof ov.grid==='object'?ov.grid:{};
+      const gAuto=!Array.isArray(g.rooms);
+      h+=sub('Room grid');
+      h+=chk('ovf-g-auto','All rooms, in room order',gAuto,true);
+      if(!gAuto){
+        const ids=g.rooms.map(String);
+        h+='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;">'+rooms.filter(function(r){return r&&!r.overview;}).map(function(r){
+          return'<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-ovg-room="'+e(r.id)+'"'+(ids.indexOf(String(r.id))>=0?' checked':'')+' data-ovf style="width:15px;height:15px;">'+e(r.name||r.id)+'</label>';
+        }).join('')+'</div>';
+      }
+      const st=[['card','photo tiles'],['row','list rows']];
+      h+=row(fld('Columns — landscape','<input id="ovf-g-cols-l" type="number" min="1" max="12" step="1" data-ovf placeholder="3" value="'+e(PV(g.columns,'landscape',''))+'"'+inp()+'>','1 1 100px')
+        +fld('Columns — portrait','<input id="ovf-g-cols-p" type="number" min="1" max="12" step="1" data-ovf placeholder="2" value="'+e(PV(g.columns,'portrait',''))+'"'+inp()+'>','1 1 100px')
+        +fld('Tiles — landscape',sel('ovf-g-style-l',PV(g.style,'landscape','card'),st))
+        +fld('Tiles — portrait',sel('ovf-g-style-p',PV(g.style,'portrait','card'),st)));
+      h+=row(fld('Tile picture',sel('ovf-g-live',g.live||'inherit',[['inherit','same as the nav thumbnails'],['full','live room (everything)'],['custom','live room (Show-in-mini items)'],['composite','photo + active overlays'],['off','photo only']]),'2 1 200px')
+        +fld('Live tile reference width','<input id="ovf-g-wref" type="text" data-ovf placeholder="auto (tile width)" value="'+e(Number(g.width_ref)>0?g.width_ref:'')+'"'+inp()+'>','1 1 120px')
+        +fld('State chips — landscape','<input id="ovf-g-chips-l" type="number" min="0" max="8" step="1" data-ovf placeholder="4" value="'+e(PV(g.chips_max,'landscape',''))+'"'+inp()+'>','1 1 100px')
+        +fld('State chips — portrait','<input id="ovf-g-chips-p" type="number" min="0" max="8" step="1" data-ovf placeholder="3" value="'+e(PV(g.chips_max,'portrait',''))+'"'+inp()+'>','1 1 100px'));
+      h+=row(chk('ovf-g-info','Show each room&#39;s thumbnail chips (temperature, humidity…) on its tile',g.info!==false,false)+fld('Gap',txt('ovf-g-gap',g.gap||'','12px'),'0 1 100px'));
+      // dock
+      const dk=ov.dock&&typeof ov.dock==='object'?ov.dock:null;
+      const secs=Array.isArray(c.sections)?c.sections:[];
+      h+=sub('Dock — section launchers');
+      if(!secs.length)h+='<div style="font-size:11px;color:var(--secondary-text-color);margin-bottom:6px;">No sections yet — create them in the Sections tab; each becomes a launcher here.</div>';
+      h+=row(chk('ovf-dk-on','Show the dock',!!dk,true)+(dk?fld('Icon size',txt('ovf-dk-size',dk.size||'','24px'),'0 1 100px'):''));
+      if(dk){
+        const dAuto=!Array.isArray(dk.sections);
+        h+=chk('ovf-dk-auto','All sections, in their order',dAuto,true);
+        if(!dAuto){
+          const ids=dk.sections.map(String);
+          h+='<div style="display:flex;flex-wrap:wrap;gap:10px;">'+secs.map(function(s){
+            return'<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-ovd-sec="'+e(s.id)+'"'+(ids.indexOf(String(s.id))>=0?' checked':'')+' data-ovf style="width:15px;height:15px;">'+e(s.title||s.id)+'</label>';
+          }).join('')+'</div>';
+        }
+      }
+      out+=sec('room-overview','Overview page — header, side columns, room grid, dock',undefined,h,'mdi:view-dashboard');
+    }else if(er&&rocOvAny(c)){
+      const t=er.overview_tile&&typeof er.overview_tile==='object'?er.overview_tile:{};
+      const f=rocOvFocus(t.focus);
+      const fx=Math.round(f.x*100),fy=Math.round(f.y*100);
+      const mode=t.chips===undefined||t.chips===null||t.chips==='auto'?'auto':(Array.isArray(t.chips)?'custom':'none');
+      let h='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">How this room appears as a tile on the overview page. Tapping the tile opens this room.</p>';
+      h+=row(fld('Tile name','<input id="ovt-name" type="text" data-ovf placeholder="'+e(er.name||er.id||'')+'" value="'+e(t.name||'')+'"'+inp()+'>','2 1 180px')
+        +chk('ovt-hidden','Leave this room out of the overview',t.hidden===true,false));
+      h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
+        +'<div id="ovt-prev" style="width:160px;aspect-ratio:4/3;border-radius:10px;border:1px solid var(--divider-color);background-size:cover;background-position:'+fx+'% '+fy+'%;'+(er.base_image?'background-image:url(\''+e(escUrl(er.base_image))+'\');':'')+'"></div>'
+        +'<div style="flex:1 1 200px;display:grid;gap:6px;"><label class="roc-l">Focus — horizontal <span id="ovt-fx-v">'+fx+'%</span></label><input id="ovt-fx" type="range" min="0" max="100" step="1" value="'+fx+'" data-ovf>'
+        +'<label class="roc-l">Focus — vertical <span id="ovt-fy-v">'+fy+'%</span></label><input id="ovt-fy" type="range" min="0" max="100" step="1" value="'+fy+'" data-ovf></div></div>';
+      h+=row(fld('State chips',sel('ovt-mode',mode,[['auto','automatic — lights, blinds, media'],['custom','my own list'],['none','none']],true),'2 1 220px'));
+      if(mode==='auto'){
+        let ri=rooms.indexOf(er);
+        const derived=ri>=0?rocOvChips(c,ri,8):[];
+        h+='<div style="font-size:11px;color:var(--secondary-text-color);margin-bottom:6px;">'+(derived.length?'Derived now: '+derived.map(function(d){return e(d.kind==='lights'?'Lights ('+d.entities.length+')':d.entities[0]);}).join(' · '):'Nothing to derive yet — this room has no light controls, cover-controlled blinds or media players.')+'</div>';
+      }else if(mode==='custom'){
+        t.chips.forEach(function(ch,k){
+          const o=typeof ch==='string'?{entity:ch}:(ch||{});
+          let b='<div style="border:1px solid var(--divider-color);border-radius:6px;padding:8px;margin-bottom:6px;">';
+          b+=row(fld('Entity','<input data-ovtc-ent="'+k+'" type="text" list="roc-entities" data-ovf placeholder="light.bedroom" value="'+e(o.entity||'')+'"'+inp()+'>','2 1 180px')
+            +fld('Icon','<input data-ovtc-icon="'+k+'" type="text" data-ovf placeholder="entity icon" value="'+e(o.icon||'')+'"'+inp()+'>')
+            +fld('Active when state is','<input data-ovtc-act="'+k+'" type="text" data-ovf placeholder="anything but off/closed/idle" value="'+e(o.active_state==null?'':(Array.isArray(o.active_state)?o.active_state.join(', '):o.active_state))+'"'+inp()+'>'));
+          b+=self._actFieldsHtml('ovtc'+k,{tap:o.tap_action,hold:o.hold_action},{slots:['tap','hold'],entity:o.entity||'',labels:{tap:'Tap (default: toggle, or more-info)',hold:'Hold (default: more-info)'}});
+          b+='<div><button type="button" data-ovtc-mv="'+k+':-1" style="'+btn+'">&#9650;</button> <button type="button" data-ovtc-mv="'+k+':1" style="'+btn+'">&#9660;</button> <button type="button" data-ovtc-rm="'+k+'" style="'+btn+'color:var(--error-color);border-color:var(--error-color);">Remove</button></div>';
+          h+=b+'</div>';
+        });
+        h+='<button type="button" id="ovtc-add" style="'+btn+'">+ Chip</button>';
+      }
+      out+=sec('room-ovtile','Overview tile — name, focus, state chips',undefined,h,'mdi:view-grid-outline');
+    }
+    return out;
+  }
+
+  // Read the overview fields back onto the edited room (tgt).
+  _ovCollect(q,tgt){
+    const self=this;
+    const has=function(id){return!!q('#'+id);};
+    const val=function(id){const el=q('#'+id);return el?el.value.trim():'';};
+    const on=function(id){const el=q('#'+id);return!!(el&&el.checked);};
+    const setK=function(o,k,v){if(v===undefined||v===null||v==='')delete o[k];else o[k]=v;};
+    const num=function(s){const n=parseInt(s,10);return isNaN(n)?undefined:n;};
+    const pv=function(l,p,dl,dp){
+      if(l===undefined&&p===undefined)return undefined;
+      if(l!==undefined&&p!==undefined&&l===p)return l;
+      const o={};if(l!==undefined)o.landscape=l;if(p!==undefined)o.portrait=p;return o;
+    };
+    if(has('ovf-transition')&&tgt.overview){
+      const ov=Object.assign({},typeof tgt.overview==='object'?tgt.overview:{});
+      const tr=val('ovf-transition');setK(ov,'transition',tr&&tr!=='zoom'?tr:'');
+      const d=val('ovf-dur');setK(ov,'transition_duration',d!==''&&!isNaN(parseFloat(d))?Math.max(0,parseFloat(d)):'');
+      setK(ov,'background',val('ovf-bg'));
+      if(on('ovf-navhidden'))tgt.nav_hidden=true;else delete tgt.nav_hidden;
+      // header
+      if(on('ovf-hd-on')){
+        const hd=Object.assign({},ov.header&&typeof ov.header==='object'?ov.header:{});
+        const items=(Array.isArray(hd.items)?hd.items:[]).map(function(it,i){
+          const kEl=q('[data-ovhd-kind="'+i+'"]');if(!kEl)return it;
+          const k=kEl.value;
+          let o;
+          if(k==='pill'){
+            const p=Object.assign({},it&&it.pill?it.pill:{});
+            const g=function(a){const el=q('[data-ovhd-'+a+'="'+i+'"]');return el?el.value.trim():undefined;};
+            ['ent:entity','icon:icon','attr:attribute','tpl:template'].forEach(function(m){const x=m.split(':');const v=g(x[0]);if(v!==undefined)setK(p,x[1],v);});
+            const sf=q('[data-ovhd-suf="'+i+'"]');if(sf){if(sf.value!=='')p.suffix=sf.value;else delete p.suffix;}
+            const pf=q('[data-ovhd-pre="'+i+'"]');if(pf){if(pf.value!=='')p.prefix=pf.value;else delete p.prefix;} // spaces are part of a prefix
+            const dc=g('dec');if(dc!==undefined)setK(p,'decimals',num(dc));
+            self._applyActs('ovhd'+i,p,['tap','hold']);
+            o={pill:p};
+          }else if(k==='nav_cards')o={nav_cards:true};
+          else{
+            const ta=q('[data-ovhd-card="'+i+'"]');
+            const r=ta?self._pYaml(ta):{ok:false};
+            const prevCard=it&&it.card?it.card:(it&&it.type?(function(){const x=Object.assign({},it);delete x.width;delete x.media;return x;})():null);
+            o={card:r.ok?(r.val||null):prevCard};
+            if(!o.card)o={card:{type:''}};
+          }
+          const w=q('[data-ovhd-w="'+i+'"]');if(w&&w.value.trim())o.width=w.value.trim();
+          const m=q('[data-ovhd-media="'+i+'"]');if(m&&m.value)o.media=m.value;
+          return o;
+        });
+        hd.items=items;
+        if(has('ovf-hd-h'))setK(hd,'height',val('ovf-hd-h'));
+        ov.header=hd;
+      }else if(has('ovf-hd-on'))delete ov.header;
+      // left / right
+      [['left','lt'],['right','rt']].forEach(function(x){
+        if(!has('ovf-'+x[1]+'-on'))return;
+        if(!on('ovf-'+x[1]+'-on')){delete ov[x[0]];return;}
+        const sd=Object.assign({},ov[x[0]]&&typeof ov[x[0]]==='object'?ov[x[0]]:{});
+        if(has('ovf-'+x[1]+'-w'))setK(sd,'width',val('ovf-'+x[1]+'-w'));
+        if(has('ovf-'+x[1]+'-pp')){const pp=val('ovf-'+x[1]+'-pp');setK(sd,'portrait',pp&&pp!=='top'?pp:'');}
+        const ta=q('#ovf-'+x[1]+'-cards');
+        if(ta){const r=self._pYaml(ta);if(r.ok){if(Array.isArray(r.val)&&r.val.length)sd.cards=r.val;else if(r.val&&typeof r.val==='object')sd.cards=[r.val];else sd.cards=[];}}
+        if(!Array.isArray(sd.cards))sd.cards=[];
+        ov[x[0]]=sd;
+      });
+      // grid
+      const g=Object.assign({},ov.grid&&typeof ov.grid==='object'?ov.grid:{});
+      if(has('ovf-g-auto')){
+        if(on('ovf-g-auto'))delete g.rooms;
+        else{
+          const boxes=self.querySelectorAll('[data-ovg-room]');
+          if(boxes.length){const l=[];boxes.forEach(function(b){if(b.checked)l.push(b.dataset.ovgRoom);});g.rooms=l;}
+          else if(!Array.isArray(g.rooms)){const tc=self._config||{};g.rooms=(tc.rooms||[]).filter(function(r){return r&&!r.overview;}).map(function(r){return r.id;});}
+        }
+      }
+      setK(g,'columns',pv(num(val('ovf-g-cols-l')),num(val('ovf-g-cols-p'))));
+      const sl=val('ovf-g-style-l'),sp=val('ovf-g-style-p');
+      setK(g,'style',pv(sl&&sl!=='card'?sl:undefined,sp&&sp!=='card'?sp:undefined));
+      const lv=val('ovf-g-live');setK(g,'live',lv&&lv!=='inherit'?lv:'');
+      const wrv=parseFloat(val('ovf-g-wref'));setK(g,'width_ref',wrv>0?wrv:'');
+      setK(g,'chips_max',pv(num(val('ovf-g-chips-l')),num(val('ovf-g-chips-p'))));
+      if(has('ovf-g-info')){if(on('ovf-g-info'))delete g.info;else g.info=false;}
+      setK(g,'gap',val('ovf-g-gap'));
+      if(Object.keys(g).length)ov.grid=g;else delete ov.grid;
+      // dock
+      if(has('ovf-dk-on')){
+        if(on('ovf-dk-on')){
+          const dk=Object.assign({},ov.dock&&typeof ov.dock==='object'?ov.dock:{});
+          if(has('ovf-dk-size'))setK(dk,'size',val('ovf-dk-size'));
+          if(has('ovf-dk-auto')){
+            if(on('ovf-dk-auto'))delete dk.sections;
+            else{
+              const boxes=self.querySelectorAll('[data-ovd-sec]');
+              if(boxes.length){const l=[];boxes.forEach(function(b){if(b.checked)l.push(b.dataset.ovdSec);});dk.sections=l;}
+              else if(!Array.isArray(dk.sections))dk.sections=((self._config&&self._config.sections)||[]).map(function(s){return s.id;});
+            }
+          }
+          ov.dock=dk;
+        }else delete ov.dock;
+      }
+      tgt.overview=Object.keys(ov).length?ov:true;
+    }
+    if(has('ovt-mode')&&!tgt.overview){
+      const t=Object.assign({},tgt.overview_tile&&typeof tgt.overview_tile==='object'?tgt.overview_tile:{});
+      setK(t,'name',val('ovt-name'));
+      if(on('ovt-hidden'))t.hidden=true;else delete t.hidden;
+      const fx=parseInt(val('ovt-fx'),10),fy=parseInt(val('ovt-fy'),10);
+      if(!isNaN(fx)&&!isNaN(fy)&&!(fx===50&&fy===50))t.focus=fx+'% '+fy+'%';else delete t.focus;
+      const mode=val('ovt-mode');
+      if(mode==='none')t.chips='none';
+      else if(mode==='auto')delete t.chips;
+      else{
+        const prev=Array.isArray(t.chips)?t.chips:[];
+        t.chips=prev.map(function(ch,k){
+          const o=Object.assign({},typeof ch==='string'?{entity:ch}:(ch||{}));
+          const ent=q('[data-ovtc-ent="'+k+'"]');if(ent)setK(o,'entity',ent.value.trim());
+          const ic=q('[data-ovtc-icon="'+k+'"]');if(ic)setK(o,'icon',ic.value.trim());
+          const ac=q('[data-ovtc-act="'+k+'"]');
+          if(ac){const l=ac.value.split(',').map(function(x){return x.trim();}).filter(Boolean);if(!l.length)delete o.active_state;else o.active_state=l.length===1?l[0]:l;}
+          self._applyActs('ovtc'+k,o,['tap','hold']);
+          if(typeof ch==='string'&&Object.keys(o).length===1&&o.entity===ch)return ch; // KEEP the short form
+          return o;
+        });
+      }
+      if(Object.keys(t).length)tgt.overview_tile=t;else delete tgt.overview_tile;
+    }
+  }
+
+  // Listeners for the overview accordions (called from _listen()).
+  _ovListen(fire,T){
+    const self=this;
+    const rr=function(mut){
+      const c=self._collectConfig();
+      if(mut)mut(T(c));
+      self._config=c;self._render();self._fire(c);
+    };
+    this.querySelectorAll('[data-ovf]').forEach(function(el){el.addEventListener('change',fire);});
+    this.querySelectorAll('[data-ovf-rr]').forEach(function(el){
+      el.addEventListener('change',function(){
+        rr(function(r){
+          const ov=r.overview&&typeof r.overview==='object'?r.overview:null;
+          if(!ov)return;
+          if(el.id==='ovf-hd-on'&&el.checked&&!ov.header)ov.header={items:[{nav_cards:true}]};
+          if(el.id==='ovf-lt-on'&&el.checked&&!ov.left)ov.left={cards:[]};
+          if(el.id==='ovf-rt-on'&&el.checked&&!ov.right)ov.right={cards:[]};
+          if(el.id==='ovf-dk-on'&&el.checked&&!ov.dock)ov.dock={};
+        });
+      });
+    });
+    const fx=this.querySelector('#ovt-fx'),fy=this.querySelector('#ovt-fy'),pv=this.querySelector('#ovt-prev');
+    const live=function(){
+      if(!fx||!fy)return;
+      if(pv)pv.style.backgroundPosition=fx.value+'% '+fy.value+'%';
+      const a=self.querySelector('#ovt-fx-v'),b=self.querySelector('#ovt-fy-v');
+      if(a)a.textContent=fx.value+'%';if(b)b.textContent=fy.value+'%';
+    };
+    if(fx)fx.addEventListener('input',live);
+    if(fy)fy.addEventListener('input',live);
+    const hdItems=function(r){const ov=r.overview;if(!ov||typeof ov!=='object')return null;if(!ov.header||typeof ov.header!=='object')ov.header={};if(!Array.isArray(ov.header.items))ov.header.items=[];return ov.header.items;};
+    this.querySelectorAll('[data-ovhd-add]').forEach(function(b){
+      b.addEventListener('click',function(){
+        const k=b.dataset.ovhdAdd;
+        rr(function(r){const l=hdItems(r);if(!l)return;l.push(k==='pill'?{pill:{}}:(k==='nav_cards'?{nav_cards:true}:{card:{type:'markdown',content:'…'}}));});
+      });
+    });
+    this.querySelectorAll('[data-ovhd-rm]').forEach(function(b){
+      b.addEventListener('click',function(){const i=parseInt(b.dataset.ovhdRm,10);rr(function(r){const l=hdItems(r);if(l&&i>=0&&i<l.length)l.splice(i,1);});});
+    });
+    this.querySelectorAll('[data-ovhd-mv]').forEach(function(b){
+      b.addEventListener('click',function(){
+        const p=b.dataset.ovhdMv.split(':'),i=parseInt(p[0],10),j=i+parseInt(p[1],10);
+        rr(function(r){const l=hdItems(r);if(!l||j<0||j>=l.length)return;const x=l[i];l[i]=l[j];l[j]=x;});
+      });
+    });
+    const chipList=function(r){if(!r.overview_tile||typeof r.overview_tile!=='object')r.overview_tile={};if(!Array.isArray(r.overview_tile.chips))r.overview_tile.chips=[];return r.overview_tile.chips;};
+    const modeEl=this.querySelector('#ovt-mode');
+    if(modeEl)modeEl.addEventListener('change',function(){
+      rr(function(r){
+        if(modeEl.value!=='custom')return;
+        const l=chipList(r);
+        if(!l.length){
+          // seed the list with what "automatic" showed, so switching is not a reset
+          const c=self._config,ri=(c.rooms||[]).indexOf(r);
+          const tmp=JSON.parse(JSON.stringify(c));
+          if(ri>=0&&tmp.rooms[ri].overview_tile)delete tmp.rooms[ri].overview_tile.chips;
+          (ri>=0?rocOvChips(tmp,ri,8):[]).forEach(function(d){if(d.kind!=='lights')l.push({entity:d.entities[0]});else d.entities.forEach(function(id){l.push({entity:id});});});
+        }
+      });
+    });
+    const addC=this.querySelector('#ovtc-add');
+    if(addC)addC.addEventListener('click',function(){rr(function(r){chipList(r).push({entity:''});});});
+    this.querySelectorAll('[data-ovtc-rm]').forEach(function(b){
+      b.addEventListener('click',function(){const k=parseInt(b.dataset.ovtcRm,10);rr(function(r){const l=chipList(r);if(k>=0&&k<l.length)l.splice(k,1);});});
+    });
+    this.querySelectorAll('[data-ovtc-mv]').forEach(function(b){
+      b.addEventListener('click',function(){
+        const p=b.dataset.ovtcMv.split(':'),i=parseInt(p[0],10),j=i+parseInt(p[1],10);
+        rr(function(r){const l=chipList(r);if(j<0||j>=l.length)return;const x=l[i];l[i]=l[j];l[j]=x;});
+      });
+    });
+    const addOv=this.querySelector('#add-ovpage');
+    if(addOv)addOv.addEventListener('click',function(){
+      const c=self._collectConfig();
+      if(!Array.isArray(c.rooms))c.rooms=[];
+      let id='overview',n=1;
+      while(c.rooms.some(function(r){return r&&r.id===id;})){n++;id='overview_'+n;}
+      const ov={grid:{}};
+      if(Array.isArray(c.sections)&&c.sections.length)ov.dock={};
+      delete ov.grid;
+      c.rooms.push({id:id,name:'Overview',icon:'mdi:view-dashboard',overview:Object.keys(ov).length?ov:true});
+      self._editRoomIdx=c.rooms.length-1;self._editGlobal=false;
+      if(self._openPanels)self._openPanels.add('room-overview');
+      self._config=c;self._render();self._fire(c);
+    });
+  }
+
   _render(){
     if(!this._config)return;
     this._actOrig={};
@@ -7383,6 +8450,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     const btnStyle='padding:6px 14px;border-radius:4px;background:var(--primary-color);color:white;border:none;cursor:pointer;font-size:13px;';
 
     let basicInner='<div style="display:grid;gap:8px;">';
+    if(cR&&cR.overview&&!this._editGlobal)basicInner+='<div style="padding:10px 12px;border-radius:6px;background:var(--secondary-background-color);font-size:12px;line-height:1.5;">This room is an <b>overview page</b> — its photo and elements are not shown. Set it up in <b>Rooms &amp; menu → Overview page</b>.</div>';
     const _bgMode=this._bgMode||(cR.base_camera?'camera':'image');
     basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;">';
     basicInner+='<div><label class="roc-l">Background</label><select id="bg-mode"'+this._inp('')+'>';
@@ -7571,6 +8639,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+='<button id="room-up" title="Move room earlier"'+(self._editGlobal||_ri<=0?' disabled':'')+' style="'+_navBtn+(self._editGlobal||_ri<=0?'opacity:0.4;cursor:default;':'')+'">&#9650;</button>';
       roomsInner+='<button id="room-down" title="Move room later"'+(self._editGlobal||_ri>=_rcnt-1?' disabled':'')+' style="'+_navBtn+(self._editGlobal||_ri>=_rcnt-1?'opacity:0.4;cursor:default;':'')+'">&#9660;</button>';
       roomsInner+='<button id="add-room" style="'+btnStyle+'">+ Room</button>';
+      roomsInner+='<button id="add-ovpage" title="Add an overview page: every room as a tile, tap opens the room" style="'+btnStyle+'">+ Overview</button>';
       roomsInner+='<button id="rm-room" style="padding:6px 14px;border-radius:4px;border:1px solid var(--error-color);background:none;color:var(--error-color);cursor:pointer;font-size:13px;">Remove</button>';
       roomsInner+='</span>';
       roomsInner+='</div>';
@@ -7676,6 +8745,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       roomsInner+=sec('room-presence','Presence &amp; follow — which room is "active", and how',undefined,riPresence,'mdi:radar');
       roomsInner+=sec('room-nav','Navigation menu — style, live thumbnails, sizing, chips &amp; cards',undefined,riNav,'mdi:menu');
       roomsInner+=sec('room-deeplink','Deep-linking — bookmarkable room URL',undefined,riDeep,'mdi:link-variant');
+      if(!self._editGlobal)roomsInner+=this._ovEdHtml(c,er,sec); // overview page / tile (v6.30.0)
     }else{
       roomsInner+='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;">Single-room card. Convert to multi-room to get the thumbnail room switcher, swipe navigation, switch-room actions and room_entity follow (e.g. Bermuda).</p>';
       roomsInner+='<button id="conv-rooms" style="'+btnStyle+'">Convert to multi-room</button>';
@@ -8556,6 +9626,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(convRooms)convRooms.addEventListener('click',function(){self._convertToRooms();});
     const bootstrapAreas=this.querySelector('#bootstrap-areas');
     if(bootstrapAreas)bootstrapAreas.addEventListener('click',function(){self._bootstrapAreas();});
+    this._ovListen(fire,T); // overview page / tile (v6.30.0)
     ['room-id','room-name','room-icon','room-area-match','room-chips','room_entity','follow_hold','card_id','follow_mode','room_state_entity','nav-style','nav-position','nav-height','nav-width','nav-mobile-height','nav-rows-portrait','nav-rows-landscape','nav-cards-pos','nav-wheel','nav-follow-btn','nav-chips','nav-cards','nav-mini-templates','nav-mini-camera-refresh','nav-mini-width-ref','url-sync','url-sync-key'].forEach(function(id){
       const el=self.querySelector('#'+id);if(el)el.addEventListener('change',fire);
     });

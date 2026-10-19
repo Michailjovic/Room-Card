@@ -1,5 +1,64 @@
 # Changelog
 
+## [6.30.0] - 2026-10-19
+
+### Overview page — every room on one screen
+
+A room in `rooms:` can now be an **overview page** (`overview:`): every other room as a tile,
+plus an optional header, left/right card columns and a dock of section launchers. Tap a tile and
+the room opens in its usual view, growing out of its tile. Spec and closed decisions:
+[`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md); reference:
+[Configuration → Overview page](docs/CONFIGURATION.md#overview-page-v6300).
+
+- **A page, not a mode.** An ordinary room entry — put it first to open on it. Swipe, wheel,
+  next/prev, `url_sync` and the editor treat it like any room; presence follow never targets it.
+  It shows no nav strip; the other rooms show it in theirs as an icon thumbnail (`nav_hidden: true`
+  hides it).
+- **Five regions, all but the grid optional.** `header` (pills with the shared value formatter
+  or a live `template:`, `nav_cards: true` to reuse your nav strip cards such as the alert ticker,
+  any card), `left` / `right` (a column of cards with `media: portrait|landscape` per card and
+  `portrait: top|bottom|hidden`), the room `grid`, and a `dock` generated from `sections:` with
+  the launchers' running status. A region left out collapses and the grid takes its space.
+- **Room tiles.** The picture follows `nav.live`: under `full`/`custom` it is the same live mini as
+  the thumbnail, rendered at the tile's own width (`grid.width_ref: auto`, 40 px steps) so it is
+  never an upscaled 480 px render; `composite` and `off` paint the photo like the nav does. The
+  tile also shows the room's nav chips (temperature, humidity…) and up to `chips_max` **state
+  chips** — automatic (one chip for all `light_controls` lights: any on → all off; one per
+  cover-controlled blind; one per media player in the room) or your own list
+  (`overview_tile.chips`). Chips act without opening the room; hold = more-info.
+  `overview_tile` also sets the name, `focus` (which part of the photo) and `hidden`.
+- **Phones.** The page fills the screen; header and dock stay, only the grid scrolls. Photo tiles
+  or list rows per profile (`grid.style: {portrait: row}`), 44 px chips, side columns above/below
+  the grid or hidden.
+- **Zoom transition** (`transition: zoom | fade | none`, `transition_duration`). The real
+  full-size room is scaled down onto the tile and animated up with transform + clip-path, so its
+  first frame is the tile and every frame is sharp; the room's strip, light pills and cover
+  control slide in from their edges. Back to the overview, the room shrinks into its tile.
+  Presence follow fades, a swipe keeps its drag preview, reduced motion gets a short fade, a
+  second tap mid-animation jumps to the end.
+- **The live strip survives the overview.** Entering the overview parks the nav strip with its
+  live minis; leaving it puts the same elements back — no re-mount of every mini (they get fresh
+  states once the zoom is over).
+- **GUI.** *Rooms & menu → + Overview* creates the page; its **Overview page** accordion covers
+  every key (header item list with the action builder, side columns, room checklist, per-profile
+  columns / tile style / chip count, tile picture tier, dock checklist); every other room gets an
+  **Overview tile** accordion (name, hide, focus sliders with a live crop preview, automatic /
+  custom / no chips). Keys without a field survive a save.
+- **No change without an overview room.** Rendering, room switches and the editor's saved config
+  are byte-identical to v6.25.1 (the editor gains the *+ Overview* button). Shared code, not
+  copies: the nav's mini mount, chip builder and thumbnail painter were factored out and are used
+  by both; dock launchers go through the icon pipeline.
+
+Verified: new `tests/overview.test.js` (61 jsdom assertions: regions, tiles, chips, pills,
+templates, dock, strip parking, ghost placeholder, composite tier, portrait rows, editor
+round-trip) and 31 new smoke assertions for the pure helpers; 8 new Playwright tests — regions
+inside the card at 1920×1080, a dropped region's space going to the grid, phone header + dock
+fixed while the grid scrolls (photo tiles and rows) with ≥ 44 px chips, a dock sheet on a phone,
+the zoom ending in exactly the plain-switch DOM and geometry and back, a mid-animation switch,
+and frame timing under 4× CPU throttle (≈30 fps during the zoom, worst frame 50 ms in the dev
+container). A compat run rendered 15 configs × 2 viewports (+ room switches + editor) with v6.25.1
+and v6.30.0: no difference. All tiers green on source and on the minified `dist/`; e2e 33/33.
+
 ## [6.25.1] - 2026-10-05
 
 ### Fix: Save for the new nav fields; e2e suite in line with v6.24.1

@@ -574,6 +574,57 @@ t('tfResolve of a missing block is null',g.tfResolve(null,{state:'on'})===null&&
   t('rocAutoTiles other domains are untouched by a climate filter',g.rocAutoTiles({domain:'cover'},autoHass,new Set()).length===1);
 })();
 
+// ---- Overview page (v6.30.0, OVERVIEW_PLAN.md §7 smoke) -------------------
+(function(){
+  const cAll={
+    nav:{live:'full'},
+    light_controls:{entities:['light.default']},
+    rooms:[
+      {id:'ov',overview:{grid:{}}},
+      {id:'a',light_controls:{entities:['light.a1',{entity:'switch.a2'},'fan.not_a_light']},blinds:[{id:'b',entity:'cover.a',control:{placement:'dock'}},{id:'b2',entity:'cover.nocontrol'}],elements:[{id:'e',card:{type:'media-control',entity:'media_player.tv_a'}}]},
+      {id:'b',overview_tile:{hidden:true}},
+      {id:'c',overview_tile:{chips:'none'}},
+      {id:'d',overview_tile:{chips:['light.d',{entity:'media_player.x',icon:'mdi:cast'},{entity:'sensor.t',active_state:['on','heat']}]}},
+      {id:'e2',overview:true}
+    ]
+  };
+  t('rocOvCfg: a room\'s own overview block',!!g.rocOvCfg(cAll,0)&&g.rocOvCfg(cAll,1)===null);
+  t('rocOvCfg: overview: true is an empty config object',JSON.stringify(g.rocOvCfg(cAll,5))==='{}');
+  t('rocOvAny',g.rocOvAny(cAll)===true&&g.rocOvAny({rooms:[{id:'x'}]})===false&&g.rocOvAny({})===false);
+  t('rocOvRooms auto: every room except overview pages and hidden tiles',JSON.stringify(g.rocOvRooms(cAll,{}))==='[1,3,4]');
+  t('rocOvRooms explicit ids keep their order, skip unknown/hidden/overview',JSON.stringify(g.rocOvRooms(cAll,{grid:{rooms:['d','zzz','a','b','ov','a']}}))==='[4,1]');
+  t('rocOvPV plain value',g.rocOvPV(3,'portrait',2)===3);
+  t('rocOvPV per profile with fallback',g.rocOvPV({landscape:4},'portrait',2)===2&&g.rocOvPV({landscape:4},'landscape',2)===4);
+  t('rocOvPV empty → default',g.rocOvPV('', 'landscape','card')==='card');
+  const f=g.rocOvFocus('30% 70%');
+  t('rocOvFocus parses x y',Math.abs(f.x-0.3)<1e-9&&Math.abs(f.y-0.7)<1e-9);
+  t('rocOvFocus default centre',g.rocOvFocus(undefined).x===0.5&&g.rocOvFocus('junk').y===0.5);
+  t('rocOvFocus clamps',g.rocOvFocus('150% -20%').x===1&&g.rocOvFocus('150% -20%').y===0);
+  t('rocOvMs: ms, s and bare numbers',g.rocOvMs('450ms',0)===450&&g.rocOvMs('0.6s',0)===600&&g.rocOvMs(300,0)===300&&g.rocOvMs(undefined,450)===450&&g.rocOvMs('x',450)===450);
+  t('rocOvLive inherits nav.live for photo tiles',g.rocOvLive(cAll,{},'card')==='full');
+  t('rocOvLive: list rows take composite instead of a full live mini',g.rocOvLive(cAll,{},'row')==='composite');
+  t('rocOvLive: grid.live wins, off → ""',g.rocOvLive(cAll,{grid:{live:'composite'}},'card')==='composite'&&g.rocOvLive(cAll,{grid:{live:'off'}},'card')==='');
+  const ch=g.rocOvChips(cAll,1,8);
+  t('auto chips: ONE lights chip from light_controls (lights and switches only)',ch[0].kind==='lights'&&JSON.stringify(ch[0].entities)==='["light.a1","switch.a2"]');
+  t('auto chips: lights tap = any on → turn_off all, else turn_on all',ch[0].tap_action.condition.entity==='light.a1'&&ch[0].tap_action.condition.or.entity==='switch.a2'&&ch[0].tap_action.then.perform_action==='homeassistant.turn_off'&&ch[0].tap_action.else.perform_action==='homeassistant.turn_on'&&JSON.stringify(ch[0].tap_action.then.target.entity_id)==='["light.a1","switch.a2"]');
+  t('auto chips: only blinds with a cover control',ch.some(function(c){return c.entities[0]==='cover.a';})&&!ch.some(function(c){return c.entities[0]==='cover.nocontrol';}));
+  t('auto chips: media players found anywhere in the room, tap = more-info',ch.some(function(c){return c.entities[0]==='media_player.tv_a'&&c.tap_action.action==='more-info';}));
+  t('auto chips: capped by chips_max',g.rocOvChips(cAll,1,2).length===2);
+  t('auto chips: a room without its own light_controls inherits the top-level one',g.rocOvChips(cAll,3,8).length===0&&g.rocOvChips({light_controls:{entities:['light.default']},rooms:[{id:'x'}]},0,8)[0].entities[0]==='light.default');
+  t('chips: none',g.rocOvChips(cAll,3,8).length===0);
+  const cc=g.rocOvChips(cAll,4,8);
+  t('custom chips: strings and objects',cc.length===3&&cc[0].entities[0]==='light.d'&&cc[1].icon==='mdi:cast');
+  t('custom chips: default tap toggles a toggleable domain, more-info otherwise',cc[0].tap_action.action==='toggle'&&cc[1].tap_action.action==='more-info'&&cc[2].tap_action.action==='more-info');
+  t('custom chips: default hold = more-info',cc[0].hold_action.action==='more-info');
+  const st={'light.d':{state:'off'},'media_player.x':{state:'playing'},'sensor.t':{state:'heat'},'light.a1':{state:'off'},'switch.a2':{state:'on'}};
+  t('chip active: off is inactive',g.rocOvChipActive(cc[0],st)===false);
+  t('chip active: playing is active',g.rocOvChipActive(cc[1],st)===true);
+  t('chip active: active_state list',g.rocOvChipActive(cc[2],st)===true);
+  t('chip active: lights chip is on when any light is on',g.rocOvChipActive(ch[0],st)===true);
+  t('rocOvHdKind',g.rocOvHdKind({pill:{}})==='pill'&&g.rocOvHdKind({nav_cards:true})==='nav_cards'&&g.rocOvHdKind({card:{type:'x'}})==='card'&&g.rocOvHdKind({type:'markdown'})==='card'&&g.rocOvHdKind({})==='');
+  t('rocOvMediaIds dedupes',JSON.stringify(g.rocOvMediaIds({a:'media_player.x',b:['media_player.x',{c:'media_player.y'}],d:'light.z'}))==='["media_player.x","media_player.y"]');
+})();
+
 // ---- version single-source check (v5.0 C5) --------------------------------
 // ROC_VERSION in the card source must match package.json — the two used to be
 // bumped by hand independently and could drift.

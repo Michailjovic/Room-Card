@@ -258,3 +258,164 @@ test.describe('cockpit image tiles (v6.9.0)',()=>{
     expect(g.animDur).toBe('0.5s');
   });
 });
+
+// Overview page (v6.30.0, OVERVIEW_PLAN.md §7) — real-layout checks: the five
+// regions collapse into the grid, phones keep header + dock in view while the
+// grid scrolls, and the tile ↔ room zoom ends exactly in the plain room view.
+test.describe('overview page (v6.30.0)',()=>{
+  // Turn the harness config into one with an overview page in front.
+  async function ovConfig(page,ov,extra){
+    await page.evaluate(({ov,extra})=>{
+      const card=window.__harness.card;
+      const c=JSON.parse(JSON.stringify(card._config));
+      c.layout={landscape:{rows:['auto','1fr'],place:{nav:{row:1},image:{row:2}}},portrait:{rows:['auto','auto'],place:{nav:{row:1},image:{row:2}}}};
+      c.nav={style:'thumbnails',live:'full'};
+      c.rooms=c.rooms.filter(r=>!r.overview);
+      c.rooms.forEach(r=>{r.light_controls={entities:['light.harness']};});
+      // four rooms so the grid has two rows on a phone
+      c.rooms.push(Object.assign(JSON.parse(JSON.stringify(c.rooms[1])),{id:'hall',name:'Hall'}));
+      c.rooms.push(Object.assign(JSON.parse(JSON.stringify(c.rooms[1])),{id:'bath',name:'Bath'}));
+      c.rooms.unshift({id:'overview',name:'Overview',overview:ov});
+      Object.assign(c,extra||{});
+      card._roomIdx=0;
+      card.setConfig(c);
+    },{ov,extra});
+    await settle(page,700);
+  }
+  const geoOv=page=>page.evaluate(()=>{
+    const sr=window.__harness.card.shadowRoot;
+    const rb=el=>{if(!el)return null;const b=el.getBoundingClientRect();return{t:b.top,b:b.bottom,l:b.left,r:b.right,w:b.width,h:b.height};};
+    const grid=sr.querySelector('[data-ov-grid]');
+    return{innerW:window.innerWidth,innerH:window.innerHeight,
+      pageOverflow:document.documentElement.scrollHeight-window.innerHeight,
+      card:rb(sr.querySelector('ha-card')),root:rb(sr.querySelector('[data-ov-root]')),grid:rb(grid),
+      hd:rb(sr.querySelector('.roc-ov-hd')),left:rb(sr.querySelector('.roc-ov-left')),dock:rb(sr.querySelector('.roc-ov-dock')),
+      tiles:[...sr.querySelectorAll('.roc-ovt')].map(rb),chip:rb(sr.querySelector('.roc-ovc')),
+      gridScroll:grid?{sh:grid.scrollHeight,ch:grid.clientHeight}:null};
+  });
+  const ALL={header:{items:[{pill:{entity:'light.harness',icon:'mdi:lightbulb'}}]},left:{width:'25%',cards:[{card:{type:'markdown',content:'x'},height:'120px'}]},grid:{},dock:{}};
+
+  test('wide: all regions inside the card, tiles inside the grid, dock fully visible',async({page})=>{
+    await page.setViewportSize({width:1920,height:1080});
+    await ovConfig(page,ALL);
+    const g=await geoOv(page);
+    expect(g.pageOverflow).toBeLessThanOrEqual(1);
+    expect(Math.abs(g.card.b-g.innerH)).toBeLessThanOrEqual(2);
+    expect(g.root.b).toBeLessThanOrEqual(g.card.b+1);
+    expect(g.dock.b).toBeLessThanOrEqual(g.innerH);
+    expect(g.left.r).toBeLessThanOrEqual(g.grid.l);
+    for(const t of g.tiles){expect(t.l).toBeGreaterThanOrEqual(g.grid.l-1);expect(t.r).toBeLessThanOrEqual(g.grid.r+1);expect(t.b).toBeLessThanOrEqual(g.grid.b+1);}
+    expect(g.tiles.length).toBe(4);
+  });
+
+  test('wide: a region switched off gives its space to the grid',async({page})=>{
+    await page.setViewportSize({width:1920,height:1080});
+    await ovConfig(page,ALL);
+    const a=await geoOv(page);
+    await ovConfig(page,{grid:{}});
+    const b=await geoOv(page);
+    expect(b.left).toBeNull();expect(b.hd).toBeNull();expect(b.dock).toBeNull();
+    expect(b.grid.w).toBeGreaterThan(a.grid.w+300);           // the left column's width
+    expect(b.grid.h).toBeGreaterThan(a.grid.h+40);            // header + dock heights
+    expect(Math.abs(b.grid.l-b.root.l)).toBeLessThanOrEqual(13); // only the padding left of it
+  });
+
+  for(const style of ['card','row']){
+    test('phone ('+style+'): header and dock stay in view while the grid scrolls',async({page})=>{
+      await page.setViewportSize({width:390,height:520});
+      await ovConfig(page,Object.assign({},ALL,{grid:{style:{portrait:style}}}));
+      const g=await geoOv(page);
+      expect(g.pageOverflow).toBeLessThanOrEqual(1);
+      expect(g.hd.t).toBeGreaterThanOrEqual(0);
+      expect(g.dock.b).toBeLessThanOrEqual(g.innerH);
+      expect(g.gridScroll.sh).toBeGreaterThan(g.gridScroll.ch);   // content scrolls inside the grid…
+      await page.evaluate(()=>{window.__harness.card.shadowRoot.querySelector('[data-ov-grid]').scrollTop=9999;});
+      const g2=await geoOv(page);
+      expect(g2.dock.b).toBeCloseTo(g.dock.b,0);                // …and the dock does not move
+      expect(g.chip.w).toBeGreaterThanOrEqual(44);              // touch target
+      expect(g.chip.h).toBeGreaterThanOrEqual(44);
+    });
+  }
+
+  test('phone: a dock launcher opens its section as a full-screen sheet over the overview',async({page})=>{
+    await page.setViewportSize({width:390,height:844});
+    await ovConfig(page,ALL);
+    await clickShadow(page,'[data-ico="__ovdock_sec_bottom"]');
+    const p=await panelGeo(page,'sec_bottom');
+    expect(p.open).toBe(true);
+  });
+
+  const roomState=page=>page.evaluate(()=>{
+    const card=window.__harness.card,sr=card.shadowRoot;
+    const reg=sr.querySelector('.roc-reg[data-reg="image"]');const r=reg.getBoundingClientRect();
+    return{room:card._roomIdx,ov:card._ovActive,anim:!!card._ovAnim,kids:sr.querySelector('ha-card').children.length,
+      reg:[r.left,r.top,r.width,r.height].map(Math.round),style:reg.style.cssText,
+      wrapOverflow:getComputedStyle(sr.querySelector('.wrap')).overflow};
+  });
+
+  test('zoom: tile → room ends exactly in the plain room view, and back',async({page})=>{
+    await page.setViewportSize({width:1600,height:900});
+    // reference: the plain switch (no transition)
+    await ovConfig(page,Object.assign({},ALL,{transition:'none'}));
+    await clickShadow(page,'.roc-ovt[data-ovt="1"]');
+    const ref=await roomState(page);
+    await ovConfig(page,Object.assign({},ALL,{transition_duration:300}));
+    await page.evaluate(()=>window.__harness.card.shadowRoot.querySelector('.roc-ovt[data-ovt="1"]').click());
+    await settle(page,900);
+    const z=await roomState(page);
+    expect(z.room).toBe(1);expect(z.anim).toBe(false);
+    expect(z.kids).toBe(1);                        // frozen overview removed
+    expect(z.reg).toEqual(ref.reg);                // same geometry as a plain switch
+    expect(z.style).toBe(ref.style);               // every inline style the zoom set is gone
+    expect(z.wrapOverflow).toBe('hidden');
+    // back to the overview through its thumbnail: shrink into the tile
+    await page.evaluate(()=>window.__harness.card.shadowRoot.querySelector('.roc-thumb[data-thumb="0"]').click());
+    await settle(page,900);
+    const back=await page.evaluate(()=>{const card=window.__harness.card,sr=card.shadowRoot;
+      const ph=sr.querySelector('.roc-ovt[data-ovt="1"] .roc-ovt-ph');const root=sr.querySelector('[data-ov-root]');
+      return{ov:card._ovActive,kids:sr.querySelector('ha-card').children.length,phVis:getComputedStyle(ph).visibility,rootStyle:root.style.opacity+'|'+root.style.transform};});
+    expect(back.ov).toBe(true);expect(back.kids).toBe(1);
+    expect(back.phVis).toBe('visible');
+    expect(back.rootStyle).toBe('|');
+  });
+
+  test('zoom: a second switch mid-animation lands in a clean final state',async({page})=>{
+    await page.setViewportSize({width:1600,height:900});
+    await ovConfig(page,Object.assign({},ALL,{transition_duration:2000}));
+    await page.evaluate(()=>window.__harness.card.shadowRoot.querySelector('.roc-ovt[data-ovt="1"]').click());
+    await settle(page,300);
+    await page.evaluate(()=>window.__harness.card._switchRoom(2,1,true));
+    await settle(page,500);
+    const s=await roomState(page);
+    expect(s.room).toBe(2);expect(s.anim).toBe(false);expect(s.kids).toBe(1);
+    expect(s.style).not.toContain('clip-path');expect(s.style).not.toContain('scale(');
+  });
+
+  // Measured in the dev container at 4x throttle: ~30 fps during the zoom, worst
+  // frames 50 ms (two missed vsyncs). The bound below catches a real regression
+  // (a re-render or a mini re-mount inside the animation) without flaking.
+  test('zoom: smooth on a slow device (4x CPU throttle) — no stall, ~30 fps or better',async({page})=>{
+    await page.setViewportSize({width:1280,height:800});
+    await ovConfig(page,Object.assign({},ALL,{transition_duration:450}));
+    const cdp=await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
+    const frames=await page.evaluate(()=>new Promise(res=>{
+      const card=window.__harness.card;
+      card.shadowRoot.querySelector('.roc-ovt[data-ovt="1"]').click();
+      // measure from the first animated frame (the switch's own render is a
+      // one-off cost before the zoom starts, same as any room switch)
+      const t0=performance.now();const d=[];let last=0,started=false;
+      const tick=now=>{
+        if(!started){if(card._ovAnim&&card.shadowRoot.querySelector('.roc-reg[data-reg="image"]').style.clipPath){started=true;last=now;}}
+        else{d.push(now-last);last=now;if(!card._ovAnim){res(d);return;}}
+        if(now-t0<3000)requestAnimationFrame(tick);else res(d);
+      };
+      requestAnimationFrame(tick);
+    }));
+    await cdp.send('Emulation.setCPUThrottlingRate',{rate:1});
+    expect(frames.length).toBeGreaterThan(5);
+    console.log('zoom frames (ms):',frames.map(x=>Math.round(x)).join(' '));
+    expect(Math.max(...frames)).toBeLessThan(70);
+    expect(frames.reduce((a,b)=>a+b,0)/frames.length).toBeLessThan(36);
+  });
+});

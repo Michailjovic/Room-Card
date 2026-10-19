@@ -111,6 +111,29 @@ mock-up.*
   offers to bootstrap the whole `rooms:` list from `hass.areas` in one click, with each area's
   entities pre-assigned as icons — see
   [Configuration → Onboarding](CONFIGURATION.md#onboarding-editor-only).
+- **+ Overview** (next to *+ Room*, v6.30.0) adds an **overview page** — a room that shows every
+  other room as a tile. Pick it in the header's room select and *Rooms & menu* shows an
+  **Overview page** accordion instead of the photo tools (the Image tab says so):
+  - transition (zoom / fade / none) and its duration, an optional background image, and *Hide
+    this page from the other rooms' thumbnail strip*;
+  - **Header** — on/off, height, and a list of items: *Pill* (entity, icon, attribute, prefix,
+    suffix, decimals or a template, tap / hold via the action builder), *Nav strip cards* (the
+    same cards as *Navigation menu → Cards*, e.g. your alert ticker) or *Card (YAML)*; each with a
+    width and *both / landscape only / portrait only*; ▲▼ and Remove;
+  - **Left column / Right column** — on/off, width, where it goes on phones (above / below the
+    grid / hidden) and its cards as a YAML list (`media: portrait|landscape` per card);
+  - **Room grid** — all rooms or a checklist, columns and tile style (photo tiles / list rows)
+    per profile, tile picture (same as the nav thumbnails, live, composite, photo only), live tile
+    reference width, state chips per profile, the rooms' info chips, gap;
+  - **Dock** — on/off, all sections or a checklist, icon size.
+
+  Every other room then gets an **Overview tile** accordion: tile name, *Leave this room out*,
+  **focus** (two sliders with a live crop preview of the photo) and **state chips** — automatic
+  (it lists what it derived: the room's lights, cover-controlled blinds and media players), your
+  own list (entity, icon, *active when state is*, tap / hold builder, ▲▼, Remove; switching from
+  automatic starts the list with what automatic showed) or none. A region you switch off
+  collapses on the card and the grid takes its space. See
+  [Configuration → Overview page](CONFIGURATION.md#overview-page-v6300).
 
 ### Actions (tap / double tap / hold)
 

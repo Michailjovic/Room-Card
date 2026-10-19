@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.25.1** (2026-10-05, v5.2.0/v5.3.0 reserved/unused). Verified against Home
+Current release: **v6.30.0** (2026-10-19, v5.2.0/v5.3.0 and v6.26–v6.29 unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -107,6 +107,7 @@ failure broke HACS installs.
 | **v6.24.1** | Fix: full-screen section panels in portrait (`placement_portrait: inline` to opt out), backdrop click on a launcher switches sections, phone panels honour `columns:` |
 | **v6.25.0** | `nav.rows` + `nav.cards_position` (multi-row thumbnail grid, GUI), live minis cover narrow thumbnails, HQ-resampled thumbnail images (no moiré), GUI keeps nav keys it has no field for |
 | **v6.25.1** | Fix: the new nav row / strip-card fields alone now enable Save; e2e suite updated to the v6.24.1 full-screen portrait panels |
+| **v6.30.0** | **Overview page** — `rooms[].overview`: every room as a live tile with state chips, optional header (pills, nav strip cards), left/right card columns and a section dock; regions collapse into the grid; photo tiles or rows on phones; zoom transition tile ↔ room; the live strip is parked, not re-mounted; full GUI. See [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 
@@ -200,6 +201,13 @@ this release) gives the submission screenshots something finished to show off.
    positions on it, reusing the `nav.live: full` mount/scale mechanism and `zoom` pan/zoom; click a
    room to enter it. Wants its own planning document (in the style of `NAV_LIVE_FULL_PLAN.md`)
    before any code.
+
+1c. ✅ **Overview page — shipped in v6.30.0** — one page showing every room as a tile (live mini + state chips), with
+   optional header (ticker, pills), left/right card columns (weather, calendar…) and a dock of
+   section launchers; any optional region left out collapses and the grid fills it. Phone: photo
+   tiles or list rows, the user picks. Agreed 2026-10-19, shipped as one release (the plan's
+   v6.26–v6.27 phases together); spec and closed decisions: [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md).
+   Still open: the cross-room signals of §9 (presence ring, attention badge, vacuum).
 
 2. 🎯 **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
    `lovelace`, `custom-card`, `hacs`, …) — required by the `hacs/default` review.

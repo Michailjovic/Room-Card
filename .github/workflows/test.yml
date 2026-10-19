@@ -37,6 +37,8 @@ jobs:
       # launcher status, nav chip/thumbnail styling + the analysis fixes.
       - name: Design tests (jsdom)
         run: node tests/design.test.js
+      - name: Overview tests (jsdom)
+        run: node tests/overview.test.js
 
       # The release asset is the MINIFIED bundle, so the minified bundle is what
       # has to be green — not just the source. All three tiers accept a path

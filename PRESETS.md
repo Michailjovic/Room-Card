@@ -361,3 +361,54 @@ overlays:
 
 A drawer or an oven flap is the same `from`/`to` recipe with `translateX(...)` or `rotateX(...)`.
 
+
+---
+
+# Overview page (v6.30.0)
+
+## Whole home on one screen
+
+A page that shows every room as a live tile, your alert ticker and two status pills on top,
+weather and calendar on the left (a compact weather card on phones) and the cockpit sections as a
+dock. Tap a room and it zooms open. Paste it as the **first** entry of `rooms:` to open the card
+on it; keep `nav.cards` holding your ticker — the header reuses it.
+
+```yaml
+rooms:
+  - id: overview
+    name: Přehled
+    icon: mdi:view-dashboard
+    overview:
+      header:
+        items:
+          - pill: { entity: sensor.dhw_temperature, icon: mdi:water-boiler, prefix: "DHW " }
+          - pill: { entity: sensor.house_power, icon: mdi:flash }
+          - nav_cards: true                  # the alert ticker from nav.cards
+      left:
+        width: 26%
+        cards:
+          - card: { type: weather-forecast, entity: weather.home, forecast_type: hourly }
+            media: landscape
+          - card: { type: calendar, entities: [calendar.family], initial_view: listWeek }
+            media: landscape
+          - card: { type: weather-forecast, entity: weather.home, show_forecast: false }
+            media: portrait                  # phones: one compact line above the rooms
+      grid:
+        columns: { landscape: 3, portrait: 2 }
+        style: { portrait: card }            # or row — list rows on the phone
+      dock: {}                               # one launcher per section
+  # … your rooms follow
+```
+
+Per room, choose which part of the photo the tile shows and what its round buttons do:
+
+```yaml
+  - id: bedroom
+    overview_tile:
+      focus: 50% 35%
+      chips:
+        - light.bedroom_ceiling
+        - cover.bedroom
+        - entity: media_player.bedroom_tv
+          icon: mdi:television
+```
