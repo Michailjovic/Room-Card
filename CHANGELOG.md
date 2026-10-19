@@ -1,5 +1,19 @@
 # Changelog
 
+## [6.30.1] - 2026-10-20
+
+### Re-release of v6.30.0 (stale browser cache)
+
+No code change — only the version number. HACS installed v6.30.0 a few minutes before the
+release workflow had attached `room-overlay-card.js`, so it kept the old v6.25.1 file under the
+new v6.30.0 resource URL (`?hacstag=…6300`). Browsers that loaded the card in that window cached
+the old file under that URL for 31 days (`cache-control: max-age=2678400`), so even a correct
+Redownload of v6.30.0 kept showing v6.25.1. A new version gives the resource a new URL, which
+every browser and companion app fetches fresh.
+
+Tip for every release: wait until the GitHub release shows the `room-overlay-card.js` asset
+(the *Release* workflow takes ~5 minutes) before updating in HACS.
+
 ## [6.30.0] - 2026-10-19
 
 ### Overview page — every room on one screen

@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.30.0** (2026-10-19, v5.2.0/v5.3.0 and v6.26–v6.29 unused). Verified against Home
+Current release: **v6.30.1** (2026-10-20, v5.2.0/v5.3.0 and v6.26–v6.29 unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
