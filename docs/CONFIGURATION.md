@@ -1571,7 +1571,8 @@ configuration; if the browser can't do it (or the image can't be fetched), the o
 Switching works several ways: nav thumbnails/tabs, the **follow button** (crosshair that lights
 up when you're away from your presence room; `{action: follow-room}`), **finger-attached swipe**
 (the room follows your finger; release past 25 % or fling to commit), **mouse-wheel** on desktop
-(`nav.wheel: horizontal | vertical | both`), the `switch-room` / `next-room` / `prev-room`
+(`nav.wheel: horizontal | vertical | both`; a touchpad swipe moves exactly one room and never
+turns into the browser's Back swipe), the `switch-room` / `next-room` / `prev-room`
 actions, and automatic **presence follow** via `room_entity`. With **`url_sync: true`** the
 active room is written to the page URL as `#room=<id>` (set `url_sync: <key>` for a custom hash
 key), so rooms become **bookmarkable and shareable** — opening a `#room=bedroom` link jumps
@@ -1670,6 +1671,7 @@ rooms:
         width_ref: auto               # live tiles: render at the tile's own width (default)
         chips_max: { landscape: 4, portrait: 3 }
         info: true                    # the rooms' thumbnail chips (temperature, humidity…)
+        names: true                   # v6.31.0: false hides the room names on the tiles
         gap: 12px
         # fill: false                 # landscape photo tiles stop stretching to the height
         # min_height: 110px           # smallest row before the grid scrolls (landscape)
@@ -1691,13 +1693,14 @@ rooms:
 | `header.items[]` | — | `pill:`, `nav_cards: true` or `card:` (or a plain card config); each with optional `width` and `media` |
 | `header.height` | `auto` | a fixed height makes the cards fill it |
 | `left` / `right` | — | `width` (landscape), `portrait: top \| bottom \| hidden`, `cards:` |
-| `grid.rooms` | all | room ids, in display order |
+| `grid.rooms` | all | room ids, in display order — independent of the nav strip, which follows `rooms:` |
 | `grid.columns` | 3 / 2 | per profile; `row` style is always one column |
 | `grid.style` | `card` | `card` (photo tile) or `row` (list row), per profile |
 | `grid.live` | `inherit` | tile picture tier — `inherit` follows `nav.live`; `row` tiles default to `composite` |
 | `grid.width_ref` | `auto` | reference width of a live tile mini (px), `auto` = the tile's own width |
 | `grid.chips_max` | 4 / 3 | state chips per tile, per profile (3 keeps a 44 px touch target on a phone) |
 | `grid.info` | `true` | show `nav.chips` / the room's `chips:` on its tile |
+| `grid.names` | `true` | `false` hides the room names on the tiles (v6.31.0) |
 | `dock.sections` | all | section ids, in order |
 | `dock.size` | `24px` | launcher icon size |
 
@@ -1716,6 +1719,7 @@ rooms:
   - id: bedroom
     overview_tile:
       name: Ložnice                # default: the room's name
+      show_name: false             # v6.31.0: hide (or with true: show) the name on this tile, whatever grid.names says
       hidden: false                # leave the room out of the grid
       focus: 50% 40%               # which part of the photo the tile shows (like object-position)
       chips: auto                  # auto (default) | none | a list:

@@ -200,6 +200,39 @@ const sr=el=>el.shadowRoot;
     ed.remove();
   }
 
+  // ---- 8. v6.31.0: room names on/off, grid order in the GUI ----------------------
+  {
+    const c=clone(BASE);c.rooms[0].overview.grid={names:false};c.rooms[2].overview_tile={show_name:true};
+    const el6=mk(c);await sleep(40);
+    t('grid.names: false hides the tile names',!sr(el6).querySelector('.roc-ovt[data-ovt="1"] .roc-ovt-name'));
+    t('overview_tile.show_name: true still shows that one',!!sr(el6).querySelector('.roc-ovt[data-ovt="2"] .roc-ovt-name'));
+    t('a hidden name keeps the info chips (aria-label keeps the name)',!!sr(el6).querySelector('[data-ovt-info="1"]')&&sr(el6).querySelector('.roc-ovt[data-ovt="1"]').getAttribute('aria-label')==='A');
+    el6.remove();
+    const c2=clone(BASE);c2.rooms[0].overview.grid={rooms:['b','a']};
+    const el7=mk(c2);await sleep(40);
+    t('grid.rooms sets the grid order independently of rooms:',[...sr(el7).querySelectorAll('.roc-ovt')].map(x=>x.dataset.ovt).join(',')==='2,1');
+    el7.remove();
+    const ed=w.document.createElement('room-overlay-card-editor');
+    ed.setConfig(clone(c2));ed.hass=hass();w.document.body.appendChild(ed);
+    ed._editRoomIdx=0;ed._editGlobal=false;ed._render();
+    const ids=()=>[...ed.querySelectorAll('[data-ovg-room]')].map(x=>x.dataset.ovgRoom+(x.checked?'+':'-')).join(',');
+    t('editor: shown rooms first in grid order, the rest unticked below',ids()==='b+,a+,c-');
+    t('editor: ▲ disabled on the first, ▼ on the last shown room',ed.querySelector('[data-ovg-mv="0:-1"]').disabled&&ed.querySelector('[data-ovg-mv="1:1"]').disabled&&!ed.querySelector('[data-ovg-mv="2:-1"]'));
+    let fired=null;ed.addEventListener('config-changed',e=>{fired=e.detail.config;});
+    ed.querySelector('[data-ovg-mv="0:1"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    t('editor: ▼ moves a room later in the grid',!!fired&&JSON.stringify(fired.rooms[0].overview.grid.rooms)==='["a","b"]'&&ids()==='a+,b+,c-');
+    t('editor: the nav order (rooms:) is untouched',fired.rooms.map(r=>r.id).join(',')==='ov,a,b,c');
+    ed.querySelector('#ovf-g-names').checked=false;let out=ed._collectConfig();
+    t('editor: "Show room names" off writes grid.names: false',out.rooms[0].overview.grid.names===false);
+    ed.querySelector('#ovf-g-names').checked=true;out=ed._collectConfig();
+    t('editor: on again removes the key',out.rooms[0].overview.grid.names===undefined);
+    ed._editRoomIdx=1;ed._render();
+    t('editor: tile name select defaults to "as the overview page sets it"',ed.querySelector('#ovt-showname').value==='');
+    ed.querySelector('#ovt-showname').value='hide';out=ed._collectConfig();
+    t('editor: tile "hide" writes show_name: false',out.rooms[1].overview_tile.show_name===false);
+    ed.remove();
+  }
+
   console.log(fails?('FAILURES: '+fails):'ALL OVERVIEW TESTS PASSED');
   process.exit(fails?1:0);
 })();

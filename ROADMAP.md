@@ -108,6 +108,7 @@ failure broke HACS installs.
 | **v6.25.0** | `nav.rows` + `nav.cards_position` (multi-row thumbnail grid, GUI), live minis cover narrow thumbnails, HQ-resampled thumbnail images (no moiré), GUI keeps nav keys it has no field for |
 | **v6.25.1** | Fix: the new nav row / strip-card fields alone now enable Save; e2e suite updated to the v6.24.1 full-screen portrait panels |
 | **v6.30.0** | **Overview page** — `rooms[].overview`: every room as a live tile with state chips, optional header (pills, nav strip cards), left/right card columns and a section dock; regions collapse into the grid; photo tiles or rows on phones; zoom transition tile ↔ room; the live strip is parked, not re-mounted; full GUI. See [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) |
+| **v6.31.0** *(unreleased)* | Overview: grid order with ▲▼ in the GUI (`grid.rooms`, independent of the nav), optional room names (`grid.names`, `overview_tile.show_name`), fix: `fade` / zoom start under HA's Lit `ha-card`, fix: touchpad swipe left the view / skipped rooms |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

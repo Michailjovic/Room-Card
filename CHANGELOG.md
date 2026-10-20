@@ -1,5 +1,58 @@
 # Changelog
 
+## [6.31.0] - unreleased
+
+### Overview page: grid order in the GUI, optional room names, working fade, touchpad fixes
+
+- **Grid order in the editor.** *Rooms & menu → Overview page → Room grid*, with *All rooms*
+  unticked, is now an ordered list: the rooms shown on the overview come first, in grid order,
+  each with ▲▼; the others follow unticked. The order is the overview's own (`grid.rooms`) — the
+  nav strip keeps following `rooms:`. (The YAML key already existed in v6.30.0; only the GUI
+  could not reorder it.)
+- **Room names can be hidden.** `grid.names: false` hides the name on every tile;
+  `overview_tile.show_name: true | false` overrides it per room. The info chips stay, and the
+  tile keeps the room name as its accessible label. GUI: *Show room names on the tiles* in Room
+  grid, *Name on the tile* (as the overview page sets it / always show / hide) in each room's
+  Overview tile.
+
+### Fix: overview transitions in Home Assistant (`fade` did nothing)
+
+- **`transition: fade` now fades**, and every zoom (tile → room, room → overview) starts from
+  its real first frame. In Home Assistant `<ha-card>` is a Lit element: right after the card
+  renders, its shadow `<slot>` does not exist yet for a moment, so the new view has no layout box.
+  The transition was started in that moment — with no "from" state the browser jumped straight
+  to the end. The frozen layer is still attached at once (no flash of the new view), but the
+  animation now starts only once the card is laid out (`updateComplete`, then a layout check,
+  ~0.5 s fallback). A safety timer always removes the frozen layer.
+- The test harness used a plain `<ha-card>`, which is why the tests passed. New e2e group with a
+  Lit-like `ha-card` (slot created one task later): fade shows intermediate opacities, tile →
+  room scales from the tile, room → overview fades the overview in. All three fail on v6.30.x.
+
+### Fix: touchpad swipe (`nav.wheel`) left the dashboard view, and skipped rooms
+
+- **A sideways touchpad swipe could end on a different dashboard view** (browser Back). Chrome
+  only lets a page cancel a touchpad swipe if it cancels the swipe's *first* wheel event; the
+  card ignored events below 6 px (exactly how a swipe starts), and while a room switch was
+  rendering — or the overview zoom had the picture hidden — events fell past the `.wrap`
+  listener entirely. Now one listener on the card element (it survives every re-render) cancels
+  every horizontal wheel event over the room picture, and over the other regions whenever
+  nothing there can scroll further sideways.
+- **One swipe = one room.** A touchpad keeps sending momentum events for a second or two; the
+  320 ms throttle let one swipe walk 2–3 rooms (room → overview → last room). After a
+  switch the rest of the gesture is now swallowed until the stream pauses for 150 ms — measured
+  from the end of the switch's own render, so events queued during it are not a "pause".
+  Separate mouse-wheel notches still switch one room each.
+
+No change for configs without these keys, or without an overview page.
+
+Verified: 12 new assertions in `tests/overview.test.js` (names off/on per grid and per tile, grid
+order independent of `rooms:`, editor list order, ▲▼ disabled at the ends, ▼ reorders and leaves
+`rooms:` alone, names checkbox and tile select round-trip); 3 new e2e tests (Lit-like
+`ha-card`) and a touchpad-swipe e2e test (every event cancelable and cancelled, one room per
+swipe across the overview, mouse notches, nav strip) — fails on v6.30.x; all tiers,
+`build:verify` and e2e (37) green; rendering of 15 reference configs
+byte-identical to v6.30.1.
+
 ## [6.30.1] - 2026-10-20
 
 ### Re-release of v6.30.0 (stale browser cache)

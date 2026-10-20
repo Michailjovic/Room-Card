@@ -2,7 +2,7 @@
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
  */
-const ROC_VERSION='6.30.1';
+const ROC_VERSION='6.31.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -2561,6 +2561,7 @@ class RoomOverlayCard extends HTMLElement{
     const cols=style==='row'?1:Math.max(1,Math.min(12,parseInt(P(g.columns,prof==='portrait'?2:3),10)||1));
     const chipsMax=P(g.chips_max,prof==='portrait'?3:4);
     const showInfo=g.info!==false;
+    const namesOn=g.names!==false; // v6.31.0: grid.names: false hides every tile's name; overview_tile.show_name overrides per room
     const meta={prof:prof,style:style,live:live,tiles:[],pills:[],cards:[],dockIcons:[]};
     const show=function(media){
       if(!media||media==='all')return true;
@@ -2640,7 +2641,7 @@ class RoomOverlayCard extends HTMLElement{
       }).join('');
       tilesHtml+='<div class="roc-ovt roc-ovt-'+style+'" data-ovt="'+ri+'" tabindex="0" role="button" aria-label="'+escA(name)+'">'
         +'<div class="roc-ovt-ph" data-ovt-ph="'+ri+'" style="'+phStyle+'">'+(real?'<div class="roc-ovt-mini" data-ovt-mini="'+ri+'"></div>':'')+'</div>'
-        +'<div class="roc-ovt-top"><div class="roc-ovt-name">'+escA(name)+'</div>'+(showInfo?'<div class="roc-ovt-info" data-ovt-info="'+ri+'"></div>':'')+'</div>'
+        +'<div class="roc-ovt-top">'+((t.show_name!==undefined?t.show_name!==false:namesOn)?'<div class="roc-ovt-name">'+escA(name)+'</div>':'<span></span>')+(showInfo?'<div class="roc-ovt-info" data-ovt-info="'+ri+'"></div>':'')+'</div>'
         +(chipsHtml?'<div class="roc-ovt-chips">'+chipsHtml+'</div>':'')
         +'</div>';
       meta.tiles.push({ri:ri,chips:chips,focus:f,real:real});
@@ -2870,15 +2871,36 @@ class RoomOverlayCard extends HTMLElement{
     const f=function(n){return n.toFixed(2)+'px';};
     return{transform:'translate('+f(tx)+','+f(ty)+') scale('+s.toFixed(5)+')',clip:'inset('+f(Tp)+' '+f(Rr)+' '+f(B)+' '+f(L)+' round '+f(radius/s)+')'};
   }
+  // Waits until the freshly rendered card is laid out. In Home Assistant
+  // <ha-card> is a Lit element: right after innerHTML its shadow <slot> does
+  // not exist yet, so its children are outside the flat tree — no box, and a
+  // transition started then has no "from" state and simply jumps (v6.31.0
+  // fix: `transition: fade` did nothing, the zoom back to the overview
+  // measured a 0×0 tile). Without Lit (tests, older HA) this runs at once.
+  _ovReady(card,el,cb){
+    let n=0,fired=false;
+    const laid=function(){const r=el.getBoundingClientRect();return r.width>0&&r.height>0;};
+    const go=function(){
+      if(fired)return;
+      if(laid()||n++>30){fired=true;void el.offsetWidth;getComputedStyle(el).opacity;cb();}
+      else setTimeout(go,16);
+    };
+    if(laid()){go();return;}
+    const p=card&&card.updateComplete;
+    if(p&&typeof p.then==='function')p.then(function(){setTimeout(go,0);},function(){setTimeout(go,0);});
+    else setTimeout(go,0);
+  }
   // Runs AFTER the switch rendered the new view. Every path ends in exactly
   // the plain switch-room DOM (finish() strips every inline style it set).
+  // The frozen layer is attached at once (no flash of the new view); the
+  // animation itself starts once the card is laid out (_ovReady).
   _ovRun(plan){
     if(!plan||plan.kind==='none')return;
     const self=this,sr=this.shadowRoot;
     const card=sr&&sr.querySelector('ha-card');if(!card)return;
     const cleanups=[];let done=false,timer=null;
     const anim={finish:function(){
-      if(done)return;done=true;clearTimeout(timer);
+      if(done)return;done=true;clearTimeout(timer);clearTimeout(safety);
       for(const f of cleanups)try{f();}catch(_){}
       if(self._ovAnim===anim)self._ovAnim=null;
     }};
@@ -2887,16 +2909,22 @@ class RoomOverlayCard extends HTMLElement{
       const prev={};for(const k in props){prev[k]=el.style[k];el.style[k]=props[k];}
       cleanups.push(function(){for(const k in prev)el.style[k]=prev[k];});
     };
-    if(getComputedStyle(card).position==='static')setS(card,{position:'relative'});
+    if(card.style.position!=='relative'&&card.style.position!=='absolute')setS(card,{position:'relative'});
     const ease='cubic-bezier(.2,.8,.2,1)',dur=plan.dur;
     const layer=document.createElement('div');
     cleanups.push(function(){layer.remove();});
-    const end=function(ms){timer=setTimeout(anim.finish,ms);};
+    const end=function(ms){clearTimeout(timer);timer=setTimeout(anim.finish,ms);};
+    // never leave a frozen layer behind, whatever happens to the async steps
+    const safety=setTimeout(anim.finish,dur+2500);
     if(plan.kind==='fade-out'){
       layer.style.cssText='position:absolute;inset:0;z-index:5;pointer-events:none;transition:opacity '+dur+'ms ease;';
       layer.appendChild(plan.layerEl);card.appendChild(layer);
-      void layer.offsetWidth;layer.style.opacity='0';
-      end(dur+60);return;
+      this._ovReady(card,layer,function(){
+        if(done)return;
+        layer.style.opacity='0';
+        end(dur+60);
+      });
+      return;
     }
     const grid=sr.querySelector('.roc-grid');
     if(plan.kind==='open'){
@@ -2911,15 +2939,17 @@ class RoomOverlayCard extends HTMLElement{
       if(!img){anim.finish();return;}
       const others=[].slice.call(grid.querySelectorAll('.roc-reg')).filter(function(r){return r!==img;});
       setS(img,{visibility:'hidden'});
-      const ir=img.getBoundingClientRect();
-      others.forEach(function(o){
-        const r=o.getBoundingClientRect();
-        const off=r.bottom<=ir.top+1?'translateY(-16px)':(r.top>=ir.bottom-1?'translateY(16px)':(r.right<=ir.left+1?'translateX(-16px)':(r.left>=ir.right-1?'translateX(16px)':'none')));
-        setS(o,{opacity:'0',transform:off,transition:'none'});
-      });
+      others.forEach(function(o){setS(o,{opacity:'0',transform:'none',transition:'none'});});
       const base=this._roomCfg&&this._roomCfg.base_image;
-      rocOvDecode(base,150).then(function(){
+      const go=function(){
         if(done)return;
+        // Each region slides in from the edge it sits on (measured now that
+        // the card is laid out).
+        const ir=img.getBoundingClientRect();
+        others.forEach(function(o){
+          const r=o.getBoundingClientRect();
+          o.style.transform=r.bottom<=ir.top+1?'translateY(-16px)':(r.top>=ir.bottom-1?'translateY(16px)':(r.right<=ir.left+1?'translateX(-16px)':(r.left>=ir.right-1?'translateX(16px)':'none')));
+        });
         // Start from the room's real state, not from overlays fading in from 0:
         // apply one state pass with the layers' own transitions off.
         const lay=[].slice.call(img.querySelectorAll('.layer,.glow'));
@@ -2947,7 +2977,8 @@ class RoomOverlayCard extends HTMLElement{
           others.forEach(function(o){o.style.transition='opacity 250ms ease,transform 300ms ease';o.style.opacity='1';o.style.transform='none';});
         },Math.round(dur*0.7));
         end(dur+320);
-      });
+      };
+      rocOvDecode(base,150).then(function(){if(!done)self._ovReady(card,img,go);});
       return;
     }
     if(plan.kind==='close'){
@@ -2959,35 +2990,39 @@ class RoomOverlayCard extends HTMLElement{
       layer.style.cssText='position:absolute;inset:0;z-index:5;pointer-events:none;';
       setS(plan.grid,{height:'100%'});
       layer.appendChild(plan.grid);card.appendChild(layer);
-      // Bring the tile into view inside the scrolling grid first.
-      const gEl=root.querySelector('[data-ov-grid]');
-      if(gEl){
-        const gr=gEl.getBoundingClientRect(),tr=tile.getBoundingClientRect();
-        if(tr.top<gr.top)gEl.scrollTop-=gr.top-tr.top+8;
-        else if(tr.bottom>gr.bottom)gEl.scrollTop+=tr.bottom-gr.bottom+8;
-      }
-      const cr=card.getBoundingClientRect(),pr=ph.getBoundingClientRect();
-      const T={x:pr.left-cr.left,y:pr.top-cr.top,w:pr.width,h:pr.height};
-      const img=plan.grid.querySelector('.roc-reg[data-reg="image"]');
-      const xf=img&&this._ovTileXf(img,T,plan.focus,parseFloat(getComputedStyle(ph).borderTopLeftRadius)||0,card);
-      if(!xf){anim.finish();return;}
-      setS(ph,{visibility:'hidden'});
-      const wrapOld=img.querySelector('.wrap');
-      if(wrapOld)wrapOld.style.overflow='visible';
-      img.style.overflow='visible';
-      setS(root,{opacity:'0',transform:'scale(.96)',transformOrigin:(T.x+T.w/2)+'px '+(T.y+T.h/2)+'px',transition:'none'});
-      [].slice.call(plan.grid.querySelectorAll('.roc-reg')).forEach(function(o){
-        if(o!==img)o.style.transition='opacity '+Math.round(dur*0.45)+'ms ease';
+      setS(root,{opacity:'0',transition:'none'});
+      this._ovReady(card,root,function(){
+        if(done)return;
+        // Bring the tile into view inside the scrolling grid first.
+        const gEl=root.querySelector('[data-ov-grid]');
+        if(gEl){
+          const gr=gEl.getBoundingClientRect(),tr=tile.getBoundingClientRect();
+          if(tr.top<gr.top)gEl.scrollTop-=gr.top-tr.top+8;
+          else if(tr.bottom>gr.bottom)gEl.scrollTop+=tr.bottom-gr.bottom+8;
+        }
+        const cr=card.getBoundingClientRect(),pr=ph.getBoundingClientRect();
+        const T={x:pr.left-cr.left,y:pr.top-cr.top,w:pr.width,h:pr.height};
+        const img=plan.grid.querySelector('.roc-reg[data-reg="image"]');
+        const xf=img&&self._ovTileXf(img,T,plan.focus,parseFloat(getComputedStyle(ph).borderTopLeftRadius)||0,card);
+        if(!xf){anim.finish();return;}
+        setS(ph,{visibility:'hidden'});
+        const wrapOld=img.querySelector('.wrap');
+        if(wrapOld)wrapOld.style.overflow='visible';
+        img.style.overflow='visible';
+        setS(root,{transform:'scale(.96)',transformOrigin:(T.x+T.w/2)+'px '+(T.y+T.h/2)+'px'});
+        [].slice.call(plan.grid.querySelectorAll('.roc-reg')).forEach(function(o){
+          if(o!==img)o.style.transition='opacity '+Math.round(dur*0.45)+'ms ease';
+        });
+        img.style.transformOrigin='0 0';img.style.willChange='transform,clip-path';
+        img.style.clipPath='inset(0px 0px 0px 0px round 0px)';
+        void img.offsetWidth;
+        img.style.transition='transform '+dur+'ms '+ease+',clip-path '+dur+'ms '+ease;
+        img.style.transform=xf.transform;img.style.clipPath=xf.clip;
+        [].slice.call(plan.grid.querySelectorAll('.roc-reg')).forEach(function(o){if(o!==img)o.style.opacity='0';});
+        root.style.transition='opacity '+Math.round(dur*0.8)+'ms ease,transform '+dur+'ms '+ease;
+        root.style.opacity='1';root.style.transform='scale(1)';
+        end(dur+60);
       });
-      img.style.transformOrigin='0 0';img.style.willChange='transform,clip-path';
-      img.style.clipPath='inset(0px 0px 0px 0px round 0px)';
-      void img.offsetWidth;
-      img.style.transition='transform '+dur+'ms '+ease+',clip-path '+dur+'ms '+ease;
-      img.style.transform=xf.transform;img.style.clipPath=xf.clip;
-      [].slice.call(plan.grid.querySelectorAll('.roc-reg')).forEach(function(o){if(o!==img)o.style.opacity='0';});
-      root.style.transition='opacity '+Math.round(dur*0.8)+'ms ease,transform '+dur+'ms '+ease;
-      root.style.opacity='1';root.style.transform='scale(1)';
-      end(dur+60);
     }
   }
 
@@ -3730,31 +3765,14 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const wrapSw=this.shadowRoot.querySelector('.wrap');
       if(wrapSw)this._attachRoomDrag(wrapSw);
       // ---- Mouse-wheel room switching (nav.wheel) -------------------------
-      // true|'horizontal' → horizontal wheel (deltaX, safe: doesn't scroll page)
-      // 'vertical' → deltaY · 'both' → either. Ctrl+wheel stays zoom.
-      const _whMode=navCfg.wheel;
-      if(_whMode&&wrapSw){
-        const whSelf=this;
-        const useX=_whMode===true||_whMode==='horizontal'||_whMode==='both';
-        const useY=_whMode==='vertical'||_whMode==='both';
-        wrapSw.addEventListener('wheel',function(e){
-          if(e.ctrlKey||whSelf._zoomScale>1)return; // leave zoom alone
-          // Overview page: a vertical wheel over the room grid / a side column scrolls it
-          if(whSelf._ovActive&&Math.abs(e.deltaY)>=Math.abs(e.deltaX)&&(e.composedPath?e.composedPath():[]).some(function(n){return n.classList&&(n.classList.contains('roc-ov-grid')||n.classList.contains('roc-ov-side'));}))return;
-          let d=0;
-          if(useX&&useY)d=Math.abs(e.deltaX)>=Math.abs(e.deltaY)?e.deltaX:e.deltaY;
-          else if(useX)d=e.deltaX;
-          else if(useY)d=e.deltaY;
-          if(!d||Math.abs(d)<6)return;
-          e.preventDefault(); // block page scroll / browser back-forward swipe
-          const now=Date.now();
-          if(now-(whSelf._lastWheelNav||0)<320)return; // one notch = one room
-          whSelf._lastWheelNav=now;
-          const n=whSelf._config.rooms.length;
-          if(d>0)whSelf._switchRoom((whSelf._roomIdx+1)%n,1,true);
-          else whSelf._switchRoom((whSelf._roomIdx-1+n)%n,-1,true);
-        },{passive:false});
-      }
+      // One listener on the card element itself, bound once (not on the shadow
+      // root: Chrome only treats wheel events as cancelable over an ELEMENT with
+      // a non-passive listener). It survives every re-render,
+      // so a touchpad swipe that is still running while the next room renders
+      // (or while an overview transition hides the image region) keeps being
+      // caught — before v6.31.0 those events reached the page and Chrome turned
+      // them into a browser Back swipe (left the dashboard view).
+      if(navCfg.wheel&&!this._wheelBound){this._wheelBound=true;this.addEventListener('wheel',this._onWheel.bind(this),{passive:false});}
     }
     if(this._wxEl&&_wx&&_wx.angle!==undefined)this._wxEl.style.setProperty('--roc-rain-angle',typeof _wx.angle==='number'?_wx.angle+'deg':String(_wx.angle));
     this._ovEls={};
@@ -4762,6 +4780,60 @@ navSelf._navChipInto(chipCont,chCfg,r);
 
   // Live room drag: content follows the finger, the neighbour's base image is
   // revealed alongside; release past 25 % width (or fling) commits the switch.
+  // nav.wheel: true|'horizontal' → horizontal wheel/touchpad (deltaX) ·
+  // 'vertical' → deltaY · 'both' → either. Ctrl+wheel stays zoom.
+  // One gesture = one room: a touchpad swipe keeps sending (momentum) events
+  // for a second or two; after a switch the rest of that gesture is swallowed
+  // until the stream pauses for 150 ms (3 s at most).
+  _onWheel(e){
+    const cAll=this._config;
+    if(!cAll||cAll.test_mode||!Array.isArray(cAll.rooms)||cAll.rooms.length<2)return;
+    const mode=(cAll.nav||{}).wheel;
+    if(!mode||e.ctrlKey||this._zoomScale>1)return; // leave zoom alone
+    const path=e.composedPath?e.composedPath():[];
+    const has=function(cls){return path.some(function(n){return n&&n.classList&&n.classList.contains(cls);});};
+    // Only the room picture (and the gaps of the layout grid) switch rooms; the
+    // nav strip, light pills, cover dock… keep their own wheel. While an
+    // overview transition runs the picture may be hidden — catch everything.
+    const ax=Math.abs(e.deltaX),ay=Math.abs(e.deltaY);
+    if(!this._ovAnim&&!has('wrap')&&path.some(function(n){return n&&n.classList&&n.classList.contains('roc-reg')&&n.dataset.reg!=='image';})){
+      // …but a sideways swipe that nothing there can scroll any further must
+      // not reach the page either (browser Back swipe).
+      if(ax>ay&&!path.some(function(n){
+        if(!n||n.nodeType!==1||n.scrollWidth<=n.clientWidth+1)return false;
+        const ox=getComputedStyle(n).overflowX;if(ox!=='auto'&&ox!=='scroll')return false;
+        return e.deltaX<0?n.scrollLeft>0:n.scrollLeft+n.clientWidth<n.scrollWidth-1;
+      }))e.preventDefault();
+      return;
+    }
+    // Overview page: a vertical wheel over the room grid / a side column scrolls it
+    if(this._ovActive&&!this._ovAnim&&ay>=ax&&(has('roc-ov-grid')||has('roc-ov-side')))return;
+    const useX=mode===true||mode==='horizontal'||mode==='both';
+    const useY=mode==='vertical'||mode==='both';
+    let d=0;
+    if(useX&&ax>ay)d=e.deltaX;
+    else if(useY&&ay>=ax)d=e.deltaY;
+    if(!d)return;
+    // Every event of a horizontal gesture is cancelled — also its tiny first
+    // ones: Chrome makes the rest of a gesture non-cancelable when its first
+    // event was not, and then the touchpad swipe becomes a browser Back.
+    e.preventDefault();
+    // A pause is measured from the end of the previous handling to this
+    // event's input time: a room switch can block the main thread for a few
+    // hundred ms, and the events queued meanwhile must not look like a pause.
+    const now=e.timeStamp||performance.now(),gap=now-(this._wheelLast||-1e9);
+    const self=this,done=function(){self._wheelLast=Math.max(now,performance.now());};
+    if(this._wheelLock){
+      if(gap<150&&now-this._wheelLock<3000){done();return;}
+      this._wheelLock=0;
+    }
+    if(Math.abs(d)<6){done();return;}
+    this._wheelLock=now;
+    const n=cAll.rooms.length;
+    if(d>0)this._switchRoom((this._roomIdx+1)%n,1,true);
+    else this._switchRoom((this._roomIdx-1+n)%n,-1,true);
+    done();
+  }
   _attachRoomDrag(wrap){
     const self=this;
     this._wrapTA='pan-y';
@@ -8136,9 +8208,19 @@ class RoomOverlayCardEditor extends HTMLElement{
       h+=sub('Room grid');
       h+=chk('ovf-g-auto','All rooms, in room order',gAuto,true);
       if(!gAuto){
-        const ids=g.rooms.map(String);
-        h+='<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;">'+rooms.filter(function(r){return r&&!r.overview;}).map(function(r){
-          return'<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" data-ovg-room="'+e(r.id)+'"'+(ids.indexOf(String(r.id))>=0?' checked':'')+' data-ovf style="width:15px;height:15px;">'+e(r.name||r.id)+'</label>';
+        // v6.31.0: an ordered list — the grid's own order, independent of the
+        // nav strip (rooms: order). Shown rooms first, in grid order, with ▲▼;
+        // the rest below, unticked, in room order.
+        const all=rooms.filter(function(r){return r&&!r.overview;});
+        const shown=[];g.rooms.forEach(function(id){const r=all.find(function(x){return String(x.id)===String(id);});if(r&&shown.indexOf(r)<0)shown.push(r);});
+        const rest=all.filter(function(r){return shown.indexOf(r)<0;});
+        const ab='padding:2px 8px;border-radius:4px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:11px;';
+        h+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;max-width:420px;">'+shown.concat(rest).map(function(r,k){
+          const on=k<shown.length;
+          return'<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border:1px solid var(--divider-color);border-radius:6px;'+(on?'':'opacity:.6;')+'">'
+            +'<label style="flex:1;font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" data-ovg-room="'+e(r.id)+'"'+(on?' checked':'')+' data-ovf-rr style="width:15px;height:15px;">'+e(r.name||r.id)+'</label>'
+            +(on?'<button type="button" data-ovg-mv="'+k+':-1" title="Earlier in the grid" style="'+ab+'"'+(k===0?' disabled':'')+'>&#9650;</button><button type="button" data-ovg-mv="'+k+':1" title="Later in the grid" style="'+ab+'"'+(k===shown.length-1?' disabled':'')+'>&#9660;</button>':'')
+            +'</div>';
         }).join('')+'</div>';
       }
       const st=[['card','photo tiles'],['row','list rows']];
@@ -8150,7 +8232,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         +fld('Live tile reference width','<input id="ovf-g-wref" type="text" data-ovf placeholder="auto (tile width)" value="'+e(Number(g.width_ref)>0?g.width_ref:'')+'"'+inp()+'>','1 1 120px')
         +fld('State chips — landscape','<input id="ovf-g-chips-l" type="number" min="0" max="8" step="1" data-ovf placeholder="4" value="'+e(PV(g.chips_max,'landscape',''))+'"'+inp()+'>','1 1 100px')
         +fld('State chips — portrait','<input id="ovf-g-chips-p" type="number" min="0" max="8" step="1" data-ovf placeholder="3" value="'+e(PV(g.chips_max,'portrait',''))+'"'+inp()+'>','1 1 100px'));
-      h+=row(chk('ovf-g-info','Show each room&#39;s thumbnail chips (temperature, humidity…) on its tile',g.info!==false,false)+fld('Gap',txt('ovf-g-gap',g.gap||'','12px'),'0 1 100px'));
+      h+=row(chk('ovf-g-names','Show room names on the tiles',g.names!==false,false)+chk('ovf-g-info','Show each room&#39;s thumbnail chips (temperature, humidity…) on its tile',g.info!==false,false)+fld('Gap',txt('ovf-g-gap',g.gap||'','12px'),'0 1 100px'));
       // dock
       const dk=ov.dock&&typeof ov.dock==='object'?ov.dock:null;
       const secs=Array.isArray(c.sections)?c.sections:[];
@@ -8175,6 +8257,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const mode=t.chips===undefined||t.chips===null||t.chips==='auto'?'auto':(Array.isArray(t.chips)?'custom':'none');
       let h='<p style="font-size:12px;color:var(--secondary-text-color);margin:0 0 10px;line-height:1.5;">How this room appears as a tile on the overview page. Tapping the tile opens this room.</p>';
       h+=row(fld('Tile name','<input id="ovt-name" type="text" data-ovf placeholder="'+e(er.name||er.id||'')+'" value="'+e(t.name||'')+'"'+inp()+'>','2 1 180px')
+        +fld('Name on the tile',sel('ovt-showname',t.show_name===true?'show':(t.show_name===false?'hide':''),[['','as the overview page sets it'],['show','always show'],['hide','hide']]),'1 1 170px')
         +chk('ovt-hidden','Leave this room out of the overview',t.hidden===true,false));
       h+='<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">'
         +'<div id="ovt-prev" style="width:160px;aspect-ratio:4/3;border-radius:10px;border:1px solid var(--divider-color);background-size:cover;background-position:'+fx+'% '+fy+'%;'+(er.base_image?'background-image:url(\''+e(escUrl(er.base_image))+'\');':'')+'"></div>'
@@ -8283,6 +8366,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const wrv=parseFloat(val('ovf-g-wref'));setK(g,'width_ref',wrv>0?wrv:'');
       setK(g,'chips_max',pv(num(val('ovf-g-chips-l')),num(val('ovf-g-chips-p'))));
       if(has('ovf-g-info')){if(on('ovf-g-info'))delete g.info;else g.info=false;}
+      if(has('ovf-g-names')){if(on('ovf-g-names'))delete g.names;else g.names=false;}
       setK(g,'gap',val('ovf-g-gap'));
       if(Object.keys(g).length)ov.grid=g;else delete ov.grid;
       // dock
@@ -8307,6 +8391,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       const t=Object.assign({},tgt.overview_tile&&typeof tgt.overview_tile==='object'?tgt.overview_tile:{});
       setK(t,'name',val('ovt-name'));
       if(on('ovt-hidden'))t.hidden=true;else delete t.hidden;
+      if(has('ovt-showname')){const sn=val('ovt-showname');if(sn==='show')t.show_name=true;else if(sn==='hide')t.show_name=false;else delete t.show_name;}
       const fx=parseInt(val('ovt-fx'),10),fy=parseInt(val('ovt-fy'),10);
       if(!isNaN(fx)&&!isNaN(fy)&&!(fx===50&&fy===50))t.focus=fx+'% '+fy+'%';else delete t.focus;
       const mode=val('ovt-mode');
@@ -8373,6 +8458,15 @@ class RoomOverlayCardEditor extends HTMLElement{
       b.addEventListener('click',function(){
         const p=b.dataset.ovhdMv.split(':'),i=parseInt(p[0],10),j=i+parseInt(p[1],10);
         rr(function(r){const l=hdItems(r);if(!l||j<0||j>=l.length)return;const x=l[i];l[i]=l[j];l[j]=x;});
+      });
+    });
+    this.querySelectorAll('[data-ovg-mv]').forEach(function(b){
+      b.addEventListener('click',function(){
+        const p=b.dataset.ovgMv.split(':'),i=parseInt(p[0],10),j=i+parseInt(p[1],10);
+        const order=[];self.querySelectorAll('[data-ovg-room]').forEach(function(x){if(x.checked)order.push(x.dataset.ovgRoom);});
+        if(j<0||j>=order.length)return;
+        const x=order[i];order[i]=order[j];order[j]=x;
+        rr(function(r){const ov=r.overview;if(!ov||typeof ov!=='object')return;if(!ov.grid||typeof ov.grid!=='object')ov.grid={};ov.grid.rooms=order;});
       });
     });
     const chipList=function(r){if(!r.overview_tile||typeof r.overview_tile!=='object')r.overview_tile={};if(!Array.isArray(r.overview_tile.chips))r.overview_tile.chips=[];return r.overview_tile.chips;};

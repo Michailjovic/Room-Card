@@ -419,3 +419,121 @@ test.describe('overview page (v6.30.0)',()=>{
     expect(frames.reduce((a,b)=>a+b,0)/frames.length).toBeLessThan(36);
   });
 });
+
+// v6.31.0: HA's <ha-card> is a Lit element — right after the card's innerHTML
+// its shadow <slot> does not exist yet, so the children have no style/geometry
+// and a transition started then jumps straight to its end (fade "did nothing").
+// This stub reproduces that: the slot appears one task later, like Lit's update.
+test.describe('overview transitions under a Lit-like ha-card (v6.31.0)',()=>{
+  test.beforeEach(async({page})=>{
+    await page.addInitScript(()=>{
+      class LitLikeCard extends HTMLElement{
+        constructor(){super();this.attachShadow({mode:'open'});
+          let r;this.updateComplete=new Promise(x=>{r=x;});this._r=r;}
+        connectedCallback(){
+          if(this._done)return;this._done=true;const self=this;
+          setTimeout(function(){self.shadowRoot.innerHTML='<style>:host{display:block}</style><slot></slot>';self._r(true);},20);
+        }
+      }
+      customElements.define('ha-card',LitLikeCard);
+    });
+    await page.goto(HARNESS);
+    await page.waitForFunction(()=>window.__harness&&window.__harness.geo().rendered===true);
+    await settle(page,600);
+  });
+  async function ovCfg(page,ov){
+    await page.evaluate(ov=>{
+      const card=window.__harness.card;
+      const c=JSON.parse(JSON.stringify(card._config));
+      c.layout={landscape:{rows:['auto','1fr'],place:{nav:{row:1},image:{row:2}}},portrait:{rows:['auto','auto'],place:{nav:{row:1},image:{row:2}}}};
+      c.nav={style:'thumbnails',live:'full'};
+      c.rooms=c.rooms.filter(r=>!r.overview);
+      c.rooms.unshift({id:'overview',name:'Overview',overview:ov});
+      card._roomIdx=0;card.setConfig(c);
+    },ov);
+    await settle(page,700);
+  }
+  // Sample a value every frame while the animation runs.
+  const sample=(page,fnSrc,start)=>page.evaluate(({fnSrc,start})=>new Promise(res=>{
+    const card=window.__harness.card;const read=new Function('card','sr',fnSrc);
+    new Function('card',start)(card);
+    const out=[];const t0=performance.now();
+    const tick=()=>{out.push(read(card,card.shadowRoot));
+      if(performance.now()-t0<1600)requestAnimationFrame(tick);else res(out);};
+    requestAnimationFrame(tick);
+  }),{fnSrc,start});
+  const mid=a=>a.filter(v=>typeof v==='number'&&v>0.08&&v<0.92).length;
+
+  test('fade: tile → room actually fades (intermediate opacities)',async({page})=>{
+    await page.setViewportSize({width:1600,height:900});
+    await ovCfg(page,{grid:{},transition:'fade',transition_duration:800});
+    const op=await sample(page,
+      "const l=[...sr.querySelector('ha-card').children].find(e=>e.style&&e.style.zIndex==='5');return l?parseFloat(getComputedStyle(l).opacity):null;",
+      "card.shadowRoot.querySelector('.roc-ovt[data-ovt=\"1\"]').click();");
+    expect(mid(op)).toBeGreaterThan(5);
+    await settle(page,400);
+    const s=await page.evaluate(()=>{const c=window.__harness.card;return{room:c._roomIdx,anim:!!c._ovAnim,kids:c.shadowRoot.querySelector('ha-card').children.length};});
+    expect(s).toEqual({room:1,anim:false,kids:1});
+  });
+
+  test('zoom: room → overview actually animates the overview in',async({page})=>{
+    await page.setViewportSize({width:1600,height:900});
+    await ovCfg(page,{grid:{},transition:'zoom',transition_duration:800});
+    await page.evaluate(()=>window.__harness.card.shadowRoot.querySelector('.roc-ovt[data-ovt="1"]').click());
+    await settle(page,1500);
+    const op=await sample(page,
+      "const r=sr.querySelector('[data-ov-root]');return r?parseFloat(getComputedStyle(r).opacity):null;",
+      "card.shadowRoot.querySelector('.roc-thumb[data-thumb=\"0\"]').click();");
+    expect(mid(op)).toBeGreaterThan(5);
+    await settle(page,400);
+    const s=await page.evaluate(()=>{const c=window.__harness.card,sr=c.shadowRoot;const r=sr.querySelector('[data-ov-root]');
+      return{ov:c._ovActive,anim:!!c._ovAnim,kids:sr.querySelector('ha-card').children.length,rs:r.style.opacity+'|'+r.style.transform};});
+    expect(s).toEqual({ov:true,anim:false,kids:1,rs:'|'});
+  });
+
+  test('zoom: tile → room scales the room up from the tile',async({page})=>{
+    await page.setViewportSize({width:1600,height:900});
+    await ovCfg(page,{grid:{},transition:'zoom',transition_duration:800});
+    const sc=await sample(page,
+      "const i=sr.querySelector('.roc-reg[data-reg=\"image\"]');if(!i||!card._ovAnim)return null;const m=new DOMMatrix(getComputedStyle(i).transform);return m.a;",
+      "card.shadowRoot.querySelector('.roc-ovt[data-ovt=\"1\"]').click();");
+    expect(sc.filter(v=>typeof v==="number"&&Math.abs(v-1)>0.002).length).toBeGreaterThan(5);   // scale animates from the tile size to 1
+  });
+
+  // A touchpad swipe is one long stream of wheel events (tiny ones first,
+  // then momentum). Every one must be cancelled — Chrome turns an uncancelled
+  // horizontal stream into a browser Back swipe (left the dashboard view in
+  // v6.30.x when the swipe crossed the overview) — and one swipe = one room.
+  test('wheel: a touchpad swipe across the overview is fully caught, one room per swipe',async({page})=>{
+    await page.setViewportSize({width:1600,height:900});
+    await ovCfg(page,{grid:{},transition:'zoom',transition_duration:450});
+    await page.evaluate(()=>{const c=window.__harness.card;const cfg=JSON.parse(JSON.stringify(c._config));cfg.nav.wheel='horizontal';
+      cfg.rooms.push(Object.assign(JSON.parse(JSON.stringify(cfg.rooms[1])),{id:'r3',name:'R3'}));c._roomIdx=1;c.setConfig(cfg);
+      window.__wl=[];window.addEventListener('wheel',e=>{window.__wl.push(e.cancelable&&e.defaultPrevented);},{passive:true});});
+    await settle(page,900);
+    await page.mouse.move(900,500);
+    const swipe=async dir=>{for(const d of [1,2,3,5,8,12,18,25,30,30,28,24,20,15,10,6,4,2,1,1,1,1]){await page.mouse.wheel(d*dir,0);await page.waitForTimeout(16);}};
+    // (Playwright's wheel sign is the inverse of a touchpad's — only the
+    // direction matters here: one swipe each way, through the overview)
+    await swipe(-1);                                // room 1 → overview
+    expect(await page.evaluate(()=>window.__harness.card._roomIdx)).toBe(0);
+    await settle(page,700);
+    await swipe(1);                                    // overview → room 1 (zoom out of the tile)
+    expect(await page.evaluate(()=>window.__harness.card._roomIdx)).toBe(1);
+    await settle(page,700);
+    const wl=await page.evaluate(()=>window.__wl);
+    expect(wl.length).toBeGreaterThan(30);
+    expect(wl.filter(x=>!x).length).toBe(0);           // every event cancelable AND cancelled
+    // a mouse wheel: separate notches still switch one room each
+    await page.mouse.wheel(100,0);await settle(page,500);
+    await page.mouse.wheel(100,0);await settle(page,500);
+    expect(await page.evaluate(()=>window.__harness.card._roomIdx)).toBe(3);
+    // over the nav strip: no room switch, but nothing reaches the page either
+    const nb=await page.evaluate(()=>{const r=window.__harness.card.shadowRoot.querySelector('.roc-reg[data-reg="nav"]').getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2};});
+    await page.mouse.move(nb.x,nb.y);
+    await page.evaluate(()=>{window.__wl=[];});
+    await swipe(1);
+    expect(await page.evaluate(()=>window.__harness.card._roomIdx)).toBe(3);
+    expect(await page.evaluate(()=>window.__wl.filter(x=>!x).length)).toBe(0);
+  });
+});

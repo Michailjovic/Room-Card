@@ -122,12 +122,15 @@ mock-up.*
     width and *both / landscape only / portrait only*; ▲▼ and Remove;
   - **Left column / Right column** — on/off, width, where it goes on phones (above / below the
     grid / hidden) and its cards as a YAML list (`media: portrait|landscape` per card);
-  - **Room grid** — all rooms or a checklist, columns and tile style (photo tiles / list rows)
-    per profile, tile picture (same as the nav thumbnails, live, composite, photo only), live tile
-    reference width, state chips per profile, the rooms' info chips, gap;
+  - **Room grid** — all rooms, or an ordered list (v6.31.0: tick the rooms to show and order
+    them with ▲▼ — the grid's own order, the nav strip keeps `rooms:` order), columns and tile
+    style (photo tiles / list rows) per profile, tile picture (same as the nav thumbnails, live,
+    composite, photo only), live tile reference width, state chips per profile, *Show room names
+    on the tiles*, the rooms' info chips, gap;
   - **Dock** — on/off, all sections or a checklist, icon size.
 
-  Every other room then gets an **Overview tile** accordion: tile name, *Leave this room out*,
+  Every other room then gets an **Overview tile** accordion: tile name, *Name on the tile* (as
+  the overview page sets it / always show / hide, v6.31.0), *Leave this room out*,
   **focus** (two sliders with a live crop preview of the photo) and **state chips** — automatic
   (it lists what it derived: the room's lights, cover-controlled blinds and media players), your
   own list (entity, icon, *active when state is*, tap / hold builder, ▲▼, Remove; switching from
