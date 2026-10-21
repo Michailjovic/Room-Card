@@ -222,6 +222,33 @@ test('v6.44.0: the Properties form with real Home Assistant data — entity pick
   await shot(page,'studio-section');
   await page.evaluate(()=>customElements.get('room-overlay-card')._rocStudio.Studio.current.close());   // nothing saved
 });
+test('v6.46.0: the wizard reads HA\'s real areas and uploads a picture into HA\'s image store',async({page})=>{
+  await login(page,TOK);await page.goto(B+'/roc-test/e');await hass(page);
+  await page.waitForFunction(D=>{eval(D);const c=d(document.body,'room-overlay-card');return c.length===2&&c.every(x=>x._rendered);},DEEP,{timeout:30000});
+  await page.evaluate(D=>{eval(D);d(document.body,'room-overlay-card')[1].shadowRoot.querySelector('.tm-studio').click();},DEEP);
+  await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
+  await page.click('dialog.roc-studio >> [data-act="wizard"]');
+  const W='dialog.roc-studio >> .panel.wiz';
+  const a=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const h=S.hass;
+    return{areas:[...S._sr.querySelectorAll('.panel.wiz input[data-area]')].map(x=>x.dataset.area),ha:Object.keys(h.areas).sort()};});
+  console.log('wizard/areas',JSON.stringify(a));
+  expect(a.areas.length).toBeGreaterThan(0);expect(a.areas.slice().sort()).toEqual(a.ha);
+  await page.click(W+' [data-act="wiz-none"]');
+  await page.click(W+' input[data-area="'+a.areas[0]+'"]');
+  await page.click(W+' [data-act="wiz-next"]');
+  await page.setInputFiles(W+' .wiz-img input[type="file"]',{name:'room.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==','base64')});
+  await page.waitForFunction(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const i=S._sr.querySelector('.panel.wiz [data-act="wiz-image"]');return i&&/^\/api\/image\/serve\/[0-9a-f]+\/original$/.test(i.value);},null,{timeout:15000});
+  const url=await page.evaluate(()=>customElements.get('room-overlay-card')._rocStudio.Studio.current._sr.querySelector('.panel.wiz [data-act="wiz-image"]').value);
+  const served=await page.evaluate(u=>fetch(u,{credentials:'omit'}).then(r=>[r.status,r.headers.get('content-type')]),url);
+  console.log('wizard/upload',url,JSON.stringify(served));
+  expect(served).toEqual([200,'image/png']);
+  await page.click(W+' [data-act="wiz-next"]');await page.click(W+' [data-act="wiz-next"]');
+  await page.click(W+' [data-act="wiz-create"]');await page.waitForTimeout(500);
+  const r=await page.evaluate(id=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const room=(S.work.rooms||[]).find(x=>x.id===id);return{room:room&&{id:room.id,img:room.base_image},canvas:S._card._rendered};},a.areas[0]);
+  expect(r.room).toEqual({id:a.areas[0],img:url});expect(r.canvas).toBe(true);
+  await shot(page,'studio-wizard-done');
+  await page.evaluate(()=>customElements.get('room-overlay-card')._rocStudio.Studio.current.close());   // nothing saved
+});
 test('v6.42.0: in HA\'s dashboard edit mode the card offers a Studio button (masonry, panel); sections views leave it to HA\'s editor',async({page})=>{
   await login(page,TOK);
   const out={};

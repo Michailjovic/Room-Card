@@ -34,6 +34,7 @@
         "studio/35-elements.js",
         "studio/45-props.js",
         "studio/40-studio.js",
+        "studio/50-wizard.js",
         "studio/90-register.js"
       ]
     }

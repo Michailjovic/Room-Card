@@ -117,6 +117,7 @@ class RocStudio{
     bar.appendChild(mseg);
     this._addBtn=rsEl('button',{class:'btn',title:this.t('add_hint'),onclick:function(){self._showAdd();}},[rsIcon('mdi:plus'),rsEl('span',{class:'lbl',text:this.t('add')})]);
     bar.appendChild(this._addBtn);
+    bar.appendChild(rsEl('button',{class:'btn','data-act':'wizard',title:this.t('wiz_hint'),onclick:function(){self.openWizard();}},[rsIcon('mdi:auto-fix'),rsEl('span',{class:'lbl',text:this.t('wiz_btn')})]));
     this._undoBtn=rsEl('button',{class:'btn icon',title:this.t('undo'),'aria-label':this.t('undo'),onclick:function(){self.undo();}},[rsIcon('mdi:undo')]);
     this._redoBtn=rsEl('button',{class:'btn icon',title:this.t('redo'),'aria-label':this.t('redo'),onclick:function(){self.redo();}},[rsIcon('mdi:redo')]);
     bar.appendChild(this._undoBtn);bar.appendChild(this._redoBtn);
@@ -205,6 +206,9 @@ class RocStudio{
     this._timers.push(setInterval(function(){self._pollHass();},250));
     this._renderChrome();
     this._layoutFrame();
+    // v6.46.0: a fresh card (the picker's placeholder) starts in the wizard; so does "Start with the
+    // wizard" in the editor (on a card that has content it adds rooms)
+    if(this.opts.wizard||(this.I.isStubCfg&&this.I.isStubCfg(this.work)))try{this.openWizard();}catch(e){console.warn('[room-overlay-card] wizard:',e);}
   }
 
   _mountEditor(){

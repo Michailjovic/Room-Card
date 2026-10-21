@@ -64,4 +64,9 @@ RoomOverlayCard._rocInternals={
   studioUrl:rocStudioUrl,
   ROOM_KEYS:ROOM_KEYS,
   actTypes:ROC_ACT_TYPES, // v6.44.0 — the studio's action builder offers the same types as the editor
+  // v6.46.0 — the new-card wizard: the card's domain icons, its placeholder image and how it spots a fresh card
+  domainIcon:ROC_DOMAIN_ICON,
+  stubImg:ROC_STUB_IMG,
+  isStubImg:rocIsStubImg,
+  isStubCfg:rocIsStubCfg,
 };

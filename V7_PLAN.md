@@ -671,3 +671,38 @@ companion app (author), and the tablet run of the S5 probe.
 - **Pinned validation goes deep:** findings are matched by path below the target
   (`light_controls.entities[1].entity`). Collapsed sections, sub-forms and list rows get a dot when
   something inside has a problem (`rsMarkNests`).
+
+### Phase 4c — v6.46.0
+
+- **The wizard is one pure function plus a UI.**
+  - `rsWizBuild(state, base, internals, recipes)` turns the answers into a config; the jsdom tier
+    tests it directly.
+  - The steps are `RocStudio.prototype._wiz_<step>` in `src/studio/50-wizard.js`, which comes
+    after `40-studio.js` in the manifest.
+- **Grounded in HA data**, probed on 2026.10.2:
+  - `hass.areas[id]` has `area_id`, `name`, `icon`, `picture`, `aliases`, `floor_id`;
+    `hass.floors[id]` has `name` and `level`.
+  - A room's id is the `area_id` (already a slug); otherwise the editor's slug rule.
+  - `area_match` gets only the area's aliases: `roomMatch` already matches id and name.
+  - Entities come from `hass.entities` through `area_id` or the device's `area_id`, skipping
+    `hidden` and `entity_category`.
+  - Icons come from the card's `ROC_DOMAIN_ICON`; recipes from the hosted editor's `_recipeDef`;
+    nav styles and positions from the schema enums.
+- **Upload:**
+  - `POST /api/image/upload` (multipart, through `hass.fetchWithAuth`) returns `{id}`.
+  - The file is served without auth at `/api/image/serve/<id>/original` (and `/512x512`), as
+    probed. This is the store HA uses for area pictures.
+- **Fresh card:** `rocIsStubCfg` (the picker's placeholder) means *replace*. The wizard keeps
+  `type`, `card_id`, `grid_options`, `view_layout`, `card_mod`, `layout`, `aspect_ratio` and
+  `border_radius`.
+- **Existing card means *add*.**
+  - Areas the card already has (by id, name, `area_match` against the area's id, name or aliases)
+    are greyed out.
+  - A single-room card first becomes `room_1`, the same move as the editor's convert.
+  - `nav` is touched only when the card had none.
+- **Placeholder fallback:** rooms without a picture or camera fall back to a top-level
+  `base_image` set to the placeholder sketch (`ROC_STUB_IMG`). So the card always renders
+  (`setConfig` needs an image somewhere), and the review step says so.
+- **Not in this phase:**
+  - floorplan import (§6.3) is Phase 5;
+  - "presets" beyond the section recipes wait for the PRESETS refresh (Phase 10).

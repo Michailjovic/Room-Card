@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='6.45.0';
+const ROC_VERSION='6.46.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -9122,6 +9122,9 @@ class RoomOverlayCardEditor extends HTMLElement{
       '<div style="padding:18px 14px;border:1px dashed var(--divider-color);border-radius:10px;text-align:center;">'
       +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">Build your room card</div>'
       +'<div style="font-size:12px;color:var(--secondary-text-color);margin:0 auto 14px;max-width:430px;line-height:1.5;">Start with a background — a floor-plan or room photo. Then open the <b>Studio</b> (button above) to place and drag elements on it. The rest of the editor appears once a background is set.</div>'
+      // v6.46.0: the studio's new-card wizard builds the card from Home Assistant's areas
+      +'<button id="roc-wizard" type="button" style="padding:8px 14px;border-radius:6px;border:none;background:var(--primary-color);color:var(--text-primary-color,#fff);cursor:pointer;font-size:13px;font-weight:600;display:inline-flex;align-items:center;gap:6px;margin:0 auto 6px;"><ha-icon icon="mdi:auto-fix" style="--mdc-icon-size:18px;"></ha-icon>Start with the wizard</button>'
+      +'<div style="font-size:11px;color:var(--secondary-text-color);margin:0 auto 14px;max-width:430px;">One room per Home Assistant area — names, pictures, lights and sections filled in for you. Or set a background yourself:</div>'
       +'<div style="max-width:430px;margin:0 auto;text-align:left;">'
       +'<label class="roc-l">Background image URL *</label>'
       +'<input id="base_image" type="text" placeholder="/local/room.webp or https://…" value="'+this._e(_realImg?cR.base_image:'')+'"'+this._inp('')+'>'
@@ -9426,6 +9429,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     this.querySelectorAll('textarea').forEach(function(ta){
       const st=ta.getAttribute('style')||'';
       if(st.indexOf('monospace')>=0&&!ta.hasAttribute('data-act-yaml')){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
+    });
+    const wizBtn=this.querySelector('#roc-wizard');
+    if(wizBtn)wizBtn.addEventListener('click',function(){
+      if(self._rocHosted&&self._rocHost&&typeof self._rocHost.openWizard==='function'){self._rocHost.openWizard();return;}   // already in the studio
+      wizBtn.disabled=true;
+      rocOpenStudio({from:'editor',editor:self,hass:self._hass,wizard:true})
+        .catch(function(err){const m=self.querySelector('#roc-studio-msg');if(m)m.textContent=(err&&err.message)||String(err);})
+        .then(function(){wizBtn.disabled=false;});
     });
     const studioBtn=this.querySelector('#roc-studio');
     if(studioBtn)studioBtn.addEventListener('click',function(){
@@ -11014,4 +11025,9 @@ RoomOverlayCard._rocInternals={
   studioUrl:rocStudioUrl,
   ROOM_KEYS:ROOM_KEYS,
   actTypes:ROC_ACT_TYPES, // v6.44.0 — the studio's action builder offers the same types as the editor
+  // v6.46.0 — the new-card wizard: the card's domain icons, its placeholder image and how it spots a fresh card
+  domainIcon:ROC_DOMAIN_ICON,
+  stubImg:ROC_STUB_IMG,
+  isStubImg:rocIsStubImg,
+  isStubCfg:rocIsStubCfg,
 };

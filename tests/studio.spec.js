@@ -441,6 +441,33 @@ test('light controls as a list: a plain entity stays a string until it gets a na
   expect(await page.evaluate(C=>{const S=eval(C);return{cs:S.cardSel,title:S._propsPane.querySelector('.pf-title').textContent};},CUR)).toEqual({cs:null,title:'Living'});
 });
 
+// ---- Phase 4c (v6.46.0): the new-card wizard ----------------------------------------------------
+test('wizard on an existing card: only the areas it lacks, a picture uploaded to Home Assistant, rooms added',async({page})=>{
+  let uploads=0;
+  await page.route('**/api/image/upload',r=>{uploads++;r.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:'up1'})});});
+  await page.goto(base+'/');await ready(page);
+  await page.evaluate(()=>{const h=window.__h.hass;
+    h.areas={kitchen:{area_id:'kitchen',name:'Kitchen',icon:'mdi:stove',picture:null,aliases:[],floor_id:null},bathroom:{area_id:'bathroom',name:'Bathroom',icon:'mdi:shower',picture:null,aliases:['Bath'],floor_id:null}};
+    h.floors={};h.devices={};h.entities={'light.x':{entity_id:'light.x',area_id:'bathroom'}};
+    h.fetchWithAuth=(u,o)=>fetch(u,o);});
+  await openFromCard(page);
+  await page.click('dialog.roc-studio >> [data-act="wizard"]');
+  const W='dialog.roc-studio >> .panel.wiz';
+  const a=await page.evaluate(C=>{const S=eval(C);const p=S._sr.querySelector('.panel.wiz');return{steps:[...p.querySelectorAll('.wiz-step')].map(x=>x.dataset.step),areas:[...p.querySelectorAll('input[data-area]')].map(x=>x.dataset.area+':'+x.checked+':'+x.disabled)};},CUR);
+  expect(a).toEqual({steps:['rooms','images','contents','review'],areas:['bathroom:true:false','kitchen:false:true']});
+  await page.click(W+' [data-act="wiz-next"]');
+  await page.setInputFiles(W+' .wiz-img input[type="file"]',{name:'bath.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==','base64')});
+  await page.waitForFunction(C=>{const S=eval(C);const i=S._sr.querySelector('.panel.wiz [data-act="wiz-image"]');return i&&i.value==='/api/image/serve/up1/original';},CUR);
+  expect(uploads).toBe(1);
+  await page.click(W+' [data-act="wiz-next"]');
+  await page.click(W+' [data-act="wiz-next"]');
+  await page.click(W+' [data-act="wiz-create"]');await page.waitForTimeout(300);
+  const r=await page.evaluate(C=>{const S=eval(C);return{ids:S.work.rooms.map(x=>x.id),bath:S.work.rooms[2],cur:S.roomIdx,open:!!S._sr.querySelector('.panel.wiz'),undo:S.undoStack.length};},CUR);
+  expect(r.ids).toEqual(['a','b','bathroom']);
+  expect(r.bath).toEqual({id:'bathroom',name:'Bathroom',icon:'mdi:shower',area_match:['Bath'],base_image:'/api/image/serve/up1/original',light_controls:{entities:['light.x']}});
+  expect(r.open).toBe(false);expect(r.undo).toBe(1);
+});
+
 test('screenshot: the Properties form (visual check, not an assertion)',async({page})=>{
   await page.goto(base+'/');await ready(page);await openFromCard(page);
   await page.evaluate(C=>{const S=eval(C);const c=JSON.parse(JSON.stringify(S.work));c.rooms[0].gauges[0].height='tall';S._commit(c,'test');S._select('gauge','g1','outline');S._propsOpen.add('actions');S._syncProps(true);},CUR);

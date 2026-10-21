@@ -36,10 +36,15 @@
  * room form grows to navigation, overview, image & weather, light controls and cards; card-level
  * forms in the outline: Card settings, Navigation and Sections (add from the editor's recipes,
  * reorder, delete, rename with their references, the elements tagged into each).
+ *
+ * Phase 4c (v6.46.0) — the new-card wizard (50-wizard.js): rooms from Home Assistant's areas
+ * (names, icons, pictures, aliases), pictures by URL, upload or camera, the areas' lights as light
+ * controls and devices as icons, the editor's section recipes, nav / overview / presence. A fresh
+ * card starts in it; on an existing card it adds rooms for the areas it does not have yet.
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.45.0';
+const ROC_STUDIO_VERSION='6.46.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -389,6 +394,31 @@ const ROC_STUDIO_STR={en:{
   g_defaults:'Room defaults',g_image:'Image & weather',g_lights:'Light controls',g_cards:'Cards above / below',g_room_tap:'Tap on the image',
   g_room_nav:'Navigation',g_overview:'Overview page',g_card:'Card',g_panel:'Panel',g_content:'Content',g_behaviour:'Behaviour',
   g_nav_chips:'Chips',g_nav_cards:'Cards in the nav',g_nav_mini:'Mini previews',
+  // Phase 4c (v6.46.0) — the new-card wizard
+  stub_img:'the placeholder sketch',
+  wiz_btn:'Wizard',wiz_hint:'Build the card from Home Assistant\'s areas — or add rooms for the areas it does not have yet',
+  wiz_title:'New card',wiz_title_add:'Add rooms from Home Assistant',
+  wiz_s_rooms:'Rooms',wiz_s_images:'Pictures',wiz_s_contents:'Contents',wiz_s_nav:'Navigation',wiz_s_review:'Review',
+  wiz_back:'Back',wiz_next:'Next',wiz_create:'Create the card',wiz_add:'Add to the card',
+  wiz_mode_rooms:'Several rooms',wiz_mode_single:'One room',
+  wiz_rooms_body:'One room per Home Assistant area. Pick the ones this card shows — names, icons and pictures come from the areas.',
+  wiz_rooms_add_body:'Areas the card does not have yet. Pick the ones to add as rooms.',
+  wiz_no_areas:'Home Assistant has no areas yet — name the rooms here (or create areas in Settings → Areas, then come back).',
+  wiz_single_body:'A card for one room. Pick the area it shows (its picture and devices are used).',
+  wiz_all:'All',wiz_none:'None',wiz_has:'already in the card',wiz_n_dev:'{n} devices',wiz_room_n:'Room {n}',wiz_add_room:'Room without an area',
+  wiz_images_body:'A photo or a floor-plan render for each room — a URL (/local/… for files in config/www), an upload, or a live camera. The area\'s own picture is already filled in.',
+  wiz_images_note:'A room without a picture shows a placeholder sketch until you set one (Properties → the room).',
+  wiz_upload:'Upload',wiz_upload_hint:'Upload a picture to Home Assistant (the same store as area pictures)',wiz_uploading:'Uploading…',wiz_upload_err:'Upload failed: {m}',wiz_camera_ph:'or a camera: camera.living_room',
+  wiz_c_rooms:'In each room',wiz_lights:'Its lights as light controls (slider pills under the picture)',wiz_icons:'Its devices as icons, to arrange on the picture',wiz_found:'{n} found',
+  wiz_c_sections:'Sections',wiz_sections_body:'Panels that open over the card. A recipe that fills itself from a kind of device is offered when Home Assistant has such devices.',
+  wiz_recipe_none:'No such devices in Home Assistant',
+  wiz_nav_body:'How the rooms are switched.',wiz_nav_style:'Room strip',wiz_nav_pos:'Position',
+  wiz_overview:'An overview page first',wiz_overview_sub:'every room as a tile, tap to zoom in',
+  wiz_presence:'Follow presence (optional)',wiz_presence_note:'A sensor whose state is the room you are in (its name or id) — the card switches to that room.',
+  wiz_sum_rooms:'{n} rooms: {names}',wiz_sum_single:'One room',wiz_sum_lights:'Light controls in {n} rooms',wiz_sum_icons:'{n} icons to arrange',wiz_sum_sections:'Sections: {s}',
+  wiz_sum_stub:'Rooms without a picture use the placeholder sketch for now',
+  wiz_review_note:'Creating replaces the placeholder card. Undo brings it back; nothing is saved until you press Save / Apply.',
+  wiz_review_note_add:'The rooms are added to this card; everything it has stays. Undo takes them out again.',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;
@@ -606,6 +636,41 @@ textarea.pf-in{height:auto;padding:6px 8px;resize:vertical;font:12px/1.45 ui-mon
 .pf-chip ha-icon{--mdc-icon-size:14px;}
 details.has-err>summary::after,details.has-warn>summary::after{content:'';width:7px;height:7px;border-radius:50%;flex:none;order:9;}
 details.has-err>summary::after{background:var(--rs-err);}
+.panel.wiz{width:min(860px,100%);height:min(86vh,760px);max-height:none;}
+.wiz-head{padding:14px 18px 6px;}
+.wiz-head h2{display:flex;align-items:center;gap:8px;padding:0;margin:0 0 10px;font-size:17px;}
+.wiz-head h2 ha-icon{--mdc-icon-size:22px;color:var(--rs-acc);}
+.wiz-steps{display:flex;gap:6px;flex-wrap:wrap;}
+.wiz-step{font-size:12px;padding:3px 10px;border-radius:12px;border:1px solid var(--rs-line);color:var(--rs-txt2);}
+.wiz-step.cur{border-color:var(--rs-acc);color:var(--rs-acc);font-weight:600;}
+.wiz-step.done{color:var(--primary-text-color,#e8eaed);}
+.wiz-body{flex:1;min-height:0;overflow:auto;padding:8px 18px 12px;color:var(--rs-txt2);line-height:1.45;}
+.wiz-body p{margin:6px 0 10px;}
+.wiz-body h3{font-size:13px;margin:14px 0 6px;color:var(--primary-text-color,#e8eaed);}
+.wiz-foot .sp{flex:1;}
+.wiz-mode{margin:4px 0 8px;}
+.wiz-tools{display:flex;gap:6px;margin-bottom:8px;}
+.wiz-list{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;}
+.wiz-floor{font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:10px 4px 4px;}
+.wiz-row{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:8px;cursor:pointer;color:var(--primary-text-color,#e8eaed);}
+.wiz-row:hover{background:var(--rs-sub);}
+.wiz-row.has{opacity:.5;cursor:default;}
+.wiz-row input[type=checkbox],.wiz-row input[type=radio]{width:18px;height:18px;accent-color:var(--rs-acc);flex:none;}
+.wiz-row .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wiz-row .sub{margin-left:auto;font-size:12px;color:var(--rs-txt2);white-space:nowrap;}
+.wiz-row .pf-in{flex:1;}
+.wiz-th{width:44px;height:28px;}
+.wiz-img{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--rs-line);}
+.wiz-big{width:140px;height:88px;flex:none;}
+.wiz-imgcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;}
+.wiz-nmrow,.wiz-urlrow{display:flex;gap:6px;align-items:center;}
+.wiz-nmrow ha-icon{color:var(--rs-acc);}
+.wiz-urlrow .pf-in{flex:1;}
+.wiz-recipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px;}
+.wiz-recipe.off{opacity:.45;cursor:default;}
+.wiz-sum{margin:4px 0 10px;padding-left:18px;color:var(--primary-text-color,#e8eaed);}
+textarea.wiz-yaml{min-height:30vh;}
+@media (max-width:700px){.wiz-big{width:96px;height:64px;}.panel.wiz{height:100%;}}
 details.has-warn>summary::after{background:var(--rs-warn);}
 .ol-el .vd{order:3;}
 .vd.error{background:var(--rs-err);} .vd.warn{background:var(--rs-warn);}
@@ -915,7 +980,7 @@ function rsPicker(input,getItems,onPick,render){
 }
 // entity picker: search id / friendly name / area, preferred domains first, live state shown
 function rsEntityInput(ctx,value,domains,onChange,ph){
-  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:ph||'light.living_room'});
+  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:ph||((domains&&domains[0]||'light')+'.living_room')});
   inp.value=value||'';
   const hint=rsEl('div',{class:'pf-sub'});
   const showHint=function(){
@@ -1126,6 +1191,12 @@ function rsActionWidget(ctx,value,onChange,o){
 const RS_YAML_SCHEMAS=['cond','condVal','baseImageCond','filterCond','companion','ovSideCard'];
 const RS_MAX_DEPTH=4;
 function rsFormSchema(name){const S=RocSchema.ROC_SCHEMA;return(name&&S[name]&&RS_YAML_SCHEMAS.indexOf(name)<0)?S[name]:null;}
+// a shared value shown as a placeholder: the card's placeholder sketch by name, long values cut
+function rsShort(ctx,v){
+  const s=String(v);
+  if(ctx.I&&ctx.I.isStubImg&&ctx.I.isStubImg(s))return ctx.t('stub_img');
+  return s.length>48?s.slice(0,45)+'…':s;
+}
 function rsIsObj(v){return!!v&&typeof v==='object'&&!Array.isArray(v);}
 function rsCount(v){return rsIsObj(v)?Object.keys(v).length:(Array.isArray(v)?v.length:0);}
 // a short name for a list item: its title / name / id / entity…
@@ -1234,7 +1305,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
   const choices=ctx.choices?ctx.choices(key,o.schema):null;
   const inh=o.inherit;
   const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey,choices:choices,
-    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:String(inh)}):null};
+    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):null};
   const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
   const canDeep=depth<RS_MAX_DEPTH;
   const asObj=!yamlMode&&canDeep&&objName&&(rsIsObj(value)||(value===undefined&&!simple));
@@ -1570,6 +1641,7 @@ class RocStudio{
     bar.appendChild(mseg);
     this._addBtn=rsEl('button',{class:'btn',title:this.t('add_hint'),onclick:function(){self._showAdd();}},[rsIcon('mdi:plus'),rsEl('span',{class:'lbl',text:this.t('add')})]);
     bar.appendChild(this._addBtn);
+    bar.appendChild(rsEl('button',{class:'btn','data-act':'wizard',title:this.t('wiz_hint'),onclick:function(){self.openWizard();}},[rsIcon('mdi:auto-fix'),rsEl('span',{class:'lbl',text:this.t('wiz_btn')})]));
     this._undoBtn=rsEl('button',{class:'btn icon',title:this.t('undo'),'aria-label':this.t('undo'),onclick:function(){self.undo();}},[rsIcon('mdi:undo')]);
     this._redoBtn=rsEl('button',{class:'btn icon',title:this.t('redo'),'aria-label':this.t('redo'),onclick:function(){self.redo();}},[rsIcon('mdi:redo')]);
     bar.appendChild(this._undoBtn);bar.appendChild(this._redoBtn);
@@ -1658,6 +1730,9 @@ class RocStudio{
     this._timers.push(setInterval(function(){self._pollHass();},250));
     this._renderChrome();
     this._layoutFrame();
+    // v6.46.0: a fresh card (the picker's placeholder) starts in the wizard; so does "Start with the
+    // wizard" in the editor (on a card that has content it adds rooms)
+    if(this.opts.wizard||(this.I.isStubCfg&&this.I.isStubCfg(this.work)))try{this.openWizard();}catch(e){console.warn('[room-overlay-card] wizard:',e);}
   }
 
   _mountEditor(){
@@ -2920,13 +2995,358 @@ class RocStudio{
     this._card=null;this._ed=null;
   }
 }
+// ---- New-card wizard (Phase 4c, v6.46.0, V7_PLAN §5.7) --------------------------------------
+// Builds a card from what Home Assistant already knows: one room per area (name, icon, picture,
+// aliases), the area's lights as light controls, its devices as icons to arrange later, the
+// editor's section recipes, the nav and an optional overview page. Nothing is invented: every id,
+// name, icon and picture comes from the area / entity registries or from the editor's own
+// defaults. On an existing card the same wizard adds rooms for the areas it does not have yet.
+//
+// rsWizBuild(state, base, I, recipes) is pure (tested on its own): state is the wizard's answers,
+// base the current config. The result replaces a fresh (placeholder) card, or extends an existing
+// one — every key it does not touch stays as it was (KEEP).
+
+const RS_WIZ_STEPS=['rooms','images','contents','nav','review'];
+// slug for a room id — the same rule as the editor's "Create a room for each area"
+function rsSlug(s){return String(s||'room').toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'')||'room';}
+// the areas of Home Assistant, by floor (level), each with its usable entities
+function rsWizAreas(hass){
+  const areas=(hass&&hass.areas)||{},floors=(hass&&hass.floors)||{},ents=(hass&&hass.entities)||{},devs=(hass&&hass.devices)||{},st=(hass&&hass.states)||{};
+  const byArea={};
+  Object.keys(ents).forEach(function(eid){
+    const e=ents[eid]||{};
+    if(e.hidden||e.entity_category||!st[eid])return;   // diagnostics / config entities and hidden ones are not room devices
+    const a=e.area_id||(e.device_id&&devs[e.device_id]&&devs[e.device_id].area_id);
+    if(!a)return;
+    (byArea[a]=byArea[a]||[]).push({id:eid,dom:eid.split('.')[0],name:(st[eid].attributes&&st[eid].attributes.friendly_name)||eid});
+  });
+  return Object.keys(areas).map(function(id){
+    const a=areas[id]||{},f=a.floor_id&&floors[a.floor_id];
+    return{area:id,name:String(a.name||id),icon:a.icon||null,picture:a.picture||null,aliases:Array.isArray(a.aliases)?a.aliases.filter(Boolean):[],
+      floor:f?String(f.name||f.floor_id):'',level:f&&typeof f.level==='number'?f.level:(f?0:999),ents:(byArea[id]||[]).sort(function(x,y){return x.id.localeCompare(y.id);})};
+  }).sort(function(x,y){return x.level-y.level||x.floor.localeCompare(y.floor)||x.name.localeCompare(y.name);});
+}
+// is this area already a room of the card (by id, name or area_match)?
+function rsWizHasArea(cfg,a){
+  const rooms=Array.isArray(cfg&&cfg.rooms)?cfg.rooms:[];
+  const keys=[a.area,a.name].concat(a.aliases).map(function(x){return String(x).toLowerCase();});
+  return rooms.some(function(r){
+    if(!r)return false;
+    const rk=[r.id,r.name].concat(Array.isArray(r.area_match)?r.area_match:(r.area_match?[r.area_match]:[])).filter(function(x){return x!=null;}).map(function(x){return String(x).toLowerCase();});
+    return rk.some(function(x){return keys.indexOf(x)>=0;});
+  });
+}
+function rsWizBuild(st,base,I,recipes){
+  const fresh=!!st.fresh;
+  const c=fresh?(function(){
+    // a placeholder card: keep only what identifies it on the dashboard and its frame
+    const o={};['type','card_id','grid_options','view_layout','card_mod','layout','aspect_ratio','border_radius'].forEach(function(k){if(base[k]!==undefined)o[k]=JSON.parse(rsJ(base[k]));});
+    if(!o.type)o.type='custom:room-overlay-card';
+    return o;
+  })():JSON.parse(rsJ(base));
+  const domIcon=(I&&I.domainIcon)||{};
+  const stub=I&&I.stubImg;
+  const iconDef=RS_TYPES.icon.def;
+  // one room's own keys from an answer
+  const roomBody=function(r,taken){
+    const o={};
+    if(r.image)o.base_image=r.image;
+    if(r.camera)o.base_camera=r.camera;
+    if(st.lights){
+      const ls=(r.ents||[]).filter(function(e){return e.dom==='light';}).map(function(e){return e.id;});
+      if(ls.length)o.light_controls={entities:ls};
+    }
+    if(st.icons){
+      const icons=[];let col=0,row=0;
+      (r.ents||[]).forEach(function(e){
+        if(!domIcon[e.dom])return;   // the domains the card has an icon for (ROC_DOMAIN_ICON)
+        const id=rsUniqueId(icons.concat(taken||[]),'icon_',e.id.replace(/[^A-Za-z0-9_-]/g,'_'));
+        icons.push({id:id,entity:e.id,icon:domIcon[e.dom],top:rsPct(6+row*12),left:rsPct(6+col*12),size:iconDef.size});
+        col++;if(col>=7){col=0;row++;}
+      });
+      if(icons.length)o.icons=icons;
+    }
+    return o;
+  };
+  const chosen=(st.rooms||[]).filter(function(r){return r.on!==false;});
+  if(st.mode==='single'){
+    const r=chosen[0]||{};
+    const o=roomBody(r);
+    if(!o.base_image&&!o.base_camera&&!c.base_image&&!c.base_camera&&stub)o.base_image=stub;
+    Object.keys(o).forEach(function(k){c[k]=o[k];});
+  }else{
+    // an existing single-room card becomes the first room (same move as the editor's "convert")
+    if(!Array.isArray(c.rooms)||!c.rooms.length){
+      const had=(I&&I.ROOM_KEYS||[]).some(function(k){return c[k]!==undefined&&!(k==='base_image'&&I.isStubImg&&I.isStubImg(c[k]));});
+      c.rooms=[];
+      if(!fresh&&had){
+        const first={id:'room_1',name:'Room 1'};
+        (I.ROOM_KEYS||[]).forEach(function(k){if(c[k]!==undefined){first[k]=c[k];delete c[k];}});
+        c.rooms.push(first);
+      }
+    }
+    if(st.overview&&!c.rooms.some(function(r){return r&&r.overview;}))
+      c.rooms.unshift({id:rsUniqueId(c.rooms,'overview','overview'),name:st.overviewName||'Overview',icon:'mdi:view-dashboard-outline',overview:true});
+    chosen.forEach(function(r){
+      const id=rsUniqueId(c.rooms,'room_',/^[a-z0-9_]+$/.test(r.area||'')?r.area:rsSlug(r.name));
+      const room={id:id,name:String(r.name||id)};
+      if(r.icon)room.icon=r.icon;
+      if(r.aliases&&r.aliases.length)room.area_match=r.aliases.slice();
+      Object.assign(room,roomBody(r));
+      c.rooms.push(room);
+    });
+    // a room without a picture or camera falls back to the shared image: the placeholder sketch
+    const bare=c.rooms.some(function(r){return r&&!r.overview&&!r.base_image&&!r.base_camera;});
+    if(bare&&!c.base_image&&!c.base_camera&&stub)c.base_image=stub;
+    if(fresh||!c.nav){
+      const nav=Object.assign({},c.nav||{});
+      if(st.navStyle)nav.style=st.navStyle;
+      if(st.navPos)nav.position=st.navPos;
+      if(Object.keys(nav).length)c.nav=nav;
+    }
+    if(st.roomEntity)c.room_entity=st.roomEntity;
+  }
+  (st.sections||[]).forEach(function(kind){
+    const def=recipes&&recipes[kind];if(!def)return;
+    if(!Array.isArray(c.sections))c.sections=[];
+    c.sections.push(Object.assign({id:rsUniqueId(c.sections,'section_',kind)},JSON.parse(rsJ(def))));
+  });
+  return c;
+}
+
+// ---- the wizard UI ---------------------------------------------------------------------------
+// recipes offered: the editor's own list (room-overlay-card-editor: _recipeDef); a recipe that
+// auto-fills from a domain is offered only when Home Assistant has entities of that domain
+const RS_WIZ_RECIPES=[['appliances','mdi:washing-machine','Appliances'],['cleaning','mdi:robot-vacuum','Cleaning'],['media','mdi:cast','Media'],['heating','mdi:radiator','Heating'],
+  ['covers','mdi:window-shutter','Covers'],['electricity','mdi:flash','Electricity'],['weather','mdi:weather-partly-cloudy','Weather']];
+function rsUploadImage(hass,file){
+  if(!hass||typeof hass.fetchWithAuth!=='function')return Promise.reject(new Error('no upload'));
+  const fd=new FormData();fd.append('file',file);
+  // Home Assistant's own image store (what area pictures use); served without auth
+  return hass.fetchWithAuth('/api/image/upload',{method:'POST',body:fd}).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(function(j){if(!j||!j.id)throw new Error('no id');return'/api/image/serve/'+j.id+'/original';});
+}
+RocStudio.prototype._wizRecipes=function(){
+  const ed=this._ed,out={};
+  RS_WIZ_RECIPES.forEach(function(k){let d=null;if(ed&&typeof ed._recipeDef==='function')try{d=ed._recipeDef(k[0]);}catch(_){d=null;}if(d)out[k[0]]=d;});
+  return out;
+};
+RocStudio.prototype.openWizard=function(opts){
+  opts=opts||{};
+  if(this._wiz)return;
+  const self=this,I=this.I;
+  const fresh=opts.fresh!=null?!!opts.fresh:!!(I.isStubCfg&&I.isStubCfg(this.work));
+  const areas=rsWizAreas(this.hass);
+  const recipes=this._wizRecipes();
+  const doms=new Set(Object.keys((this.hass&&this.hass.states)||{}).map(function(e){return e.split('.')[0];}));
+  const st={fresh:fresh,mode:'rooms',step:0,lights:true,icons:false,sections:[],navStyle:fresh?'thumbnails':null,navPos:fresh?'bottom':null,overview:false,roomEntity:null,
+    rooms:areas.map(function(a){const has=!fresh&&rsWizHasArea(self.work,a);
+      return{area:a.area,name:a.name,icon:a.icon,image:a.picture||'',camera:'',aliases:a.aliases,ents:a.ents,floor:a.floor,on:!has,has:has};})};
+  if(!st.rooms.length)st.rooms.push({name:this.t('wiz_room_n',{n:1}),image:'',camera:'',ents:[],on:true,manual:true});
+  this._wiz=st;
+  const layer=rsEl('div',{class:'layer wiz-layer'});
+  const p=rsEl('div',{class:'panel wiz',role:'dialog','aria-modal':'true','aria-label':this.t('wiz_title')});
+  const head=rsEl('div',{class:'wiz-head'});
+  const body=rsEl('div',{class:'wiz-body'});
+  const foot=rsEl('div',{class:'pf wiz-foot'});
+  p.appendChild(head);p.appendChild(body);p.appendChild(foot);layer.appendChild(p);
+  const close=function(){const i=self._layers.indexOf(close);if(i>=0)self._layers.splice(i,1);layer.remove();self._wiz=null;};
+  st.close=close;
+  const steps=function(){return RS_WIZ_STEPS.filter(function(s){return!(s==='nav'&&(st.mode==='single'||!fresh));});};
+  const btn=function(label,cls,act,fn,dis){return rsEl('button',{class:'btn'+(cls?' '+cls:''),type:'button','data-act':act,disabled:dis?true:null,onclick:fn},[label]);};
+  const chosen=function(){return st.rooms.filter(function(r){return r.on;});};
+  const render=function(){
+    const ss=steps();if(st.step>=ss.length)st.step=ss.length-1;
+    const step=ss[st.step];
+    head.innerHTML='';
+    head.appendChild(rsEl('h2',null,[rsIcon('mdi:auto-fix'),rsEl('span',{text:self.t(fresh?'wiz_title':'wiz_title_add')})]));
+    const dots=rsEl('div',{class:'wiz-steps'});
+    ss.forEach(function(s,i){dots.appendChild(rsEl('span',{class:'wiz-step'+(i===st.step?' cur':'')+(i<st.step?' done':''),'data-step':s,text:(i+1)+' '+self.t('wiz_s_'+s)}));});
+    head.appendChild(dots);
+    body.innerHTML='';
+    self['_wiz_'+step](body,st,{areas:areas,recipes:recipes,doms:doms,fresh:fresh,render:render,chosen:chosen});
+    foot.innerHTML='';
+    foot.appendChild(btn(self.t('cancel'),'','wiz-cancel',close));
+    foot.appendChild(rsEl('span',{class:'sp'}));
+    if(st.step>0)foot.appendChild(btn(self.t('wiz_back'),'','wiz-back',function(){st.step--;render();}));
+    const n=chosen().length;
+    if(step==='review')foot.appendChild(btn(self.t(fresh?'wiz_create':'wiz_add'),'primary','wiz-create',function(){self._wizFinish(st,recipes);}));
+    else foot.appendChild(btn(self.t('wiz_next'),'primary','wiz-next',function(){st.step++;render();},step==='rooms'&&!n&&!st.sections.length&&st.mode!=='single'&&fresh));
+    st.render=render;
+  };
+  render();
+  this._app.appendChild(layer);
+  this._layers.push(close);
+};
+// step 1 — which rooms: one per area (by floor), or one room only
+RocStudio.prototype._wiz_rooms=function(body,st,o){
+  const self=this;
+  if(o.fresh){
+    const seg=rsEl('div',{class:'seg wiz-mode',role:'group'});
+    [['rooms','wiz_mode_rooms'],['single','wiz_mode_single']].forEach(function(m){
+      seg.appendChild(rsEl('button',{type:'button','data-mode':m[0],'aria-pressed':String(st.mode===m[0]),onclick:function(){st.mode=m[0];o.render();}},[self.t(m[1])]));
+    });
+    body.appendChild(seg);
+  }
+  if(st.mode==='single'){
+    body.appendChild(rsEl('p',{text:this.t('wiz_single_body')}));
+    const list=rsEl('div',{class:'wiz-list'});
+    st.rooms.forEach(function(r,i){
+      list.appendChild(rsEl('label',{class:'wiz-row'},[rsEl('input',{type:'radio',name:'wiz-single',checked:r.on&&st.rooms.findIndex(function(x){return x.on;})===i?true:null,onchange:function(){st.rooms.forEach(function(x,j){x.on=j===i;});}}),
+        rsIcon(r.icon||'mdi:door'),rsEl('span',{class:'nm',text:r.name}),rsEl('span',{class:'sub',text:r.manual?'':self.t('wiz_n_dev',{n:r.ents.length})})]));
+    });
+    // radio semantics: exactly one room
+    if(st.rooms.filter(function(x){return x.on;}).length!==1){st.rooms.forEach(function(x,j){x.on=j===0;});o.render();return;}
+    body.appendChild(list);
+    return;
+  }
+  body.appendChild(rsEl('p',{text:this.t(o.areas.length?(o.fresh?'wiz_rooms_body':'wiz_rooms_add_body'):'wiz_no_areas')}));
+  const tools=rsEl('div',{class:'wiz-tools'},[
+    rsEl('button',{class:'btn sm',type:'button','data-act':'wiz-all',onclick:function(){st.rooms.forEach(function(r){if(!r.has)r.on=true;});o.render();}},[this.t('wiz_all')]),
+    rsEl('button',{class:'btn sm',type:'button','data-act':'wiz-none',onclick:function(){st.rooms.forEach(function(r){r.on=false;});o.render();}},[this.t('wiz_none')]),
+  ]);
+  body.appendChild(tools);
+  const list=rsEl('div',{class:'wiz-list'});
+  let floor=null;
+  st.rooms.forEach(function(r){
+    if(!r.manual&&r.floor!==floor){floor=r.floor;if(floor)list.appendChild(rsEl('div',{class:'wiz-floor',text:floor}));}
+    const cb=rsEl('input',{type:'checkbox','data-area':r.area||'',disabled:r.has?true:null,onchange:function(){r.on=cb.checked;o.render();}});cb.checked=!!r.on;
+    const row=rsEl('label',{class:'wiz-row'+(r.has?' has':'')},[cb,rsIcon(r.icon||'mdi:door')]);
+    if(r.manual){
+      const nm=rsEl('input',{type:'text',class:'pf-in','data-act':'wiz-manual-name',value:r.name,onchange:function(){r.name=nm.value.trim()||r.name;}});
+      row.appendChild(nm);
+    }else row.appendChild(rsEl('span',{class:'nm',text:r.name}));
+    row.appendChild(rsEl('span',{class:'sub',text:r.has?self.t('wiz_has'):(r.manual?'':self.t('wiz_n_dev',{n:r.ents.length}))}));
+    if(r.image)row.appendChild(rsEl('span',{class:'pf-thumb wiz-th',style:'background-image:url("'+String(r.image).replace(/"/g,'%22')+'")'}));
+    list.appendChild(row);
+  });
+  body.appendChild(list);
+  body.appendChild(rsEl('button',{class:'pf-add',type:'button','data-act':'wiz-add-room',onclick:function(){st.rooms.push({name:self.t('wiz_room_n',{n:st.rooms.filter(function(x){return x.manual;}).length+1}),image:'',camera:'',ents:[],on:true,manual:true});o.render();}},[rsIcon('mdi:plus'),rsEl('span',{text:this.t('wiz_add_room')})]));
+};
+// step 2 — a picture (or a camera) for each room
+RocStudio.prototype._wiz_images=function(body,st,o){
+  const self=this;
+  body.appendChild(rsEl('p',{text:this.t('wiz_images_body')}));
+  const canUp=!!(this.hass&&typeof this.hass.fetchWithAuth==='function');
+  const ctx={t:function(k,v){return self.t(k,v);},get hass(){return self.hass;}};
+  o.chosen().forEach(function(r){
+    const row=rsEl('div',{class:'wiz-img','data-room':r.area||r.name});
+    const th=rsEl('div',{class:'pf-thumb wiz-big'});
+    const setTh=function(){th.style.backgroundImage=r.image?'url("'+String(r.image).replace(/"/g,'%22')+'")':'';th.classList.toggle('cam',!r.image&&!!r.camera);};
+    setTh();
+    const col=rsEl('div',{class:'wiz-imgcol'});
+    const nm=rsEl('input',{type:'text',class:'pf-in','data-act':'wiz-name',value:r.name,onchange:function(){r.name=nm.value.trim()||r.name;}});
+    col.appendChild(rsEl('div',{class:'wiz-nmrow'},[rsIcon(r.icon||'mdi:door'),nm]));
+    const url=rsEl('input',{type:'text',class:'pf-in','data-act':'wiz-image',placeholder:'/local/'+(/^[a-z0-9_]+$/.test(r.area||'')?r.area:rsSlug(r.name))+'.webp',value:r.image||'',onchange:function(){r.image=url.value.trim();setTh();}});
+    const line=rsEl('div',{class:'wiz-urlrow'},[url]);
+    const msg=rsEl('span',{class:'pf-sub'});
+    if(canUp){
+      const file=rsEl('input',{type:'file',accept:'image/*',style:'display:none',onchange:function(){
+        const f=file.files&&file.files[0];if(!f)return;
+        msg.textContent=self.t('wiz_uploading');
+        rsUploadImage(self.hass,f).then(function(u){r.image=u;url.value=u;setTh();msg.textContent='';},function(e){msg.textContent=self.t('wiz_upload_err',{m:String(e&&e.message||e)});});
+      }});
+      line.appendChild(file);
+      line.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'wiz-upload',title:self.t('wiz_upload_hint'),onclick:function(){file.click();}},[rsIcon('mdi:upload'),rsEl('span',{class:'lbl',text:self.t('wiz_upload')})]));
+    }
+    col.appendChild(line);
+    const cam=rsEntityInput(ctx,r.camera,['camera'],function(v){r.camera=v||'';setTh();},self.t('wiz_camera_ph'));
+    cam.classList.add('wiz-cam');
+    col.appendChild(cam);
+    col.appendChild(msg);
+    row.appendChild(th);row.appendChild(col);
+    body.appendChild(row);
+  });
+  body.appendChild(rsEl('p',{class:'pf-note',text:this.t('wiz_images_note')}));
+};
+// step 3 — what goes into the rooms and the card
+RocStudio.prototype._wiz_contents=function(body,st,o){
+  const self=this;
+  const ch=o.chosen();
+  const nL=ch.reduce(function(a,r){return a+r.ents.filter(function(e){return e.dom==='light';}).length;},0);
+  const domIcon=this.I.domainIcon||{};
+  const nD=ch.reduce(function(a,r){return a+r.ents.filter(function(e){return!!domIcon[e.dom];}).length;},0);
+  const opt=function(key,label,sub,act){
+    const cb=rsEl('input',{type:'checkbox','data-act':act,onchange:function(){st[key]=cb.checked;}});cb.checked=!!st[key];
+    return rsEl('label',{class:'wiz-row wiz-opt'},[cb,rsEl('span',{class:'nm',text:label}),rsEl('span',{class:'sub',text:sub})]);
+  };
+  body.appendChild(rsEl('h3',{text:this.t('wiz_c_rooms')}));
+  body.appendChild(opt('lights',this.t('wiz_lights'),this.t('wiz_found',{n:nL}),'wiz-lights'));
+  body.appendChild(opt('icons',this.t('wiz_icons'),this.t('wiz_found',{n:nD}),'wiz-icons'));
+  body.appendChild(rsEl('h3',{text:this.t('wiz_c_sections')}));
+  body.appendChild(rsEl('p',{text:this.t('wiz_sections_body')}));
+  const grid=rsEl('div',{class:'wiz-recipes'});
+  RS_WIZ_RECIPES.forEach(function(k){
+    const def=o.recipes[k[0]];
+    const ok=!!def&&(!def.domain||o.doms.has(def.domain));
+    const cb=rsEl('input',{type:'checkbox','data-recipe':k[0],disabled:ok?null:true,onchange:function(){
+      st.sections=st.sections.filter(function(x){return x!==k[0];});if(cb.checked)st.sections.push(k[0]);
+    }});cb.checked=ok&&st.sections.indexOf(k[0])>=0;
+    grid.appendChild(rsEl('label',{class:'wiz-row wiz-recipe'+(ok?'':' off'),title:ok?null:self.t(def?'wiz_recipe_none':'sec_needs')},[cb,rsIcon(k[1]),rsEl('span',{class:'nm',text:k[2]})]));
+  });
+  body.appendChild(grid);
+};
+// step 4 — navigation, overview page, presence (a new multi-room card)
+RocStudio.prototype._wiz_nav=function(body,st,o){
+  const self=this,S=RocSchema.ROC_SCHEMA;
+  const sel=function(key,enumT,act){
+    const s=rsEl('select',{class:'pf-in','data-act':act,onchange:function(){st[key]=s.value||null;}});
+    enumT.slice(5).split('|').forEach(function(v){s.appendChild(rsEl('option',{value:v,text:v}));});
+    s.value=st[key]||'';return s;
+  };
+  body.appendChild(rsEl('p',{text:this.t('wiz_nav_body')}));
+  const g=rsEl('div',{class:'pf-grid'});
+  const f=function(label,w){const b=rsEl('div',{class:'pf-field'});b.appendChild(rsEl('label',{class:'pf-l',text:label}));b.appendChild(w);return b;};
+  g.appendChild(f(this.t('wiz_nav_style'),sel('navStyle',S.nav.keys.style.t,'wiz-nav-style')));
+  g.appendChild(f(this.t('wiz_nav_pos'),sel('navPos',S.nav.keys.position.t,'wiz-nav-pos')));
+  body.appendChild(g);
+  const ov=rsEl('input',{type:'checkbox','data-act':'wiz-overview',onchange:function(){st.overview=ov.checked;}});ov.checked=!!st.overview;
+  body.appendChild(rsEl('label',{class:'wiz-row wiz-opt'},[ov,rsEl('span',{class:'nm',text:this.t('wiz_overview')}),rsEl('span',{class:'sub',text:this.t('wiz_overview_sub')})]));
+  const ctx={t:function(k,v){return self.t(k,v);},get hass(){return self.hass;}};
+  const pe=rsEntityInput(ctx,st.roomEntity,['sensor','input_select','select'],function(v){st.roomEntity=v||null;},'sensor.current_room');
+  body.appendChild(f(this.t('wiz_presence'),pe));
+  body.appendChild(rsEl('p',{class:'pf-note',text:this.t('wiz_presence_note')}));
+};
+// step 5 — what will be created, and the YAML
+RocStudio.prototype._wiz_review=function(body,st,o){
+  const c=rsWizBuild(st,this.work,this.I,o.recipes);
+  st.preview=c;
+  const ul=rsEl('ul',{class:'wiz-sum'});
+  const li=function(t){ul.appendChild(rsEl('li',{text:t}));};
+  const rooms=Array.isArray(c.rooms)?c.rooms:[];
+  if(st.mode==='single')li(this.t('wiz_sum_single'));
+  else li(this.t('wiz_sum_rooms',{n:rooms.length,names:rooms.map(function(r){return r.name||r.id;}).join(', ')}));
+  const all=[c].concat(rooms);
+  const nLc=all.filter(function(r){return r&&r.light_controls;}).length,nIc=all.reduce(function(a,r){return a+((r&&r.icons)||[]).length;},0);
+  if(st.lights&&nLc)li(this.t('wiz_sum_lights',{n:nLc}));
+  if(st.icons&&nIc)li(this.t('wiz_sum_icons',{n:nIc}));
+  if(st.sections.length)li(this.t('wiz_sum_sections',{s:st.sections.join(', ')}));
+  if(c.base_image&&this.I.isStubImg&&this.I.isStubImg(c.base_image))li(this.t('wiz_sum_stub'));
+  body.appendChild(ul);
+  const ta=rsEl('textarea',{readonly:true,spellcheck:'false',class:'wiz-yaml'});ta.value=this.I.yaml.s(c);
+  body.appendChild(ta);
+  body.appendChild(rsEl('p',{class:'pf-note',text:this.t(st.fresh?'wiz_review_note':'wiz_review_note_add')}));
+};
+RocStudio.prototype._wizFinish=function(st,recipes){
+  const c=rsWizBuild(st,this.work,this.I,recipes);
+  st.close();
+  this.sel=null;this.multi=[];this.cardSel=null;
+  this._commit(c,'wizard');
+  const rooms=this._rooms();
+  if(rooms.length){
+    const i=rooms.findIndex(function(r){return r&&!r.overview;});
+    this._setRoom(Math.max(0,i),false,'wizard');
+  }
+  this._syncProps(true);
+};
 // ---- Registration ---------------------------------------------------------------------------
 // The card's loader (rocLoadStudio) looks for RoomOverlayCard._rocStudio after the import. If
 // this file is evaluated before the card (e.g. added as its own dashboard resource), it waits.
 function rocStudioRegister(){
   const C=customElements.get('room-overlay-card');
   if(!C||!C._rocInternals){console.warn('[room-overlay-card] studio: room-overlay-card.js is too old or not loaded — the studio needs v'+ROC_STUDIO_VERSION);return;}
-  C._rocStudio={version:ROC_STUDIO_VERSION,open:function(opts){return RocStudio.open(opts);},Studio:RocStudio,schema:RocSchema};
+  C._rocStudio={version:ROC_STUDIO_VERSION,open:function(opts){return RocStudio.open(opts);},Studio:RocStudio,schema:RocSchema,
+    wizBuild:rsWizBuild,wizAreas:rsWizAreas,wizUpload:rsUploadImage}; // the wizard's pure parts, for the test tiers
 }
 if(customElements.get('room-overlay-card'))rocStudioRegister();
 else customElements.whenDefined('room-overlay-card').then(rocStudioRegister);

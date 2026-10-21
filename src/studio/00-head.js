@@ -36,7 +36,12 @@
  * room form grows to navigation, overview, image & weather, light controls and cards; card-level
  * forms in the outline: Card settings, Navigation and Sections (add from the editor's recipes,
  * reorder, delete, rename with their references, the elements tagged into each).
+ *
+ * Phase 4c (v6.46.0) — the new-card wizard (50-wizard.js): rooms from Home Assistant's areas
+ * (names, icons, pictures, aliases), pictures by URL, upload or camera, the areas' lights as light
+ * controls and devices as icons, the editor's section recipes, nav / overview / presence. A fresh
+ * card starts in it; on an existing card it adds rooms for the areas it does not have yet.
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.45.0';
+const ROC_STUDIO_VERSION='6.46.0';

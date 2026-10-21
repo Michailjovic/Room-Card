@@ -229,6 +229,26 @@ the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5).
   *sections* view HA covers each card with its own click-to-edit layer: click the card, then
   **Studio** in the editor.) The button appears for administrators only.
 
+**The wizard** (v6.46.0). A new card — the placeholder the card picker adds — opens the studio in
+a wizard; so does **Start with the wizard** on the editor's first screen, and **Wizard** in the
+studio's toolbar works at any time. It takes five steps:
+
+1. **Rooms:** one per Home Assistant area (by floor), with the area's name, icon, picture and
+   aliases (as `area_match`). Rooms without an area can be added by name, or the card can be **one
+   room** for one area.
+2. **Pictures:** the area's picture is filled in; otherwise a URL (`/local/…`), an **upload**
+   (stored in Home Assistant like area pictures) or a camera. A room without one shows a
+   placeholder sketch until you set it.
+3. **Contents:** each area's lights as light controls, optionally its devices as icons to drag
+   into place, and sections from recipes (offered when Home Assistant has the devices they need).
+4. **Navigation** (a new multi-room card): the room strip's style and position, an overview page
+   first, a presence sensor to follow.
+5. **Review:** the result as YAML.
+
+On a new card the wizard replaces the placeholder. On an existing card it adds rooms for the
+areas the card does not have yet and leaves everything else alone; a single-room card becomes
+room 1 first. One Undo takes it back.
+
 ```
 ┌ toolbar: room · frame (Fit / Tablet / Tablet portrait / Phone) · Arrange / Live · Add · undo / redo · YAML · History · Save ┐
 │ outline (rooms, every element, search) │ canvas — the real card, live states │ inspector: Properties | All settings (this editor) │

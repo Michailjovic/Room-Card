@@ -66,8 +66,10 @@ async function snapshot(code,cfgs){
       await wait(40);
       out.push(name+' '+iw+' :: '+el.shadowRoot.innerHTML.replace(/blob:[^'")]+/g,'blob'));
       if(Array.isArray(cfg.rooms)&&cfg.rooms.length>1){
-        el._switchRoom(1,1,true);await wait(450);out.push(name+' '+iw+' switched :: '+el.shadowRoot.innerHTML);
-        el._switchRoom(0,-1,true);await wait(450);out.push(name+' '+iw+' back :: '+el.shadowRoot.innerHTML);
+        // 700 ms: past the slide's cleanup (rAF + 420 ms since v6.43.0) — 450 ms raced it and the
+        // snapshot caught the transient transition style on either side at random
+        el._switchRoom(1,1,true);await wait(700);out.push(name+' '+iw+' switched :: '+el.shadowRoot.innerHTML);
+        el._switchRoom(0,-1,true);await wait(700);out.push(name+' '+iw+' back :: '+el.shadowRoot.innerHTML);
       }
       const ed=w.document.createElement('room-overlay-card-editor');
       try{ed.setConfig(JSON.parse(JSON.stringify(cfg)));ed.hass=hass;w.document.body.appendChild(ed);await wait(20);

@@ -84,7 +84,7 @@ To install a specific version (for example to roll back), open the card in HACS 
 ## Quick start (no YAML)
 
 1. **Add the card** to a dashboard — *Add card → Custom: Room Overlay Card*.
-2. The editor opens on a single step: **set a background image** (a room photo or floor-plan, e.g. `/local/bedroom.webp`). The rest of the editor appears once it's set.
+2. The editor opens on a single step. Press **Start with the wizard**: it builds the card from Home Assistant's areas — one room each, with the area's name, icon and picture, its lights as light controls, sections from recipes and the room strip. (Or **set a background image** yourself, e.g. `/local/bedroom.webp`.)
 3. Press **Studio** in the editor header: the card opens full-screen on a live canvas, with a
    form for whatever you select next to it (the full editor is one tab away, *All settings*).
 4. **Add** an icon, label, zone, gauge, light glow, blind or embedded card and click (or drag a

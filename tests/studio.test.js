@@ -678,6 +678,80 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('an entity value grows into {entity: …} with More options',J(S10.work.rooms[0].weather_overlay)===J({entity:'weather.home'}));
   S10.requestClose();if(layerBtn(S10,'discard'))layerBtn(S10,'discard').click();E10.remove();
 
+  // ---- 10. Phase 4c (v6.46.0): the new-card wizard ---------------------------------------------
+  const hass11=Object.assign({},hass,{
+    areas:{living_room:{area_id:'living_room',name:'Living Room',icon:'mdi:sofa',picture:'/api/image/serve/pic1/original',aliases:['Lounge'],floor_id:'g'},
+      kitchen:{area_id:'kitchen',name:'Kitchen',icon:'mdi:stove',picture:null,aliases:[],floor_id:'g'},attic:{area_id:'attic',name:'Attic',icon:null,picture:null,aliases:[],floor_id:null}},
+    floors:{g:{floor_id:'g',name:'Ground',level:0}},
+    devices:{dev1:{area_id:'kitchen'}},
+    entities:{'light.lr':{entity_id:'light.lr',area_id:'living_room'},'light.k':{entity_id:'light.k',device_id:'dev1'},'media_player.tv':{entity_id:'media_player.tv',area_id:'living_room'},
+      'sensor.diag':{entity_id:'sensor.diag',area_id:'living_room',entity_category:'diagnostic'},'switch.hid':{entity_id:'switch.hid',area_id:'living_room',hidden:true}},
+    states:{'light.lr':{state:'on',attributes:{friendly_name:'Lamp'}},'light.k':{state:'off',attributes:{}},'media_player.tv':{state:'off',attributes:{}},'sensor.diag':{state:'1',attributes:{}},'switch.hid':{state:'off',attributes:{}},'sensor.room':{state:'Kitchen',attributes:{}}},
+  });
+  const SW=C._rocStudio;
+  check('the wizard\'s pure parts are exposed for tests',typeof SW.wizBuild==='function'&&typeof SW.wizAreas==='function'&&typeof SW.wizUpload==='function');
+  const ar=SW.wizAreas(hass11);
+  check('areas come by floor, then name; a room\'s devices skip hidden and diagnostic entities',ar.map(a=>a.area).join()==='kitchen,living_room,attic'&&ar[1].ents.map(e=>e.id).join()==='light.lr,media_player.tv'&&ar[0].ents.map(e=>e.id).join()==='light.k',J(ar.map(a=>[a.area,a.ents.map(e=>e.id)])));
+  check('the card exposes what the wizard needs (domain icons, placeholder image, fresh-card test)',C._rocInternals.domainIcon.light==='mdi:lightbulb'&&C._rocInternals.isStubCfg(Object.assign({type:'custom:room-overlay-card'},C.getStubConfig()))&&C._rocInternals.isStubImg(C._rocInternals.stubImg));
+  // a fresh card (the picker's placeholder) opens straight in the wizard
+  const stubCfg=Object.assign({type:'custom:room-overlay-card',card_id:'fresh1'},C.getStubConfig());
+  const E11=d.createElement('room-overlay-card-editor');E11.setConfig(clone(stubCfg));E11.hass=hass11;d.body.appendChild(E11);
+  check('the editor\'s first-run screen offers the wizard',!!E11.querySelector('#roc-wizard'));
+  const S11=await C._rocStudio.open({from:'editor',editor:E11,hass:hass11});await wait(60);
+  const wz=()=>S11._sr.querySelector('.panel.wiz');
+  const wbtn=a=>S11._sr.querySelector('.panel.wiz [data-act="'+a+'"]');
+  check('a fresh card opens in the wizard, five steps',!!S11._wiz&&!!wz()&&[...wz().querySelectorAll('.wiz-step')].map(x=>x.dataset.step).join()==='rooms,images,contents,nav,review');
+  check('…every area offered and checked, by floor',[...wz().querySelectorAll('input[data-area]')].map(x=>x.dataset.area+':'+x.checked).join()==='kitchen:true,living_room:true,attic:true'&&wz().querySelector('.wiz-floor').textContent==='Ground');
+  wbtn('wiz-next').click();
+  check('pictures: the area\'s own picture is filled in',[...wz().querySelectorAll('[data-act="wiz-image"]')].map(x=>x.value).join('|')==='|/api/image/serve/pic1/original|');
+  const lrImg=wz().querySelectorAll('[data-act="wiz-image"]')[0];lrImg.value='/local/kitchen.webp';lrImg.dispatchEvent(new w.Event('change'));
+  wbtn('wiz-next').click();
+  const rc=k=>wz().querySelector('input[data-recipe="'+k+'"]');
+  check('contents: lights on by default; a recipe is offered only when HA has its devices; one needing a missing card is off',wz().querySelector('[data-act="wiz-lights"]').checked&&!rc('media').disabled&&rc('heating').disabled&&rc('electricity').disabled&&!rc('appliances').disabled);
+  rc('media').checked=true;rc('media').dispatchEvent(new w.Event('change'));
+  const icb=wz().querySelector('[data-act="wiz-icons"]');icb.checked=true;icb.dispatchEvent(new w.Event('change'));
+  wbtn('wiz-next').click();
+  check('navigation: the schema\'s nav styles, thumbnails by default',[...wz().querySelectorAll('[data-act="wiz-nav-style"] option')].map(o=>o.value).join()==='thumbnails,tabs,dots,none'&&wz().querySelector('[data-act="wiz-nav-style"]').value==='thumbnails');
+  const ovc=wz().querySelector('[data-act="wiz-overview"]');ovc.checked=true;ovc.dispatchEvent(new w.Event('change'));
+  const pres=wz().querySelector('.pf-ent input');pres.value='sensor.room';pres.dispatchEvent(new w.Event('change'));
+  wbtn('wiz-next').click();
+  check('review shows the result as YAML',/rooms:/.test(wz().querySelector('textarea.wiz-yaml').value)&&!!wbtn('wiz-create'));
+  wbtn('wiz-create').click();
+  const W=S11.work;
+  check('Create: an overview page first, then one room per area',W.rooms.map(r=>r.id).join()==='overview,kitchen,living_room,attic'&&W.rooms[0].overview===true,J(W.rooms.map(r=>r.id)));
+  const lr=W.rooms[2],kt=W.rooms[1];
+  check('…names, icons, pictures and aliases from the areas',lr.name==='Living Room'&&lr.icon==='mdi:sofa'&&lr.base_image==='/api/image/serve/pic1/original'&&J(lr.area_match)===J(['Lounge'])&&kt.base_image==='/local/kitchen.webp'&&!('area_match' in kt));
+  check('…each area\'s lights as light controls (also through its devices)',J(lr.light_controls)===J({entities:['light.lr']})&&J(kt.light_controls)===J({entities:['light.k']}));
+  check('…its devices as icons in a grid, with the card\'s domain icons',J(lr.icons.map(i=>[i.entity,i.icon]))===J([['light.lr','mdi:lightbulb'],['media_player.tv','mdi:cast']])&&lr.icons[0].top==='6.0%'&&lr.icons[1].left==='18.0%');
+  check('…a room without a picture falls back to the placeholder; nav, presence and the media section are set',W.base_image===C._rocInternals.stubImg&&!W.rooms[3].base_image&&J(W.nav)===J({style:'thumbnails',position:'bottom'})&&W.room_entity==='sensor.room'&&W.sections.length===1&&W.sections[0].id==='media'&&W.sections[0].domain==='media_player');
+  check('…the card keeps its type and card_id; the placeholder\'s element lists are gone',W.type==='custom:room-overlay-card'&&W.card_id==='fresh1'&&!('zones' in W)&&!('test_mode' in W));
+  check('…the wizard closes on the first room, and the result is valid',!S11._wiz&&!wz()&&S11.roomIdx===1&&!S11.global&&!RocErr(W));
+  function RocErr(c){return C._rocStudio.schema.rocValidate(c).filter(x=>x.level==='error').length;}
+  check('…and Undo brings the placeholder back',(S11.undo(),C._rocInternals.isStubCfg(S11.work)));
+  S11.redo();
+  // the same wizard on a card that has rooms: only the areas it lacks, nothing else touched
+  S11.openWizard();
+  check('on an existing card: four steps (no navigation), the areas it has are greyed out',[...wz().querySelectorAll('.wiz-step')].length===4&&[...wz().querySelectorAll('input[data-area]')].every(x=>x.disabled&&!x.checked));
+  wz().querySelector('[data-act="wiz-cancel"]').click();
+  check('Cancel leaves the card as it was',!S11._wiz&&S11.work.rooms.length===4);
+  S11.requestClose();if(layerBtn(S11,'discard'))layerBtn(S11,'discard').click();E11.remove();
+  // existing single-room card → becomes room_1, the new areas follow
+  const base12={type:'custom:room-overlay-card',base_image:IMG,zones:[{id:'z',top:'1%',left:'1%',width:'5%',height:'5%'}],aspect_ratio:'4/3'};
+  const st12={fresh:false,mode:'rooms',lights:true,icons:false,sections:[],rooms:ar.map(a=>({area:a.area,name:a.name,icon:a.icon,image:a.picture||'',camera:'',aliases:a.aliases,ents:a.ents,on:a.area==='kitchen'}))};
+  const r12=SW.wizBuild(st12,base12,C._rocInternals,{});
+  check('an existing single-room card becomes room 1, the chosen areas are added after it',r12.rooms.map(r=>r.id).join()==='room_1,kitchen'&&r12.rooms[0].base_image===IMG&&J(r12.rooms[0].zones)===J(base12.zones)&&r12.aspect_ratio==='4/3');
+  check('…the shared image moved into room 1; the kitchen (no picture) falls back to the placeholder',r12.rooms[0].base_image===IMG&&r12.base_image===C._rocInternals.stubImg&&!('zones' in r12));
+  check('…no nav is added unless the wizard sets one',!('nav' in r12));
+  // single-room mode on a fresh card
+  const st13={fresh:true,mode:'single',lights:true,icons:false,sections:[],rooms:ar.map(a=>({area:a.area,name:a.name,icon:a.icon,image:a.picture||'',camera:'',aliases:a.aliases,ents:a.ents,on:a.area==='living_room'}))};
+  const r13=SW.wizBuild(st13,stubCfg,C._rocInternals,{});
+  check('one room: the area\'s picture and lights go to the card itself, no rooms, no nav',r13.base_image==='/api/image/serve/pic1/original'&&J(r13.light_controls)===J({entities:['light.lr']})&&!r13.rooms&&!r13.nav&&r13.card_id==='fresh1');
+  // upload to Home Assistant's image store
+  let upCall=null;
+  const upHass={fetchWithAuth:(u,o)=>{upCall={u,method:o.method,file:o.body.get('file')};return Promise.resolve({ok:true,json:()=>Promise.resolve({id:'abc123'})});}};
+  const upUrl=await SW.wizUpload(upHass,new w.File(['x'],'room.png',{type:'image/png'}));
+  check('upload posts the file to /api/image/upload and returns its served URL',upUrl==='/api/image/serve/abc123/original'&&upCall.u==='/api/image/upload'&&upCall.method==='POST'&&upCall.file&&upCall.file.name==='room.png');
+
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

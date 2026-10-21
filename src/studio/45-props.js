@@ -123,7 +123,7 @@ function rsPicker(input,getItems,onPick,render){
 }
 // entity picker: search id / friendly name / area, preferred domains first, live state shown
 function rsEntityInput(ctx,value,domains,onChange,ph){
-  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:ph||'light.living_room'});
+  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:ph||((domains&&domains[0]||'light')+'.living_room')});
   inp.value=value||'';
   const hint=rsEl('div',{class:'pf-sub'});
   const showHint=function(){
@@ -334,6 +334,12 @@ function rsActionWidget(ctx,value,onChange,o){
 const RS_YAML_SCHEMAS=['cond','condVal','baseImageCond','filterCond','companion','ovSideCard'];
 const RS_MAX_DEPTH=4;
 function rsFormSchema(name){const S=RocSchema.ROC_SCHEMA;return(name&&S[name]&&RS_YAML_SCHEMAS.indexOf(name)<0)?S[name]:null;}
+// a shared value shown as a placeholder: the card's placeholder sketch by name, long values cut
+function rsShort(ctx,v){
+  const s=String(v);
+  if(ctx.I&&ctx.I.isStubImg&&ctx.I.isStubImg(s))return ctx.t('stub_img');
+  return s.length>48?s.slice(0,45)+'…':s;
+}
 function rsIsObj(v){return!!v&&typeof v==='object'&&!Array.isArray(v);}
 function rsCount(v){return rsIsObj(v)?Object.keys(v).length:(Array.isArray(v)?v.length:0);}
 // a short name for a list item: its title / name / id / entity…
@@ -442,7 +448,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
   const choices=ctx.choices?ctx.choices(key,o.schema):null;
   const inh=o.inherit;
   const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey,choices:choices,
-    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:String(inh)}):null};
+    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):null};
   const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
   const canDeep=depth<RS_MAX_DEPTH;
   const asObj=!yamlMode&&canDeep&&objName&&(rsIsObj(value)||(value===undefined&&!simple));

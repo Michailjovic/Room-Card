@@ -39,8 +39,8 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | ✅ released |
 | 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | ✅ released (+ fix: room-switch lag) |
 | 4a — Properties form: schema-generated fields, entity / icon pickers, action builder, YAML for structured keys, pinned validation | v6.44.0 | ✅ done |
-| 4b — sub-forms and lists: sections / tiles, light controls, nav, overview, cover control; Card settings, Navigation and Sections in the outline | v6.45.0 | 🔨 built |
-| 4c — new-card wizard (rooms from HA areas, images, recipes) | v6.46.0 | next |
+| 4b — sub-forms and lists: sections / tiles, light controls, nav, overview, cover control; Card settings, Navigation and Sections in the outline | v6.45.0 | ✅ done |
+| 4c — new-card wizard (rooms from HA areas, pictures incl. upload, lights, icons, section recipes, nav / overview / presence) | v6.46.0 | 🔨 built |
 | 5–8 — floorplan core, bindings, wall elements, AnyVac live | v6.47.0–6.50.0 | planned |
 
 ## Shipped history (condensed)

@@ -1,6 +1,43 @@
 # Changelog
 
-## [6.45.0] - unreleased
+## [6.46.0] - unreleased
+
+### Studio: the new-card wizard (V7_PLAN.md Phase 4c)
+
+- **A new card starts in a wizard.** The card picker's placeholder card opens the studio straight
+  into it. The editor's first screen has a **Start with the wizard** button, and the studio's
+  toolbar has **Wizard** at any time.
+- **Rooms from Home Assistant's areas,** grouped by floor:
+  - name, icon and picture come from the area;
+  - the area's aliases become `area_match`;
+  - rooms without an area can be added by name;
+  - or the whole card is **one room** for one area.
+- **Pictures** for each room:
+  - the area's own picture is already filled in;
+  - or a URL (`/local/…`);
+  - or an **upload** into Home Assistant's image store (the same one area pictures use);
+  - or a live camera.
+
+  A room without one shows the placeholder sketch until it gets one.
+- **Contents:**
+  - each area's lights as **light controls**, found through the entity's area or its device's;
+  - optionally each area's devices as **icons** in a grid, to drag into place (the card's own
+    domain icons);
+  - **sections** from the editor's recipes. One that fills itself from a kind of device is offered
+    only when Home Assistant has such devices.
+
+  Hidden and diagnostic / configuration entities are left out.
+- **Navigation:** the room strip's style and position, an **overview page** first, and **follow
+  presence** (a sensor whose state is the current room).
+- **Review** shows the result as YAML before anything changes.
+  - On a fresh card it replaces the placeholder. The card keeps its `type`, `card_id`, size and
+    layout settings.
+  - On an existing card it **adds rooms** for the areas the card does not have yet; everything
+    else stays. A single-room card becomes room 1 first.
+
+  One Undo takes it all back.
+
+## [6.45.0] - 2026-10-21
 
 ### Studio: forms for everything the schema describes (V7_PLAN.md Phase 4b)
 
