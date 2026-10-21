@@ -53,6 +53,21 @@ const ROC_STUDIO_STR={en:{
   room_del:'Delete room',room_del_title:'Delete the room “{r}”?',room_del_body:'The room and everything in it is removed from the card. Undo brings it back.',
   room_paste:'Paste room “{r}”',
   layer_hide:'Hide on the canvas (studio only)',layer_show:'Show on the canvas',layer_lock:'Lock — cannot be selected or dragged',layer_unlock:'Unlock',
+  // Phase 4a (v6.44.0) — the Properties form
+  tab_props:'Properties',tab_props_hint:'The selected element (or the room) as a form',
+  tab_all:'All settings',tab_all_hint:'The complete classic editor — every option, including the ones the Properties form does not show yet',
+  open_all:'Open in All settings',card_form:'Card',
+  props_multi:'{n} selected — the form edits “{id}”',
+  props_card_hint:'Select an element on the canvas or in the outline to edit it here. Layout, sections and the rest of the card settings are in All settings.',
+  props_global_hint:'These are the defaults every room falls back to. Select an element, or a room in the outline, to edit it here.',
+  ent_missing:'Not found in Home Assistant',dflt:'default',not_set:'not set',choose:'choose',
+  f_entity:'Entity',f_path:'Path',f_service:'Action',f_target:'Target entity',f_data:'Data (YAML)',f_section:'Section',f_group:'Group',
+  one_value:'One value for both profiles',as_simple:'Use a single value',per_profile:'Different per profile (portrait / landscape)',as_conditions:'Depends on a state…',
+  g_main:'General',g_position:'Position & size',g_actions:'Actions',g_visibility:'Visibility',g_advanced:'Advanced (YAML)',g_room_more:'More (YAML)',
+  adv_hint:'Profile overrides (portrait / landscape) and keys the form does not list — kept exactly as they are',
+  adv_room_hint:'Room keys the schema does not know — kept exactly as they are',
+  room_more_hint:'The overview tile, navigation chips, weather, the lighting model and the room\'s cards are in All settings for now.',
+  mark_err:'Has errors',mark_warn:'Has warnings',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;

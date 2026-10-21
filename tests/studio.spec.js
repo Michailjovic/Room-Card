@@ -75,11 +75,14 @@ test('a real mouse drag on the scaled canvas moves the zone in the studio config
   for(let i=1;i<=10;i++)await page.mouse.move(z.x+z.cw*0.2*i/10,z.y+z.ch*0.1*i/10);
   await page.mouse.up();await page.waitForTimeout(200);
   const r=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;
-    return{top:parseFloat(S.work.rooms[0].zones[0].top),left:parseFloat(S.work.rooms[0].zones[0].left),ed:S._ed._config.rooms[0].zones[0].left,w:S.work.rooms[0].zones[0].left,dirty:S._dirty(),studio:S.work._roc_studio,undo:S.undoStack.length};});
+    const p=S._propsPane.querySelector('.pf-field[data-key="left"] input');const pl=p&&p.value;   // the Properties form follows the drag
+    S._setTab('all');                                                                                // the hidden editor catches up when shown
+    return{pl,top:parseFloat(S.work.rooms[0].zones[0].top),left:parseFloat(S.work.rooms[0].zones[0].left),ed:S._ed._config.rooms[0].zones[0].left,w:S.work.rooms[0].zones[0].left,dirty:S._dirty(),studio:S.work._roc_studio,undo:S.undoStack.length};});
   expect(r.left).toBeGreaterThan(36);expect(r.left).toBeLessThan(44);   // +20 % of the width, scale-independent
   expect(r.top).toBeGreaterThan(26);expect(r.top).toBeLessThan(34);
   expect(r.ed).toBe(r.w);
   expect(r.dirty).toBe(true);expect(r.studio).toBeUndefined();expect(r.undo).toBe(1);
+  expect(r.pl).toBe(r.w);
 });
 
 test('Escape guards unsaved changes; Escape closes the guard first; Discard closes',async({page})=>{
@@ -100,6 +103,7 @@ test('editor path: Apply hands the edit to the HA editor and closes',async({page
   await page.waitForFunction(()=>window.__h.editor&&window.__h.editor.querySelector('#roc-studio'));
   await page.evaluate(()=>{window.__fired=[];window.__h.editor.addEventListener('config-changed',e=>window.__fired.push(e.detail.config));window.__h.editor.querySelector('#roc-studio').click();});
   await studio(page);
+  await page.evaluate(()=>customElements.get('room-overlay-card')._rocStudio.Studio.current._setTab('all'));   // the classic editor (v6.44.0: All settings)
   await page.click('dialog.roc-studio >> [data-roctab="rooms"]');   // Playwright pierces the studio's shadow root
   const sel='dialog.roc-studio >> #room-name';
   await page.fill(sel,'Lounge');await page.press(sel,'Tab');
@@ -139,6 +143,7 @@ async function contentRect(page){return page.evaluate(C=>{const S=eval(C);const 
 
 test('click on the canvas selects the element and opens it in the inspector; inspector → canvas too',async({page})=>{
   await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>eval(C)._setTab('all'),CUR);
   const ic=await centreOf(page,'[data-ico="i1"]');
   await page.mouse.click(ic.x,ic.y);await page.waitForTimeout(500);
   const a=await page.evaluate(C=>{const S=eval(C);const d=S._ed.querySelector('details[data-panel="ico-0"]');const r=d.getBoundingClientRect(),ir=S._insp.getBoundingClientRect();
@@ -186,6 +191,7 @@ test('snap guides: a dragged icon snaps its centre to another element\'s edge',a
 
 test('arrow keys typed in an inspector field do not move the selected element; embedded cards move by their grip',async({page})=>{
   await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>eval(C)._setTab('all'),CUR);
   const ic=await centreOf(page,'[data-ico="i1"]');
   await page.mouse.click(ic.x,ic.y);await page.waitForTimeout(300);
   const before=await page.evaluate(C=>eval(C).work.rooms[0].icons[0].top,CUR);
@@ -306,4 +312,84 @@ test('wheel room switch: the old room does not linger and the slide is never cut
   // the ghost never disappears before the new room has arrived
   const cut=r.out.find(x=>x.g===null&&x.n!==null&&Math.abs(x.n)>1);
   expect(cut).toBeUndefined();
+});
+
+// ---- Phase 4a (v6.44.0): the Properties form -----------------------------------------------------
+const PF='dialog.roc-studio >> .props';
+test('Properties: a canvas click shows the element\'s form; a typed value moves it on the canvas; Tab keeps the form',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  const ic=await centreOf(page,'[data-ico="i1"]');
+  await page.mouse.click(ic.x,ic.y);await page.waitForTimeout(200);
+  const a=await page.evaluate(C=>{const S=eval(C);return{tab:S.tab,title:S._propsPane.querySelector('.pf-title').textContent,edHidden:S._edPane.hidden};},CUR);
+  expect(a).toEqual({tab:'props',title:'i1',edHidden:true});
+  await page.evaluate(C=>{window.__form=eval(C)._propsPane.firstChild;},CUR);
+  await page.fill(PF+' .pf-field[data-key="top"] input','30%');await page.keyboard.press('Tab');await page.waitForTimeout(300);
+  const b=await page.evaluate(C=>{const S=eval(C);const ae=S._sr.activeElement;const f=ae&&ae.closest('.pf-field');
+    return{top:S.work.rooms[0].icons[0].top,same:S._propsPane.firstChild===window.__form,focus:f&&f.dataset.key};},CUR);
+  expect(b).toEqual({top:'30%',same:true,focus:'left'});
+  const after=await centreOf(page,'[data-ico="i1"]'),cr=await contentRect(page);
+  expect(after.y).toBeLessThan(ic.y-cr.h*0.2);                     // 60 % → 30 %: it moved up on the canvas
+  await page.keyboard.press('Control+z');await page.waitForTimeout(200);
+  // Ctrl+Z in a field with nothing typed = the studio's undo; the form follows, the focus stays put
+  expect(await page.evaluate(C=>{const S=eval(C);const ae=S._sr.activeElement;return[S.work.rooms[0].icons[0].top,S._propsPane.querySelector('.pf-field[data-key="top"] input').value,ae&&ae.closest('.pf-field')&&ae.closest('.pf-field').dataset.key];},CUR)).toEqual(['60%','60%','left']);
+});
+
+test('entity picker: type to search, arrows + Enter pick; Escape closes the list, then leaves the field, then clears the selection',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>eval(C)._select('gauge','g1','outline'),CUR);
+  const ent=PF+' .pf-field[data-key="entity"] input';
+  await page.click(ent);await page.fill(ent,'cov');await page.waitForTimeout(100);
+  const l=await page.evaluate(C=>{const S=eval(C);const list=S._propsPane.querySelector('.pf-field[data-key="entity"] .rs-list');const r=list.getBoundingClientRect(),ir=S._insp.getBoundingClientRect();
+    return{shown:r.height>20,inside:r.left>=ir.left-1&&r.right<=ir.right+1,rows:[...list.querySelectorAll('.o-sub')].map(x=>x.textContent)};},CUR);
+  expect(l).toEqual({shown:true,inside:true,rows:['cover.x']});
+  await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.rooms[0].gauges[0].entity,CUR)).toBe('cover.x');
+  await page.fill(ent,'la');await page.waitForTimeout(100);
+  await page.keyboard.press('Escape');
+  const e1=await page.evaluate(C=>{const S=eval(C);return{open:!!S._sr.querySelector('.rs-pick.open'),sel:S.sel&&S.sel.id,focus:!!(S._sr.activeElement&&S._sr.activeElement.closest('.pf-field'))};},CUR);
+  expect(e1).toEqual({open:false,sel:'g1',focus:true});
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(C=>{const S=eval(C);return{sel:S.sel&&S.sel.id,focus:!!(S._sr.activeElement&&S._sr.activeElement.closest('.pf-field'))};},CUR)).toEqual({sel:'g1',focus:false});
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(C=>{const S=eval(C);return{sel:S.sel,dlg:!!document.querySelector('dialog.roc-studio')};},CUR)).toEqual({sel:null,dlg:true});
+});
+
+test('icon picker searches Home Assistant\'s own icon list; the action builder writes a valid action',async({page})=>{
+  let hits=0;
+  await page.route('**/static/mdi/iconList.json',r=>{hits++;r.fulfill({status:200,contentType:'application/json',body:JSON.stringify([{name:'lamp',keywords:['light']},{name:'sofa',keywords:['couch']},{name:'sofa-outline',keywords:['couch']}])});});
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>eval(C)._select('icon','i1','outline'),CUR);
+  const ii=PF+' .pf-field[data-key="icon"] input';
+  await page.click(ii);await page.fill(ii,'couch');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>[...eval(C)._propsPane.querySelectorAll('.pf-field[data-key="icon"] .rs-opt .o-main')].map(x=>x.textContent),CUR)).toEqual(['mdi:sofa','mdi:sofa-outline']);
+  await page.click(PF+' .pf-field[data-key="icon"] .rs-opt >> nth=1');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.rooms[0].icons[0].icon,CUR)).toBe('mdi:sofa-outline');
+  expect(hits).toBe(1);
+  await page.click(PF+' details[data-sec="actions"] > summary');
+  await page.selectOption(PF+' .pf-field[data-key="tap_action"] select >> nth=0','toggle');
+  const ent=PF+' .pf-field[data-key="tap_action"] .pf-actbody input';
+  await page.fill(ent,'light.x');await page.keyboard.press('Tab');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.rooms[0].icons[0].tap_action,CUR)).toEqual({action:'toggle',entity:'light.x'});
+});
+
+test('validation is pinned: the field says what is wrong and the element is ringed on the canvas',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>{const S=eval(C);const c=JSON.parse(JSON.stringify(S.work));c.rooms[0].zones[0].width='wide';S._commit(c,'test');S._select('zone','z1','outline');},CUR);
+  await page.waitForTimeout(400);
+  const r=await page.evaluate(C=>{const S=eval(C);const f=S._propsPane.querySelector('.pf-field[data-key="width"]');const m=f.querySelector('.pf-msg.v');
+    return{msg:m&&m.textContent,visible:!!m&&m.getBoundingClientRect().height>0,dot:!!S._olList.querySelector('[data-id="z1"] .vd.error'),ring:getComputedStyle(S._card.shadowRoot.querySelector('[data-z="z1"]')).boxShadow};},CUR);
+  expect(r.msg).toMatch(/expected len/);expect(r.visible).toBe(true);expect(r.dot).toBe(true);
+  expect(r.ring).toContain('rgb(219, 68, 55)');
+  await page.fill(PF+' .pf-field[data-key="width"] input','25%');await page.keyboard.press('Tab');await page.waitForTimeout(400);
+  const r2=await page.evaluate(C=>{const S=eval(C);return{msg:!!S._propsPane.querySelector('.pf-field[data-key="width"] .pf-msg.v'),ring:getComputedStyle(S._card.shadowRoot.querySelector('[data-z="z1"]')).boxShadow};},CUR);
+  expect(r2.msg).toBe(false);expect(r2.ring).not.toContain('rgb(219, 68, 55)');
+});
+
+
+test('screenshot: the Properties form (visual check, not an assertion)',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>{const S=eval(C);const c=JSON.parse(JSON.stringify(S.work));c.rooms[0].gauges[0].height='tall';S._commit(c,'test');S._select('gauge','g1','outline');S._propsOpen.add('actions');S._syncProps(true);},CUR);
+  await page.waitForTimeout(400);
+  const ent=PF+' .pf-field[data-key="entity"] input';await page.click(ent);await page.fill(ent,'x');await page.waitForTimeout(150);
+  if(process.env.ROC_SHOT)await page.screenshot({path:process.env.ROC_SHOT});
 });

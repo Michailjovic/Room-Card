@@ -593,3 +593,39 @@ companion app (author), and the tablet run of the S5 probe.
   grabbed.
 - **Phase 3 closed.** Rotate stays open (no config key yet). Touch is covered by pointer events
   for placing and by the card's touch handlers for dragging; pinch-zoom of the canvas is not done.
+
+### Phase 4a — v6.44.0
+
+- **Phase 4 is split** like Phase 3: 4a = v6.44.0 (the Properties form for elements, rooms and
+  the card's shared defaults), 4b = v6.45.0 (sections / tiles, overview, light controls, cover
+  and nav forms, the new-card wizard).
+- **Properties, not a replacement.** The inspector has two tabs: Properties (`src/studio/45-props.js`)
+  and All settings (the hosted editor, unchanged). The editor stays the fallback for everything
+  the forms do not cover yet; while hidden it is not rebuilt on every change (`_edStale`,
+  rebuilt when its tab opens).
+- **Form generation** reads `RocSchema.ROC_SCHEMA[type].keys` (§6): the key's type string picks
+  the widget. Unions pick the simple alternative that fits the current value (`rsPickSimple`);
+  anything structured is YAML. Legacy keys get no field. `RS_POS_KEYS` / `RS_ACT_KEYS` /
+  `RS_VIS_KEYS` sort keys into sections; profile overrides and unknown keys go to an Advanced
+  YAML box.
+- **KEEP (D4) in practice:** a commit changes one key of a copy of the config (`_propsSet`);
+  `Object.assign` on existing keys keeps their position; the Advanced box deletes only the keys
+  it showed and no longer has. A sweep in the jsdom tier builds the form for every element of
+  every reference config (235 forms) and asserts the config is unchanged.
+- **Rebuild rule:** the form is rebuilt when its target or the target's JSON changes
+  (`_syncProps`, signature), but not after its own commit (`_propsSkip`), so the cursor stays in
+  the next field. Validation messages are refreshed in place (`root._rsRefresh`).
+- **Pickers** are plain inputs with a dropdown (`rsPicker`), inside the studio's shadow root. The
+  icon list is fetched once from `/static/mdi/iconList.json` (HA's own, `[{name, keywords}]`);
+  the entity index uses `hass.states` / `entities` / `devices` / `areas`. On focus the list shows
+  everything (the value already set is not a search).
+- **Action builder** uses `ROC_ACT_TYPES` through `_rocInternals.actTypes` and writes the same
+  keys as the editor's `_collectAct` (`navigation_path`, `url_path`, `perform_action`,
+  `target.entity_id`, `data`).
+- **Pinned validation:** paths are the validator's (`rooms[1].zones[0].top`); `_itemPath` maps a
+  selection to its prefix. Outline dots and the canvas ring (`_markCss`, inside the layer
+  stylesheet) are refreshed with the validation timer.
+- **CI found a real bug on a newer Chromium:** Shift-click extended a text selection over the
+  canvas, and the next drag became a native drag of that text. The edit canvas now has
+  `user-select:none`, no native `dragstart`, and Shift / Ctrl mousedowns do not select text.
+  Playwright is pinned (1.64.1) so local and CI agree.

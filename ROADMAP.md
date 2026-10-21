@@ -36,9 +36,10 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 0 — spikes | — | ✅ done (V7_PLAN §13) |
 | 1 — foundation (`src/`, schema, test tiers) | v6.40.0 | ✅ released |
 | 2 — Studio shell | v6.41.0 | ✅ released; gate G2 (author's PC and tablet) running |
-| 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | ✅ built |
-| 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | 🔨 built (+ fix: room-switch lag) |
-| 4 — forms rebuilt (entity picker, action builder, sections, overview), new-card wizard | v6.44.0–6.45.0 | next |
+| 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | ✅ released |
+| 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | ✅ released (+ fix: room-switch lag) |
+| 4a — Properties form: schema-generated fields, entity / icon pickers, action builder, YAML for structured keys, pinned validation | v6.44.0 | 🔨 built |
+| 4b — sections / tiles, overview, light controls, cover and nav forms; new-card wizard | v6.45.0 | next |
 
 ## Shipped history (condensed)
 

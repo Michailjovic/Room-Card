@@ -24,7 +24,13 @@
  * Phase 3b (v6.43.0) — multi-selection (Shift / Ctrl click, Ctrl+A), group move, align /
  * distribute, hide / lock layers on the canvas (studio view only), duplicate / copy / paste /
  * delete whole rooms.
+ *
+ * Phase 4a (v6.44.0) — the Properties form (§5.7): the selected element, the room or the card's
+ * shared defaults as a form generated from the schema registry, with the studio's own entity
+ * picker, icon picker (Home Assistant's MDI list), colour, length, action builder and YAML for
+ * structured keys; validation pinned to fields, outline rows and the canvas. The classic editor
+ * stays one tab away (All settings).
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.43.0';
+const ROC_STUDIO_VERSION='6.44.0';

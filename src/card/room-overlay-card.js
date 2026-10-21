@@ -2774,6 +2774,15 @@ navSelf._navChipInto(chipCont,chCfg,r);
       };
       this._tmKeyHandler=_nudgeFn;
       document.addEventListener('keydown',_nudgeFn);
+      // v6.44.0: no text selection / native drag-and-drop on the edit canvas. A Shift-click (add
+      // to the selection) used to extend a text selection over the labels; the next drag then
+      // started the browser's own drag of that text and the element never moved (Chromium 15x).
+      const _tmCont=this.shadowRoot.querySelector('.content');
+      if(_tmCont){
+        _tmCont.style.userSelect='none';_tmCont.style.webkitUserSelect='none';
+        _tmCont.addEventListener('mousedown',(e)=>{if(e.shiftKey||e.ctrlKey||e.metaKey){const t=e.composedPath()[0];if(!(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||'')))e.preventDefault();}},true);
+        _tmCont.addEventListener('dragstart',(e)=>{e.preventDefault();},true);
+      }
       // Click to select (capture phase — fires before drag suppression and zone tap actions)
       for(const z of(c.zones||[])){
         const el=this._zoneEls[z.id];if(!el)continue;

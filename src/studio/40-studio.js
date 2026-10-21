@@ -40,6 +40,11 @@ class RocStudio{
     this.search='';          // outline filter
     this._placeType=null;    // element type being placed on the canvas (Add)
     this._layers=[];this._timers=[];
+    // inspector tab (v6.44.0): 'props' = the studio's own Properties form, 'all' = the classic editor
+    let tab='props';try{tab=localStorage.getItem('roc-studio-tab')==='all'?'all':'props';}catch(_){}
+    this.tab=tab;
+    this._propsOpen=new Set(['main','position']); // Properties sections kept open across selections
+    this._propsSig='';this._propsKey='';this._propsSkip=false;
   }
   t(k,v){return rocT((this.hass&&this.hass.language||'en').split('-')[0],k,v);}
 
@@ -149,8 +154,23 @@ class RocStudio{
     cv.appendChild(this._cvInfo);cv.appendChild(this._stage);
     app.appendChild(cv);
 
-    // inspector = today's editor, hosted unchanged (§5.5)
+    // inspector: the Properties form (v6.44.0, §5.7) and today's editor, hosted unchanged (§5.5)
     this._insp=rsEl('aside',{class:'insp','aria-label':this.t('inspector')});
+    const tabs=rsEl('div',{class:'itabs',role:'tablist'});
+    this._tabBtns={};
+    [['props','tab_props','tab_props_hint'],['all','tab_all','tab_all_hint']].forEach(function(x){
+      const b=rsEl('button',{type:'button',role:'tab','data-tab':x[0],title:self.t(x[2]),'aria-selected':String(self.tab===x[0]),onclick:function(){self._setTab(x[0]);}},[self.t(x[1])]);
+      self._tabBtns[x[0]]=b;tabs.appendChild(b);
+    });
+    this._insp.appendChild(tabs);
+    this._propsPane=rsEl('div',{class:'ipane props-pane',role:'tabpanel'});
+    // a field with typed, not yet committed text keeps the browser's own undo (see _onKey)
+    this._propsPane.addEventListener('input',function(e){const t=e.composedPath?e.composedPath()[0]:e.target;if(t)t._rsDirty=true;},true);
+    this._propsPane.addEventListener('change',function(e){const t=e.composedPath?e.composedPath()[0]:e.target;if(t)t._rsDirty=false;},true);
+    this._edPane=rsEl('div',{class:'ipane ed-pane',role:'tabpanel'});
+    if(this.tab!=='props')this._propsPane.hidden=true;
+    if(this.tab!=='all')this._edPane.hidden=true;
+    this._insp.appendChild(this._propsPane);this._insp.appendChild(this._edPane);
     app.appendChild(this._insp);
 
     // status bar
@@ -213,7 +233,7 @@ class RocStudio{
     },true);
     ed.setConfig(I.clone(this.work));
     this._ed=ed;
-    this._insp.appendChild(ed);
+    this._edPane.appendChild(ed);
   }
 
   _mountCanvas(){
@@ -347,6 +367,8 @@ class RocStudio{
       if(n){this._commit(out,'studio');return;}
     }
     this._commit(out,'canvas');
+    // v6.44.0: dragging an element that was not selected selects it (its form follows the drag)
+    if(mv&&!this._isSel(mv.type,mv.id))this._select(mv.type,mv.id,'drag');
   }
   // the one positioned element whose top/left differs between two configs (a canvas drag)
   _movedItem(a,b){
@@ -389,6 +411,7 @@ class RocStudio{
     let css='';
     this.hidden.forEach(function(t){const q=RS_LAYER_SEL[t];if(q)css+=q.map(function(x){return'.content '+x;}).join(',')+'{display:none!important;}';});
     this.locked.forEach(function(t){const q=RS_LAYER_SEL[t];if(q)css+=q.map(function(x){return'.content '+x+',.content '+x+' *';}).join(',')+'{pointer-events:none!important;}';});
+    css+=this._markCss();
     card._rocExtraCss=css;
     const sr=card.shadowRoot;if(!sr)return;
     let st=sr.querySelector('style.roc-xcss');
@@ -439,7 +462,7 @@ class RocStudio{
     this.multi=[];
     this.sel={type:type,id:String(id)};
     // an element the room inherits lives in the shared (Global) list — edit it there
-    if(f&&f.inherited&&!this.global&&from!=='inspector')this._setRoom(this.roomIdx,true,'select');
+    if(f&&f.inherited&&!this.global&&from!=='inspector'&&from!=='drag')this._setRoom(this.roomIdx,true,'select');
     if(from!=='canvas')this._reselectCanvas();
     if(from!=='inspector')this._revealItem(type,id);
     this._renderOutlineList();this._renderSelBar();
@@ -451,8 +474,13 @@ class RocStudio{
     if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
     this._renderOutlineList();this._renderSelBar();
   }
-  // open the element's own panel in the inspector, scroll to it and flash it
+  // show the selection in the inspector: the Properties form follows the selection by itself
+  // (_syncProps); in All settings the element's own editor panel is opened and flashed
   _revealItem(type,id){
+    if(this.tab==='all')this._revealInEditor(type,id);
+    if(this._narrow(700))this._app.classList.add('show-insp');this._app.classList.remove('show-outline');
+  }
+  _revealInEditor(type,id){
     const ed=this._ed,T=RS_TYPES[type];if(!ed||!T)return;
     const list=(ed._roomView()||{})[T.key]||[];
     const i=list.findIndex(function(x){return x&&String(x.id)===String(id);});
@@ -465,7 +493,26 @@ class RocStudio{
     try{target.scrollIntoView({block:'start',behavior:'smooth'});}catch(_){try{target.scrollIntoView();}catch(__){}}
     const sm=target.querySelector('summary');
     if(sm){sm.style.outline='2px solid var(--primary-color,#03a9f4)';sm.style.outlineOffset='1px';clearTimeout(sm._rsT);sm._rsT=setTimeout(function(){sm.style.outline='';sm.style.outlineOffset='';},1400);}
-    this._app.classList.add('show-insp');this._app.classList.remove('show-outline');
+  }
+  _syncEditor(){
+    const ed=this._ed;if(!ed)return;
+    this._edStale=false;
+    ed._editRoomIdx=this.roomIdx;ed._editGlobal=this.global;
+    ed._rocStudioLoad(this.I.clone(this.work));
+  }
+  // the same breakpoints as the studio CSS: ≤1100 px the outline slides over, ≤700 px the inspector
+  _narrow(px){try{return!!(window.matchMedia&&window.matchMedia('(max-width:'+px+'px)').matches);}catch(_){return false;}}
+  _setTab(k){
+    if(k!=='props'&&k!=='all')return;
+    this.tab=k;
+    try{localStorage.setItem('roc-studio-tab',k);}catch(_){}
+    for(const x in this._tabBtns)this._tabBtns[x].setAttribute('aria-selected',String(x===k));
+    this._propsPane.hidden=k!=='props';this._edPane.hidden=k!=='all';
+    if(k==='props')this._syncProps(true);
+    else{
+      if(this._edStale)this._syncEditor();
+      if(this.sel)this._revealInEditor(this.sel.type,this.sel.id);
+    }
   }
   deleteSel(){
     const set=this._selSet();if(!set.length)return;
@@ -730,6 +777,7 @@ class RocStudio{
   }
   _renderSelBar(){
     const self=this,b=this._selBar;if(!b)return;
+    this._syncProps();
     b.innerHTML='';
     if(this._placeType){
       b.appendChild(rsEl('span',{class:'hint',text:this.t('place_hint',{t:this.t('t_'+this._placeType)})}));
@@ -759,15 +807,145 @@ class RocStudio{
     if(this._clipboard())b.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'paste',title:this.t('paste_hint'),onclick:function(){self.paste();}},[rsIcon('mdi:content-paste'),rsEl('span',{class:'lbl',text:this.t('paste')})]));
   }
 
+  // ---------------------------------------------------------------- properties (4a)
+  // What the Properties form edits: the selected element; else the room shown; else the card
+  // itself (a single-room card, or Global = the defaults every room falls back to).
+  _propsTarget(){
+    const s=this.sel;
+    if(s&&RS_TYPES[s.type]){const f=this._findItem(s.type,s.id);if(f)return{kind:'element',type:s.type,id:s.id,f:f};}
+    if(this._rooms().length&&!this.global)return{kind:'room'};
+    return{kind:'card'};
+  }
+  // the validator's path of an element ("rooms[1].zones[0]", "icons[2]")
+  _itemPath(type,id){
+    const T=RS_TYPES[type],f=this._findItem(type,id);if(!T||!f)return null;
+    const room=rsRoom(this.work,this.roomIdx,this.global);
+    return(room&&!f.inherited?'rooms['+this.roomIdx+'].':'')+T.key+'['+f.idx+']';
+  }
+  _levelOf(prefix){
+    let lv='';
+    (this._findings||[]).forEach(function(f){
+      const p=f.path||'';
+      if(p===prefix||p.indexOf(prefix+'.')===0||p.indexOf(prefix+'[')===0){if(f.level==='error')lv='error';else if(!lv)lv='warn';}
+    });
+    return lv;
+  }
+  // pinned validation: a dot on outline rows that have findings, a red ring on the canvas
+  _applyMarks(outlineOnly){
+    const self=this;
+    const dot=function(btn,lv){
+      const old=btn.querySelector('.vd');if(old)old.remove();
+      if(lv)btn.appendChild(rsEl('span',{class:'vd '+lv,title:self.t(lv==='error'?'mark_err':'mark_warn')}));
+    };
+    if(this._olList)this._olList.querySelectorAll('.ol-el[data-type]').forEach(function(b){const p=self._itemPath(b.getAttribute('data-type'),b.getAttribute('data-id'));dot(b,p?self._levelOf(p):'');});
+    if(this._olRooms)this._olRooms.querySelectorAll('[data-room]').forEach(function(b){dot(b,self._levelOf('rooms['+b.getAttribute('data-room')+']'));});
+    if(outlineOnly)return;
+    if(this._propsPane){const r=this._propsPane.firstChild;if(r&&r._rsRefresh)r._rsRefresh(this._findings||[]);}
+    this._applyLayerCss();
+  }
+  _markCss(){
+    if(this.mode!=='arrange'||!this._findings||!this._findings.length)return'';
+    const self=this,sels=[];
+    const q=function(v){return'"'+String(v).replace(/["\\]/g,'\\$&')+'"';};
+    const attr={zone:['data-z'],icon:['data-ico'],label:['data-lbl'],gauge:['data-gauge'],element:['data-el'],glow:['data-glow','data-glowedit'],vacuum_widget:['data-vw']};
+    RS_TYPE_ORDER.forEach(function(type){
+      const T=RS_TYPES[type];if(!T.canvas||self.hidden.has(type))return;
+      (rsOwner(self.work,self.roomIdx,self.global,T.key).list||[]).forEach(function(it){
+        if(!it||it.id==null)return;
+        const p=self._itemPath(type,it.id);
+        if(!p||self._levelOf(p)!=='error')return;
+        if(type==='blind')sels.push('.content [data-gauge='+q('__bl_'+it.id)+']');
+        else (attr[type]||[]).forEach(function(a){sels.push('.content ['+a+'='+q(it.id)+']');});
+      });
+    });
+    return sels.length?sels.join(',')+'{box-shadow:0 0 0 2px var(--error-color,#db4437),0 0 12px 3px rgba(219,68,55,.55)!important;}':'';
+  }
+  // rebuild the form when what it shows changed — but not after its own commit (the cursor is in it)
+  _syncProps(force){
+    const pane=this._propsPane;if(!pane)return;
+    if(this.tab!=='props'){this._propsSig='';return;}
+    const tg=this._propsTarget();
+    const key=tg.kind+':'+(tg.type||'')+':'+(tg.id||'')+'@'+(this.global?'g':this.roomIdx);
+    let data;
+    if(tg.kind==='element')data=rsJ(tg.f.item)+(tg.f.inherited?'i':'');
+    else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx]);
+    else{const w=this.work,o={};RS_CARD_KEYS.forEach(function(k){o[k]=w[k];});data=rsJ(o);}
+    const sig=key+'|'+data+'|'+this._selSet().length;
+    if(!force&&sig===this._propsSig)return;
+    if(!force&&this._propsSkip&&key===this._propsKey){this._propsSig=sig;this._propsSkip=false;return;}
+    this._propsSkip=false;
+    const same=key===this._propsKey;
+    const st=pane.scrollTop;
+    // the same target rebuilt (undo, a canvas drag): the focus goes back to the same field
+    let fk=null;
+    const ae=this._sr&&this._sr.activeElement;
+    if(same&&ae&&pane.contains(ae)&&!ae.closest('.rs-pick')){const f=ae.closest('.pf-field');if(f)fk=f.getAttribute('data-key');}
+    this._propsSig=sig;this._propsKey=key;
+    pane.innerHTML='';
+    pane.appendChild(rsBuildProps(this._propsCtx(tg),tg));
+    pane.scrollTop=same?st:0;
+    if(fk){const f=pane.querySelector('.pf-field[data-key="'+fk+'"]');const el=f&&f.querySelector('input,select,textarea');if(el)try{el.focus({preventScroll:true});}catch(_){}}
+  }
+  _propsCtx(tg){
+    const self=this;
+    const room=rsRoom(this.work,this.roomIdx,this.global);
+    let item,path,inherited=false;
+    if(tg.kind==='element'){item=tg.f.item;inherited=tg.f.inherited;path=this._itemPath(tg.type,tg.id);}
+    else if(tg.kind==='room'){item=this._rooms()[this.roomIdx];path='rooms['+this.roomIdx+']';}
+    else{item=this.work;path='';}
+    return{
+      t:function(k,v){return self.t(k,v);},I:this.I,
+      get hass(){return self.hass;},
+      work:this.work,scope:room||this.work,item:item,path:path,global:this.global,
+      findings:this._findings||this._validate(),
+      domains:tg.kind==='element'?(RS_DOMAINS[tg.type]||null):null,
+      labels:{z_index:'Z-index',hold_delay:'Hold delay (ms)'},
+      open:this._propsOpen,inherited:inherited,multi:this._selSet().length,
+      set:function(k,v){self._propsSet(tg,function(it){if(v===undefined)delete it[k];else it[k]=v;},k);},
+      setRest:function(keys,obj){
+        self._propsSet(tg,function(it){keys.forEach(function(k){if(!(k in obj))delete it[k];});Object.keys(obj).forEach(function(k){it[k]=obj[k];});},'_rest');
+        self._syncProps(true);
+      },
+      rename:function(nid){self._propsRename(tg,nid);},
+      rerender:function(){self._syncProps(true);},
+      openAll:function(){self._setTab('all');if(tg.kind!=='element'&&self._ed){const tab=self._ed.querySelector('[data-roctab="'+(tg.kind==='room'?'rooms':'image')+'"]');if(tab)tab.click();}},
+    };
+  }
+  // one change from the form: a copy of the config, the target's own object changed in place
+  // (every other key, and the key order, stay as they are — KEEP)
+  _propsSet(tg,mut,key){
+    const c=JSON.parse(rsJ(this.work));
+    let it=null;
+    if(tg.kind==='element'){const f=this._findItem(tg.type,tg.id,c);it=f&&f.item;}
+    else if(tg.kind==='room')it=Array.isArray(c.rooms)?c.rooms[this.roomIdx]:null;
+    else it=c;
+    if(!it||typeof it!=='object')return;
+    mut(it);
+    this._commit(c,'props',(tg.kind==='element'?tg.type+':'+tg.id:tg.kind)+'.'+key);
+  }
+  _propsRename(tg,nid){
+    if(tg.kind!=='element')return;
+    const c=JSON.parse(rsJ(this.work));
+    const f=this._findItem(tg.type,tg.id,c);if(!f)return;
+    const others=f.list.filter(function(x,i){return i!==f.idx;});
+    const id=rsUniqueId(others,RS_TYPES[tg.type].idp,nid);
+    f.item.id=id;
+    if(this.sel&&this.sel.type===tg.type&&this.sel.id===String(tg.id))this.sel={type:tg.type,id:String(id)};
+    this._commit(c,'props','id');
+    this._syncProps(true);
+  }
+
   // ---------------------------------------------------------------- state
   _rooms(){return Array.isArray(this.work&&this.work.rooms)?this.work.rooms:[];}
   _dirty(){return rsJ(this.work)!==this.base;}
-  _commit(c,src){
+  _commit(c,src,key){
     const j=rsJ(c),cur=rsJ(this.work);
     if(j===cur)return;
     const now=Date.now();
-    // a typing burst in one field fires every 150 ms — keep it as ONE undo step
-    const coalesce=src==='editor'&&this.lastSrc==='editor'&&now-this.lastCommit<800;
+    // a typing burst in one field fires every 150 ms — keep it as ONE undo step; the Properties
+    // form commits on change, so only repeated changes of the same key within 800 ms merge
+    const coalesce=now-this.lastCommit<800&&((src==='editor'&&this.lastSrc==='editor')||(src==='props'&&this.lastSrc==='props'&&key!=null&&key===this._lastKey));
+    this._lastKey=key;
     if(!coalesce){this.undoStack.push(cur);if(this.undoStack.length>200)this.undoStack.shift();}
     this.redoStack=[];
     this.lastCommit=now;this.lastSrc=src;
@@ -794,11 +972,13 @@ class RocStudio{
     if(n&&this.roomIdx>=n)this.roomIdx=n-1;
     if(!n)this.global=false;
     if(src!=='editor'&&this._ed){
-      this._ed._editRoomIdx=this.roomIdx;this._ed._editGlobal=this.global;
-      this._ed._rocStudioLoad(this.I.clone(this.work));
+      // the hosted editor is rebuilt only while it is shown (All settings) — otherwise once, when
+      // its tab is opened (a large card's editor takes a while to build)
+      if(this.tab==='all')this._syncEditor();else this._edStale=true;
     }
     if(src==='canvas'){if(this._card)this._card._cfgJson=null;} // card already shows it; never skip its next setConfig
     else this._pushCanvas(src!=='editor');
+    this._propsSkip=src==='props'; // the form already shows its own change — do not rebuild it under the cursor
     this._renderChrome();
   }
   _setRoom(idx,global,from){
@@ -807,7 +987,7 @@ class RocStudio{
     idx=Math.max(0,Math.min(idx|0,n-1));
     const gChanged=!!global!==this.global;
     this.roomIdx=idx;this.global=!!global;
-    if(from!=='editor'&&this._ed){this._ed._editRoomIdx=idx;this._ed._editGlobal=this.global;this._ed._render();}
+    if(from!=='editor'&&this._ed){if(this.tab==='all'){this._ed._editRoomIdx=idx;this._ed._editGlobal=this.global;this._ed._render();}else this._edStale=true;}
     if(from!=='canvas'){
       if(gChanged)this._pushCanvas(true);
       this._canvasRoom();
@@ -847,7 +1027,9 @@ class RocStudio{
       rooms.forEach(function(r,i){
         const cur=!self.global&&i===self.roomIdx;
         const row=rsEl('div',{class:'ol-row'+(cur?' cur':'')});
-        row.appendChild(mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');}));
+        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
+        rb.setAttribute('data-room',String(i));
+        row.appendChild(rb);
         if(cur){
           row.appendChild(rsEl('button',{class:'ol-act',type:'button','data-act':'room-dup',title:self.t('room_dup'),'aria-label':self.t('room_dup'),onclick:function(){self.duplicateRoom(i);}},[rsIcon('mdi:content-duplicate')]));
           row.appendChild(rsEl('button',{class:'ol-act',type:'button','data-act':'room-copy',title:self.t('room_copy'),'aria-label':self.t('room_copy'),onclick:function(){self.copyRoom(i);}},[rsIcon('mdi:content-copy')]));
@@ -912,6 +1094,7 @@ class RocStudio{
       box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal('lights');}},[rsIcon('mdi:tune-vertical'),rsEl('span',{text:self.t('k_lights')}),rsEl('span',{class:'n',text:String(lcn)})]));
     }
     if(!shown)box.appendChild(rsEl('div',{class:'ol-empty',text:q?this.t('no_match'):this.t('no_elements')}));
+    this._applyMarks(true);
   }
   _validate(){
     try{return RocSchema.rocValidate(this.work).filter(function(x){return x.level!=='info';});}catch(e){return[{path:'',level:'error',msg:String(e&&e.message||e)}];}
@@ -927,14 +1110,16 @@ class RocStudio{
       b.appendChild(document.createTextNode(parts.join(' · ')));
     }
     this._findings=f;
+    this._applyMarks();
   }
   // open the editor section that holds this kind of element
   _reveal(panel){
     const ed=this._ed;if(!ed)return;
+    if(this.tab!=='all')this._setTab('all');
     const tab=ed.querySelector('[data-roctab="elements"]');if(tab)tab.click();
     const d=ed.querySelector('details[data-panel="'+panel+'"]');
     if(d){d.open=true;try{d.scrollIntoView({block:'start',behavior:'smooth'});}catch(_){d.scrollIntoView();}}
-    this._app.classList.add('show-insp');this._app.classList.remove('show-outline');
+    if(this._narrow(700))this._app.classList.add('show-insp');this._app.classList.remove('show-outline');
   }
 
   // ---------------------------------------------------------------- keyboard
@@ -943,10 +1128,15 @@ class RocStudio{
     const tgt=path[0]||e.target;
     if(e.key==='Escape'){
       e.preventDefault();e.stopPropagation();
+      // an open picker list closes first; a Properties field just gives up the focus (its change commits)
+      const pk=this._sr&&this._sr.querySelector('.rs-pick.open');
+      if(pk&&pk._rsClose){pk._rsClose();return;}
+      if(this._propsPane&&tgt&&this._propsPane.contains(tgt)&&/^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName||'')){try{tgt.blur();}catch(_){}return;}
       if(this._layers.length){this._layers[this._layers.length-1]();return;}
       if(this._placeType){this._cancelPlace();return;}
       if(this.sel){this.deselect();return;}
-      if(this._app.classList.contains('show-outline')||this._app.classList.contains('show-insp')){this._app.classList.remove('show-outline','show-insp');return;}
+      // a slide-over panel (narrow screens only — the classes do nothing on a wide one)
+      if((this._app.classList.contains('show-outline')&&this._narrow(1100))||(this._app.classList.contains('show-insp')&&this._narrow(700))){this._app.classList.remove('show-outline','show-insp');return;}
       const card=this._card;
       if(card&&card._sectionOpen&&typeof card._closeSection==='function'){card._closeSection();return;}
       this.requestClose();
@@ -954,6 +1144,12 @@ class RocStudio{
     }
     const tag=(tgt&&tgt.tagName||'').toLowerCase();
     const inField=tag==='input'||tag==='textarea'||tag==='select'||!!(tgt&&tgt.isContentEditable);
+    // Ctrl+Z / Y in a Properties field with nothing typed yet is the studio's undo (the browser's
+    // own would only put back the text of another field, without committing it)
+    if(inField&&(e.ctrlKey||e.metaKey)&&!e.altKey&&this._propsPane&&this._propsPane.contains(tgt)&&!tgt._rsDirty&&!this._layers.length){
+      const kz=String(e.key||'').toLowerCase();
+      if(kz==='z'||kz==='y'){e.preventDefault();e.stopPropagation();if(kz==='y'||e.shiftKey)this.redo();else this.undo();return;}
+    }
     if(!inField&&!this._layers.length&&(e.key==='Delete'||e.key==='Backspace')&&this.sel&&!e.ctrlKey&&!e.metaKey){e.preventDefault();e.stopPropagation();this.deleteSel();return;}
     if(!(e.ctrlKey||e.metaKey)||e.altKey)return;
     const k=String(e.key||'').toLowerCase();

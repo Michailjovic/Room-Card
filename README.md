@@ -85,12 +85,12 @@ To install a specific version (for example to roll back), open the card in HACS 
 
 1. **Add the card** to a dashboard — *Add card → Custom: Room Overlay Card*.
 2. The editor opens on a single step: **set a background image** (a room photo or floor-plan, e.g. `/local/bedroom.webp`). The rest of the editor appears once it's set.
-3. Press **Studio** in the editor header: the card opens full-screen on a live canvas, with the
-   editor next to it.
+3. Press **Studio** in the editor header: the card opens full-screen on a live canvas, with a
+   form for whatever you select next to it (the full editor is one tab away, *All settings*).
 4. **Add** an icon, label, zone, gauge, light glow, blind or embedded card and click (or drag a
-   box) on the image where it belongs. Click any element to select it: it opens in the editor
-   panel on the right, and you can drag it, resize it, duplicate, copy it to another room or
-   delete it.
+   box) on the image where it belongs. Click any element to select it: its form opens on the
+   right — pick the entity and icon from lists, build its tap action — and you can drag it,
+   resize it, duplicate, copy it to another room or delete it.
 5. **Apply & close**, then Save in Home Assistant. That's it — you never had to touch YAML.
 
 On the dashboard itself, Home Assistant's edit mode (the pencil) puts a **✎ Studio** button on the

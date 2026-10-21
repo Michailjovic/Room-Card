@@ -63,4 +63,5 @@ RoomOverlayCard._rocInternals={
   esc:escA,
   studioUrl:rocStudioUrl,
   ROOM_KEYS:ROOM_KEYS,
+  actTypes:ROC_ACT_TYPES, // v6.44.0 — the studio's action builder offers the same types as the editor
 };

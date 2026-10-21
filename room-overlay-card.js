@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='6.43.0';
+const ROC_VERSION='6.44.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -4282,6 +4282,15 @@ navSelf._navChipInto(chipCont,chCfg,r);
       };
       this._tmKeyHandler=_nudgeFn;
       document.addEventListener('keydown',_nudgeFn);
+      // v6.44.0: no text selection / native drag-and-drop on the edit canvas. A Shift-click (add
+      // to the selection) used to extend a text selection over the labels; the next drag then
+      // started the browser's own drag of that text and the element never moved (Chromium 15x).
+      const _tmCont=this.shadowRoot.querySelector('.content');
+      if(_tmCont){
+        _tmCont.style.userSelect='none';_tmCont.style.webkitUserSelect='none';
+        _tmCont.addEventListener('mousedown',(e)=>{if(e.shiftKey||e.ctrlKey||e.metaKey){const t=e.composedPath()[0];if(!(t&&/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||'')))e.preventDefault();}},true);
+        _tmCont.addEventListener('dragstart',(e)=>{e.preventDefault();},true);
+      }
       // Click to select (capture phase — fires before drag suppression and zone tap actions)
       for(const z of(c.zones||[])){
         const el=this._zoneEls[z.id];if(!el)continue;
@@ -11004,4 +11013,5 @@ RoomOverlayCard._rocInternals={
   esc:escA,
   studioUrl:rocStudioUrl,
   ROOM_KEYS:ROOM_KEYS,
+  actTypes:ROC_ACT_TYPES, // v6.44.0 — the studio's action builder offers the same types as the editor
 };

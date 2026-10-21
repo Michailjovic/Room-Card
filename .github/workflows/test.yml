@@ -79,8 +79,9 @@ jobs:
         with:
           node-version: 22
 
+      # pinned (v6.44.0): the same Playwright / Chromium as package.json, so local runs and CI agree
       - name: Install Playwright
-        run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
+        run: npm i --no-save @playwright/test@1.64.1 && npx playwright install --with-deps chromium
 
       - name: Geometry + studio e2e
         run: npx playwright test
@@ -101,8 +102,9 @@ jobs:
         with:
           node-version: 22
 
+      # pinned (v6.44.0): the same Playwright / Chromium as package.json, so local runs and CI agree
       - name: Install Playwright
-        run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
+        run: npm i --no-save @playwright/test@1.64.1 && npx playwright install --with-deps chromium
 
       - name: HA-in-the-loop tests
         run: npm run test:ha

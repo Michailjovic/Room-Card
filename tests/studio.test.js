@@ -67,6 +67,7 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('HA editor shows the Studio button',!!E.querySelector('#roc-studio'));
   const before=J(E._config);
   const S=await C._rocStudio.open({from:'editor',editor:E,hass});
+  S._setTab('all'); // these checks are about the hosted editor (v6.44.0: the All settings tab)
   await wait(80);
   check('studio is a <dialog> on <body>, open',dialogs().length===1&&dialogs()[0].parentNode===d.body&&dialogs()[0].hasAttribute('open'));
   check('studio marks itself open on the card class',C._rocStudioOpen===true);
@@ -110,7 +111,8 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('status bar reports schema findings',/warning/.test(S._vBtn.textContent),S._vBtn.textContent);
   S.undo();await wait(160);
   check('…and clears them',S._vBtn.textContent===S.t('valid_ok'),S._vBtn.textContent);
-  // Escape guard
+  // Escape guard (v6.44.0: the canvas drag above selected the zone — Escape would clear that first)
+  S.deselect();
   S._dlg.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}));
   check('Escape with unsaved changes opens the guard, studio stays open',!!layerBtn(S,'discard')&&dialogs().length===1);
   layerBtn(S,'keep').click();
@@ -143,7 +145,7 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   const cards=[];
   for(const f of files){const p=path.join(ROOT,f);if(!fs.existsSync(p))continue;
     JSON.stringify(w.__rocY.load(fs.readFileSync(p,'utf8')),(k,v)=>{if(v&&typeof v==='object'&&String(v.type||'').includes('room-overlay-card'))cards.push([f,v]);return v;});}
-  let rtBad=[];
+  let rtBad=[],propsForms=0;
   for(const [f,cfg] of cards){
     const e=d.createElement('room-overlay-card-editor');e.setConfig(clone(cfg));e.hass=hass;d.body.appendChild(e);
     const fired=[];e.addEventListener('config-changed',x=>fired.push(x));
@@ -152,12 +154,27 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
     await wait(30);
     if(J(s._ed._collectConfig())!==collected)rtBad.push(f+': hosted editor collects differently');
     if(s._dirty())rtBad.push(f+': dirty right after open');
+    // v6.44.0: the Properties form builds for every room and every element, and never writes on its own
+    s._setTab('props');
+    const nr=s._rooms().length;
+    for(let ri=nr?-1:0;ri<Math.max(1,nr);ri++){
+      if(nr)s._setRoom(Math.max(0,ri),ri<0,'toolbar');
+      try{s._syncProps(true);if(!s._propsPane.querySelector('.pf-head'))rtBad.push(f+': no room/card form');}catch(err){rtBad.push(f+': room form '+err.message);}
+      for(const b of [...s._olList.querySelectorAll('.ol-el[data-type]')]){
+        try{s._select(b.dataset.type,b.dataset.id,'outline');s._syncProps(true);if(!s._propsPane.querySelector('.pf-field[data-key="_rest"]'))rtBad.push(f+': '+b.dataset.id+' form incomplete');}
+        catch(err){rtBad.push(f+': '+b.dataset.type+' '+b.dataset.id+': '+err.message);}
+        propsForms++;
+      }
+      s.deselect();
+    }
+    if(s._dirty())rtBad.push(f+': browsing the Properties forms changed the config');
+    s._setTab('all');
     await s.save();
     if(fired.length||J(e._config)!==b)rtBad.push(f+': apply without edits changed the config');
     if(dialogs().length)rtBad.push(f+': studio left open');
     e.remove();
   }
-  check('round-trip: '+cards.length+' reference configs open → Apply unchanged; hosted editor collects identically',cards.length>=4&&!rtBad.length,rtBad.join('\n     '));
+  check('round-trip: '+cards.length+' reference configs open → Apply unchanged; hosted editor collects identically; '+propsForms+' Properties forms build without writing',cards.length>=4&&propsForms>20&&!rtBad.length,rtBad.join('\n     '));
 
   // ---- 4. dashboard path (b) on a fake Lovelace DOM ----------------------------------------
   const CARD=extra=>Object.assign({type:'custom:room-overlay-card',card_id:'dup',base_image:IMG,test_mode:true},extra||{});
@@ -249,6 +266,7 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   const E6=d.createElement('room-overlay-card-editor');E6.setConfig(P3());E6.hass=hass;d.body.appendChild(E6);
   const S6=await C._rocStudio.open({from:'editor',editor:E6,hass});await wait(40);
   const cv6=S6._card,ed6=S6._ed;
+  S6._setTab('all'); // the Phase 3 checks below follow the selection into the classic editor (All settings)
   check('canvas card exposes programmatic selection',typeof cv6._rocSelect==='function');
   // canvas → studio → inspector
   const icoEl=cv6.shadowRoot.querySelector('[data-ico="i1"]');
@@ -338,6 +356,7 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('…but stays on a card that has it on, so it can be switched off',!!eOld.querySelector('#test_mode')&&eOld.querySelector('#test_mode').checked);
   eNew.remove();eOld.remove();
 
+  w.localStorage.removeItem('roc-studio-tab'); // back to the default (Properties)
   // ---- 7. Phase 3b (v6.43.0): multi-select, group move, layers, rooms; room-switch ghost --------
   const E7=d.createElement('room-overlay-card-editor');E7.setConfig(P3());E7.hass=hass;d.body.appendChild(E7);
   const S7=await C._rocStudio.open({from:'editor',editor:E7,hass});await wait(40);
@@ -394,6 +413,156 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   const src=d.createElement('div');src.innerHTML='<div class="elcont" style="left:5%"><probe-card class="x" style="top:1px"></probe-card></div><ha-icon icon="mdi:lamp"></ha-icon>';
   const before7=constructed;const gh=w.eval('rocGhostClone')(src);
   check('the room-switch ghost does not construct embedded cards again',constructed===before7&&!gh.querySelector('probe-card')&&gh.querySelector('.elcont > div.x').getAttribute('style')==='top:1px'&&!!gh.querySelector('ha-icon'));
+
+  // ---- 8. Phase 4a (v6.44.0): the Properties form --------------------------------------------
+  w.localStorage.removeItem('roc-studio-tab');
+  const hass8=Object.assign({},hass,{
+    states:{'light.x':{state:'on',attributes:{friendly_name:'Lamp X'}},'cover.blind':{state:'open',attributes:{friendly_name:'Blind'}},'sensor.t':{state:'21.5',attributes:{friendly_name:'Temp',unit_of_measurement:'°C'}}},
+    entities:{'sensor.t':{area_id:'kitchen'}},areas:{kitchen:{name:'Kitchen'}},devices:{},services:{script:{turn_on:{}},light:{toggle:{}}}});
+  const P8=()=>({type:'custom:room-overlay-card',card_id:'p8',base_image:IMG,
+    rooms:[{id:'a',name:'A',base_image:IMG+'a',zr_custom:1,
+      zones:[{id:'z1',top:'10%',left:'10%',width:'20%',height:'20%',foo:{bar:1},portrait:{top:'5%'},tap_action:{action:'more-info',entity:'light.x',confirmation:{text:'Sure?'}}},{id:'zbad',top:'5x',left:'50%',width:'10%',height:'10%'}],
+      icons:[{id:'i1',icon:'mdi:lamp',top:'50%',left:'50%',size:24,entity:'light.x'}]},
+     {id:'b',name:'B',base_image:IMG+'b'}]});
+  const E8=d.createElement('room-overlay-card-editor');E8.setConfig(P8());E8.hass=hass8;d.body.appendChild(E8);
+  const S8=await C._rocStudio.open({from:'editor',editor:E8,hass:hass8});await wait(200);
+  const pane=S8._propsPane,fld=k=>pane.querySelector('.pf-field[data-key="'+k+'"]');
+  const inp=k=>fld(k)&&fld(k).querySelector('input,select,textarea');
+  const change=(el,v)=>{el.value=v;el.dispatchEvent(new w.Event('change',{bubbles:true}));};
+  check('Properties is the default inspector tab, the editor sits under All settings',S8.tab==='props'&&!pane.hidden&&S8._edPane.hidden&&S8._edPane.contains(S8._ed)&&!!S8._tabBtns.all);
+  check('nothing selected in a room → the room form',/^A/.test(pane.querySelector('.pf-title').textContent)&&!!fld('name')&&!!fld('base_image')&&!!fld('area_match'));
+  check('…the room\'s unknown keys are offered as YAML, its element lists are not',!!fld('_rest')&&/zr_custom/.test(fld('_rest').querySelector('textarea').value)&&!/zones/.test(fld('_rest').querySelector('textarea').value));
+  change(inp('name'),'Alpha');
+  check('a room field writes only its key',S8.work.rooms[0].name==='Alpha'&&S8.work.rooms[0].zr_custom===1&&S8._roomSel.options[1].text==='Alpha');
+  S8.undo();
+  S8._select('zone','z1','canvas');await wait(10);
+  check('selecting an element shows its form (id, position, actions, YAML for the rest)',pane.querySelector('.pf-title').textContent==='z1'&&inp('id').value==='z1'&&inp('top').value==='10%'&&!!fld('tap_action')&&!!fld('_rest'));
+  const restTxt=fld('_rest').querySelector('textarea').value;
+  check('…profile overrides and unknown keys are in Advanced, untouched',/foo/.test(restTxt)&&/portrait/.test(restTxt)&&!/width/.test(restTxt));
+  const form1=pane.firstChild,u0=S8.undoStack.length;
+  change(inp('width'),'25%');
+  check('a field change commits that key only (KEEP: other keys, key order)',S8.work.rooms[0].zones[0].width==='25%'&&J(Object.keys(S8.work.rooms[0].zones[0]))===J(Object.keys(P8().rooms[0].zones[0]))&&J(S8.work.rooms[0].zones[0].foo)===J({bar:1}));
+  check('…the form is not rebuilt under the cursor',pane.firstChild===form1);
+  check('…the canvas shows it',cv8w()==='25%');
+  function cv8w(){const el=S8._card.shadowRoot.querySelector('[data-z="z1"]');return el&&el.style.width;}
+  S8.lastCommit=Date.now(); // jsdom re-renders the hosted editor slowly — pretend the second change came at once
+  change(inp('width'),'26%');
+  check('two quick changes of the same key are one undo step',S8.undoStack.length===u0+1);
+  S8.lastCommit=Date.now();change(inp('left'),'11%');
+  check('…another key is a step of its own',S8.undoStack.length===u0+2);S8.undo();
+  change(inp('height'),'');
+  check('clearing a field removes the key',!('height' in S8.work.rooms[0].zones[0]));
+  S8.undo();
+  check('undo rebuilds the form with the restored value',inp('height').value==='20%'&&pane.firstChild!==form1);
+  // canvas drag → the form follows
+  const nc8=JSON.parse(J(S8._card._config));nc8.rooms[0].zones[0].top='30%';S8._card._posOut(Object.assign({type:'custom:room-overlay-card'},nc8));await wait(40);
+  check('a canvas drag updates the position fields',inp('top').value==='30%');
+  S8.deselect();
+  const nc8b=S8._canvasCfg();nc8b.rooms[0].icons[0].left='55%';S8._card._posOut(Object.assign({type:'custom:room-overlay-card'},nc8b));await wait(40);
+  check('dragging an element that was not selected selects it',S8.sel&&S8.sel.id==='i1'&&inp('left').value==='55%',J(S8.sel)+' '+(inp('left')&&inp('left').value)+' '+S8.work.rooms[0].icons[0].left);
+  S8.undo();S8._select('zone','z1','outline');
+  // action builder
+  const act=fld('tap_action'),asel=act.querySelector('select');
+  check('action builder reads the action (type, entity)',asel.value==='more-info'&&act.querySelector('.pf-actbody input').value==='light.x');
+  asel.value='navigate';asel.dispatchEvent(new w.Event('change'));
+  check('switching the type keeps confirmation, drops the old type\'s keys',J(S8.work.rooms[0].zones[0].tap_action)===J({action:'navigate',confirmation:{text:'Sure?'}}),J(S8.work.rooms[0].zones[0].tap_action));
+  change(act.querySelector('.pf-actbody input'),'/lovelace/2');
+  check('…and its own field writes navigation_path',S8.work.rooms[0].zones[0].tap_action.navigation_path==='/lovelace/2');
+  const hsel=fld('hold_action').querySelector('select');hsel.value='perform-action';hsel.dispatchEvent(new w.Event('change'));
+  const hb=fld('hold_action').querySelectorAll('.pf-actbody input');
+  change(hb[0],'script.turn_on');
+  check('perform-action: action name + services offered from hass',S8.work.rooms[0].zones[0].hold_action.perform_action==='script.turn_on'&&!!fld('hold_action').querySelector('datalist option[value="light.toggle"]'));
+  const dta=fld('hold_action').querySelector('.pf-actbody textarea');change(dta,'brightness: 50');
+  check('…data as YAML',J(S8.work.rooms[0].zones[0].hold_action.data)===J({brightness:50}));
+  change(dta,'a: [');
+  check('…invalid YAML is reported, not committed',J(S8.work.rooms[0].zones[0].hold_action.data)===J({brightness:50})&&!!fld('hold_action').querySelector('.pf-yaml .pf-msg.error').textContent);
+  // the Advanced YAML: edit and keep
+  S8._syncProps(true);
+  const rt=fld('_rest').querySelector('textarea');
+  change(rt,'foo:\n  bar: 2\nportrait:\n  top: 5%\nnew_key: x');
+  const z8=S8.work.rooms[0].zones[0];
+  check('Advanced YAML changes its keys in place and adds new ones last',z8.foo.bar===2&&z8.new_key==='x'&&Object.keys(z8).indexOf('foo')<Object.keys(z8).indexOf('portrait')&&Object.keys(z8).slice(-1)[0]==='new_key'&&z8.width==='26%');
+  change(fld('_rest').querySelector('textarea'),'portrait:\n  top: 5%');
+  check('…and removing a key there removes it',!('foo' in S8.work.rooms[0].zones[0])&&!('new_key' in S8.work.rooms[0].zones[0]));
+  // rename keeps the selection
+  change(inp('id'),'zone_main');
+  check('renaming keeps the element selected (form, canvas, outline)',S8.sel.id==='zone_main'&&S8.work.rooms[0].zones[0].id==='zone_main'&&pane.querySelector('.pf-title').textContent==='zone_main'&&S8._card._selectedTM&&S8._card._selectedTM.id==='zone_main');
+  change(inp('id'),'zbad');
+  check('…a taken id gets a unique suffix',S8.sel.id!=='zbad'&&S8.work.rooms[0].zones[0].id===S8.sel.id&&S8.work.rooms[0].zones[1].id==='zbad');
+  // pinned validation
+  S8._select('zone','zbad','outline');S8._renderValidation();
+  check('validation is pinned to the field',/expected len/.test((fld('top').querySelector('.pf-msg.v.error')||{}).textContent||'')&&fld('top').classList.contains('has-error'));
+  check('…marked in the outline',!!S8._olList.querySelector('[data-id="zbad"] .vd.error')&&!S8._olList.querySelector('[data-id="i1"] .vd'));
+  check('…ringed on the canvas (studio view only)',/\[data-z="zbad"\][^{]*\{box-shadow/.test(S8._card._rocExtraCss)&&J(S8.work).indexOf('box-shadow')<0);
+  change(inp('top'),'5%');S8._renderValidation();
+  check('…and gone once fixed',!fld('top').querySelector('.pf-msg.v')&&!S8._olList.querySelector('[data-id="zbad"] .vd')&&!/zbad/.test(S8._card._rocExtraCss||''));
+  // entity picker
+  S8._select('icon','i1','outline');await wait(10);
+  const ein=inp('entity');
+  check('entity field shows the live state',/Lamp X · on/.test(fld('entity').querySelector('.pf-sub').textContent));
+  ein.dispatchEvent(new w.Event('focus'));await wait(10);
+  const eopts=[...fld('entity').querySelectorAll('.rs-opt .o-sub')].map(x=>x.textContent);
+  check('entity picker lists HA entities, the type\'s domains first, with areas',eopts[0].indexOf('light.x')===0&&eopts.some(x=>x==='sensor.t · Kitchen'),J(eopts));
+  ein.value='kitch';ein.dispatchEvent(new w.Event('input'));await wait(10);
+  const kopt=fld('entity').querySelector('.rs-opt');
+  check('…searches by area / name',fld('entity').querySelectorAll('.rs-opt').length===1&&/sensor\.t/.test(kopt.textContent));
+  check('Escape closes an open picker first (selection and studio stay)',(S8._dlg.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})),!fld('entity').querySelector('.rs-pick.open')&&S8.sel&&S8.sel.id==='i1'&&dialogs().length===1));
+  ein.dispatchEvent(new w.Event('focus'));ein.value='kitch';ein.dispatchEvent(new w.Event('input'));await wait(10);
+  fld('entity').querySelector('.rs-opt').dispatchEvent(new w.MouseEvent('mousedown',{bubbles:true,cancelable:true}));
+  check('…a pick writes the entity',S8.work.rooms[0].icons[0].entity==='sensor.t'&&/21\.5 °C/.test(fld('entity').querySelector('.pf-sub').textContent));
+  change(ein,'light.nope');
+  check('…an unknown entity is flagged',fld('entity').querySelector('.pf-sub').classList.contains('warn'));
+  check('a number stays a number (len)',(change(inp('size'),'30'),S8.work.rooms[0].icons[0].size===30));
+  // icon picker (Home Assistant's own MDI list)
+  let fetched=0;w.fetch=u=>{fetched++;return Promise.resolve({ok:u==='/static/mdi/iconList.json',json:()=>Promise.resolve([{name:'lamp',keywords:['light']},{name:'lightbulb',keywords:[]},{name:'sofa',keywords:['couch']}])});};
+  const iin=fld('icon').querySelector('.pf-icon input');
+  iin.dispatchEvent(new w.Event('focus'));iin.value='couch';iin.dispatchEvent(new w.Event('input'));await wait(20);
+  check('icon picker searches HA\'s icon list by name and keyword',fetched===1&&[...fld('icon').querySelectorAll('.rs-opt .o-main')].map(x=>x.textContent).join()==='mdi:sofa');
+  fld('icon').querySelector('.rs-opt').dispatchEvent(new w.MouseEvent('mousedown',{bubbles:true,cancelable:true}));
+  check('…a pick writes the icon and the preview',S8.work.rooms[0].icons[0].icon==='mdi:sofa'&&fld('icon').querySelector('.pf-icprev').getAttribute('icon')==='mdi:sofa');
+  iin.dispatchEvent(new w.Event('focus'));await wait(20);
+  check('…the list is fetched once',fetched===1);
+  // union fields: conditional colour as YAML, and back
+  const cl=fld('color');
+  check('a union key offers its simple widget and a switch to conditions',!!cl.querySelector('input[type="color"]')&&!!cl.querySelector('.pf-link'));
+  cl.querySelector('.pf-link').click();
+  check('…which writes a condition list and shows it as YAML',Array.isArray(S8.work.rooms[0].icons[0].color)&&!!fld('color').querySelector('textarea'));
+  fld('color').querySelector('.pf-link').click();
+  check('…and back to one value',S8.work.rooms[0].icons[0].color===undefined&&!!fld('color').querySelector('input[type="color"]'));
+  // Escape in a field gives up the focus, it does not clear the selection
+  const tin=inp('top');tin.focus();
+  tin.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true,composed:true}));
+  check('Escape in a Properties field keeps the selection',S8.sel&&S8.sel.id==='i1');
+  // Delete / Backspace typed in a field never deletes the element
+  const nIcons=S8.work.rooms[0].icons.length;
+  tin.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Backspace',bubbles:true,cancelable:true,composed:true}));
+  check('Backspace in a field does not delete the element',S8.work.rooms[0].icons.length===nIcons);
+  // Global → the card form (shared defaults); All settings reveals the element
+  S8.deselect();S8._setRoom(0,true,'toolbar');
+  check('Global → the card form with the shared defaults',/Global/.test(pane.querySelector('.pf-title').textContent)&&inp('base_image').value===IMG&&!fld('name'));
+  S8._setRoom(0,false,'toolbar');S8._select('icon','i1','outline');
+  check('while Properties is shown the hidden editor is not rebuilt',S8._edStale===true&&S8._ed._config.rooms[0].icons[0].icon!==S8.work.rooms[0].icons[0].icon);
+  pane.querySelector('[data-act="open-all"]').click();
+  check('…opening All settings brings it up to date',!S8._edStale&&S8._ed._config.rooms[0].icons[0].icon===S8.work.rooms[0].icons[0].icon);
+  check('Open in All settings switches the tab and opens the element there',S8.tab==='all'&&S8._propsPane.hidden&&!!S8._ed.querySelector('details[data-panel="ico-0"]').open);
+  check('the tab choice is remembered',w.localStorage.getItem('roc-studio-tab')==='all');
+  S8._setTab('props');
+  check('back on Properties the form shows the selection again',pane.querySelector('.pf-title').textContent==='i1');
+  // multi-selection: the form edits the primary element and says so
+  S8._toggleSel('zone','zbad','test');
+  check('multi-selection: the form edits the primary one and says so',/2 selected/.test(pane.textContent)&&pane.querySelector('.pf-title').textContent==='zbad');
+  // single-room card → the card form
+  S8.requestClose();if(layerBtn(S8,'discard'))layerBtn(S8,'discard').click();E8.remove();
+  const E9=d.createElement('room-overlay-card-editor');E9.setConfig({type:'custom:room-overlay-card',base_image:IMG,badges:[{id:'b1',position:'top-left',label:'Hi'}]});E9.hass=hass8;d.body.appendChild(E9);
+  const S9=await C._rocStudio.open({from:'editor',editor:E9,hass:hass8});await wait(40);
+  check('single-room card, nothing selected → the card form',S9._propsPane.querySelector('.pf-title').textContent==='Card'&&!!S9._propsPane.querySelector('.pf-field[data-key="base_image"]'));
+  S9._select('badge','b1','outline');
+  const pos=S9._propsPane.querySelector('.pf-field[data-key="position"] select');
+  check('an element off the canvas (badge) has a form too; enums are selects',!!pos&&pos.value==='top-left'&&[...pos.options].map(o=>o.value).join()===',top-left,top-right,bottom-left,bottom-right');
+  pos.value='bottom-right';pos.dispatchEvent(new w.Event('change'));
+  check('…and write their value',S9.work.badges[0].position==='bottom-right');
+  S9.requestClose();if(layerBtn(S9,'discard'))layerBtn(S9,'discard').click();E9.remove();
+  check('card internals expose the action types for the builder',Array.isArray(C._rocInternals.actTypes)&&C._rocInternals.actTypes.some(x=>x[0]==='perform-action'));
 
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);

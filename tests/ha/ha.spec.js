@@ -181,6 +181,39 @@ test('studio from an Edit-mode card on the dashboard: saves exactly that card, t
   expect(r).toMatchObject({kind:'dashboard',path:['views',3,'cards',1],ok1:true,c0:'16/9',c1:'3/2',tm:true,ok2:false,conflictShown:true,final:'5/4'});
   expect(r.live).toContain('3/2');
 });
+test('v6.44.0: the Properties form with real Home Assistant data — entity picker (names, states), HA\'s own icon list',async({page})=>{
+  await login(page,TOK);await page.goto(B+'/roc-test/e');await hass(page);
+  await page.waitForFunction(D=>{eval(D);const c=d(document.body,'room-overlay-card');return c.length===2&&c.every(x=>x._rendered);},DEEP,{timeout:30000});
+  await page.evaluate(D=>{eval(D);d(document.body,'room-overlay-card')[1].shadowRoot.querySelector('.tm-studio').click();},DEEP);
+  await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
+  await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;S._create('icon',{top:'40.0%',left:'40.0%'});});
+  await page.waitForTimeout(400);
+  const PF='dialog.roc-studio >> .props';
+  const ent=PF+' .pf-field[data-key="entity"] input';
+  await page.click(ent);await page.fill(ent,'sun');await page.waitForTimeout(300);
+  const a=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const f=S._propsPane.querySelector('.pf-field[data-key="entity"]');
+    return{tab:S.tab,n:Object.keys(S.hass.states).length,rows:[...f.querySelectorAll('.rs-opt')].map(o=>[o.querySelector('.o-main').textContent,o.querySelector('.o-sub').textContent,o.querySelector('.o-st').textContent])};});
+  console.log('props/entity',JSON.stringify(a));
+  expect(a.tab).toBe('props');expect(a.n).toBeGreaterThan(3);
+  const sun=a.rows.find(r=>/^sun\.sun/.test(r[1]));
+  expect(sun).toBeTruthy();expect(sun[0]).not.toBe('sun.sun');                 // the friendly name, not the id
+  await page.keyboard.press('ArrowDown');
+  for(let i=0;i<a.rows.indexOf(sun);i++)await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');await page.waitForTimeout(300);
+  const b=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const f=S._propsPane.querySelector('.pf-field[data-key="entity"]');
+    return{ent:S.work.icons.slice(-1)[0].entity,hint:f.querySelector('.pf-sub').textContent,state:S.hass.states['sun.sun'].state};});
+  expect(b.ent).toBe('sun.sun');expect(b.hint).toContain(b.state);
+  // HA's own icon list (/static/mdi/iconList.json): search by keyword, icons render
+  const ic=PF+' .pf-field[data-key="icon"] input';
+  await page.click(ic);await page.fill(ic,'couch');await page.waitForTimeout(1500);
+  const c=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const f=S._propsPane.querySelector('.pf-field[data-key="icon"]');
+    const o=[...f.querySelectorAll('.rs-opt')];const hi=o[0]&&o[0].querySelector('ha-icon');
+    return{names:o.map(x=>x.querySelector('.o-main').textContent),drawn:!!(hi&&hi.shadowRoot&&hi.shadowRoot.innerHTML.length)};});
+  console.log('props/icons',JSON.stringify(c));
+  expect(c.names).toContain('mdi:sofa');expect(c.drawn).toBe(true);
+  await shot(page,'studio-properties');
+  await page.evaluate(()=>customElements.get('room-overlay-card')._rocStudio.Studio.current.close());   // nothing saved
+});
 test('v6.42.0: in HA\'s dashboard edit mode the card offers a Studio button (masonry, panel); sections views leave it to HA\'s editor',async({page})=>{
   await login(page,TOK);
   const out={};

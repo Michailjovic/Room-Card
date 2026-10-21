@@ -216,10 +216,10 @@ The underlying YAML (`nav.live`, `nav.mini.*`) is documented in
 
 ## Room Card Studio
 
-The studio (v6.41.0, canvas editing since v6.42.0) is where cards are built. It takes the whole
-screen, above Home Assistant's own dialog, and shows the real card large on a canvas next to this
-editor. It is the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5); the next releases
-rebuild the forms.
+The studio (v6.41.0, canvas editing since v6.42.0, its own forms since v6.44.0) is where cards
+are built. It takes the whole screen, above Home Assistant's own dialog, and shows the real card
+large on a canvas next to a form for whatever is selected — with this editor one tab away. It is
+the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5).
 
 **Opening it**
 
@@ -231,15 +231,45 @@ rebuild the forms.
 
 ```
 ┌ toolbar: room · frame (Fit / Tablet / Tablet portrait / Phone) · Arrange / Live · Add · undo / redo · YAML · History · Save ┐
-│ outline (rooms, every element, search) │ canvas — the real card, live states │ inspector (this editor) │
+│ outline (rooms, every element, search) │ canvas — the real card, live states │ inspector: Properties | All settings (this editor) │
 └ status bar: config check · unsaved changes · where Save goes ┘
 ```
 
-**Selecting.** Click an element on the canvas, its row in the outline, or its header in the
-inspector — all three follow. The inspector opens exactly that element's panel and scrolls to it.
+**Selecting.** Click an element on the canvas or its row in the outline (or drag it) — the
+canvas, the outline and the inspector follow. On the *Properties* tab the inspector shows the
+element's form; on *All settings* it opens exactly that element's panel in this editor (a click
+on a panel header there selects it too).
 The canvas bar shows the selection with **Duplicate**, **Copy** and **Delete** (and **Paste**
 once something is copied), so all of it works on a touch screen too. An element the room only
 *inherits* from the shared defaults is opened in **Global**, where it lives.
+
+**Properties** (v6.44.0) — the inspector's first tab, a form for:
+
+- the **selected element** (any type);
+- with nothing selected, the **room** shown (name, id, icon, background image or camera,
+  `area_match`);
+- in **Global**, or on a single-room card, the **shared defaults** (background image / camera).
+
+The fields come from the card's schema, grouped into *General*, *Position & size*, *Actions*,
+*Visibility* and *Advanced (YAML)*:
+
+- **Entity:** type to search by id, name or area; the element's usual domains come first; the
+  live state is shown under the field and an unknown entity is flagged.
+- **Icon:** searches Home Assistant's own icon list (name and keywords), with a preview.
+- **Colours** (swatch or any CSS colour), **lengths** (`10%`, `24px`), numbers, choices (a list),
+  templates, image paths (with a thumbnail).
+- **Actions:** pick the type (more info, toggle, navigate, URL, perform action, open section,
+  switch room, groups…), then its own fields. Changing the type keeps `confirmation` / `haptic`.
+- **YAML** for structured values (conditions, embedded cards, sliders…). Invalid YAML is shown and
+  not saved. Keys that take one value or a list of conditions (`color`, `icon`, `label`…) have a
+  link to switch between the two.
+- **Advanced (YAML)** shows profile overrides (`portrait:` / `landscape:`) and any key the form
+  does not know. They are kept exactly as they are.
+
+A field changes only its own key when you leave it (Tab / Enter / click elsewhere). Problems the
+config check finds are shown under the field they are about, as a dot in the outline and as a red
+ring on the canvas. The **ID** field renames the element (the selection follows). The **↗** button in the
+form's header opens the same thing in *All settings*, where every option is.
 
 **Several at once** (v6.43.0):
 
@@ -280,11 +310,13 @@ far inherited that list, the room gets its own copy first, so nothing on screen 
 **Keyboard** (outside text fields): **Ctrl+A** selects all, **Del** deletes, **Ctrl+D** duplicates, **Ctrl+C / Ctrl+V**
 copy and paste (also into another room or another card — the copy is kept in this browser),
 **Ctrl+Z / Ctrl+Y** undo / redo, **Ctrl+S** saves, **Esc** cancels placing, then clears the
-selection, then closes.
+selection, then closes. In a Properties field: **Esc** closes an open list, then leaves the field;
+**Ctrl+Z** is the studio's undo until you type into the field.
 
 **Other parts of the screen**
 
-- **Inspector.** This editor, unchanged. Every tab and field works the same.
+- **Inspector.** *Properties* (above) and *All settings* — this editor, unchanged, every tab and
+  field working the same. The studio remembers the tab you used last.
 - **Canvas frames.**
   - *Tablet* (1280 × 800), *Tablet portrait* (800 × 1280) and *Phone* (390 × 844) are scaled to
     fit; *Fit* is the real size of the canvas.
@@ -297,7 +329,7 @@ selection, then closes.
   box (id, entity, icon, type). A type's header opens its section in the inspector. Rooms stay in
   sync everywhere: toolbar, outline, inspector and the card's own nav strip.
 - **Undo / redo.** Covers everything done in the studio; a burst of typing in one field is one
-  step.
+  step, and so is a quick series of changes to one Properties field.
 - **Status bar.**
   - The *config check* (wrong types, values outside the allowed list, unknown keys, missing ids,
     each with its full path).

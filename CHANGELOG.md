@@ -1,6 +1,70 @@
 # Changelog
 
-## [6.43.0] - unreleased
+## [6.44.0] - unreleased
+
+### Studio: the Properties form (V7_PLAN.md Phase 4a)
+
+- **New inspector tab: Properties.** The inspector has two tabs:
+  - **Properties** (the default) — a form for whatever is selected;
+  - **All settings** — the classic editor, unchanged, with every option. The studio remembers the
+    tab in this browser.
+- **What the form edits:**
+  - the selected element (all 11 types, on the image or not);
+  - with nothing selected, the room shown (name, id, icon, background image / camera,
+    `area_match`);
+  - in Global or a single-room card, the card's shared defaults (background image / camera).
+- **Generated from the schema.** Every key the schema lists for the type gets a field of the
+  right kind. Sections: General, Position & size, Actions, Visibility, Advanced (YAML).
+- **Field types (the studio's own components, no HA form elements inside the studio):**
+  - **Entity picker:** search by entity id, friendly name or area; the element's usual domains
+    first (lights for a glow, covers for a blind…); the live state under the field; an unknown
+    entity is flagged.
+  - **Icon picker:** searches Home Assistant's own icon list by name and keyword, with a preview.
+  - **Colour:** swatch plus text, so `rgba(…)` and `var(--…)` stay possible.
+  - **Lengths, numbers, enums** (enums as selects), templates, image paths with a thumbnail.
+  - **Action builder** for `tap_action` / `hold_action` / `double_tap_action`: the same action
+    types as the editor, with their own fields (entity, path, URL, action name with Home
+    Assistant's services offered, target, data as YAML, section, room, group). Changing the type
+    keeps `confirmation` / `haptic`.
+  - **YAML** for structured values (conditions, embedded cards, sliders, tiles…). Invalid YAML is
+    reported and not written.
+  - Keys that take one value *or* a condition list (`color`, `icon`, `label`…) can switch between
+    the two.
+- **Nothing is lost (KEEP).** A field writes only its own key; key order stays. Profile overrides
+  (`portrait:` / `landscape:`) and keys the schema does not know are shown as YAML in Advanced
+  and kept exactly as they are.
+- **Validation is pinned:**
+  - the schema's message under the field it is about (red outline on errors);
+  - a red / orange dot on the element's row and on the room in the outline;
+  - a red ring around elements with errors on the canvas (Arrange only, never saved).
+- **Rename** an element from its ID field: the selection follows (a taken id gets a suffix).
+- **Undo:** one step per committed field; repeated changes of the same field within 0.8 s merge.
+  Ctrl+Z in a field you have not typed into is the studio's undo.
+- **Keyboard:** Escape closes an open picker list first, then leaves the field, then clears the
+  selection.
+- **Dragging an element that was not selected now selects it**, so its form follows the drag.
+- **All settings** is rebuilt only while it is shown, so a large card stays quick in the
+  Properties tab.
+
+### Fixes
+
+- **Studio: after a Shift-click, dragging a selected element did nothing** (found by CI on a newer
+  Chromium). Shift-click extended a text selection over the canvas labels; the next drag then
+  started the browser's own drag of that text, and the element never moved. The edit canvas
+  now has no text selection and no native drag-and-drop.
+- **Studio: on a wide screen, one Escape press was spent on a hidden panel** after selecting an
+  element. The slide-over outline / inspector state is now used on narrow screens only.
+
+### Tests
+
+- Playwright is pinned (1.64.1) in `package.json` and CI, so local runs and CI use the same
+  Chromium.
+- New checks for the Properties form in every tier: jsdom (fields, KEEP, undo, rename, pickers,
+  validation; the form built for every element of every reference config without writing),
+  Playwright (typing, pickers, keyboard, validation on the canvas) and the Home Assistant tier
+  (real entities and HA's own icon list).
+
+## [6.43.0] - 2026-10-21
 
 ### Studio: canvas editing, part 2 (V7_PLAN.md Phase 3b)
 
@@ -72,7 +136,7 @@
 - Compat vs v6.42.0: 18 configs, 176 snapshots (room switches included), **identical**.
 - HA tier 11/11 on the minified files.
 
-## [6.42.0] - unreleased
+## [6.42.0] - 2026-10-21
 
 ### Studio: canvas editing, part 1 (V7_PLAN.md Phase 3a) — and Edit mode retires
 
