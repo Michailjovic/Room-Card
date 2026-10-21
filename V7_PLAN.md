@@ -116,8 +116,8 @@ its own and field-tested before the next one starts.
 | **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. Split in three releases: **4a** (the Properties form, pickers, action builder, pinned validation), **4b** (sub-forms and lists: sections/tiles, light controls, nav, overview, cover control; card-level forms) and **4c** (the new-card wizard). | XL | 6.44.0–6.46.0 |
 | **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. **Shipped with seven themes, the oblique projection and Phase 6's light / floor heating / temperature / humidity bindings** (author's decision 2026-10-21 — the themes cannot be judged without live state). | L | 6.47.0 |
 | **6** | **Bindings** (§6.4): ~~lights (colour + brightness glow), floor heating, temperature tint, humidity~~ (in 6.47.0), presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. **Shipped in 6.48.0** (overview signals opt-in). | M | 6.48.0 |
-| **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.49.0 |
-| **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
+| **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. **Shipped in 6.49.0** (vector blinds instead of the card's HTML renderers; "clean this room" moved to Phase 8). | L | 6.49.0 |
+| **8** | **AnyVac live** (§6.6): ~~robot position + heading, trail~~ (in 6.49.0), coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
 | **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
 | **10** | **Documentation & launch** (§9): README, guides, generated reference, AI spec + `llms.txt`, PRESETS refresh incl. cockpit + floorplan presets, screenshots/GIFs, live demo, repo cleanup, HACS default submission. | L | **7.0.0** |
 
@@ -304,7 +304,17 @@ Openings snap to the nearest wall and store `at` + `width`. Window: frame + pane
 contact sensor. Blind: the cover position fills the opening (roller / venetian / `day_night`
 renderers reused, scaled to the opening); in iso it is drawn on the wall face. Door: swing arc,
 open state from a contact. Optional "clean this room" quick action calls `anyvac.clean` with that
-room (only when AnyVac is installed).
+room (only when AnyVac is installed) — moved to Phase 8, next to the live robot.
+
+**As built in 6.49.0:** `openings[]` = `{type: door | window, at, width, entity (contact), cover,
+blind_type: roller | venetian | day_night, invert, mirror, outward, tap_action, hold_action}`.
+Windows cut the wall like doors; from above a frame + glass line (open colour + a swung casement
+while the contact is on) and the blind as a band on the room side (opacity = how far down); in the
+projected views the window is its own painter-sorted face (sill at 38 % of the wall, glass above)
+and the blind a quad down the glass by `current_position`, patterned for venetian / day_night.
+Front walls (cut to 30 %) show only the glass colour on the sill's top edge. A door with a contact
+gets a leaf (line from above, a panel in 3D) that swings by `n`; its blueprint / sketch arc shows
+only while open. Taps: blind → sensor more-info. Theme tokens `win.*`. Layer `openings`.
 
 ### 6.6 AnyVac live and the photo background (Phase 8)
 
@@ -811,4 +821,40 @@ companion app (author), and the tablet run of the S5 probe.
   uses), else the area's players (up to 3). Entity pickers suggest `media_player` for `media` and
   presence-like domains for `presence`.
 - **Not in this phase:** windows and blinds (Phase 7); the robot's live position, trail and
-  coverage, and the photo background (Phase 8); "clean this room" (Phase 7).
+  coverage, and the photo background (Phase 8); "clean this room" (moved to Phase 8 in 6.49.0).
+
+### Phase 7 — v6.49.0
+
+- **Model:** the view keeps each opening's index in `floorplan.openings` (`k`), its wall direction
+  `u` from the hinge and the normal `n` into its room (`rfpOpeningEdge`), flipped by `mirror` /
+  `outward`. Windows cut the wall (`rfpWallSegs`) like doors.
+- **Rendering:** `_openingsTop` (plan metres, inside the wall group) and `_openingFace` (screen px,
+  pushed into the painter-sorted wall list). Blind and leaf geometry is kept per render (`_og`) so
+  `_applyOpenings` only rewrites points / opacity / colour, keyed by an `open|closedFraction`
+  signature — a state tick never re-renders. Tap targets (`data-rfp-open`) are wide transparent
+  lines over the opening, above the room hit polygons, only for openings with a sensor, a blind or
+  an action.
+- **Card:** change detection adds the contacts and the covers (+ `current_position`), unless the
+  `openings` layer is off.
+- **Studio:** `window` tool; `rsFpOpeningGuess` (pure) suggests a window's sensor (device class
+  `window` only) and blind from the plan room's area, skipping ones other openings use; doors get
+  no guess — on the author's system the only `door` sensors are appliances (dishwasher, oven,
+  fridge, washer-dryer). `rsFpMergeDoors` (pure) is shared by *Propose doors* and the import: windows
+  stay, an old door within 0.6 m of a proposed one is kept.
+- **Pulled forward from Phase 8 (author's request 2026-10-21):** the live robot. `_robots()` = the
+  AnyVac sensors with `vacuum_position_home_px` in the plan's `source.frame`; home px → plan metres
+  via `source.origin_px` / `mm_per_px`; heading `a` is an image-frame angle (y down; 270 = up, the
+  robot backs into its dock). Drawn above the walls, moved by a CSS transform (1.2 s glide), a ping
+  ring while `in_cleaning`; the trail of the run (`path_*_home_px`, decimated to 5 cm) is redrawn
+  only when its point count changes. The card also watches those attributes.
+- **`mirror`** (author: "the import looks mirrored"): a flip before the rotation in `rfpFit`
+  (`[-1,0,0,1]` / `[1,0,0,-1]`), so the stored coordinates stay in the vacuum's frame and the
+  robot, re-import and the studio's inverse map keep working. The import itself is not mirrored:
+  AnyVac's home px are the map image's px plus an offset (`vacuum_position_px` → `_home_px` is a
+  pure translation). His anyvac-card seat for the S8 has `rotation: 89.39` against the real plan.
+- **Floor covering per room** (author: the kitchen is brown vinyl, the import said tile): material
+  `vinyl` and a per-room `floor_color`, drawn as the room's own copy of its material's pattern
+  (`rfpFloorPattern`, shared with the theme patterns); `neon` uses it as the flat colour. Only a
+  CSS colour is accepted (it goes into an attribute).
+- **Not in this phase:** "clean this room", coverage and last-cleaned layers, the photo
+  background (Phase 8); openings in the `thermal` / `tiles` themes.

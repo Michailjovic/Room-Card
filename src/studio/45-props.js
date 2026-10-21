@@ -522,7 +522,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select']};
+const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover']};
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;
@@ -552,7 +552,7 @@ function rsFormSpec(ctx,target){
   if(target.kind==='fproom'){
     const lk=(ctx.work.rooms||[]).find(function(r){return r&&item.room!=null&&String(r.id)===String(item.room);});
     return{keys:S.fpRoom.keys,schema:'fpRoom',title:String(item.name||(lk&&((lk.overview_tile&&lk.overview_tile.name)||lk.name))||item.room||('#'+(target.idx+1))),icon:'mdi:vector-square',type:ctx.t('t_fproom'),rest:'object',groups:[
-      ['main',['name','room','floor']],['fp_states',['lights','climate','temperature','humidity','media']],['fp_actions',['tap_action','hold_action']],['fp_geom',['polygon','anyvac_room']]]};
+      ['main',['name','room','floor','floor_color']],['fp_states',['lights','climate','temperature','humidity','media']],['fp_actions',['tap_action','hold_action']],['fp_geom',['polygon','anyvac_room']]]};
   }
   if(target.kind==='fpitem'){
     const lab=item.type==='label';
@@ -560,7 +560,9 @@ function rsFormSpec(ctx,target){
       ['main',['type','entity','attribute','name','icon','text']],['fp_shows',['show_state','prefix','suffix','decimals','active_state','color','size']],['fp_actions',['tap_action','hold_action']],['fp_geom',['at']]]};
   }
   if(target.kind==='fpdoor'){
-    return{keys:S.fpOpening.keys,schema:'fpOpening',title:ctx.t('fp_door_n',{n:target.idx+1}),icon:'mdi:door',type:ctx.t('t_fpdoor'),rest:'object',groups:[['main',['width','at','type']]]};
+    const win=item.type==='window';
+    return{keys:S.fpOpening.keys,schema:'fpOpening',title:ctx.t(win?'fp_window_n':'fp_door_n',{n:target.n||target.idx+1}),icon:win?'mdi:window-closed-variant':'mdi:door',type:ctx.t(win?'t_fpwindow':'t_fpdoor'),rest:'object',groups:[
+      ['main',['type','width','at']],['fp_shows',win?['entity','cover','blind_type','invert']:['entity','mirror','outward']],['fp_actions',['tap_action','hold_action']]]};
   }
   if(target.kind==='room'){
     return{keys:S.room.keys,title:String(item.name||item.id||''),icon:'mdi:door',type:ctx.t('room'),rest:'room',groups:[['main',RS_ROOM_KEYS],

@@ -322,6 +322,127 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     t('overview signals: presence / vacuum can be left out',!sr(e15).querySelector('.roc-ovt-here')&&!sr(e15).querySelector('.roc-sig-vac')&&!!sr(e15).querySelector('.roc-sig-att'));
     e15.remove();
   }
+  // ---- 3c. doors and windows (v6.49.0) -------------------------------------------------------------
+  {
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;
+    fp.openings[0].entity='binary_sensor.door0';
+    fp.openings.push({type:'window',at:[2.5,0.4],width:1.2,entity:'binary_sensor.lr_window',cover:'cover.lr_blind'});
+    fp.openings.push({type:'window',at:[14,0.25],cover:'cover.bed_blind',blind_type:'venetian',invert:true});
+    fp.openings.push({type:'window',at:[2.6,4.55]});
+    const st=Object.assign(states(),{'binary_sensor.door0':{state:'off',attributes:{device_class:'door'}},'binary_sensor.lr_window':{state:'on',attributes:{device_class:'window'}},
+      'cover.lr_blind':{state:'open',attributes:{current_position:30}},'cover.bed_blind':{state:'open',attributes:{current_position:100}}});
+    const e1=mk(c,mkHass(st));await sleep(40);
+    const S1=sr(e1),q=(a,k)=>S1.querySelector('['+a+'="'+k+'"]'),qa=(a,k)=>[...S1.querySelectorAll('['+a+'="'+k+'"]')];
+    t('windows: glass on the wall face (oblique), the open one in the open colour',q('data-rfp-glass',4).getAttribute('fill')==='#5eead4'&&q('data-rfp-glass',5).getAttribute('fill')==='#7fb6e6');
+    t('windows: a front wall keeps only the sill, its edge in the glass colour',qa('data-rfp-glass',6).length===1&&q('data-rfp-glass',6).tagName.toLowerCase()==='line'&&q('data-rfp-glass',6).getAttribute('stroke')==='#7fb6e6');
+    const bl=q('data-rfp-blind',4);
+    t('blinds: position 30 % → the blind is 70 % down the glass',!!bl&&bl.getAttribute('points').split(' ').length===4);
+    t('blinds: invert (a fully open motor = closed blind) and the venetian pattern',q('data-rfp-blind',5).getAttribute('points').split(' ').length===4&&/-ven\)$/.test(q('data-rfp-blind',5).getAttribute('fill')));
+    const leaf0=q('data-rfp-leaf',0).getAttribute('points');
+    t('doors: a door with a contact sensor gets a panel (closed in the gap)',!!leaf0&&leaf0.split(' ').length===4);
+    t('doors: a door without a sensor stays a gap',!q('data-rfp-leaf',1));
+    t('openings: tap targets only where there is something to show or do',S1.querySelectorAll('[data-rfp-open]').length===3&&!q('data-rfp-open',6));
+    t('change detection: contacts and blinds (position) are watched',['binary_sensor.door0','binary_sensor.lr_window','cover.lr_blind','cover.bed_blind'].every(x=>e1._relevantEntities.includes(x))&&e1._relevantAttrSources.some(a=>a.entity==='cover.lr_blind'&&a.attr==='current_position'));
+    // updates
+    const st2=Object.assign({},st,{'binary_sensor.door0':{state:'on',attributes:{}},'binary_sensor.lr_window':{state:'off',attributes:{}},'cover.lr_blind':{state:'open',attributes:{current_position:100}}});
+    const v1=e1._fpInst;e1.hass=mkHass(st2);await sleep(20);
+    t('update: the window closes (glass colour), the blind goes up, the door swings open — no re-render',e1._fpInst===v1&&q('data-rfp-glass',4).getAttribute('fill')==='#7fb6e6'&&q('data-rfp-blind',4).getAttribute('points')===''&&q('data-rfp-leaf',0).getAttribute('points')!==leaf0);
+    // actions
+    const more=[];e1.addEventListener('hass-more-info',x=>more.push(x.detail.entityId));
+    const ho=q('data-rfp-open',4);ev(ho,'pointerdown');ev(ho,'pointerup');await sleep(20);
+    t('tap a window → its blind\'s more-info (not the room)',more[0]==='cover.lr_blind'&&e1._roomIdx===0);
+    ev(ho,'pointerdown');await sleep(650);ev(ho,'pointerup');await sleep(20);
+    t('hold a window → its contact sensor\'s more-info',more[1]==='binary_sensor.lr_window');
+    const hd=q('data-rfp-open',0);ev(hd,'pointerdown');ev(hd,'pointerup');await sleep(20);
+    t('tap a door → its sensor',more[2]==='binary_sensor.door0'&&e1._roomIdx===0);
+    e1.remove();
+    // top view (blueprint): frame + pane, blind line, door leaf and arc
+    const c2=clone(c);c2.rooms[0].floorplan.theme='blueprint';
+    const e2=mk(c2,mkHass(st));await sleep(40);
+    const S2=sr(e2),q2=(a,k)=>S2.querySelector('['+a+'="'+k+'"]');
+    t('top view: the open window\'s pane shows, glass in the open colour',q2('data-rfp-pane',4).getAttribute('opacity')==='1'&&q2('data-rfp-glass',4).getAttribute('stroke')==='#ffd166');
+    t('top view: the blind on the room side, stronger the more it is down',Math.abs(parseFloat(q2('data-rfp-blind',4).getAttribute('opacity'))-(0.3+0.7*0.7))<0.01&&q2('data-rfp-blind',5).getAttribute('stroke-dasharray')==='0.03 0.025');
+    const l0=q2('data-rfp-leaf',0);
+    t('top view: a closed door — the leaf lies in the gap, its arc is hidden',l0&&q2('data-rfp-arc',0).getAttribute('opacity')==='0'&&Math.abs(parseFloat(l0.getAttribute('x2'))-parseFloat(l0.getAttribute('x1')))+Math.abs(parseFloat(l0.getAttribute('y2'))-parseFloat(l0.getAttribute('y1')))>0.7);
+    t('top view: a door without a sensor keeps its arc',[...S2.querySelectorAll('svg path')].filter(p=>/^M[^A]+A0\.(8|75) /.test(p.getAttribute('d')||'')&&!p.hasAttribute('data-rfp-arc')).length===3);
+    e2.remove();
+    // mirror / outward move the hinge / the swing
+    const c3=clone(c2);c3.rooms[0].floorplan.openings[0].mirror=true;c3.rooms[0].floorplan.openings[0].outward=true;
+    const st3=Object.assign({},st,{'binary_sensor.door0':{state:'on',attributes:{}}});
+    const e3=mk(c3,mkHass(st3));await sleep(30);
+    const e3b=mk(c2,mkHass(st3));await sleep(30);
+    const lf=e=>{const l=sr(e).querySelector('[data-rfp-leaf="0"]');return[l.getAttribute('x1'),l.getAttribute('y1'),l.getAttribute('x2'),l.getAttribute('y2')].join();};
+    t('mirror + outward: another hinge and the other side',lf(e3)!==lf(e3b));
+    e3.remove();e3b.remove();
+    // a theme override of the window colours
+    const c4=clone(c);c4.rooms[0].floorplan.overrides={'win.glass':'#123456'};
+    const e4=mk(c4,mkHass(st2));await sleep(30);
+    t('overrides: win.glass',sr(e4).querySelector('[data-rfp-glass="4"]').getAttribute('fill')==='#123456');
+    e4.remove();
+    // the openings layer off: plain windows, no state, nothing watched
+    const c5=clone(c);c5.rooms[0].floorplan.layers={openings:false};
+    const e5=mk(c5,mkHass(st));await sleep(30);
+    t('layers.openings off: windows drawn plain, no blinds / leaves / targets, not watched',!!sr(e5).querySelector('[data-rfp-glass="4"]')&&!sr(e5).querySelector('[data-rfp-blind],[data-rfp-leaf],[data-rfp-open]')&&!e5._relevantEntities.includes('cover.lr_blind'));
+    e5.remove();
+  }
+  // ---- 3d. the vacuum on the plan, mirror (v6.49.0) ------------------------------------------------
+  {
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;fp.theme='blueprint';
+    fp.source={anyvac:'sensor.s8_anyvac_map',frame:'d4e87578-c982-4eb4-8ae1-a2e0c5be2547',origin_px:[800,752],mm_per_px:12.5};
+    const av=clone(DATA.anyvac);
+    av.attributes.home_frame=Object.assign({},av.attributes.home_frame,{id:'d4e87578-c982-4eb4-8ae1-a2e0c5be2547'});
+    Object.assign(av.attributes,{vacuum_position_home_px:{x:1200,y:900,a:0},in_cleaning:true,vacuum_room_name:'Living room',path_wet_home_px:[[{x:900,y:800},{x:1000,y:800},{x:1000,y:900}]],path_dry_home_px:[]});
+    const st=Object.assign(states(),{'sensor.s8_anyvac_map':av});
+    const e1=mk(c,mkHass(st));await sleep(40);
+    const S1=sr(e1),v=e1._fpInst,rb=S1.querySelector('[data-rfp-robot="0"]');
+    const want=F.geom.P(v.F,5,1.85,0.03);
+    const m=/translate\(([-\d.]+)px, *([-\d.]+)px\)/.exec(rb&&rb.style.transform||'');
+    t('robot: at its home-frame position converted to plan metres',!!m&&Math.abs(+m[1]-want[0])<0.05&&Math.abs(+m[2]-want[1])<0.05&&rb.getAttribute('opacity')==='1');
+    t('robot: heading 0° → facing right (top view)',S1.querySelector('[data-rfp-rhead="0"]').getAttribute('transform')==='rotate(0)');
+    t('robot: cleaning → ping ring and the mop\'s trail (plan metres)',S1.querySelector('[data-rfp-rping="0"]').getAttribute('opacity')==='1'&&/^M1\.25 0\.6L2\.5 0\.6L2\.5 1\.85$/.test(S1.querySelector('[data-rfp-trail] path').getAttribute('d')));
+    t('change detection: the robot\'s position and trail',['vacuum_position_home_px','path_wet_home_px'].every(x=>e1._relevantAttrSources.some(a=>a.entity==='sensor.s8_anyvac_map'&&a.attr===x)));
+    const av2=clone(av);Object.assign(av2.attributes,{vacuum_position_home_px:{x:1300,y:900,a:90},in_cleaning:false});
+    e1.hass=mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av2}));await sleep(20);
+    t('update: the robot moves and turns, docked → no ring, no trail, no re-render',e1._fpInst===v&&S1.querySelector('[data-rfp-rhead="0"]').getAttribute('transform')==='rotate(90)'&&S1.querySelector('[data-rfp-rping="0"]').getAttribute('opacity')==='0'&&!S1.querySelector('[data-rfp-trail] path')&&rb.getAttribute('opacity')==='0.85');
+    e1.remove();
+    const c2=clone(c);c2.rooms[0].floorplan.source.frame='another-frame';
+    const e2=mk(c2,mkHass(st));await sleep(30);
+    t('robot: a map in another home frame is not drawn',!sr(e2).querySelector('[data-rfp-robot]'));
+    e2.remove();
+    const c3=clone(c);c3.rooms[0].floorplan.layers={vacuum:false};
+    const e3=mk(c3,mkHass(st));await sleep(30);
+    t('robot: the vacuum layer off hides it',!sr(e3).querySelector('[data-rfp-robot]')&&!sr(e3).querySelector('[data-rfp-trail]'));
+    e3.remove();
+    const e4=mk(BASE,mkHass(st));await sleep(30);
+    t('robot: a plan without an AnyVac source has none',!sr(e4).querySelector('[data-rfp-robot]'));
+    const F0=e4._fpInst.F;
+    e4.remove();
+    const c5=clone(BASE);c5.rooms[0].floorplan.mirror='horizontal';c5.rooms[0].floorplan.theme='blueprint';
+    const e5=mk(c5,mkHass(st));await sleep(30);
+    const F5=e5._fpInst.F,Pg=F.geom.P;
+    t('mirror horizontal: the living room ends up on the right, the plan still fits',Pg(F5,1,1,0)[0]>Pg(F5,14,1,0)[0]&&Pg(F0,1,1,0)[0]<Pg(F0,14,1,0)[0]);
+    const back=F.geom.inv(F5,...Pg(F5,3.2,1.7,0));
+    t('mirror: screen → plan still inverts (the studio edits a mirrored plan)',Math.abs(back[0]-3.2)<1e-6&&Math.abs(back[1]-1.7)<1e-6);
+    e5.remove();
+  }
+  // ---- 3e. floor covering per room (v6.49.0) ---------------------------------------------------------
+  {
+    const c=clone(BASE);const r3=c.rooms[0].floorplan.rooms[3];r3.floor='vinyl';r3.floor_color='#7a5a43';c.rooms[0].floorplan.rooms[2].floor='vinyl';
+    const e1=mk(c);await sleep(30);const S1=sr(e1),id=e1._fpInst.uid;
+    const own=S1.querySelector('pattern[id="'+id+'-f3"]');
+    t('floor_color: the room gets its own pattern of its material in its colour',!!own&&own.querySelector('rect').getAttribute('fill')==='#7a5a43'&&own.getAttribute('width')==='1.2');
+    const fills=[...S1.querySelectorAll('g[transform^="matrix"] > polygon')].map(p=>p.getAttribute('fill'));
+    t('vinyl: the theme\'s vinyl pattern; floor_color: the room\'s own',fills.includes('url(#'+id+'-vinyl)')&&fills.includes('url(#'+id+'-f3)'));
+    e1.remove();
+    const c2=clone(c);c2.rooms[0].floorplan.theme='neon';
+    const e2=mk(c2);await sleep(30);
+    t('neon: floor_color is the room\'s flat colour',[...sr(e2).querySelectorAll('polygon')].some(p=>p.getAttribute('fill')==='#7a5a43'));
+    e2.remove();
+    const c3=clone(c);c3.rooms[0].floorplan.rooms[3].floor_color='red;stroke:url(x)';
+    const e3=mk(c3);await sleep(30);
+    t('floor_color: anything that is not a colour is ignored',!sr(e3).querySelector('pattern[id$="-f3"]'));
+    e3.remove();
+  }
   // ---- the classic editor keeps the floor plan as it is ------------------------------------------
   {
     const ed=w.document.createElement('room-overlay-card-editor');
@@ -374,6 +495,24 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
   const fb=ST.fpImport(G,hass,card,'sensor.s8_anyvac_map',broken,{clean:false,doors:false},{});
   const k=fb.rooms.find(r=>r.anyvac_room.endsWith('_19'));
   t('a broken outline (AnyVac A1) falls back to the room\'s bbox',k.polygon.length===4&&Math.abs(Math.abs(G.area(k.polygon))-3.2*4.4)<0.05);
+  // v6.49.0: a new opening's sensors from the room's area; re-proposed doors keep windows and nearby old doors
+  {
+    const h2={states:{'binary_sensor.lr_win':{state:'off',attributes:{device_class:'window'}},'binary_sensor.lr_win2':{state:'off',attributes:{device_class:'window'}},
+        'binary_sensor.lr_door':{state:'off',attributes:{device_class:'door'}},'cover.lr_roller':{state:'closed',attributes:{current_position:0}},'cover.k_roller':{state:'closed',attributes:{}}},
+      areas:{living_room:{name:'Living Room'},kitchen:{name:'Kitchen'}},
+      entities:{'binary_sensor.lr_win':{area_id:'living_room'},'binary_sensor.lr_win2':{area_id:'living_room'},'binary_sensor.lr_door':{area_id:'living_room'},'cover.lr_roller':{area_id:'living_room'},'cover.k_roller':{area_id:'kitchen'}}};
+    const fp2={rooms:[{room:'living_room',polygon:C0.Living},{name:'Kitchen',polygon:C0.Kitchen}],openings:[{type:'window',at:[1,0.4],entity:'binary_sensor.lr_win'}]};
+    const g1=ST.fpOpeningGuess(h2,card,fp2,0,'window');
+    t('a new window: the area\'s next unused window contact and its blind',g1.entity==='binary_sensor.lr_win2'&&g1.cover==='cover.lr_roller');
+    t('a new door: no guess (appliance doors are device_class door too)',JSON.stringify(ST.fpOpeningGuess(h2,card,fp2,0,'door'))==='{}');
+    t('a plan-only room matches its area by name',ST.fpOpeningGuess(h2,card,fp2,1,'window').cover==='cover.k_roller');
+    const old=[{type:'door',at:[5.95,2.1],width:0.9,entity:'binary_sensor.lr_door',mirror:true},{type:'door',at:[20,20]},{type:'window',at:[1,0.4],cover:'cover.lr_roller'}];
+    const m=ST.fpMergeDoors(G,[{at:[5.98,2.25],width:0.8},{at:[8.65,2.3],width:0.8}],old);
+    t('re-proposed doors: an old door nearby is kept (sensor, mirror), a far one goes, windows stay',m.length===3&&m[0].entity==='binary_sensor.lr_door'&&m[0].mirror===true&&m[1].at.join()==='8.65,2.3'&&m[2].type==='window');
+    const prevW=clone(fp);prevW.openings.push({type:'window',at:[2,0.4],cover:'cover.x'});
+    const reW=ST.fpImport(G,hass,card,'sensor.s8_anyvac_map',DATA.anyvac,{},prevW);
+    t('re-import with doors: windows stay',reW.openings.filter(o=>o.type==='window').length===1&&reW.openings.filter(o=>o.type!=='window').length===4);
+  }
   console.log(fails?'\n'+fails+' FAILED':'\nall floor plan tests passed');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

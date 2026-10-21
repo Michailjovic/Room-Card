@@ -3055,11 +3055,14 @@ navSelf._navChipInto(chipCont,chCfg,r);
     }
     // v6.48.0: markers on the plan, presence, AnyVac vacuums, collected section tiles (attention)
     if(_fpOn&&_fpDef){
+      const _L0=_fpDef.layers&&typeof _fpDef.layers==='object'?_fpDef.layers:{};
+      // v6.49.0: doors / windows — contact sensors and blinds (state + position)
+      if(_L0.openings!==false)(Array.isArray(_fpDef.openings)?_fpDef.openings:[]).forEach(function(o){if(!o||typeof o!=='object')return;if(o.entity)_ex.ids.add(String(o.entity));if(o.cover){_ex.ids.add(String(o.cover));_ex.attrs.add(o.cover+' current_position');}});
       (Array.isArray(_fpDef.items)?_fpDef.items:[]).forEach(function(it){if(it&&it.entity){_ex.ids.add(String(it.entity));if(it.attribute)_ex.attrs.add(it.entity+' '+it.attribute);}});
       const _L=_fpDef.layers&&typeof _fpDef.layers==='object'?_fpDef.layers:{};
       const _so={persons:_L.presence===false?[]:rocSigPersons(_fpDef.presence,this._roomEntityId()),anyvac:_L.vacuum===false?[]:this._sigAnyvac(_fpDef)};
       rocSigEntities(_so,_L.attention===false?[]:this._getSections(cAll)).forEach(function(id){_ex.ids.add(id);});
-      _so.anyvac.forEach(function(id){_ex.attrs.add(id+' in_cleaning');_ex.attrs.add(id+' vacuum_room_name');});
+      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0)
     }
     if(this._ovSig){
       const _sc=this._ovSig.cfg;

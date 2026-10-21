@@ -1,7 +1,7 @@
 # The floor plan page
 
 *Since v6.47.0.* A room in `rooms:` with a `floorplan:` block is a **page** that draws the home as
-a vector plan instead of a photo: floors, walls with door openings, the room names, and the live
+a vector plan instead of a photo: floors, walls with doors and windows, the room names, and the live
 state of every room — lights, floor heating, temperature and humidity. Since v6.48.0 it also shows
 what happens **across rooms** — who is where, what plays, the vacuum, running appliances — and any
 entity as a marker. It works like the overview page:
@@ -48,8 +48,10 @@ Everything is done in **Room Card Studio** ([editor guide](EDITOR.md#room-card-s
    Importing again later replaces each room's outline and keeps everything you set on it; rooms
    you drew yourself stay.
 2. **Draw** — rectangles or rooms corner by corner; move rooms and corners, add corners from the
-   middle of a wall, place doors and slide them along the wall. Corners snap to 5 cm and line up
-   with other corners (Alt = free).
+   middle of a wall, place doors and windows and slide them along the wall. Corners snap to 5 cm
+   and line up with other corners (Alt = free). A new window gets its window sensor (device class
+   `window`) and its blind from the room's Home Assistant area when there is one not used yet; a
+   door's sensor is picked by hand (appliance doors share the device class).
 3. **Image** — trace over a picture of your floor plan (URL or upload); click two points whose real
    distance you know to scale it. The picture is shown in the studio only.
 
@@ -78,6 +80,9 @@ vacuum or AnyVac is gone.
   view puts a long flat on a diagonal — `oblique` keeps it horizontal.
 - `rotate`: degrees, or `auto` (default) — a quarter turn when that makes the plan clearly bigger,
   e.g. a long flat on an upright phone.
+- `mirror` *(6.49)*: `horizontal` or `vertical` flips the drawing, for a vacuum map that shows the
+  home mirrored. Only the drawing flips: the stored coordinates stay the vacuum's, so a re-import,
+  the robot and editing in the studio keep working. Combine it with `rotate` (90 / 180 / 270).
 - `quality: low` draws without SVG filters (paper, rough lines, soft shadow) for a weak tablet;
   animations stop when the plan is off screen and with *reduce motion*.
 
@@ -89,6 +94,14 @@ vacuum or AnyVac is gone.
 | `climate` | a thermostat | the floor heating loop: glowing and flowing while `hvac_action: heating`, faint while idle, none when off; also the temperature / humidity if the room has no sensors |
 | `temperature`, `humidity` | sensors | the values on the room's label |
 | `media` *(6.48)* | one or more `media_player.*` | what plays (app, else source, else title) on the label, ▶ / ❚❚; the room glows softly while playing |
+
+**Floor covering** — each plan room has its own: `floor` is `wood`, `vinyl` *(6.49)*, `tile`,
+`carpet`, `concrete` or `none`, and `floor_color` *(6.49)* gives that room its own colour (any CSS
+colour, e.g. `'#7a5a43'` for brown vinyl) on top of the material's texture. The import guesses
+`tile` for kitchens, bathrooms and halls and `wood` elsewhere — change it in the studio (select the
+room → Properties → Floor, Floor color). The material shows in the `night` and `clay` themes;
+`neon` uses only the colour; `blueprint`, `sketch`, `thermal` and `tiles` draw no floors. The
+theme's colour for a material is `overrides: {'floor.vinyl': '#…'}`.
 
 ## Across rooms
 
@@ -104,6 +117,11 @@ vacuum or AnyVac is gone.
 - **Vacuum** — a blue robot badge on the room an AnyVac vacuum is cleaning (`in_cleaning`,
   `vacuum_room_name`, matched to the plan room by its `anyvac_room`, else by name). All AnyVac map
   sensors are watched; the plan's own `source.anyvac` first.
+- **The robot itself** *(6.49)* — on a plan imported from AnyVac, every vacuum in the same home
+  frame is drawn where it is (`vacuum_position_home_px`), turned the way it faces, gliding as it
+  moves. While it cleans it gets a pulsing ring and its trail of this run (dry: a thin line, wet:
+  the mop's band, from `path_dry_home_px` / `path_wet_home_px`). Docked it stays at the dock,
+  slightly dimmed. A hand-drawn plan has no AnyVac source, so it shows only the badge.
 
 The overview page can show the same signals on its tiles — opt-in with `overview.signals`
 ([CONFIGURATION.md](CONFIGURATION.md#cross-room-signals-v6480)).
@@ -125,8 +143,30 @@ sets the lit colour, `size` the chip size (`34px`). In the studio the **Marker**
 ## Layers
 
 `layers:` switches parts of the plan off — `lights`, `heating`, `labels`, `presence`, `media`,
-`attention`, `vacuum`, `items` (all `true` by default). A layer that is off is neither drawn nor
-watched for changes.
+`attention`, `vacuum`, `items`, `openings` (all `true` by default). A layer that is off is
+neither drawn nor watched for changes (with `openings: false` the windows are still drawn, without
+their state).
+
+## Doors and windows
+
+*Windows, sensors and blinds since v6.49.0.* `openings:` holds the doors and windows on the walls:
+`type` (`door` / `window`), `at` (a point on the wall, metres) and `width` (door 0.8 m, window
+1 m by default). They snap to the nearest wall; a door is a gap in the wall, a window a frame with
+glass.
+
+| Key | For | Drawn as |
+|---|---|---|
+| `entity` | a contact sensor (`binary_sensor`, device class `door` / `window` / `opening`) | a window's glass turns the "open" colour and, from above, its casement swings in; a door's leaf swings open (blueprint / sketch: its arc shows only while open) — without a sensor a door is just a gap |
+| `cover` | a window's blind (`cover.*`) | from above a band on the room side, stronger the further it is down; in the 3D views it comes down the glass from the top by `current_position` |
+| `blind_type` | | `roller` (solid, default), `venetian` (slats), `day_night` (bands) |
+| `invert` | | the cover's position counts the other way (100 = closed) |
+| `mirror`, `outward` | doors | the hinge at the other end / the door opens to the other side |
+| `tap_action`, `hold_action` | | default: tap → more-info of the blind (else the sensor), hold → more-info of the sensor |
+
+In the projected themes a window sits on the wall face with a sill; on the front walls, which are
+cut away low so the rooms stay visible, only its top edge shows the glass colour. The `thermal` and
+`tiles` themes draw no openings. Colours are theme tokens: `win.glass`, `win.open`, `win.blind`,
+`win.door` (e.g. `overrides: {'win.open': '#ff9f43'}`).
 
 ## Reference
 
@@ -140,6 +180,7 @@ rooms:
       theme_by: {portrait: tiles}  # portrait / landscape / dark / light → theme
       projection: auto             # auto | top | oblique | iso
       rotate: auto                 # auto | degrees
+      mirror: none                 # none | horizontal | vertical
       quality: auto                # auto | high | low
       wall: {height: 0.42}         # metres (projected views)
       temperature_range: [21, 24]  # thermal theme
@@ -152,7 +193,8 @@ rooms:
         - room: living_room        # a room of this card (tap opens it); omit for a plan-only room
           name: Obývák             # label (default: the room's overview tile name / name)
           polygon: [[0,0.4],[5.35,0.4],[5.35,1.7],[5.95,1.7],[5.95,3.45],[5.35,3.45],[5.35,4.55],[0,4.55]]
-          floor: wood              # wood | tile | carpet | concrete | none
+          floor: vinyl             # wood | vinyl | tile | carpet | concrete | none
+          floor_color: '#7a5a43'   # this room's own floor colour (optional)
           lights: [light.panel_living_room_1, light.panel_living_room_2]
           climate: climate.versatile_living_room
           temperature: sensor.living_room_temperature
@@ -162,7 +204,9 @@ rooms:
           hold_action: {action: toggle, entity: light.panel_living_room_1}       # optional
           anyvac_room: 7bUI4dOp7O1qnECi7UfFW3_16   # set by the import (matches it on re-import)
       openings:
-        - {type: door, at: [5.98, 2.25], width: 0.8}
+        - {type: door, at: [5.98, 2.25], width: 0.8}          # entity: a door contact sensor, if any
+        - {type: window, at: [2.5, 0.4], width: 1.4, entity: binary_sensor.versatile_living_room_window_state,
+           cover: cover.roller_motor_living_room, blind_type: roller}
       items:
         - {entity: light.desk_lamp, at: [3.1, 1.2]}                       # marker
         - {entity: sensor.co2, icon: mdi:molecule-co2, show_state: true, at: [1.0, 3.9]}
@@ -182,6 +226,6 @@ room's lights.
 
 ## Coming next
 
-Window and blind openings on the walls, the vacuum itself (live position, trail, cleaning
-coverage) and a calibrated photo-real render behind the vector layers — see
+Cleaning coverage and "last cleaned" per room, a "clean this room" action through AnyVac, and a
+calibrated photo-real render behind the vector layers — see
 [V7_PLAN.md](../V7_PLAN.md) §6.

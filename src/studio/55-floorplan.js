@@ -4,7 +4,7 @@
 // slide doors along walls. Geometry comes from AnyVac (import), a drawing, or a traced image.
 // Everything is plan metres in `floorplan.rooms[].polygon`; the renderer (room-overlay-card-
 // floorplan.js) draws it and lends its projection, so editing works in every projection.
-const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['marker','mdi:map-marker-plus']];
+const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['window','mdi:window-closed-variant'],['marker','mdi:map-marker-plus']];
 const RS_FP_ACCENT='#03a9f4';
 function rsFpR(v){return Math.round(v*100)/100;}
 function rsFpNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');}
@@ -74,6 +74,31 @@ function rsFpEntities(hass,cAll,room){
   if(media.length)out.media=media.length===1?media[0]:media;
   return out;
 }
+// v6.49.0: a new window's sensor (device_class window) and blind (a cover), from the Home Assistant
+// area of the plan room the wall belongs to — ones not used by another opening of the plan. Doors
+// get nothing: appliance doors (dishwasher, oven, fridge, washer) are device_class door too and sit
+// in the same areas, so a guess would usually be wrong. Nothing found → nothing set.
+function rsFpOpeningGuess(hass,cAll,fp,ri,type){
+  const S=(hass&&hass.states)||{},E=(hass&&hass.entities)||{},out={};
+  const pr=fp&&Array.isArray(fp.rooms)?fp.rooms[ri]:null;if(!pr||type!=='window')return out;
+  const cr=pr.room!=null?((cAll&&cAll.rooms)||[]).find(function(x){return x&&String(x.id)===String(pr.room);}):null;
+  const area=rsFpArea(hass,cr||{name:pr.name});
+  const aid=area&&(area.area_id||Object.keys((hass&&hass.areas)||{}).find(function(k){return hass.areas[k]===area;}));
+  if(!aid)return out;
+  const used=new Set();(fp.openings||[]).forEach(function(o){if(o&&o.entity)used.add(o.entity);if(o&&o.cover)used.add(o.cover);});
+  const pick=function(dom,ok){
+    return Object.keys(S).sort().find(function(id){
+      if(id.split('.')[0]!==dom||used.has(id))return false;
+      const r=E[id];if(r&&(r.hidden||r.entity_category))return false;
+      return rsFpEntArea(hass,id)===aid&&ok((S[id].attributes||{}));
+    });
+  };
+  const c=pick('binary_sensor',function(a){return a.device_class==='window';});
+  if(c)out.entity=c;
+  const cv=pick('cover',function(a){return!a.device_class||['blind','shade','shutter','curtain','awning'].indexOf(a.device_class)>=0;});
+  if(cv)out.cover=cv;
+  return out;
+}
 function rsFpPageRooms(cAll){return(Array.isArray(cAll&&cAll.rooms)?cAll.rooms:[]).map(function(r,i){return{r:r,i:i};}).filter(function(x){return x.r&&!x.r.overview&&!x.r.floorplan;});}
 // The card room an AnyVac room most likely is: its area (A5), else the names (id, name, the
 // overview tile's name, area_match, the area's name and aliases), compared without case,
@@ -141,13 +166,27 @@ function rsFpImport(G,hass,cAll,sensorId,st,o,prev){
   fp.rooms=out;
   if(o.doors!==false){
     const paths=[].concat(a.path_dry_home_px||[],a.path_wet_home_px||[]).map(function(seg){return G.poly(seg).map(toM);});
-    fp.openings=G.doors(out.map(function(r){return G.poly(r.polygon);}),paths).map(function(d){return{type:'door',at:d.at,width:d.width};});
+    const old=(Array.isArray(prev.openings)?prev.openings:[]).filter(function(o){return o&&typeof o==='object';});
+    fp.openings=rsFpMergeDoors(G,G.doors(out.map(function(r){return G.poly(r.polygon);}),paths),old);
+    if(!fp.openings.length)delete fp.openings;
   }
   fp.source=Object.assign({},fp.source&&typeof fp.source==='object'?fp.source:{},{anyvac:sensorId,frame:String(hf.id||''),imported:o.today||new Date().toISOString().slice(0,10),origin_px:[ox,oy],mm_per_px:mmpp});
   if(!fp.theme)fp.theme='night';
   return fp;
 }
 
+// Proposed doors replace the old doors; windows stay; an old door within 0.6 m of a proposed one is
+// kept instead (with its sensor, mirror / outward and width).
+function rsFpMergeDoors(G,proposed,old){
+  const oldDoors=old.filter(function(o){return o.type!=='window';}),used=new Set();
+  const doors=proposed.map(function(d){
+    let best=-1,bd=0.6;
+    oldDoors.forEach(function(o,i){const at=G.poly([o.at])[0];if(!at||used.has(i))return;const dd=Math.hypot(at[0]-d.at[0],at[1]-d.at[1]);if(dd<bd){bd=dd;best=i;}});
+    if(best>=0){used.add(best);return JSON.parse(JSON.stringify(oldDoors[best]));}
+    return{type:'door',at:d.at,width:d.width};
+  });
+  return doors.concat(old.filter(function(o){return o.type==='window';}).map(function(o){return JSON.parse(JSON.stringify(o));}));
+}
 RocStudio.prototype._fpIdx=function(){
   if(this.global)return-1;
   const r=this._rooms()[this.roomIdx];
@@ -248,10 +287,12 @@ RocStudio.prototype._fpOutline=function(box){
   });
   const ops=Array.isArray(fp.openings)?fp.openings:[];
   if(ops.length){
-    box.appendChild(rsEl('div',{class:'ol-row ol-kindrow'},[rsEl('span',{class:'ol-item ol-kind'},[rsIcon('mdi:door'),rsEl('span',{text:this.t('fp_doors_h')}),rsEl('span',{class:'n',text:String(ops.length)})])]));
+    box.appendChild(rsEl('div',{class:'ol-row ol-kindrow'},[rsEl('span',{class:'ol-item ol-kind'},[rsIcon('mdi:door'),rsEl('span',{text:this.t('fp_openings_h')}),rsEl('span',{class:'n',text:String(ops.length)})])]));
+    const cnt={door:0,window:0};
     ops.forEach(function(o,k){
+      const win=o&&o.type==='window';cnt[win?'window':'door']++;
       box.appendChild(rsEl('button',{class:'ol-item ol-el',type:'button','data-fpdoor':String(k),'aria-current':String(st.door===k),onclick:function(){self._fpSelect('door',k);}},
-        [rsEl('span',{class:'nm',text:self.t('fp_door_n',{n:k+1})}),rsEl('span',{class:'sub',text:Array.isArray(o&&o.at)?o.at.join(', ')+' m':''})]));
+        [rsEl('span',{class:'nm',text:self.t(win?'fp_window_n':'fp_door_n',{n:cnt[win?'window':'door']})}),rsEl('span',{class:'sub',text:Array.isArray(o&&o.at)?o.at.join(', ')+' m':''})]));
     });
   }
   const its=Array.isArray(fp.items)?fp.items:[];
@@ -272,7 +313,11 @@ RocStudio.prototype._fpTarget=function(){
   this._fpSync();
   const st=this._fpState(),fp=this._fpCfg();
   if(st.sel!=null&&Array.isArray(fp.rooms)&&fp.rooms[st.sel])return{kind:'fproom',id:String(st.sel),idx:st.sel,item:fp.rooms[st.sel],path:'rooms['+i+'].floorplan.rooms['+st.sel+']'};
-  if(st.door!=null&&Array.isArray(fp.openings)&&fp.openings[st.door])return{kind:'fpdoor',id:String(st.door),idx:st.door,item:fp.openings[st.door],path:'rooms['+i+'].floorplan.openings['+st.door+']'};
+  if(st.door!=null&&Array.isArray(fp.openings)&&fp.openings[st.door]){
+    const ty=fp.openings[st.door].type==='window'?'window':'door';
+    const n=fp.openings.slice(0,st.door+1).filter(function(o){return o&&(o.type==='window'?'window':'door')===ty;}).length;
+    return{kind:'fpdoor',id:String(st.door),idx:st.door,n:n,item:fp.openings[st.door],path:'rooms['+i+'].floorplan.openings['+st.door+']'};
+  }
   if(st.item!=null&&Array.isArray(fp.items)&&fp.items[st.item])return{kind:'fpitem',id:String(st.item),idx:st.item,item:fp.items[st.item],path:'rooms['+i+'].floorplan.items['+st.item+']'};
   return null;
 };
@@ -295,8 +340,8 @@ RocStudio.prototype._fpDraw=function(){
   });
   (Array.isArray(fp.openings)?fp.openings:[]).forEach(function(o,k){
     const at=G.poly([o&&o.at])[0];if(!at)return;
-    const q=v.toLocal(at[0],at[1],0),sel=st.door===k;
-    s+='<rect x="'+rsFpR(q[0]-6)+'" y="'+rsFpR(q[1]-6)+'" width="12" height="12" rx="3" fill="'+(sel?RS_FP_ACCENT:'#fff')+'" stroke="#0b0e12" stroke-width="1.5" pointer-events="none"/>';
+    const q=v.toLocal(at[0],at[1],0),sel=st.door===k,win=o.type==='window';
+    s+='<rect x="'+rsFpR(q[0]-(win?8:6))+'" y="'+rsFpR(q[1]-(win?4:6))+'" width="'+(win?16:12)+'" height="'+(win?8:12)+'" rx="'+(win?2:3)+'" fill="'+(sel?RS_FP_ACCENT:(win?'#bfe3ff':'#fff'))+'" stroke="#0b0e12" stroke-width="1.5" pointer-events="none"/>';
   });
   (Array.isArray(fp.items)?fp.items:[]).forEach(function(it,k){
     const at=G.poly([it&&it.at])[0];if(!at)return;
@@ -395,11 +440,12 @@ RocStudio.prototype._fpDown=function(e){
     else st.draft.pts.push(p);
     this._fpDraw();return;
   }
-  if(st.tool==='door'){
+  if(st.tool==='door'||st.tool==='window'){
     const w=this._fpWallAt(a.p,fp);
     if(!w||w.d>0.6){this._fpFlash('fp_door_nowall');return;}
-    const self=this;let k=-1;
-    this._fpEdit(function(f){if(!Array.isArray(f.openings))f.openings=[];f.openings.push({type:'door',at:w.at,width:0.8});k=f.openings.length-1;});
+    const self=this,type=st.tool;let k=-1;
+    const op=Object.assign({type:type,at:w.at,width:type==='window'?1:0.8},rsFpOpeningGuess(this.hass,this.work,fp,w.room,type));
+    this._fpEdit(function(f){if(!Array.isArray(f.openings))f.openings=[];f.openings.push(op);k=f.openings.length-1;});
     st.tool='select';self._fpSelect('door',k);return;
   }
   if(st.tool==='marker'){
@@ -642,9 +688,11 @@ RocStudio.prototype._fpAutoDoors=function(){
       const o=fp.source.origin_px,k=Number(fp.source.mm_per_px)/1000,a=src.attributes||{};
       paths=[].concat(a.path_dry_home_px||[],a.path_wet_home_px||[]).map(function(seg){return G.poly(seg).map(function(p){return[(p[0]-o[0])*k,(p[1]-o[1])*k];});});
     }
-    const doors=G.doors(polys,paths).map(function(d){return{type:'door',at:d.at,width:d.width};});
-    const go=function(){self._fpEdit(function(f){if(doors.length)f.openings=doors;else delete f.openings;});self._fpSelect(null,null);};
-    if(Array.isArray(fp.openings)&&fp.openings.length)self._panel(self.t('fp_doors'),[self.t('fp_doors_replace',{n:fp.openings.length,m:doors.length})],[{label:self.t('fp_doors_go'),cls:'primary',id:'fp-doors-ok',fn:go},{label:self.t('cancel'),id:'cancel'}]);
+    const old=(Array.isArray(fp.openings)?fp.openings:[]).filter(function(o){return o&&typeof o==='object';});
+    const next=rsFpMergeDoors(G,G.doors(polys,paths),old);
+    const nDoors=old.filter(function(o){return o.type!=='window';}).length,mDoors=next.filter(function(o){return o.type!=='window';}).length;
+    const go=function(){self._fpEdit(function(f){if(next.length)f.openings=next;else delete f.openings;});self._fpSelect(null,null);};
+    if(nDoors)self._panel(self.t('fp_doors'),[self.t('fp_doors_replace',{n:nDoors,m:mDoors})],[{label:self.t('fp_doors_go'),cls:'primary',id:'fp-doors-ok',fn:go},{label:self.t('cancel'),id:'cancel'}]);
     else go();
   });
 };

@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='6.48.0';
+const ROC_FP_VERSION='6.49.0';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -142,10 +142,13 @@ const RFP_PROJ={
 function rfpMul(a,b){return[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3]];}
 // The affine map for a plan: projection × rotation, scaled and centred into W×H minus padding.
 // pts: every floor point; zTop: wall height (raised corners count for the fit).
-function rfpFit(pts,proj,rotDeg,W,H,pad,zTop){
+// mirror (v6.49.0): 'horizontal' flips x, 'vertical' flips y — before the rotation, so the plan's
+// own coordinates (and everything stored in them) stay as the vacuum mapped them.
+function rfpFit(pts,proj,rotDeg,W,H,pad,zTop,mirror){
   const P=RFP_PROJ[proj]||RFP_PROJ.top;
   const r=(rfpNum(rotDeg)||0)*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
-  const m=rfpMul(P.m,[c,s,-s,c]);
+  const mr=mirror==='horizontal'?[-1,0,0,1]:(mirror==='vertical'?[1,0,0,-1]:[1,0,0,1]);
+  const m=rfpMul(P.m,rfpMul([c,s,-s,c],mr));
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
   for(const q of pts){
     const sx=m[0]*q[0]+m[2]*q[1],sy=m[1]*q[0]+m[3]*q[1];
@@ -405,24 +408,28 @@ const RFP_FONT={
 };
 const RFP_THEMES={
   night:{mode:'plan',proj:'oblique',dark:true,bg:'#0b0e12',bg2:'#151a20',vignette:true,
-    floor:{wood:'#5a3e2b',tile:'#cfcac2',carpet:'#3c3f47',concrete:'#55585c',none:'#2a2e34'},floorStyle:'pattern',
+    floor:{wood:'#5a3e2b',vinyl:'#6e5442',tile:'#cfcac2',carpet:'#3c3f47',concrete:'#55585c',none:'#2a2e34'},floorStyle:'pattern',
     wall:{side:'#20252c',side2:'#20252c',top:'#3a414b',h:0.42,w:0.12},
     label:{font:'sans',c:'#e8eaed',sub:'#9aa3ad',chip:'rgba(10,12,15,.72)'},
-    light:'pool',lightColor:'#ffb35c',heat:'pipes',heatColor:'#ff7a63',coolColor:'#8fb8ff',door:'gap',shadow:'hard'},
+    light:'pool',lightColor:'#ffb35c',heat:'pipes',heatColor:'#ff7a63',coolColor:'#8fb8ff',door:'gap',shadow:'hard',
+    win:{glass:'#7fb6e6',open:'#5eead4',blind:'#cbb89a',door:'#8a6a4f'}},
   clay:{mode:'plan',proj:'iso',dark:false,bg:'#efe9e1',bg2:'#e4ddd3',
-    floor:{wood:'#e7c9a6',tile:'#e9e6e1',carpet:'#d9d2e8',concrete:'#d8d4ce',none:'#ece6dd'},floorStyle:'pattern',
+    floor:{wood:'#e7c9a6',vinyl:'#d6b896',tile:'#e9e6e1',carpet:'#d9d2e8',concrete:'#d8d4ce',none:'#ece6dd'},floorStyle:'pattern',
     wall:{side:'#f6f2ec',side2:'#ddd4c8',top:'#ffffff',h:0.55,w:0.12},
     label:{font:'sans',c:'#3a332c',sub:'#7a6f63',chip:'rgba(255,255,255,.85)'},
-    light:'pool',lightBlend:'multiply',lightColor:'#ffb35c',heat:'pipes-soft',heatColor:'#f2836b',door:'gap',shadow:'soft'},
+    light:'pool',lightBlend:'multiply',lightColor:'#ffb35c',heat:'pipes-soft',heatColor:'#f2836b',door:'gap',shadow:'soft',
+    win:{glass:'#a9d2ec',open:'#22a699',blind:'#c9b49a',door:'#d9c3a5'}},
   neon:{mode:'plan',proj:'iso',dark:true,bg:'#05060a',
-    floor:{wood:'#0b0d14',tile:'#0b0d14',carpet:'#0b0d14',concrete:'#0b0d14',none:'#0b0d14'},floorStyle:'flat',
+    floor:{wood:'#0b0d14',vinyl:'#0b0d14',tile:'#0b0d14',carpet:'#0b0d14',concrete:'#0b0d14',none:'#0b0d14'},floorStyle:'flat',
     wall:{side:'rgba(80,120,255,.07)',side2:'rgba(80,120,255,.07)',top:'#5b7cff',h:0.5,w:0.12,edge:true},
     label:{font:'mono',c:'#d6e0ff',sub:'#7d8bbd',chip:'rgba(5,6,10,.8)'},
-    light:'edge',lightColor:'#ffcf7a',heat:'edge',heatColor:'#ff4d6d',door:'gap'},
+    light:'edge',lightColor:'#ffcf7a',heat:'edge',heatColor:'#ff4d6d',door:'gap',
+    win:{glass:'#5bd1ff',open:'#00ffc6',blind:'#7d8bbd',door:'#5b7cff'}},
   blueprint:{mode:'plan',proj:'top',dark:true,bg:'#0d3b66',
     floorStyle:'outline',line:'#e6f1ff',line2:'rgba(230,241,255,.35)',
     label:{font:'mono',c:'#e6f1ff',sub:'#9fc4ea',chip:'none'},
-    light:'hatch',lightColor:'#ffd166',heat:'dashed',heatColor:'#ff9f8a',door:'arc',dims:true},
+    light:'hatch',lightColor:'#ffd166',heat:'dashed',heatColor:'#ff9f8a',door:'arc',dims:true,
+    win:{glass:'#9fd3ff',open:'#ffd166',blind:'rgba(230,241,255,.7)',door:'#e6f1ff'}},
   thermal:{mode:'thermal',proj:'top',dark:true,bg:'#101317',line:'#101317',
     label:{font:'sans',c:'#ffffff',sub:'rgba(255,255,255,.8)',chip:'none'},
     range:[21,24],stops:[[38,70,83],[42,157,143],[233,196,106],[244,162,97],[231,111,81]],heat:'faint'},
@@ -432,9 +439,25 @@ const RFP_THEMES={
   sketch:{mode:'plan',proj:'top',dark:false,bg:'#f4eee2',
     floorStyle:'sketch',line:'#3b3227',line2:'rgba(59,50,39,.55)',
     label:{font:'hand',c:'#3b3227',sub:'#7a6a55',chip:'none',scale:1.45},
-    light:'scribble',lightColor:'#e9a23b',heat:'squiggle',heatColor:'#d1495b',door:'arc',rough:true,paper:true},
+    light:'scribble',lightColor:'#e9a23b',heat:'squiggle',heatColor:'#d1495b',door:'arc',rough:true,paper:true,
+    win:{glass:'#5d8fb3',open:'#2a9d8f',blind:'#8c7a5f',door:'#3b3227'}},
 };
 const RFP_THEME_NAMES=Object.keys(RFP_THEMES);
+// Floor materials (v6.49.0: + vinyl) and their patterns, in plan metres. `c` is the base colour —
+// the theme's floor.<material>, or a room's own floor_color.
+const RFP_FLOORS=['wood','vinyl','tile','carpet','concrete','none'];
+function rfpFloorPattern(pid,mat,c){
+  c=rfpEsc(c);
+  if(mat==='tile')return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="0.6" height="0.6"><rect width="0.6" height="0.6" fill="'+c+'"/><path d="M0 0H0.6M0 0V0.6" stroke="rgba(0,0,0,.14)" stroke-width="0.014"/></pattern>';
+  if(mat==='carpet')return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="0.12" height="0.12"><rect width="0.12" height="0.12" fill="'+c+'"/><circle cx="0.06" cy="0.06" r="0.012" fill="rgba(255,255,255,.06)"/></pattern>';
+  if(mat==='concrete')return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="0.5" height="0.5"><rect width="0.5" height="0.5" fill="'+c+'"/><circle cx="0.12" cy="0.2" r="0.01" fill="rgba(0,0,0,.18)"/><circle cx="0.37" cy="0.41" r="0.008" fill="rgba(255,255,255,.12)"/></pattern>';
+  if(mat==='vinyl')return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="1.2" height="0.44"><rect width="1.2" height="0.44" fill="'+c+'"/><path d="M0 0.22H1.2M0 0.44H1.2M0.8 0V0.22M0.2 0.22V0.44" stroke="rgba(0,0,0,.12)" stroke-width="0.008"/><path d="M0.1 0.07H0.7M0.5 0.31H1.1" stroke="rgba(255,255,255,.04)" stroke-width="0.05"/></pattern>';
+  return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="0.9" height="0.18"><rect width="0.9" height="0.18" fill="'+c+'"/><path d="M0 0.18H0.9M0.45 0V0.18" stroke="rgba(0,0,0,.28)" stroke-width="0.012"/><path d="M0 0.09H0.9" stroke="rgba(255,255,255,.05)" stroke-width="0.04"/></pattern>';
+}
+// Door / window colours (v6.49.0): glass, glass of an open window, the blind, a door leaf.
+function rfpWinT(T){const w=(T&&T.win)||{};return{glass:w.glass||'#8fc7ff',open:w.open||'#5eead4',blind:w.blind||'#c9b79c',door:w.door||'#8a6a4f'};}
+// contact-sensor states that mean open (binary_sensor on; a cover-like or text sensor open)
+const RFP_OPEN=['on','open','opening'];
 function rfpClone(o){return JSON.parse(JSON.stringify(o));}
 function rfpSetPath(o,path,v){
   const ks=String(path).split('.');let cur=o;
@@ -468,11 +491,11 @@ const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8
   +'.rfp-light{transition:opacity .8s ease}.rfp-ease{transition:fill .8s ease,stroke .8s ease}'
   +'.rfp-hit{cursor:pointer;-webkit-tap-highlight-color:transparent}.rfp-hit:focus{outline:none}'
   +'.rfp-pulse{animation:rfp-pulse 2.4s ease-in-out infinite}@keyframes rfp-pulse{0%,100%{opacity:.5}50%{opacity:1}}'
-  +'.rfp-person,.rfp-sig{transition:transform .6s ease,opacity .4s ease}'
+  +'.rfp-robot{transition:transform 1.2s linear,opacity .4s ease}'+'.rfp-person,.rfp-sig{transition:transform .6s ease,opacity .4s ease}'
   +'.rfp-ping{animation:rfp-ping 2.2s ease-out infinite;transform-box:fill-box;transform-origin:center}@keyframes rfp-ping{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2);opacity:0}}'
   +'.rfp-bob{animation:rfp-bob 1.4s ease-in-out infinite}@keyframes rfp-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}'
   +'.rfp-paused .rfp-flow,.rfp-paused .rfp-pulse,.rfp-paused .rfp-ping,.rfp-paused .rfp-bob{animation-play-state:paused}'
-  +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig{transition:none}}';
+  +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
 // Markers and labels on the plan (v6.48.0) are HTML over the SVG: they carry ha-icon.
 const RFP_ITEM_CSS='.rfp-items{position:absolute;inset:0;pointer-events:none;overflow:hidden;}'
   +'.rfp-it{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}'
@@ -541,12 +564,24 @@ class RfpView{
       const cr=link>=0?cardRooms[link]:null;
       const name=r.name||(cr&&cr.overview_tile&&cr.overview_tile.name)||(cr&&cr.name)||r.room||('#'+(i+1));
       const list=function(v){return(Array.isArray(v)?v:(v?[v]:[])).map(function(x){return x&&typeof x==='object'?String(x.entity||''):String(x);}).filter(Boolean);};
-      rooms.push({i:i,cfg:r,poly:poly,name:String(name),link:link,floor:r.floor||'wood',media:list(r.media),
+      const fc=typeof r.floor_color==='string'&&/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i.test(r.floor_color.trim())?r.floor_color.trim():'';
+      rooms.push({i:i,cfg:r,poly:poly,name:String(name),link:link,floor:RFP_FLOORS.indexOf(r.floor)>=0?r.floor:'wood',floorColor:fc,media:list(r.media),
         lights:list(r.lights),climate:r.climate?String(r.climate):'',temp:r.temperature?String(r.temperature):'',hum:r.humidity?String(r.humidity):'',
         pole:rfpPole(poly),bbox:rfpBBox(poly),area:Math.abs(rfpArea(poly))});
     });
-    const openings=(Array.isArray(fp.openings)?fp.openings:[]).filter(function(o){return o&&(o.type||'door')==='door';}).map(function(o,k){
-      const at=rfpPoly([o.at])[0];return at?{k:k,at:at,width:rfpNum(o.width)>0?rfpNum(o.width):0.8,cfg:o}:null;
+    // doors and (v6.49.0) windows: k = the index in floorplan.openings; u runs along the wall from the
+    // hinge, n points into the room the opening belongs to (mirror / outward flip them)
+    const polys=rooms.map(function(r){return r.poly;});
+    const openings=(Array.isArray(fp.openings)?fp.openings:[]).map(function(o,k){
+      if(!o||typeof o!=='object')return null;
+      const type=o.type==='window'?'window':(!o.type||o.type==='door'?'door':null);if(!type)return null;
+      const at=rfpPoly([o.at])[0];if(!at)return null;
+      const e=polys.length?rfpOpeningEdge(at,polys):null;
+      let u=e?e.u:[1,0],n=e?e.n:[0,1];
+      if(o.mirror)u=[-u[0],-u[1]];
+      if(o.outward)n=[-n[0],-n[1]];
+      return{k:k,type:type,at:at,width:rfpNum(o.width)>0?rfpNum(o.width):(type==='window'?1:0.8),cfg:o,u:u,n:n,
+        entity:o.entity?String(o.entity):'',cover:o.cover?String(o.cover):'',blind:['venetian','day_night'].indexOf(o.blind_type)>=0?o.blind_type:'roller'};
     }).filter(Boolean);
     // markers and labels placed on the plan (v6.48.0)
     const items=(Array.isArray(fp.items)?fp.items:[]).map(function(it,k){
@@ -559,7 +594,7 @@ class RfpView{
   // Which layers are drawn (floorplan.layers; all on by default)
   _layers(){
     const l=this.o.cfg&&this.o.cfg.layers&&typeof this.o.cfg.layers==='object'?this.o.cfg.layers:{};
-    const o={};['lights','heating','labels','presence','media','attention','vacuum','items'].forEach(function(k){o[k]=l[k]!==false;});
+    const o={};['lights','heating','labels','presence','media','attention','vacuum','items','openings'].forEach(function(k){o[k]=l[k]!==false;});
     return o;
   }
   // ---- static render ----
@@ -574,7 +609,7 @@ class RfpView{
     this.fx=q!=='low';
     const M=this.M=this._model();
     this.L=this._layers();
-    this._st={};this._nodes=null;this._pSig='';
+    this._st={};this._os={};this._og={};this._nodes=null;this._pSig='';
     if(!(W>2&&H>2)){this.svg.innerHTML='';this.items.innerHTML='';return;}
     this.svg.setAttribute('viewBox','0 0 '+rfpN(W)+' '+rfpN(H));
     const lang=this._lang();
@@ -589,9 +624,10 @@ class RfpView{
     // bigger, e.g. a long flat on a phone held upright
     const padB=T.mode==='thermal'?{l:pad,r:pad,t:pad,b:pad+44}:(T.dims?{l:pad+10,r:pad+36,t:pad+34,b:pad+10}:pad);
     let rot=rfpNum(fp.rotate);
-    if(!isFinite(rot)&&all.length){const s0=rfpFit(all,proj,0,W,H,padB,wallH).S,s9=rfpFit(all,proj,90,W,H,padB,wallH).S;rot=s9>s0*1.25?90:0;}
+    const mir=fp.mirror==='horizontal'||fp.mirror==='vertical'?fp.mirror:'';
+    if(!isFinite(rot)&&all.length){const s0=rfpFit(all,proj,0,W,H,padB,wallH,mir).S,s9=rfpFit(all,proj,90,W,H,padB,wallH,mir).S;rot=s9>s0*1.25?90:0;}
     this.rot=isFinite(rot)?rot:0;
-    const F=this.F=rfpFit(all.length?all:[[0,0],[10,5]],proj,this.rot,W,H,T.mode==='thermal'?{l:pad,r:pad,t:pad,b:pad+44}:(T.dims?{l:pad+10,r:pad+36,t:pad+34,b:pad+10}:pad),wallH);
+    const F=this.F=rfpFit(all.length?all:[[0,0],[10,5]],proj,this.rot,W,H,T.mode==='thermal'?{l:pad,r:pad,t:pad,b:pad+44}:(T.dims?{l:pad+10,r:pad+36,t:pad+34,b:pad+10}:pad),wallH,mir);
     const fs=Math.max(12,Math.min(17,F.S*0.26))*((T.label&&T.label.scale)||1);
     this.fs=fs;
     const mat='matrix('+[F.m[0],F.m[1],F.m[2],F.m[3],F.e,F.f].map(function(v){return+v.toFixed(5);}).join(' ')+')';
@@ -614,6 +650,7 @@ class RfpView{
       s+='<g transform="'+mat+'">';
       M.rooms.forEach(function(r,k){s+='<polygon class="rfp-hit" data-rfp-hit="'+k+'" points="'+rfpPts(r.poly)+'" fill="transparent"/>';});
       s+='</g>';
+      if(T.mode==='plan')s+=this._openingHits(M,F,wallH);
     }
     s+=this._personsSvg(T);
     s+='<g class="rfp-edit"></g>';
@@ -642,11 +679,13 @@ class RfpView{
     if(T.bg2)d+='<radialGradient id="'+id+'-bg" cx="50%" cy="40%" r="75%"><stop offset="0%" stop-color="'+T.bg2+'"/><stop offset="100%" stop-color="'+T.bg+'"/></radialGradient>';
     if(T.vignette)d+='<radialGradient id="'+id+'-vg" cx="50%" cy="45%" r="70%"><stop offset="60%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity=".35"/></radialGradient>';
     if(T.floorStyle==='pattern'){
-      d+='<pattern id="'+id+'-wood" patternUnits="userSpaceOnUse" width="0.9" height="0.18"><rect width="0.9" height="0.18" fill="'+fl.wood+'"/><path d="M0 0.18H0.9M0.45 0V0.18" stroke="rgba(0,0,0,.28)" stroke-width="0.012"/><path d="M0 0.09H0.9" stroke="rgba(255,255,255,.05)" stroke-width="0.04"/></pattern>'
-        +'<pattern id="'+id+'-tile" patternUnits="userSpaceOnUse" width="0.6" height="0.6"><rect width="0.6" height="0.6" fill="'+fl.tile+'"/><path d="M0 0H0.6M0 0V0.6" stroke="rgba(0,0,0,.14)" stroke-width="0.014"/></pattern>'
-        +'<pattern id="'+id+'-carpet" patternUnits="userSpaceOnUse" width="0.12" height="0.12"><rect width="0.12" height="0.12" fill="'+fl.carpet+'"/><circle cx="0.06" cy="0.06" r="0.012" fill="rgba(255,255,255,.06)"/></pattern>'
-        +'<pattern id="'+id+'-concrete" patternUnits="userSpaceOnUse" width="0.5" height="0.5"><rect width="0.5" height="0.5" fill="'+fl.concrete+'"/><circle cx="0.12" cy="0.2" r="0.01" fill="rgba(0,0,0,.18)"/><circle cx="0.37" cy="0.41" r="0.008" fill="rgba(255,255,255,.12)"/></pattern>';
+      RFP_FLOORS.forEach(function(mt){if(mt!=='none')d+=rfpFloorPattern(id+'-'+mt,mt,fl[mt]||fl.wood);});
+      // a room's own floor colour (v6.49.0): its own pattern
+      M.rooms.forEach(function(r,k){if(r.floorColor&&r.floor!=='none')d+=rfpFloorPattern(id+'-f'+k,r.floor,r.floorColor);});
     }
+    const WT=rfpWinT(T);
+    d+='<pattern id="'+id+'-ven" patternUnits="userSpaceOnUse" width="6" height="4"><rect width="6" height="4" fill="'+WT.blind+'" fill-opacity=".55"/><rect width="6" height="2.2" fill="'+WT.blind+'"/></pattern>'
+      +'<pattern id="'+id+'-dn" patternUnits="userSpaceOnUse" width="6" height="10"><rect width="6" height="10" fill="'+WT.blind+'" fill-opacity=".35"/><rect width="6" height="5" fill="'+WT.blind+'"/></pattern>';
     d+='<radialGradient id="'+id+'-mg"><stop offset="0%" stop-color="'+(T.mediaColor||'#8ecbff')+'" stop-opacity=".75"/><stop offset="100%" stop-color="'+(T.mediaColor||'#8ecbff')+'" stop-opacity="0"/></radialGradient>';
     if(T.light==='hatch')d+='<pattern id="'+id+'-hatch" patternUnits="userSpaceOnUse" width="0.18" height="0.18" patternTransform="rotate(45)"><path d="M0 0V0.18" stroke="'+(T.lightColor||'#ffd166')+'" stroke-width="0.03"/></pattern>';
     if(this.fx){
@@ -678,15 +717,17 @@ class RfpView{
     s+='<g'+(T.rough&&fx?' filter="url(#'+id+'-rough)"':'')+'><g transform="'+mat+'">';
     M.rooms.forEach(function(r,k){
       let fill='none',stroke='none';
-      const mat0=['wood','tile','carpet','concrete','none'].indexOf(r.floor)>=0?r.floor:'wood';
-      if(T.floorStyle==='pattern')fill=mat0==='none'?(T.floor.none||'#222'):'url(#'+id+'-'+mat0+')';
-      else if(T.floorStyle==='flat')fill=(T.floor&&T.floor[mat0])||'#111';
+      const mat0=r.floor;
+      if(T.floorStyle==='pattern')fill=mat0==='none'?(T.floor.none||'#222'):'url(#'+id+(r.floorColor?'-f'+k:'-'+mat0)+')';
+      else if(T.floorStyle==='flat')fill=r.floorColor||(T.floor&&(T.floor[mat0]||T.floor.wood))||'#111';
       else if(T.floorStyle==='outline'){stroke=T.line;}
       else if(T.floorStyle==='sketch')fill='rgba(255,255,255,.35)';
       s+='<polygon points="'+rfpPts(r.poly)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="0.03"/>';
       s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._heatSvg(T,r,k)+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
     });
     s+='</g></g>';
+    // the vacuum's trail while it cleans (v6.49.0), in plan metres
+    if(this.L.vacuum&&this._robots().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
     // walls
     const walls=[];M.rooms.forEach(function(r){rfpWallSegs(r.poly,M.openings).forEach(function(w){walls.push(w);});});
     if(proj==='top'){
@@ -695,19 +736,16 @@ class RfpView{
       s+='<g'+(T.rough&&fx?' filter="url(#'+id+'-rough)"':'')+'><g transform="'+mat+'" stroke="'+col+'" stroke-linecap="square">';
       walls.forEach(function(w){s+='<line x1="'+rfpN(w.a[0])+'" y1="'+rfpN(w.a[1])+'" x2="'+rfpN(w.b[0])+'" y2="'+rfpN(w.b[1])+'" stroke-width="'+ww+'"/>';});
       if(T.rough)walls.forEach(function(w){s+='<line x1="'+rfpN(w.a[0]+0.03)+'" y1="'+rfpN(w.a[1]+0.02)+'" x2="'+rfpN(w.b[0]-0.02)+'" y2="'+rfpN(w.b[1]+0.03)+'" stroke-width="0.02" opacity=".5"/>';});
-      if(T.door==='arc'){
-        const polys=M.rooms.map(function(r){return r.poly;});
-        M.openings.forEach(function(o){
-          const e=rfpOpeningEdge(o.at,polys);if(!e)return;
-          const w=o.width,h=[o.at[0]-e.u[0]*w/2,o.at[1]-e.u[1]*w/2],leaf=[h[0]+e.n[0]*w,h[1]+e.n[1]*w],end=[o.at[0]+e.u[0]*w/2,o.at[1]+e.u[1]*w/2];
-          const cr=e.u[0]*e.n[1]-e.u[1]*e.n[0];
-          s+='<path d="M'+rfpN(h[0])+' '+rfpN(h[1])+'L'+rfpN(leaf[0])+' '+rfpN(leaf[1])+'A'+rfpN(w)+' '+rfpN(w)+' 0 0 '+(cr>0?0:1)+' '+rfpN(end[0])+' '+rfpN(end[1])+'" fill="none" stroke="'+(T.line2||col)+'" stroke-width="0.02"/>';
-        });
-      }
+      s+=this._openingsTop(T,M,col,ww);
       s+='</g></g>';
     }else{
       const VD=rfpViewDir(F),wl=T.wall||{};
       const inAny=function(x,y){return M.rooms.some(function(r){return rfpInPoly(x,y,r.poly);});};
+      M.openings.forEach(function(o){
+        const w2=o.width/2,a=[o.at[0]-o.u[0]*w2,o.at[1]-o.u[1]*w2],b=[o.at[0]+o.u[0]*w2,o.at[1]+o.u[1]*w2];
+        if(o.type==='window')walls.push({a:a,b:b,win:o});
+        else if(self.L.openings&&o.entity)walls.push({a:a,b:b,door:o});
+      });
       walls.forEach(function(w){w.depth=((w.a[0]+w.b[0])/2)*VD[0]+((w.a[1]+w.b[1])/2)*VD[1];});
       walls.sort(function(a,b){return a.depth-b.depth;});
       const topW=Math.max(2,(wl.w||0.12)*F.S*0.55);
@@ -716,6 +754,7 @@ class RfpView{
         const mx=(w.a[0]+w.b[0])/2,my=(w.a[1]+w.b[1])/2,e=0.08;
         const front=inAny(mx-VD[0]*e,my-VD[1]*e)&&!inAny(mx+VD[0]*e,my+VD[1]*e);
         const h=front?wl.h*0.3:wl.h;
+        if(w.win||w.door){s+=self._openingFace(T,F,w,front,topW);return;}
         const A=rfpP(F,w.a[0],w.a[1],0),B=rfpP(F,w.b[0],w.b[1],0),C=rfpP(F,w.b[0],w.b[1],h),D=rfpP(F,w.a[0],w.a[1],h);
         const vert=Math.abs(w.a[0]-w.b[0])<Math.abs(w.a[1]-w.b[1]);
         s+='<polygon points="'+rfpPts([A,B,C,D])+'" fill="'+(vert?(wl.side2||wl.side):wl.side)+'"'+(wl.edge?' stroke="rgba(91,124,255,.35)" stroke-width="1"':'')+'/>';
@@ -724,11 +763,198 @@ class RfpView{
       });
       s+='</g>';
     }
+    s+=this._robotsSvg(T,F);
     if(T.dims)s+=this._dims(T,M,F);
     if(this.L.labels)s+=this._labels(T,M,F);
     if(T.paper&&fx)s+='<rect width="'+W+'" height="'+H+'" filter="url(#'+id+'-paper)" pointer-events="none"/>';
     if(T.vignette)s+='<rect width="'+W+'" height="'+H+'" fill="url(#'+id+'-vg)" pointer-events="none"/>';
     return s;
+  }
+  // ---- doors and windows (v6.49.0, V7_PLAN §6.5) ----
+  // Top view, in plan metres: a window is a frame with a pane line (its colour says open), an open
+  // casement and the blind on the room side; a door with a contact sensor gets a leaf that swings
+  // open, and its arc (blueprint, sketch) shows only while it is open.
+  _openingsTop(T,M,col,ww){
+    const WT=rfpWinT(T),L=this.L;let s='';
+    const ln=function(p,q,a){return'<line x1="'+rfpN(p[0])+'" y1="'+rfpN(p[1])+'" x2="'+rfpN(q[0])+'" y2="'+rfpN(q[1])+'" '+a+'/>';};
+    M.openings.forEach(function(o){
+      const w=o.width,u=o.u,n=o.n,k=o.k;
+      const a=[o.at[0]-u[0]*w/2,o.at[1]-u[1]*w/2],b=[o.at[0]+u[0]*w/2,o.at[1]+u[1]*w/2];
+      const off=function(p,d){return[p[0]+n[0]*d,p[1]+n[1]*d];};
+      const live=L.openings&&(o.entity||o.cover);
+      if(o.type==='window'){
+        const f=ww*0.42;
+        s+=ln(off(a,f),off(b,f),'stroke-width="'+rfpN(ww*0.16)+'"')+ln(off(a,-f),off(b,-f),'stroke-width="'+rfpN(ww*0.16)+'"');
+        s+=ln(a,b,'data-rfp-glass="'+k+'" data-rfp-ga="stroke" stroke="'+WT.glass+'" stroke-width="'+rfpN(ww*0.34)+'" stroke-linecap="butt"');
+        if(live&&o.entity){const c=Math.cos(0.7),sn=Math.sin(0.7),d=[u[0]*c+n[0]*sn,u[1]*c+n[1]*sn],l=w*0.5;
+          s+=ln(a,[a[0]+d[0]*l,a[1]+d[1]*l],'class="rfp-sig" data-rfp-pane="'+k+'" stroke="'+WT.open+'" stroke-width="'+rfpN(ww*0.22)+'" stroke-linecap="round" opacity="0"');}
+        if(live&&o.cover)s+=ln(off(a,ww*0.95),off(b,ww*0.95),'class="rfp-sig" data-rfp-blind="'+k+'" data-rfp-bk="line" stroke="'+WT.blind+'" stroke-width="'+rfpN(ww*0.4)+'" stroke-linecap="butt" opacity="0"'
+          +(o.blind==='venetian'?' stroke-dasharray="0.03 0.025"':(o.blind==='day_night'?' stroke-dasharray="0.1 0.05"':'')));
+        return;
+      }
+      // door
+      const leaf=off(a,w),cr=u[0]*n[1]-u[1]*n[0];
+      const arc='<path'+(live&&o.entity?' class="rfp-sig" data-rfp-arc="'+k+'"':'')+' d="M'+rfpN(a[0])+' '+rfpN(a[1])+'L'+rfpN(leaf[0])+' '+rfpN(leaf[1])+'A'+rfpN(w)+' '+rfpN(w)+' 0 0 '+(cr>0?0:1)+' '+rfpN(b[0])+' '+rfpN(b[1])+'" fill="none" stroke="'+(T.line2||col)+'" stroke-width="0.02"/>';
+      if(T.door==='arc')s+=arc;
+      if(live&&o.entity){
+        this._og[k]={hinge:a,shut:b,open:leaf};
+        s+=ln(a,leaf,'data-rfp-leaf="'+k+'" data-rfp-lk="line" stroke="'+WT.door+'" stroke-width="'+rfpN(ww*0.45)+'" stroke-linecap="round"');
+      }
+    },this);
+    return s;
+  }
+  // Projected views: a window is a wall face with a sill and glass; the blind comes down the glass
+  // from the top; a door with a contact sensor is a panel in the gap that swings into the room.
+  // Front walls are cut away to 30 %, so there only the sill's top edge shows the glass colour.
+  _openingFace(T,F,w,front,topW){
+    const WT=rfpWinT(T),wl=T.wall||{},id=this.uid,L=this.L;
+    const P=function(p,z){return rfpP(F,p[0],p[1],z);};
+    let s='';
+    if(w.win){
+      const o=w.win,k=o.k,h=front?wl.h*0.3:wl.h,sill=front?h:wl.h*0.38;
+      const vert=Math.abs(w.a[0]-w.b[0])<Math.abs(w.a[1]-w.b[1]);
+      const side=vert?(wl.side2||wl.side):wl.side;
+      s+='<polygon points="'+rfpPts([P(w.a,0),P(w.b,0),P(w.b,sill),P(w.a,sill)])+'" fill="'+side+'"/>';
+      if(front){
+        s+='<line x1="'+rfpN(P(w.a,sill)[0])+'" y1="'+rfpN(P(w.a,sill)[1])+'" x2="'+rfpN(P(w.b,sill)[0])+'" y2="'+rfpN(P(w.b,sill)[1])+'" data-rfp-glass="'+k+'" data-rfp-ga="stroke" stroke="'+WT.glass+'" stroke-width="'+rfpN(topW)+'" stroke-linecap="square"/>';
+        return s;
+      }
+      s+='<polygon points="'+rfpPts([P(w.a,sill),P(w.b,sill),P(w.b,h),P(w.a,h)])+'" data-rfp-glass="'+k+'" data-rfp-ga="fill" fill="'+WT.glass+'" fill-opacity=".55" stroke="'+(wl.top||'#888')+'" stroke-width="1"/>';
+      if(L.openings&&o.cover){
+        this._og[k]={a:w.a,b:w.b,z0:sill,z1:h};
+        s+='<polygon class="rfp-ease" data-rfp-blind="'+k+'" data-rfp-bk="quad" points="" fill="'+(o.blind==='roller'?WT.blind:'url(#'+id+(o.blind==='venetian'?'-ven':'-dn')+')')+'" stroke="'+WT.blind+'" stroke-width="0.5"/>';
+      }
+      s+='<line x1="'+rfpN(P(w.a,h)[0])+'" y1="'+rfpN(P(w.a,h)[1])+'" x2="'+rfpN(P(w.b,h)[0])+'" y2="'+rfpN(P(w.b,h)[1])+'" stroke="'+(wl.top||'#888')+'" stroke-width="'+rfpN(topW)+'" stroke-linecap="square"/>';
+      return s;
+    }
+    const o=w.door,k=o.k,hh=(front?wl.h*0.3:wl.h)*0.95;
+    this._og[k]={hinge:w.a,shut:w.b,open:[w.a[0]+o.n[0]*o.width,w.a[1]+o.n[1]*o.width],z:hh};
+    return'<polygon class="rfp-ease" data-rfp-leaf="'+k+'" data-rfp-lk="quad" points="" fill="'+WT.door+'" stroke="'+(wl.top||'#888')+'" stroke-width="1"/>';
+  }
+  // ---- the vacuum on the plan (v6.49.0, V7_PLAN §6.6 pulled forward) ----
+  // AnyVac map sensors in the frame the plan was imported from: their home-frame pixels become plan
+  // metres through source.origin_px / mm_per_px. A hand-drawn plan has no source → no robot.
+  _robots(){
+    const fp=this.o.cfg||{},src=fp.source&&typeof fp.source==='object'?fp.source:null;
+    if(!src||!Array.isArray(src.origin_px)||!(rfpNum(src.mm_per_px)>0))return[];
+    const S=(this.o.hass&&this.o.hass.states)||{},fr=src.frame?String(src.frame):'';
+    return this._anyvac().filter(function(id){
+      const a=S[id]&&S[id].attributes;if(!a||!a.vacuum_position_home_px)return false;
+      return!fr||!a.home_frame||String(a.home_frame.id||'')===fr;
+    });
+  }
+  _toPlan(p){
+    const src=this.o.cfg.source,k=rfpNum(src.mm_per_px)/1000,x=rfpNum(p&&p.x),y=rfpNum(p&&p.y);
+    return isFinite(x)&&isFinite(y)?[(x-rfpNum(src.origin_px[0]))*k,(y-rfpNum(src.origin_px[1]))*k]:null;
+  }
+  _robotsSvg(T,F){
+    if(!this.L.vacuum)return'';
+    const ids=this._robots();if(!ids.length)return'';
+    const r=Math.max(7,F.S*0.17);let s='<g pointer-events="none">';
+    ids.forEach(function(id,i){
+      s+='<g class="rfp-robot" data-rfp-robot="'+i+'" opacity="0" style="transform:translate(-100px,-100px)">'
+        +'<circle class="rfp-ping" r="'+rfpN(r)+'" fill="none" stroke="#03a9f4" stroke-width="2" data-rfp-rping="'+i+'" opacity="0"/>'
+        +'<g data-rfp-rhead="'+i+'"><circle r="'+rfpN(r)+'" fill="#f4f6f8" stroke="#03a9f4" stroke-width="2"/>'
+        +'<circle cx="'+rfpN(r*0.32)+'" r="'+rfpN(r*0.36)+'" fill="#cfd6de" stroke="rgba(0,0,0,.25)" stroke-width="1"/>'
+        +'<path d="M'+rfpN(r*0.72)+' 0L'+rfpN(r*0.38)+' '+rfpN(-r*0.3)+'V'+rfpN(r*0.3)+'Z" fill="#03a9f4"/></g></g>';
+    });
+    return s+'</g>';
+  }
+  _applyRobots(){
+    const N=this._nodes,F=this.F,self=this;if(!N||!N.robot||!Object.keys(N.robot).length)return;
+    const S=(this.o.hass&&this.o.hass.states)||{},ids=this._robots();
+    const P=function(p){return rfpP(F,p[0],p[1],0.03);};
+    ids.forEach(function(id,i){
+      const el=(N.robot[i]||[])[0];if(!el)return;
+      const a=S[id].attributes,p=self._toPlan(a.vacuum_position_home_px);
+      if(!p){el.setAttribute('opacity','0');return;}
+      const q=P(p),ang=rfpNum(a.vacuum_position_home_px.a);
+      let deg=0;
+      if(isFinite(ang)){const t=ang*Math.PI/180,q2=P([p[0]+Math.cos(t)*0.3,p[1]+Math.sin(t)*0.3]);deg=Math.atan2(q2[1]-q[1],q2[0]-q[0])*180/Math.PI;}
+      const tr='translate('+rfpN(q[0])+'px,'+rfpN(q[1])+'px)';
+      if(el.getAttribute('opacity')==='0'){el.style.transition='none';el.style.transform=tr;try{el.getBoundingClientRect();}catch(_){}el.style.transition='';}
+      else el.style.transform=tr;
+      (N.rhead[i]||[]).forEach(function(h){h.setAttribute('transform','rotate('+rfpN(deg)+')');});
+      const busy=!!a.in_cleaning;
+      (N.rping[i]||[]).forEach(function(c){c.setAttribute('opacity',busy?'1':'0');c.style.display=busy?'':'none';}); // the ping animates opacity: hide it outright
+      el.setAttribute('opacity',busy?'1':'0.85');
+    });
+    // the trail of the vacuums cleaning now (dry: a line, wet: the mop's band)
+    const tg=this.svg.querySelector('[data-rfp-trail]');if(!tg)return;
+    let sig='';const parts=[];
+    ids.forEach(function(id){
+      const a=S[id].attributes;if(!a.in_cleaning)return;
+      [['path_wet_home_px','wet'],['path_dry_home_px','dry']].forEach(function(x){
+        const segs=Array.isArray(a[x[0]])?a[x[0]]:[];
+        let n=0;segs.forEach(function(sg){n+=Array.isArray(sg)?sg.length:0;});
+        sig+=id+x[1]+n+';';parts.push({kind:x[1],segs:segs});
+      });
+    });
+    if(sig===this._trailSig)return;
+    this._trailSig=sig;
+    let h='';
+    parts.forEach(function(pt){
+      let d='';
+      pt.segs.forEach(function(sg){
+        if(!Array.isArray(sg))return;let last=null,first=true;
+        sg.forEach(function(v){
+          const p=self._toPlan(Array.isArray(v)?{x:v[0],y:v[1]}:v);if(!p)return;
+          if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])<0.05)return;
+          d+=(first?'M':'L')+rfpN(p[0])+' '+rfpN(p[1]);first=false;last=p;
+        });
+      });
+      if(d)h+=pt.kind==='wet'?'<path d="'+d+'" fill="none" stroke="#5eead4" stroke-opacity=".22" stroke-width="0.25" stroke-linecap="round" stroke-linejoin="round"/>'
+        :'<path d="'+d+'" fill="none" stroke="#8ecbff" stroke-opacity=".6" stroke-width="0.04" stroke-linecap="round" stroke-linejoin="round"/>';
+    });
+    tg.innerHTML=h;
+  }
+  // Tap targets over the openings that have something to show or do (screen px, over the rooms)
+  _openingHits(M,F,wallH){
+    if(!this.L.openings)return'';
+    let s='';
+    M.openings.forEach(function(o){
+      const c=o.cfg;if(!(o.entity||o.cover||c.tap_action||c.hold_action))return;
+      const w2=o.width/2,z=wallH*0.5;
+      const A=rfpP(F,o.at[0]-o.u[0]*w2,o.at[1]-o.u[1]*w2,z),B=rfpP(F,o.at[0]+o.u[0]*w2,o.at[1]+o.u[1]*w2,z);
+      s+='<line class="rfp-hit-o" data-rfp-open="'+o.k+'" x1="'+rfpN(A[0])+'" y1="'+rfpN(A[1])+'" x2="'+rfpN(B[0])+'" y2="'+rfpN(B[1])+'" stroke="transparent" stroke-width="'+rfpN(Math.max(18,F.S*0.3))+'" stroke-linecap="round"/>';
+    });
+    return s;
+  }
+  // Live state of the doors and windows: open (contact on), how far the blind is down (0–1)
+  _applyOpenings(force){
+    const N=this._nodes,M=this.M,self=this,F=this.F;
+    if(!N||!M||!this.L.openings)return;
+    const S=(this.o.hass&&this.o.hass.states)||{},WT=rfpWinT(this.T);
+    M.openings.forEach(function(o){
+      const k=o.k,es=o.entity?S[o.entity]:null,cs=o.cover?S[o.cover]:null;
+      const open=!!es&&RFP_OPEN.indexOf(String(es.state))>=0;
+      let c=-1;
+      if(cs){
+        let p=rfpNum((cs.attributes||{}).current_position);
+        if(!isFinite(p))p=cs.state==='closed'?0:(cs.state==='open'||cs.state==='opening'||cs.state==='closing'?100:NaN);
+        if(isFinite(p)){if(o.cfg.invert)p=100-p;c=1-Math.max(0,Math.min(100,p))/100;}
+      }
+      const sig=open+'|'+c;
+      if(!force&&self._os[k]===sig)return;
+      self._os[k]=sig;
+      (N.glass[k]||[]).forEach(function(el){el.setAttribute(el.getAttribute('data-rfp-ga')||'stroke',open?WT.open:WT.glass);});
+      (N.pane[k]||[]).forEach(function(el){el.setAttribute('opacity',open?'1':'0');});
+      (N.arc[k]||[]).forEach(function(el){el.setAttribute('opacity',open?'1':'0');});
+      (N.blind[k]||[]).forEach(function(el){
+        if(el.getAttribute('data-rfp-bk')==='quad'){
+          const g=self._og[k];if(!g)return;
+          if(!(c>0.005)){el.setAttribute('points','');return;}
+          const zc=g.z1-c*(g.z1-g.z0);
+          el.setAttribute('points',rfpPts([rfpP(F,g.a[0],g.a[1],g.z1),rfpP(F,g.b[0],g.b[1],g.z1),rfpP(F,g.b[0],g.b[1],zc),rfpP(F,g.a[0],g.a[1],zc)]));
+        }else el.setAttribute('opacity',c>0.005?rfpN(0.3+0.7*c):'0');
+      });
+      (N.leaf[k]||[]).forEach(function(el){
+        const g=self._og[k];if(!g)return;
+        const e=open?g.open:g.shut;
+        if(el.getAttribute('data-rfp-lk')==='quad')el.setAttribute('points',rfpPts([rfpP(F,g.hinge[0],g.hinge[1],0),rfpP(F,e[0],e[1],0),rfpP(F,e[0],e[1],g.z),rfpP(F,g.hinge[0],g.hinge[1],g.z)]));
+        else{el.setAttribute('x2',rfpN(e[0]));el.setAttribute('y2',rfpN(e[1]));}
+      });
+    });
   }
   _mediaSvg(r,k){
     if(!r.media.length||!this.L.media)return'';
@@ -954,7 +1180,10 @@ class RfpView{
       cbg:by(q('[data-rfp-cbg]'),'data-rfp-cbg'),cv:by(q('[data-rfp-cv]'),'data-rfp-cv'),
       media:by(q('[data-rfp-media]'),'data-rfp-media'),mglow:by(q('[data-rfp-mglow]'),'data-rfp-mglow'),
       att:by(q('[data-rfp-att]'),'data-rfp-att'),attn:by(q('[data-rfp-attn]'),'data-rfp-attn'),vac:by(q('[data-rfp-vac]'),'data-rfp-vac'),
-      person:by(q('[data-rfp-person]'),'data-rfp-person'),pinit:by(q('[data-rfp-pinit]'),'data-rfp-pinit'),
+      person:by(q('[data-rfp-person]'),'data-rfp-person'),
+      glass:by(q('[data-rfp-glass]'),'data-rfp-glass'),pane:by(q('[data-rfp-pane]'),'data-rfp-pane'),blind:by(q('[data-rfp-blind]'),'data-rfp-blind'),
+      leaf:by(q('[data-rfp-leaf]'),'data-rfp-leaf'),arc:by(q('[data-rfp-arc]'),'data-rfp-arc'),
+      robot:by(q('[data-rfp-robot]'),'data-rfp-robot'),rhead:by(q('[data-rfp-rhead]'),'data-rfp-rhead'),rping:by(q('[data-rfp-rping]'),'data-rfp-rping'),pinit:by(q('[data-rfp-pinit]'),'data-rfp-pinit'),
       item:[].slice.call(this.items.querySelectorAll('[data-rfp-item]')),
     };
   }
@@ -1084,6 +1313,9 @@ class RfpView{
         set(N.cv['heat:'+k],function(el){el.textContent=st.heat==='heat'?rfpT(lang,'heating'):(st.heat==='off'?rfpT(lang,'off'):rfpT(lang,'idle'));el.setAttribute('fill',st.heat==='heat'?tt.heatInk:tt.ink);});
       }
     });
+    this._applyOpenings(force);
+    if(force)this._trailSig=null;
+    this._applyRobots();
     this._applyPersons(SG);
     this._applyItems();
   }
@@ -1126,7 +1358,7 @@ class RfpView{
     const target=function(e){
       let n=e.target,g=0;
       while(n&&n!==sv&&g++<8){
-        if(n.getAttribute){const c=n.getAttribute('data-rfp-ctl');if(c)return{ctl:c};const it=n.getAttribute('data-rfp-item');if(it!=null)return{item:+it};const h=n.getAttribute('data-rfp-hit');if(h!=null)return{room:+h};}
+        if(n.getAttribute){const c=n.getAttribute('data-rfp-ctl');if(c)return{ctl:c};const it=n.getAttribute('data-rfp-item');if(it!=null)return{item:+it};const op=n.getAttribute('data-rfp-open');if(op!=null)return{open:+op};const h=n.getAttribute('data-rfp-hit');if(h!=null)return{room:+h};}
         n=n.parentNode;
       }
       return null;
@@ -1136,7 +1368,7 @@ class RfpView{
       const t=target(e);if(!t)return;
       down={t:t,x:e.clientX,y:e.clientY,held:false};
       clearTimeout(self._holdT);
-      if(t.room!=null||t.item!=null)self._holdT=setTimeout(function(){if(down){down.held=true;self._act(t,'hold');}},550);
+      if(t.room!=null||t.item!=null||t.open!=null)self._holdT=setTimeout(function(){if(down){down.held=true;self._act(t,'hold');}},550);
     });
     sv.addEventListener('pointermove',function(e){if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>10){clearTimeout(self._holdT);down=null;}});
     const cancel=function(){clearTimeout(self._holdT);down=null;};
@@ -1145,7 +1377,7 @@ class RfpView{
       clearTimeout(self._holdT);
       if(!down||!self.o.interactive)return;
       const d=down;down=null;if(d.held)return;
-      const t=target(e);if(!t||t.room!==d.t.room||t.ctl!==d.t.ctl||t.item!==d.t.item)return;
+      const t=target(e);if(!t||t.room!==d.t.room||t.ctl!==d.t.ctl||t.item!==d.t.item||t.open!==d.t.open)return;
       self._act(t,'tap',e);
     });
   }
@@ -1171,6 +1403,10 @@ class RfpView{
       const c=it.cfg,d=it.entity.split('.')[0];
       if(kind==='tap')a=c.tap_action||(it.entity?(RFP_TOGGLE.indexOf(d)>=0?{action:'toggle',entity:it.entity}:{action:'more-info',entity:it.entity}):null);
       else a=c.hold_action||(it.entity?{action:'more-info',entity:it.entity}:null);
+    }else if(t.open!=null){
+      const o=M.openings.find(function(x){return x.k===t.open;});if(!o)return;
+      const c=o.cfg,mi=function(e){return e?{action:'more-info',entity:e}:null;};
+      a=kind==='tap'?(c.tap_action||mi(o.cover)||mi(o.entity)):(c.hold_action||mi(o.entity)||mi(o.cover));
     }else if(t.ctl){
       const p=t.ctl.split(':'),r=M.rooms[+p[1]];if(!r)return;
       if(p[0]==='light')a={action:'perform-action',perform_action:'homeassistant.toggle',target:{entity_id:r.lights.length===1?r.lights[0]:r.lights.slice()}};

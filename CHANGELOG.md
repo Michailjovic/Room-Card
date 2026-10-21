@@ -1,5 +1,52 @@
 # Changelog
 
+## [6.49.0] - unreleased
+
+### Doors and windows on the floor plan (V7_PLAN.md Phase 7)
+
+- **Windows.** `openings` takes `type: window`: a frame with glass in the wall (from above), or a
+  window with a sill on the wall face in the 3D themes. Default width 1 m.
+- **Open or closed, live:**
+  - `entity`: a contact sensor. An open window's glass turns the theme's "open" colour, and from
+    above its casement swings in;
+  - a door with a contact sensor gets a leaf that swings open and shut (in blueprint / sketch its
+    arc shows only while it is open). A door without a sensor stays a gap, as before.
+- **Blinds** (`cover`): the blind comes down the glass by the cover's `current_position`
+  (from above: a band on the room side, stronger the further it is down). `blind_type`:
+  `roller`, `venetian` (slats), `day_night` (bands); `invert` for a motor that counts the other way.
+- **Doors:** `mirror` puts the hinge at the other end, `outward` opens the door to the other side.
+- **Tap a window** → more-info of its blind (else its sensor); **hold** → more-info of the sensor;
+  `tap_action` / `hold_action` override. Only openings with a sensor, a blind or an action take
+  taps; the rest of the wall still opens the room.
+- **Layer** `openings` (on by default): off draws plain windows and watches nothing.
+- **Theme tokens** `win.glass`, `win.open`, `win.blind`, `win.door` per theme, overridable.
+- **Studio:**
+  - a **Window** tool next to Door. A new window gets the room's unused window sensor
+    (device class `window`) and blind from its Home Assistant area. Doors get no guess, because
+    appliance doors (dishwasher, oven, fridge) have the same device class;
+  - Properties for a door / window: type, width, sensor, blind, blind type, invert, mirror,
+    outward, actions; the outline lists *Doors and windows*;
+  - **Propose doors** and the AnyVac re-import keep the windows, and keep an existing door (with
+    its sensor and flips) where a proposed one lands within 0.6 m.
+- The `thermal` and `tiles` themes draw no openings.
+
+### Floor coverings per room
+
+- New material **`vinyl`** (long low-contrast planks), next to wood, tile, carpet and concrete.
+- **`floor_color`** gives one plan room its own floor colour on top of the material's texture
+  (e.g. brown vinyl in the kitchen); in `neon` it is the room's flat colour. Studio: Properties →
+  Floor color next to Floor.
+
+### The vacuum on the plan, mirror (pulled forward from Phase 8)
+
+- **The robot where it is.** On a plan imported from AnyVac each vacuum in the same home frame is
+  drawn at its live position (`vacuum_position_home_px`), turned the way it faces and gliding as
+  it moves. While it cleans it gets a pulsing ring and the trail of this run (dry line, wet mop
+  band). Docked, it waits at the dock, slightly dimmed. Part of the `vacuum` layer.
+- **`mirror: horizontal | vertical`** flips the drawing of a plan whose vacuum map shows the home
+  mirrored. Only the drawing flips: the stored coordinates stay the vacuum's, so the robot, a
+  re-import and the studio keep working. Combines with `rotate`.
+
 ## [6.48.0] - unreleased
 
 ### Relationships across rooms (V7_PLAN.md Phase 6, OVERVIEW_PLAN.md §9)

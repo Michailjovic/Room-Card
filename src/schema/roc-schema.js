@@ -186,17 +186,17 @@ const S={
   ovChip:{keys:{entity:{t:'entity'},icon:{t:'str'},active_state:{t:'any'},tap_action:{t:'action'},hold_action:{t:'action'}},scalar:'entity'},
   // ---------------------------------------------------------------- floor plan page (v6.47.0, V7_PLAN §6)
   floorplan:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
-    rotate:{t:'num|enum:auto',d:'auto'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
+    rotate:{t:'num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical',d:'none',since:'6.49.0'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},
     source:{t:'obj:fpSource'},trace:{t:'obj:fpTrace'},rooms:{t:'list:fpRoom'},openings:{t:'list:fpOpening'},
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
-    rotate:{t:'num|enum:auto',d:'auto'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
+    rotate:{t:'num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'}},hide:['rooms','openings','source','items']},
   fpLayers:{keys:{lights:{t:'bool',d:true},heating:{t:'bool',d:true},labels:{t:'bool',d:true},presence:{t:'bool',d:true},media:{t:'bool',d:true},
-    attention:{t:'bool',d:true},vacuum:{t:'bool',d:true},items:{t:'bool',d:true}}},
+    attention:{t:'bool',d:true},vacuum:{t:'bool',d:true},items:{t:'bool',d:true},openings:{t:'bool',d:true,since:'6.49.0'}}},
   fpEntity:{keys:{entity:{t:'entity'}},scalar:'entity'},
   // a marker (icon chip) or a text label placed on the plan (v6.48.0)
   fpItem:{keys:{type:{t:'enum:marker|label',d:'marker'},at:{t:'list:num'},entity:{t:'entity'},attribute:{t:'str'},icon:{t:'str'},name:{t:'str'},
@@ -206,11 +206,13 @@ const S={
   fpWall:{keys:{height:{t:'num'}}},
   fpSource:{keys:{anyvac:{t:'entity'},frame:{t:'str'},imported:{t:'str'},origin_px:{t:'list:num'},mm_per_px:{t:'num'}}},
   fpTrace:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},opacity:{t:'num'}}},
-  fpRoom:{keys:{room:{t:'str'},name:{t:'str'},polygon:{t:'list:any'},floor:{t:'enum:wood|tile|carpet|concrete|none',d:'wood'},anyvac_room:{t:'str'},
+  fpRoom:{keys:{room:{t:'str'},name:{t:'str'},polygon:{t:'list:any'},floor:{t:'enum:wood|vinyl|tile|carpet|concrete|none',d:'wood'},floor_color:{t:'color',since:'6.49.0'},anyvac_room:{t:'str'},
     lights:{t:'entity|list:fpLight'},climate:{t:'entity'},temperature:{t:'entity'},humidity:{t:'entity'},media:{t:'entity|list:fpEntity',since:'6.48.0'},
     tap_action:{t:'action'},hold_action:{t:'action'}}},
   fpLight:{keys:{entity:{t:'entity'}},scalar:'entity'},
-  fpOpening:{keys:{type:{t:'enum:door',d:'door'},at:{t:'list:num'},width:{t:'num',d:0.8}}},
+  fpOpening:{keys:{type:{t:'enum:door|window',d:'door'},at:{t:'list:num'},width:{t:'num',d:0.8},
+    entity:{t:'entity',since:'6.49.0'},cover:{t:'entity',since:'6.49.0'},blind_type:{t:'enum:roller|venetian|day_night',d:'roller',since:'6.49.0'},invert:{t:'bool',since:'6.49.0'},
+    mirror:{t:'bool',since:'6.49.0'},outward:{t:'bool',since:'6.49.0'},tap_action:{t:'action',since:'6.49.0'},hold_action:{t:'action',since:'6.49.0'}}},
 };
 
 // ---- validator ----------------------------------------------------------------

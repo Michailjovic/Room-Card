@@ -174,6 +174,29 @@ test('markers and people (v6.48.0): a marker taps its light; studio places, drag
   expect((await fpc(page)).items.length).toBe(3);
 });
 
+test('doors and windows (v6.49.0): tap a window opens its blind; the studio places a window with the room\'s sensors',async({page})=>{
+  await page.goto(base+'/?openings=1');await plan(page);
+  // the open living room window, its blind 60 % down, the open door's panel
+  const st=await page.evaluate(()=>{const S=window.__h.card.shadowRoot;const g=S.querySelector('[data-rfp-glass="4"]'),b=S.querySelector('[data-rfp-blind="4"]'),l=S.querySelector('[data-rfp-leaf="2"]');
+    const bb=b.getBoundingClientRect(),gb=g.getBoundingClientRect();return{open:g.getAttribute('fill'),blind:bb.height>2&&bb.height<gb.height,leaf:!!l&&l.getBoundingClientRect().width>2};});
+  expect(st).toEqual({open:'#5eead4',blind:true,leaf:true});
+  await page.evaluate(()=>{window.__more.length=0;});
+  const at=await page.evaluate(()=>{const S=window.__h.card.shadowRoot;const h=S.querySelector('[data-rfp-open="4"]');const r=h.getBoundingClientRect();const x=r.left+r.width/2,y=r.top+r.height/2;const e=S.elementFromPoint(x,y);return{x,y,top:e&&e.getAttribute('data-rfp-open')};});
+  expect(at.top).toBe('4'); // nothing covers the window's target
+  await page.mouse.click(at.x,at.y);
+  expect(await page.evaluate(()=>[window.__more.slice(),window.__h.card._roomIdx])).toEqual([['cover.lr_blind'],0]);
+  // studio: the window tool on the bedroom's top wall → the bedroom's unused contact and blind
+  await openStudio(page);
+  await page.evaluate(SG=>eval(SG)._fpTool('window'),SG);
+  const q=await ptStudio(page,13.1,0.3);await page.mouse.click(q.x,q.y);
+  const f=await fpc(page);
+  const w=f.openings[f.openings.length-1];
+  expect([w.type,w.width,w.at[1],w.entity,w.cover]).toEqual(['window',1,0.25,'binary_sensor.bed_window','cover.bed_blind2']);
+  expect(await page.evaluate(SG=>[eval(SG)._propsTarget().kind,eval(SG)._propsPane.querySelector('.pf-title').textContent],SG)).toEqual(['fpdoor','Window 5']);
+  await page.keyboard.press('Delete');
+  expect((await fpc(page)).openings.length).toBe(f.openings.length-1);
+});
+
 test('studio: import an empty floor plan from the AnyVac map',async({page})=>{
   await page.goto(base+'/?empty=1');
   await page.waitForFunction(()=>window.__h&&window.__h.card._fpInst);

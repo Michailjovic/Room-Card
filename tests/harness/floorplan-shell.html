@@ -62,6 +62,17 @@ const plan={theme:q.get('theme')||'night',rooms:[
   {room:'bedroom',polygon:C.Bedroom,floor:'carpet',lights:'light.bed',climate:'climate.bed',humidity:'sensor.bedroom_h_humidity',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_20'}],
   openings:[{type:'door',at:[11.93,1.48],width:0.8},{type:'door',at:[8.65,2.3],width:0.8},{type:'door',at:[5.98,2.25],width:0.8},{type:'door',at:[7.03,2.8],width:0.8}]};
 const fp=q.get('empty')?{theme:'night'}:plan;
+// v6.49.0: windows with blinds and a door with a contact sensor (?openings=1)
+if(q.get('openings')){plan.openings[2].entity='binary_sensor.lr_door';plan.openings.push({type:'window',at:[2.5,0.4],width:1.4,entity:'binary_sensor.lr_window',cover:'cover.lr_blind'},{type:'window',at:[14,0.25],width:1.2,cover:'cover.bed_blind',blind_type:'venetian'},{type:'window',at:[10.1,0],width:1,cover:'cover.k_blind',blind_type:'day_night'},{type:'window',at:[2.6,4.55],width:1.4,entity:'binary_sensor.lr_window2'});
+  Object.assign(states,{'binary_sensor.lr_door':{state:'on',attributes:{device_class:'door',friendly_name:'Living door'}},'binary_sensor.lr_window':{state:'on',attributes:{device_class:'window',friendly_name:'Living window'}},'binary_sensor.lr_window2':{state:'off',attributes:{device_class:'window'}},
+    'cover.lr_blind':{state:'open',attributes:{current_position:40,friendly_name:'Living blind'}},'cover.bed_blind':{state:'open',attributes:{current_position:20}},'cover.k_blind':{state:'open',attributes:{current_position:60}},
+    'binary_sensor.bed_window':{state:'off',attributes:{device_class:'window'}},'cover.bed_blind2':{state:'closed',attributes:{current_position:0}}});
+  Object.assign(entities,{'binary_sensor.bed_window':ent('bedroom'),'cover.bed_blind':ent('bedroom'),'cover.bed_blind2':ent('bedroom')});}
+// v6.49.0: the vacuum on the plan (?robot=1 docked, ?robot=2 cleaning the kitchen)
+if(q.get('robot')){const av=JSON.parse(JSON.stringify(data.anyvac));plan.source={anyvac:'sensor.kitchen_s8_anyvac_map',frame:String((av.attributes.home_frame||{}).id||''),origin_px:[800,752],mm_per_px:12.5};
+  Object.assign(av.attributes,{vacuum_position_home_px:q.get('robot')==='2'?{x:1500,y:900,a:200}:{x:1577.9,y:1078.2,a:270},charger_home_px:{x:1578.1,y:1092.2,a:269},in_cleaning:q.get('robot')==='2',vacuum_room_name:'Kitchen',
+    path_wet_home_px:q.get('robot')==='2'?[[{x:1577,y:1078},{x:1577,y:1000},{x:1450,y:1000},{x:1450,y:950},{x:1600,y:950},{x:1600,y:900},{x:1500,y:900}]]:[],path_dry_home_px:[]});
+  states['sensor.kitchen_s8_anyvac_map']=av;}
 // v6.48.0: markers, a label and a person on the plan (?items=1)
 if(q.get('items')){plan.items=[{entity:'light.hall',at:[7.3,2.0]},{type:'label',entity:'sensor.hall_h_temperature',at:[7.4,3.3],suffix:'°'}];plan.presence='sensor.michael_area';states['sensor.michael_area']={state:'kitchen',attributes:{friendly_name:'Michael'}};}
 const rooms=[{id:'plan',name:'Floor plan',icon:'mdi:floor-plan',floorplan:fp}].concat(

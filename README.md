@@ -37,7 +37,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Camera & weather** | Live camera snapshot as the base layer; animated rain/snow overlay |
 | **Multi-room** | One card for the whole home — define rooms, swipe & presence-follow |
 | **Overview page** | Every room on one screen as a live tile with state chips, plus your header (ticker, pills), weather/calendar cards and a dock of section launchers; tap a tile and the room zooms open. Photo tiles or list rows on phones |
-| **Floor plan page** | Your home as a live vector plan — imported from the robot vacuum's map (AnyVac) or drawn in the studio; lit rooms glow, floor heating flows, temperature and humidity on every room; who is where, what plays, the vacuum and running appliances, any entity as a marker; seven themes from a night cut-away to a blueprint; tap a room and it zooms open |
+| **Floor plan page** | Your home as a live vector plan — imported from the robot vacuum's map (AnyVac) or drawn in the studio; lit rooms glow, floor heating flows, temperature and humidity on every room; open windows, blinds and doors, who is where, what plays, the vacuum and running appliances, any entity as a marker; seven themes from a night cut-away to a blueprint; tap a room and it zooms open |
 | **Auto navigation menu** | The room switcher (thumbnails / tabs / dots) is generated automatically from your rooms — you never build the menu by hand |
 | **Hold feedback** | A progress ring fills and turns green when a hold gesture registers |
 | **Tabbed GUI editor** | Build everything visually — drag, resize, reorder — without writing YAML |
@@ -142,7 +142,8 @@ One more page that draws your home as a **plan**: floors, walls and doors, every
 temperature and humidity. Tap a room and it zooms open; hold it to switch its lights.
 Since v6.48.0 it also shows **across rooms** who is where, what plays, the room the vacuum is
 cleaning and running appliances, plus any entity as a **marker** — and the overview page can show
-the same signals on its tiles.
+the same signals on its tiles. Since v6.49.0 windows sit on the walls: open ones light up, blinds
+come down by their position, doors with a contact sensor swing open.
 
 - **From your robot vacuum:** in Room Card Studio, *Add a floor plan page* → **AnyVac** reads the
   room outlines from the vacuum's map, straightens the walls, links each room to your card's

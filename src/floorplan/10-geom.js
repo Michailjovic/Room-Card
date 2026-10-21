@@ -106,10 +106,13 @@ const RFP_PROJ={
 function rfpMul(a,b){return[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3]];}
 // The affine map for a plan: projection × rotation, scaled and centred into W×H minus padding.
 // pts: every floor point; zTop: wall height (raised corners count for the fit).
-function rfpFit(pts,proj,rotDeg,W,H,pad,zTop){
+// mirror (v6.49.0): 'horizontal' flips x, 'vertical' flips y — before the rotation, so the plan's
+// own coordinates (and everything stored in them) stay as the vacuum mapped them.
+function rfpFit(pts,proj,rotDeg,W,H,pad,zTop,mirror){
   const P=RFP_PROJ[proj]||RFP_PROJ.top;
   const r=(rfpNum(rotDeg)||0)*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
-  const m=rfpMul(P.m,[c,s,-s,c]);
+  const mr=mirror==='horizontal'?[-1,0,0,1]:(mirror==='vertical'?[1,0,0,-1]:[1,0,0,1]);
+  const m=rfpMul(P.m,rfpMul([c,s,-s,c],mr));
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
   for(const q of pts){
     const sx=m[0]*q[0]+m[2]*q[1],sy=m[1]*q[0]+m[3]*q[1];

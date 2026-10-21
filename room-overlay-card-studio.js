@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.48.0';
+const ROC_STUDIO_VERSION='6.49.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -242,17 +242,17 @@ const S={
   ovChip:{keys:{entity:{t:'entity'},icon:{t:'str'},active_state:{t:'any'},tap_action:{t:'action'},hold_action:{t:'action'}},scalar:'entity'},
   // ---------------------------------------------------------------- floor plan page (v6.47.0, V7_PLAN §6)
   floorplan:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
-    rotate:{t:'num|enum:auto',d:'auto'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
+    rotate:{t:'num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical',d:'none',since:'6.49.0'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},
     source:{t:'obj:fpSource'},trace:{t:'obj:fpTrace'},rooms:{t:'list:fpRoom'},openings:{t:'list:fpOpening'},
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
-    rotate:{t:'num|enum:auto',d:'auto'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
+    rotate:{t:'num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'}},hide:['rooms','openings','source','items']},
   fpLayers:{keys:{lights:{t:'bool',d:true},heating:{t:'bool',d:true},labels:{t:'bool',d:true},presence:{t:'bool',d:true},media:{t:'bool',d:true},
-    attention:{t:'bool',d:true},vacuum:{t:'bool',d:true},items:{t:'bool',d:true}}},
+    attention:{t:'bool',d:true},vacuum:{t:'bool',d:true},items:{t:'bool',d:true},openings:{t:'bool',d:true,since:'6.49.0'}}},
   fpEntity:{keys:{entity:{t:'entity'}},scalar:'entity'},
   // a marker (icon chip) or a text label placed on the plan (v6.48.0)
   fpItem:{keys:{type:{t:'enum:marker|label',d:'marker'},at:{t:'list:num'},entity:{t:'entity'},attribute:{t:'str'},icon:{t:'str'},name:{t:'str'},
@@ -262,11 +262,13 @@ const S={
   fpWall:{keys:{height:{t:'num'}}},
   fpSource:{keys:{anyvac:{t:'entity'},frame:{t:'str'},imported:{t:'str'},origin_px:{t:'list:num'},mm_per_px:{t:'num'}}},
   fpTrace:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},opacity:{t:'num'}}},
-  fpRoom:{keys:{room:{t:'str'},name:{t:'str'},polygon:{t:'list:any'},floor:{t:'enum:wood|tile|carpet|concrete|none',d:'wood'},anyvac_room:{t:'str'},
+  fpRoom:{keys:{room:{t:'str'},name:{t:'str'},polygon:{t:'list:any'},floor:{t:'enum:wood|vinyl|tile|carpet|concrete|none',d:'wood'},floor_color:{t:'color',since:'6.49.0'},anyvac_room:{t:'str'},
     lights:{t:'entity|list:fpLight'},climate:{t:'entity'},temperature:{t:'entity'},humidity:{t:'entity'},media:{t:'entity|list:fpEntity',since:'6.48.0'},
     tap_action:{t:'action'},hold_action:{t:'action'}}},
   fpLight:{keys:{entity:{t:'entity'}},scalar:'entity'},
-  fpOpening:{keys:{type:{t:'enum:door',d:'door'},at:{t:'list:num'},width:{t:'num',d:0.8}}},
+  fpOpening:{keys:{type:{t:'enum:door|window',d:'door'},at:{t:'list:num'},width:{t:'num',d:0.8},
+    entity:{t:'entity',since:'6.49.0'},cover:{t:'entity',since:'6.49.0'},blind_type:{t:'enum:roller|venetian|day_night',d:'roller',since:'6.49.0'},invert:{t:'bool',since:'6.49.0'},
+    mirror:{t:'bool',since:'6.49.0'},outward:{t:'bool',since:'6.49.0'},tap_action:{t:'action',since:'6.49.0'},hold_action:{t:'action',since:'6.49.0'}}},
 };
 
 // ---- validator ----------------------------------------------------------------
@@ -457,12 +459,13 @@ const ROC_STUDIO_STR={en:{
   // v6.47.0 — the floor plan page
   ok:'OK',fp_add:'Add a floor plan page',fp_add_btn:'Add a floor plan page',fp_page_name:'Floor plan',
   fp_add_norooms:'A floor plan page is one of the card\'s rooms. This card has a single room — add rooms first (the wizard creates them from your Home Assistant areas).',
-  fp_tools:'Floor plan tools',fp_tool_select:'Select and move (rooms, corners, doors)',fp_tool_rect:'Draw a rectangular room',fp_tool_poly:'Draw a room corner by corner',fp_tool_marker:'Place a marker or a label (any entity)',fp_tool_door:'Place a door on a wall',
+  fp_tools:'Floor plan tools',fp_tool_select:'Select and move (rooms, corners, doors, windows, markers)',fp_tool_rect:'Draw a rectangular room',fp_tool_poly:'Draw a room corner by corner',fp_tool_marker:'Place a marker or a label (any entity)',fp_tool_window:'Place a window',fp_tool_door:'Place a door on a wall',
   fp_import:'Import the rooms from an AnyVac vacuum map',fp_import_l:'AnyVac',fp_trace:'Trace over a floor plan image',fp_trace_l:'Image',
   fp_doors:'Propose doors where rooms touch',fp_doors_l:'Doors',fp_delete:'Delete the selection (Del)',fp_delete_l:'',
   fp_hint_select:'Click a room to select it, drag it to move. Drag a corner; a dot in the middle of a wall adds one. Alt = no snapping.',
   fp_hint_rect:'Drag a rectangle on the plan.',fp_hint_poly:'Click the corners; click the first one (or double-click) to close the room. Esc cancels.',
-  fp_hint_door:'Click a wall to place a door.',fp_hint_marker:'Click where the marker goes, then pick its entity in Properties.',
+  fp_hint_door:'Click a wall to place a door.',fp_hint_marker:'Click where the marker goes, then pick its entity in Properties.',fp_hint_window:'Click a wall to place a window.',
+  fp_window_n:'Window {n}',t_fpwindow:'Window',fp_openings_h:'Doors and windows',
   fp_items_h:'Markers and labels',fp_marker:'Marker',fp_label:'Label',fp_marker_n:'Marker {n}',fp_label_n:'Label {n}',g_fp_shows:'Shows',fp_hint_calib:'Click two points on the image whose real distance you know.',
   fp_hint_empty:'The plan is empty — import it from AnyVac, trace an image or draw the rooms.',
   fp_door_nowall:'No wall there — click closer to a room\'s edge.',
@@ -473,7 +476,7 @@ const ROC_STUDIO_STR={en:{
   fp_imp_clean:'Clean up the outlines (furniture, steps)',fp_imp_doors:'Propose doors (where the robot drove between rooms)',fp_imp_entities:'Fill in lights, heating and sensors from the rooms',
   fp_imp_reimport:'Rooms already on the plan keep their settings; only their outlines are replaced. Rooms you drew yourself stay.',
   fp_imp_info:'{n} rooms · registration: {s} · {f}',fp_imp_unaligned:'This map is not aligned to the home frame — pick a reference or aligned vacuum.',fp_imp_go:'Import',
-  fp_doors_replace:'The plan has {n} doors. Replace them with {m} proposed doors?',fp_doors_go:'Replace',
+  fp_doors_replace:'The plan has {n} doors. Replace them with {m} proposed doors? Windows stay.',fp_doors_go:'Replace',
   fp_trace_body:'An image to draw over in the studio (a floor plan picture or a scan). It is never shown on the dashboard.',
   fp_trace_upload:'Upload',fp_trace_uploading:'Uploading…',fp_trace_go:'Use this image',fp_trace_err:'The image could not be loaded.',
   fp_trace_calib:'Now click two points on the image whose distance you know.',fp_trace_calib_btn:'Set the scale',fp_trace_remove:'Remove the image',
@@ -1441,7 +1444,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select']};
+const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover']};
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;
@@ -1471,7 +1474,7 @@ function rsFormSpec(ctx,target){
   if(target.kind==='fproom'){
     const lk=(ctx.work.rooms||[]).find(function(r){return r&&item.room!=null&&String(r.id)===String(item.room);});
     return{keys:S.fpRoom.keys,schema:'fpRoom',title:String(item.name||(lk&&((lk.overview_tile&&lk.overview_tile.name)||lk.name))||item.room||('#'+(target.idx+1))),icon:'mdi:vector-square',type:ctx.t('t_fproom'),rest:'object',groups:[
-      ['main',['name','room','floor']],['fp_states',['lights','climate','temperature','humidity','media']],['fp_actions',['tap_action','hold_action']],['fp_geom',['polygon','anyvac_room']]]};
+      ['main',['name','room','floor','floor_color']],['fp_states',['lights','climate','temperature','humidity','media']],['fp_actions',['tap_action','hold_action']],['fp_geom',['polygon','anyvac_room']]]};
   }
   if(target.kind==='fpitem'){
     const lab=item.type==='label';
@@ -1479,7 +1482,9 @@ function rsFormSpec(ctx,target){
       ['main',['type','entity','attribute','name','icon','text']],['fp_shows',['show_state','prefix','suffix','decimals','active_state','color','size']],['fp_actions',['tap_action','hold_action']],['fp_geom',['at']]]};
   }
   if(target.kind==='fpdoor'){
-    return{keys:S.fpOpening.keys,schema:'fpOpening',title:ctx.t('fp_door_n',{n:target.idx+1}),icon:'mdi:door',type:ctx.t('t_fpdoor'),rest:'object',groups:[['main',['width','at','type']]]};
+    const win=item.type==='window';
+    return{keys:S.fpOpening.keys,schema:'fpOpening',title:ctx.t(win?'fp_window_n':'fp_door_n',{n:target.n||target.idx+1}),icon:win?'mdi:window-closed-variant':'mdi:door',type:ctx.t(win?'t_fpwindow':'t_fpdoor'),rest:'object',groups:[
+      ['main',['type','width','at']],['fp_shows',win?['entity','cover','blind_type','invert']:['entity','mirror','outward']],['fp_actions',['tap_action','hold_action']]]};
   }
   if(target.kind==='room'){
     return{keys:S.room.keys,title:String(item.name||item.id||''),icon:'mdi:door',type:ctx.t('room'),rest:'room',groups:[['main',RS_ROOM_KEYS],
@@ -3447,7 +3452,7 @@ RocStudio.prototype._wizFinish=function(st,recipes){
 // slide doors along walls. Geometry comes from AnyVac (import), a drawing, or a traced image.
 // Everything is plan metres in `floorplan.rooms[].polygon`; the renderer (room-overlay-card-
 // floorplan.js) draws it and lends its projection, so editing works in every projection.
-const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['marker','mdi:map-marker-plus']];
+const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['window','mdi:window-closed-variant'],['marker','mdi:map-marker-plus']];
 const RS_FP_ACCENT='#03a9f4';
 function rsFpR(v){return Math.round(v*100)/100;}
 function rsFpNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');}
@@ -3517,6 +3522,31 @@ function rsFpEntities(hass,cAll,room){
   if(media.length)out.media=media.length===1?media[0]:media;
   return out;
 }
+// v6.49.0: a new window's sensor (device_class window) and blind (a cover), from the Home Assistant
+// area of the plan room the wall belongs to — ones not used by another opening of the plan. Doors
+// get nothing: appliance doors (dishwasher, oven, fridge, washer) are device_class door too and sit
+// in the same areas, so a guess would usually be wrong. Nothing found → nothing set.
+function rsFpOpeningGuess(hass,cAll,fp,ri,type){
+  const S=(hass&&hass.states)||{},E=(hass&&hass.entities)||{},out={};
+  const pr=fp&&Array.isArray(fp.rooms)?fp.rooms[ri]:null;if(!pr||type!=='window')return out;
+  const cr=pr.room!=null?((cAll&&cAll.rooms)||[]).find(function(x){return x&&String(x.id)===String(pr.room);}):null;
+  const area=rsFpArea(hass,cr||{name:pr.name});
+  const aid=area&&(area.area_id||Object.keys((hass&&hass.areas)||{}).find(function(k){return hass.areas[k]===area;}));
+  if(!aid)return out;
+  const used=new Set();(fp.openings||[]).forEach(function(o){if(o&&o.entity)used.add(o.entity);if(o&&o.cover)used.add(o.cover);});
+  const pick=function(dom,ok){
+    return Object.keys(S).sort().find(function(id){
+      if(id.split('.')[0]!==dom||used.has(id))return false;
+      const r=E[id];if(r&&(r.hidden||r.entity_category))return false;
+      return rsFpEntArea(hass,id)===aid&&ok((S[id].attributes||{}));
+    });
+  };
+  const c=pick('binary_sensor',function(a){return a.device_class==='window';});
+  if(c)out.entity=c;
+  const cv=pick('cover',function(a){return!a.device_class||['blind','shade','shutter','curtain','awning'].indexOf(a.device_class)>=0;});
+  if(cv)out.cover=cv;
+  return out;
+}
 function rsFpPageRooms(cAll){return(Array.isArray(cAll&&cAll.rooms)?cAll.rooms:[]).map(function(r,i){return{r:r,i:i};}).filter(function(x){return x.r&&!x.r.overview&&!x.r.floorplan;});}
 // The card room an AnyVac room most likely is: its area (A5), else the names (id, name, the
 // overview tile's name, area_match, the area's name and aliases), compared without case,
@@ -3584,13 +3614,27 @@ function rsFpImport(G,hass,cAll,sensorId,st,o,prev){
   fp.rooms=out;
   if(o.doors!==false){
     const paths=[].concat(a.path_dry_home_px||[],a.path_wet_home_px||[]).map(function(seg){return G.poly(seg).map(toM);});
-    fp.openings=G.doors(out.map(function(r){return G.poly(r.polygon);}),paths).map(function(d){return{type:'door',at:d.at,width:d.width};});
+    const old=(Array.isArray(prev.openings)?prev.openings:[]).filter(function(o){return o&&typeof o==='object';});
+    fp.openings=rsFpMergeDoors(G,G.doors(out.map(function(r){return G.poly(r.polygon);}),paths),old);
+    if(!fp.openings.length)delete fp.openings;
   }
   fp.source=Object.assign({},fp.source&&typeof fp.source==='object'?fp.source:{},{anyvac:sensorId,frame:String(hf.id||''),imported:o.today||new Date().toISOString().slice(0,10),origin_px:[ox,oy],mm_per_px:mmpp});
   if(!fp.theme)fp.theme='night';
   return fp;
 }
 
+// Proposed doors replace the old doors; windows stay; an old door within 0.6 m of a proposed one is
+// kept instead (with its sensor, mirror / outward and width).
+function rsFpMergeDoors(G,proposed,old){
+  const oldDoors=old.filter(function(o){return o.type!=='window';}),used=new Set();
+  const doors=proposed.map(function(d){
+    let best=-1,bd=0.6;
+    oldDoors.forEach(function(o,i){const at=G.poly([o.at])[0];if(!at||used.has(i))return;const dd=Math.hypot(at[0]-d.at[0],at[1]-d.at[1]);if(dd<bd){bd=dd;best=i;}});
+    if(best>=0){used.add(best);return JSON.parse(JSON.stringify(oldDoors[best]));}
+    return{type:'door',at:d.at,width:d.width};
+  });
+  return doors.concat(old.filter(function(o){return o.type==='window';}).map(function(o){return JSON.parse(JSON.stringify(o));}));
+}
 RocStudio.prototype._fpIdx=function(){
   if(this.global)return-1;
   const r=this._rooms()[this.roomIdx];
@@ -3691,10 +3735,12 @@ RocStudio.prototype._fpOutline=function(box){
   });
   const ops=Array.isArray(fp.openings)?fp.openings:[];
   if(ops.length){
-    box.appendChild(rsEl('div',{class:'ol-row ol-kindrow'},[rsEl('span',{class:'ol-item ol-kind'},[rsIcon('mdi:door'),rsEl('span',{text:this.t('fp_doors_h')}),rsEl('span',{class:'n',text:String(ops.length)})])]));
+    box.appendChild(rsEl('div',{class:'ol-row ol-kindrow'},[rsEl('span',{class:'ol-item ol-kind'},[rsIcon('mdi:door'),rsEl('span',{text:this.t('fp_openings_h')}),rsEl('span',{class:'n',text:String(ops.length)})])]));
+    const cnt={door:0,window:0};
     ops.forEach(function(o,k){
+      const win=o&&o.type==='window';cnt[win?'window':'door']++;
       box.appendChild(rsEl('button',{class:'ol-item ol-el',type:'button','data-fpdoor':String(k),'aria-current':String(st.door===k),onclick:function(){self._fpSelect('door',k);}},
-        [rsEl('span',{class:'nm',text:self.t('fp_door_n',{n:k+1})}),rsEl('span',{class:'sub',text:Array.isArray(o&&o.at)?o.at.join(', ')+' m':''})]));
+        [rsEl('span',{class:'nm',text:self.t(win?'fp_window_n':'fp_door_n',{n:cnt[win?'window':'door']})}),rsEl('span',{class:'sub',text:Array.isArray(o&&o.at)?o.at.join(', ')+' m':''})]));
     });
   }
   const its=Array.isArray(fp.items)?fp.items:[];
@@ -3715,7 +3761,11 @@ RocStudio.prototype._fpTarget=function(){
   this._fpSync();
   const st=this._fpState(),fp=this._fpCfg();
   if(st.sel!=null&&Array.isArray(fp.rooms)&&fp.rooms[st.sel])return{kind:'fproom',id:String(st.sel),idx:st.sel,item:fp.rooms[st.sel],path:'rooms['+i+'].floorplan.rooms['+st.sel+']'};
-  if(st.door!=null&&Array.isArray(fp.openings)&&fp.openings[st.door])return{kind:'fpdoor',id:String(st.door),idx:st.door,item:fp.openings[st.door],path:'rooms['+i+'].floorplan.openings['+st.door+']'};
+  if(st.door!=null&&Array.isArray(fp.openings)&&fp.openings[st.door]){
+    const ty=fp.openings[st.door].type==='window'?'window':'door';
+    const n=fp.openings.slice(0,st.door+1).filter(function(o){return o&&(o.type==='window'?'window':'door')===ty;}).length;
+    return{kind:'fpdoor',id:String(st.door),idx:st.door,n:n,item:fp.openings[st.door],path:'rooms['+i+'].floorplan.openings['+st.door+']'};
+  }
   if(st.item!=null&&Array.isArray(fp.items)&&fp.items[st.item])return{kind:'fpitem',id:String(st.item),idx:st.item,item:fp.items[st.item],path:'rooms['+i+'].floorplan.items['+st.item+']'};
   return null;
 };
@@ -3738,8 +3788,8 @@ RocStudio.prototype._fpDraw=function(){
   });
   (Array.isArray(fp.openings)?fp.openings:[]).forEach(function(o,k){
     const at=G.poly([o&&o.at])[0];if(!at)return;
-    const q=v.toLocal(at[0],at[1],0),sel=st.door===k;
-    s+='<rect x="'+rsFpR(q[0]-6)+'" y="'+rsFpR(q[1]-6)+'" width="12" height="12" rx="3" fill="'+(sel?RS_FP_ACCENT:'#fff')+'" stroke="#0b0e12" stroke-width="1.5" pointer-events="none"/>';
+    const q=v.toLocal(at[0],at[1],0),sel=st.door===k,win=o.type==='window';
+    s+='<rect x="'+rsFpR(q[0]-(win?8:6))+'" y="'+rsFpR(q[1]-(win?4:6))+'" width="'+(win?16:12)+'" height="'+(win?8:12)+'" rx="'+(win?2:3)+'" fill="'+(sel?RS_FP_ACCENT:(win?'#bfe3ff':'#fff'))+'" stroke="#0b0e12" stroke-width="1.5" pointer-events="none"/>';
   });
   (Array.isArray(fp.items)?fp.items:[]).forEach(function(it,k){
     const at=G.poly([it&&it.at])[0];if(!at)return;
@@ -3838,11 +3888,12 @@ RocStudio.prototype._fpDown=function(e){
     else st.draft.pts.push(p);
     this._fpDraw();return;
   }
-  if(st.tool==='door'){
+  if(st.tool==='door'||st.tool==='window'){
     const w=this._fpWallAt(a.p,fp);
     if(!w||w.d>0.6){this._fpFlash('fp_door_nowall');return;}
-    const self=this;let k=-1;
-    this._fpEdit(function(f){if(!Array.isArray(f.openings))f.openings=[];f.openings.push({type:'door',at:w.at,width:0.8});k=f.openings.length-1;});
+    const self=this,type=st.tool;let k=-1;
+    const op=Object.assign({type:type,at:w.at,width:type==='window'?1:0.8},rsFpOpeningGuess(this.hass,this.work,fp,w.room,type));
+    this._fpEdit(function(f){if(!Array.isArray(f.openings))f.openings=[];f.openings.push(op);k=f.openings.length-1;});
     st.tool='select';self._fpSelect('door',k);return;
   }
   if(st.tool==='marker'){
@@ -4085,9 +4136,11 @@ RocStudio.prototype._fpAutoDoors=function(){
       const o=fp.source.origin_px,k=Number(fp.source.mm_per_px)/1000,a=src.attributes||{};
       paths=[].concat(a.path_dry_home_px||[],a.path_wet_home_px||[]).map(function(seg){return G.poly(seg).map(function(p){return[(p[0]-o[0])*k,(p[1]-o[1])*k];});});
     }
-    const doors=G.doors(polys,paths).map(function(d){return{type:'door',at:d.at,width:d.width};});
-    const go=function(){self._fpEdit(function(f){if(doors.length)f.openings=doors;else delete f.openings;});self._fpSelect(null,null);};
-    if(Array.isArray(fp.openings)&&fp.openings.length)self._panel(self.t('fp_doors'),[self.t('fp_doors_replace',{n:fp.openings.length,m:doors.length})],[{label:self.t('fp_doors_go'),cls:'primary',id:'fp-doors-ok',fn:go},{label:self.t('cancel'),id:'cancel'}]);
+    const old=(Array.isArray(fp.openings)?fp.openings:[]).filter(function(o){return o&&typeof o==='object';});
+    const next=rsFpMergeDoors(G,G.doors(polys,paths),old);
+    const nDoors=old.filter(function(o){return o.type!=='window';}).length,mDoors=next.filter(function(o){return o.type!=='window';}).length;
+    const go=function(){self._fpEdit(function(f){if(next.length)f.openings=next;else delete f.openings;});self._fpSelect(null,null);};
+    if(nDoors)self._panel(self.t('fp_doors'),[self.t('fp_doors_replace',{n:nDoors,m:mDoors})],[{label:self.t('fp_doors_go'),cls:'primary',id:'fp-doors-ok',fn:go},{label:self.t('cancel'),id:'cancel'}]);
     else go();
   });
 };
@@ -4142,7 +4195,7 @@ function rocStudioRegister(){
   if(!C||!C._rocInternals){console.warn('[room-overlay-card] studio: room-overlay-card.js is too old or not loaded — the studio needs v'+ROC_STUDIO_VERSION);return;}
   C._rocStudio={version:ROC_STUDIO_VERSION,open:function(opts){return RocStudio.open(opts);},Studio:RocStudio,schema:RocSchema,
     wizBuild:rsWizBuild,wizAreas:rsWizAreas,wizUpload:rsUploadImage, // the wizard's pure parts, for the test tiers
-    fpImport:rsFpImport,fpEntities:rsFpEntities,fpAutoLink:rsFpAutoLink,fpSensors:rsFpSensors}; // v6.47.0 floor plan import
+    fpImport:rsFpImport,fpEntities:rsFpEntities,fpAutoLink:rsFpAutoLink,fpSensors:rsFpSensors,fpOpeningGuess:rsFpOpeningGuess,fpMergeDoors:rsFpMergeDoors}; // v6.47.0 floor plan import (+ v6.49.0 openings)
 }
 if(customElements.get('room-overlay-card'))rocStudioRegister();
 else customElements.whenDefined('room-overlay-card').then(rocStudioRegister);

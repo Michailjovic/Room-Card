@@ -1802,8 +1802,9 @@ overview is shown and put back as it was.
 ## Floor plan page (v6.47.0)
 
 A room with a `floorplan:` block is a page that draws the home as a vector plan — rooms, walls,
-doors, each room's lights, floor heating, temperature and humidity, and (v6.48.0) who is where,
-what plays, the vacuum, running appliances and any entity as a marker — in one of seven themes. Tap a
+doors and (v6.49.0) windows with their sensors and blinds, each room's lights, floor heating,
+temperature and humidity, and (v6.48.0) who is where, what plays, the vacuum, running appliances
+and any entity as a marker — in one of seven themes. Tap a
 room to open it (zoom), hold it to toggle its lights. The plan is imported from a vacuum map with
 **AnyVac** or drawn / traced in Room Card Studio. Every key, the themes and the import:
 **[docs/FLOORPLAN.md](FLOORPLAN.md)**.
