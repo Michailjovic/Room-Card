@@ -52,3 +52,32 @@ function rsUniqueId(list,prefix,want){
 // shift a percentage position a little (duplicate / paste on top of the original)
 function rsNudgePct(v,d){const m=/^(-?\d+(?:\.\d+)?)%$/.exec(String(v==null?'':v));return m?Math.max(0,Math.min(98,parseFloat(m[1])+d)).toFixed(1)+'%':v;}
 function rsPct(n){return(Math.round(Math.max(0,Math.min(100,n))*10)/10).toFixed(1)+'%';}
+// "%" positions as numbers; NaN for anything else (px, calc(), numbers without a unit…)
+function rsPctNum(v){const m=/^\s*(-?\d+(?:\.\d+)?)%\s*$/.exec(String(v==null?'':v));return m?parseFloat(m[1]):NaN;}
+// move a "%" position by d percent points (kept inside 0–100); false when it is not a "%" value
+function rsShiftPct(item,key,d){
+  const n=rsPctNum(item[key]);
+  if(!isFinite(n))return false;
+  item[key]=rsPct(n+d);
+  return true;
+}
+// a copy of a room for duplicate / paste: unique id, "(copy)" name; area_match is dropped, so a
+// presence sensor keeps following the original room
+function rsRoomCopy(rooms,room,suffix){
+  const r=JSON.parse(rsJ(room));
+  const ids=new Set((rooms||[]).map(function(x){return x&&x.id;}));
+  const base=String(r.id||'room').replace(/_\d+$/,'');
+  let n=2,id=r.id||base;
+  while(ids.has(id)){id=base+'_'+n;n++;}
+  r.id=id;
+  if(r.name)r.name=r.name+' '+suffix;
+  delete r.area_match;
+  return r;
+}
+// CSS selectors of each element type inside the card's .content (hide / lock layers)
+const RS_LAYER_SEL={
+  zone:['[data-z]'],icon:['[data-ico]'],label:['[data-lbl]'],gauge:['[data-gauge]:not([data-gauge^="__bl_"])'],
+  blind:['[data-gauge^="__bl_"]'],element:['[data-el]'],glow:['[data-glow]','[data-glowedit]'],vacuum_widget:['[data-vw]'],
+  overlay:['[data-ov]'],badge:['[data-b]'],
+};
+

@@ -518,7 +518,7 @@ companion app (author), and the tablet run of the S5 probe.
 
 ### Phase 3a — v6.42.0
 
-- **Phase 3 is split** (2026-10-21, proposed with v6.42.0 — author to confirm): 3a = v6.42.0, 3b = v6.43.0 (multi-select,
+- **Phase 3 is split** (2026-10-21; the author continued with 3b as v6.43.0): 3a = v6.42.0, 3b = v6.43.0 (multi-select,
   align/distribute, hide/lock per layer, duplicate/copy whole rooms). Phases 4–8 move one minor
   version later (table in §4).
 - **One selection, three views.**
@@ -557,3 +557,39 @@ companion app (author), and the tablet run of the S5 probe.
     config key first, which belongs to a later phase.
   - *Inline save errors (E6)*: covered by the studio for its own save paths (conflict and failure
     panels). The legacy test-mode Save keeps its overlay.
+
+### Phase 3b — v6.43.0
+
+- **Multi-selection** is studio state: `sel` is the primary element (handles, inspector) and
+  `multi` holds the others.
+  - The card reports Shift / Ctrl / ⌘ on a click through `_rocSelSink(type,id,{add})` and draws
+    the others' outline with `_rocMark(list)`.
+  - **Group move** needs no card support: after a canvas drag, `_movedItem` finds the single
+    element whose `top`/`left` changed. If it is selected, the others get the same delta before
+    the commit (one undo step). The others jump at the drop rather than following live — accepted
+    for now.
+- **Align / distribute** measure the DOM boxes (`_rocBox`, % of `.content`) like the snapping
+  does, and shift `top` / `left` by the difference. Non-"%" positions are skipped and counted:
+  the same "measure on screen, write config" rule as E4.
+- **Layers** are a stylesheet inside the canvas card: `_rocExtraCss`, rendered as
+  `<style class="roc-xcss">` and also patched in place. Hidden = `display:none`, locked =
+  `pointer-events:none`, scoped to `.content`. Nothing goes into the config, so `_restore` needs
+  no new rules.
+- **Rooms:** duplicate / copy / paste / delete through `rsRoomCopy`: unique id, "(copy)" name,
+  `area_match` dropped so presence keeps following the original. Paste needs a card that already
+  has `rooms:`.
+- **Room-switch fix** (author's report: the old room stuck ~1/3 s after a wheel switch, with a
+  black strip). Reproduced with a deliberately slow embedded card (`tests/harness/switch-shell.html`).
+  - `rocGhostClone` copies custom elements as plain boxes (a deep `cloneNode` constructed them
+    all a second time).
+  - Both layers get `will-change` during the slide.
+  - The ghost is removed on its own `transitionend` (fallback timers count from the slide's
+    start).
+  - New embedded cards wait for the slide to start (`rocCardGate`, released one task after the
+    rAF that starts the transition, 600 ms at most).
+  - The regression test asserts one construction per switch and no cut slide; it fails on v6.42.0.
+- **Gauges / blinds** have `pointer-events:none` outside Edit mode (they pass taps through to the
+  image). Edit mode now switches them to `auto`, otherwise their v6.42.0 handles could not be
+  grabbed.
+- **Phase 3 closed.** Rotate stays open (no config key yet). Touch is covered by pointer events
+  for placing and by the card's touch handlers for dragging; pinch-zoom of the canvas is not done.

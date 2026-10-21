@@ -218,8 +218,8 @@ The underlying YAML (`nav.live`, `nav.mini.*`) is documented in
 
 The studio (v6.41.0, canvas editing since v6.42.0) is where cards are built. It takes the whole
 screen, above Home Assistant's own dialog, and shows the real card large on a canvas next to this
-editor. It is the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5); later releases add
-multi-select and alignment, and rebuild the forms.
+editor. It is the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5); the next releases
+rebuild the forms.
 
 **Opening it**
 
@@ -241,12 +241,32 @@ The canvas bar shows the selection with **Duplicate**, **Copy** and **Delete** (
 once something is copied), so all of it works on a touch screen too. An element the room only
 *inherits* from the shared defaults is opened in **Global**, where it lives.
 
+**Several at once** (v6.43.0):
+
+- **Shift / Ctrl / ⌘ click** on the canvas or in the outline adds an element to the selection,
+  or takes it out; **Ctrl+A** selects every visible, unlocked element of the room. The others get
+  a dashed outline; the last one clicked keeps the handles.
+- Dragging any selected element moves them all.
+- The selection bar then offers **align** (left / centre / right / top / middle / bottom) and,
+  from three elements, **distribute** with equal gaps. Both measure what you see on the canvas
+  and change `top` / `left`; positions not written in `%` are left alone (the bar says how many).
+- Duplicate, copy / paste and delete apply to the whole selection.
+
+**Layers.** Each type in the outline has an eye (hide it on the canvas) and a lock (it cannot be
+selected or dragged). Handy for reaching a small icon under a large zone. This only changes the
+studio's view — the card on the dashboard is not affected.
+
+**Rooms.** The current room in the outline has **duplicate**, **copy** (paste it into this or
+another card — a *Paste room* line appears) and **delete**. A copy gets a unique id and a
+"(copy)" name; its `area_match` is left out so presence keeps following the original.
+
 **Moving and resizing** (canvas in *Arrange*):
 
 - drag to move; it snaps to a 0.5 % grid and, with a blue guide line, to the left / centre /
   right and top / centre / bottom of every other element and of the image — hold **Alt** for free
   movement;
-- drag a handle to resize (zones, gauges, blinds, embedded cards, light glows);
+- drag a handle to resize (zones, gauges, blinds, embedded cards, light glows); gauges and blinds
+  move by dragging their body;
 - an embedded card moves by the small grip above it (the card itself stays usable);
 - arrow keys nudge the selection (Shift = 0.1 %); keys typed into a field never move anything.
 
@@ -257,7 +277,7 @@ new element gets the same defaults as the editor's own "+ Add" buttons and a uni
 opens selected. It goes to the room shown, or to the shared defaults in **Global**. If the room so
 far inherited that list, the room gets its own copy first, so nothing on screen disappears.
 
-**Keyboard** (outside text fields): **Del** deletes, **Ctrl+D** duplicates, **Ctrl+C / Ctrl+V**
+**Keyboard** (outside text fields): **Ctrl+A** selects all, **Del** deletes, **Ctrl+D** duplicates, **Ctrl+C / Ctrl+V**
 copy and paste (also into another room or another card — the copy is kept in this browser),
 **Ctrl+Z / Ctrl+Y** undo / redo, **Ctrl+S** saves, **Esc** cancels placing, then clears the
 selection, then closes.

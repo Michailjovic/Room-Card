@@ -20,10 +20,14 @@
  * inspector; the outline lists every element (with search); add by clicking / drawing on the
  * image (every positioned type); duplicate, copy / paste across rooms, delete; edge and centre
  * snapping lives in the card (_snapPos).
+ *
+ * Phase 3b (v6.43.0) — multi-selection (Shift / Ctrl click, Ctrl+A), group move, align /
+ * distribute, hide / lock layers on the canvas (studio view only), duplicate / copy / paste /
+ * delete whole rooms.
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.42.0';
+const ROC_STUDIO_VERSION='6.43.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -337,6 +341,16 @@ const ROC_STUDIO_STR={en:{
   dup:'Duplicate',dup_hint:'Duplicate (Ctrl+D)',copy_hint:'Copy (Ctrl+C) — paste into any room or card',
   del:'Delete',del_hint:'Delete (Del)',paste:'Paste',paste_hint:'Paste (Ctrl+V) into the room shown',
   search_ph:'Search elements…',no_match:'Nothing matches.',no_elements:'No elements yet — Add places the first one.',
+  // Phase 3b (v6.43.0)
+  n_selected:'{n} selected',
+  al_left:'Align left edges',al_center:'Align centres (horizontally)',al_right:'Align right edges',
+  al_top:'Align top edges',al_middle:'Align middles (vertically)',al_bottom:'Align bottom edges',
+  dist_h:'Distribute horizontally (equal gaps)',dist_v:'Distribute vertically (equal gaps)',
+  al_skipped:'{n} not moved (position not in %)',
+  copy_suffix:'(copy)',room_dup:'Duplicate this room',room_copy:'Copy this room (paste into any card)',
+  room_del:'Delete room',room_del_title:'Delete the room “{r}”?',room_del_body:'The room and everything in it is removed from the card. Undo brings it back.',
+  room_paste:'Paste room “{r}”',
+  layer_hide:'Hide on the canvas (studio only)',layer_show:'Show on the canvas',layer_lock:'Lock — cannot be selected or dragged',layer_unlock:'Unlock',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;
@@ -426,6 +440,18 @@ select.room{height:32px;border-radius:8px;border:1px solid var(--rs-line);backgr
 .ol-el .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ol-el .sub{margin-left:auto;font-size:11px;color:var(--rs-txt2);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .ol-empty{font-size:12px;color:var(--rs-txt2);padding:6px 8px;}
+.ol-row{display:flex;align-items:center;gap:2px;}
+.ol-row>.ol-item{flex:1;min-width:0;}
+.ol-act{flex:none;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;border-radius:6px;cursor:pointer;color:var(--rs-txt2);}
+.ol-act:hover{background:var(--rs-sub);color:var(--primary-text-color,#e8eaed);}
+.ol-act.on{color:var(--rs-acc);}
+.ol-act.danger:hover{color:var(--rs-err);}
+.ol-act ha-icon{--mdc-icon-size:17px;}
+.ol-kindrow.hid .ol-kind,.ol-el.hid{opacity:.45;}
+.ol-paste{color:var(--rs-acc);}
+.selbar .aligns button{height:26px;padding:0 6px;}
+.selbar .aligns ha-icon{--mdc-icon-size:17px;}
+.selbar .hint.warn{color:var(--rs-warn);font-weight:400;}
 .cv-bar{min-height:36px;}
 .selbar{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
 .selbar .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;background:var(--rs-sub);color:var(--primary-text-color,#e8eaed);}
@@ -597,6 +623,35 @@ function rsUniqueId(list,prefix,want){
 // shift a percentage position a little (duplicate / paste on top of the original)
 function rsNudgePct(v,d){const m=/^(-?\d+(?:\.\d+)?)%$/.exec(String(v==null?'':v));return m?Math.max(0,Math.min(98,parseFloat(m[1])+d)).toFixed(1)+'%':v;}
 function rsPct(n){return(Math.round(Math.max(0,Math.min(100,n))*10)/10).toFixed(1)+'%';}
+// "%" positions as numbers; NaN for anything else (px, calc(), numbers without a unit…)
+function rsPctNum(v){const m=/^\s*(-?\d+(?:\.\d+)?)%\s*$/.exec(String(v==null?'':v));return m?parseFloat(m[1]):NaN;}
+// move a "%" position by d percent points (kept inside 0–100); false when it is not a "%" value
+function rsShiftPct(item,key,d){
+  const n=rsPctNum(item[key]);
+  if(!isFinite(n))return false;
+  item[key]=rsPct(n+d);
+  return true;
+}
+// a copy of a room for duplicate / paste: unique id, "(copy)" name; area_match is dropped, so a
+// presence sensor keeps following the original room
+function rsRoomCopy(rooms,room,suffix){
+  const r=JSON.parse(rsJ(room));
+  const ids=new Set((rooms||[]).map(function(x){return x&&x.id;}));
+  const base=String(r.id||'room').replace(/_\d+$/,'');
+  let n=2,id=r.id||base;
+  while(ids.has(id)){id=base+'_'+n;n++;}
+  r.id=id;
+  if(r.name)r.name=r.name+' '+suffix;
+  delete r.area_match;
+  return r;
+}
+// CSS selectors of each element type inside the card's .content (hide / lock layers)
+const RS_LAYER_SEL={
+  zone:['[data-z]'],icon:['[data-ico]'],label:['[data-lbl]'],gauge:['[data-gauge]:not([data-gauge^="__bl_"])'],
+  blind:['[data-gauge^="__bl_"]'],element:['[data-el]'],glow:['[data-glow]','[data-glowedit]'],vacuum_widget:['[data-vw]'],
+  overlay:['[data-ov]'],badge:['[data-b]'],
+};
+
 // ---- The studio -----------------------------------------------------------------------------
 // Device frames for the canvas. The card chooses its layout profile from the frame's size (its
 // _rocVp viewport override), so "Tablet portrait" shows the portrait profile on a landscape PC.
@@ -633,6 +688,9 @@ class RocStudio{
     this.undoStack=[];this.redoStack=[];this.lastCommit=0;this.lastSrc='';
     this.roomIdx=0;this.global=false;
     this.sel=null;           // {type,id} — the selected element (canvas, outline and inspector agree)
+    this.multi=[];           // further selected elements (Shift / Ctrl click) — v6.43.0
+    this.hidden=new Set();   // element types hidden on the canvas (studio view only, never saved)
+    this.locked=new Set();   // element types that cannot be selected or dragged on the canvas
     this.search='';          // outline filter
     this._placeType=null;    // element type being placed on the canvas (Add)
     this._layers=[];this._timers=[];
@@ -817,7 +875,7 @@ class RocStudio{
     const card=document.createElement('room-overlay-card');
     card._rocSink=function(nc){self._onCanvas(nc);};
     card._rocRoomSink=function(idx){self._onCanvasRoom(idx);};
-    card._rocSelSink=function(type,id){self._onCanvasSel(type,id);};
+    card._rocSelSink=function(type,id,o){self._onCanvasSel(type,id,o);};
     card._rocVp={w:1280,h:800};
     if(this._rooms().length)card._roomIdx=this.roomIdx;
     this._card=card;
@@ -928,22 +986,79 @@ class RocStudio{
   }
   _onCanvas(nc){
     // a drag / draw on the canvas (Arrange mode) — the card already shows it
-    this._commit(this._restore(nc),'canvas');
+    const out=this._restore(nc);
+    // a selected element dragged while others are selected too: they all move by the same amount
+    const mv=this._movedItem(this.work,out);
+    if(mv&&this.multi.length&&this._isSel(mv.type,mv.id)){
+      let n=0;
+      const self=this;
+      this._selSet().forEach(function(x){
+        if(x.type===mv.type&&x.id===mv.id)return;
+        const f=self._findItem(x.type,x.id,out);if(!f)return;
+        if(rsShiftPct(f.item,'top',mv.dt))n++;
+        if(rsShiftPct(f.item,'left',mv.dl))n++;
+      });
+      if(n){this._commit(out,'studio');return;}
+    }
+    this._commit(out,'canvas');
+  }
+  // the one positioned element whose top/left differs between two configs (a canvas drag)
+  _movedItem(a,b){
+    const self=this;let hit=null,count=0;
+    RS_TYPE_ORDER.forEach(function(type){
+      const T=RS_TYPES[type];if(!T.canvas)return;
+      const la=rsOwner(a,self.roomIdx,self.global,T.key).list||[],lb=rsOwner(b,self.roomIdx,self.global,T.key).list||[];
+      lb.forEach(function(ib){
+        if(!ib)return;
+        const ia=la.find(function(x){return x&&String(x.id)===String(ib.id);});
+        if(!ia||(ia.top===ib.top&&ia.left===ib.left))return;
+        const dt=rsPctNum(ib.top)-rsPctNum(ia.top),dl=rsPctNum(ib.left)-rsPctNum(ia.left);
+        count++;
+        if(isFinite(dt)&&isFinite(dl))hit={type:type,id:String(ib.id),dt:dt,dl:dl};
+      });
+    });
+    return count===1?hit:null;
   }
   _onCanvasRoom(idx){
     if(idx===this.roomIdx&&!this.global)return;
     this.sel=null;
     this._setRoom(idx,false,'canvas');
   }
-  _onCanvasSel(type,id){
-    if(!type){if(this.sel&&RS_TYPES[this.sel.type]&&RS_TYPES[this.sel.type].canvas){this.sel=null;this._renderOutlineList();this._renderSelBar();}return;}
-    this._select(type,String(id),'canvas');
+  _onCanvasSel(type,id,o){
+    if(!type){if(this.sel&&RS_TYPES[this.sel.type]&&RS_TYPES[this.sel.type].canvas){this.sel=null;this.multi=[];this._renderOutlineList();this._renderSelBar();}return;}
+    if(o&&o.add)this._toggleSel(type,String(id),'canvas');
+    else this._select(type,String(id),'canvas');
   }
   _reselectCanvas(){
     const card=this._card;
+    this._applyLayerCss();
     if(!card||this.mode!=='arrange'||typeof card._rocSelect!=='function')return;
     const s=this.sel;
     try{card._rocSelect(s&&RS_TYPES[s.type]&&RS_TYPES[s.type].canvas?s.type:null,s?s.id:null);}catch(_){}
+    if(typeof card._rocMark==='function')try{card._rocMark(this.multi.filter(function(x){return RS_TYPES[x.type]&&RS_TYPES[x.type].canvas;}));}catch(_){}
+  }
+  // hidden / locked layers: a stylesheet inside the canvas card (studio view only)
+  _applyLayerCss(){
+    const card=this._card;if(!card)return;
+    let css='';
+    this.hidden.forEach(function(t){const q=RS_LAYER_SEL[t];if(q)css+=q.map(function(x){return'.content '+x;}).join(',')+'{display:none!important;}';});
+    this.locked.forEach(function(t){const q=RS_LAYER_SEL[t];if(q)css+=q.map(function(x){return'.content '+x+',.content '+x+' *';}).join(',')+'{pointer-events:none!important;}';});
+    card._rocExtraCss=css;
+    const sr=card.shadowRoot;if(!sr)return;
+    let st=sr.querySelector('style.roc-xcss');
+    if(!css){if(st)st.remove();return;}
+    if(!st){st=document.createElement('style');st.className='roc-xcss';const first=sr.querySelector('style');if(first&&first.nextSibling)sr.insertBefore(st,first.nextSibling);else sr.appendChild(st);}
+    st.textContent=css;
+  }
+  toggleLayer(type,what){
+    const set=what==='lock'?this.locked:this.hidden;
+    if(set.has(type))set.delete(type);else set.add(type);
+    // a hidden or locked element cannot stay selected on the canvas
+    if(this.hidden.has(type)||this.locked.has(type)){
+      if(this.sel&&this.sel.type===type)this.sel=this.multi.shift()||null;
+      this.multi=this.multi.filter(function(x){return x.type!==type;});
+    }
+    this._reselectCanvas();this._renderOutlineList();this._renderSelBar();
   }
 
   // ---------------------------------------------------------------- selection (Phase 3)
@@ -954,9 +1069,28 @@ class RocStudio{
     const i=o.list.findIndex(function(x){return x&&String(x.id)===String(id);});
     return i<0?null:{list:o.list,idx:i,item:o.list[i],inherited:o.inherited};
   }
+  _selSet(){return(this.sel?[this.sel]:[]).concat(this.multi);}
+  _isSel(type,id){return this._selSet().some(function(x){return x.type===type&&x.id===String(id);});}
+  // Shift / Ctrl / ⌘ click: add to the selection, or take an already selected element out of it
+  _toggleSel(type,id,from){
+    if(!RS_TYPES[type])return;
+    id=String(id);
+    if(!this.sel){this._select(type,id,from);return;}
+    if(this._isSel(type,id)){
+      if(this.sel.type===type&&this.sel.id===id)this.sel=this.multi.shift()||null;
+      else this.multi=this.multi.filter(function(x){return!(x.type===type&&x.id===id);});
+    }else{
+      this.multi.push(this.sel);
+      this.sel={type:type,id:id};
+    }
+    this._reselectCanvas();
+    if(this.sel&&from!=='inspector')this._revealItem(this.sel.type,this.sel.id);
+    this._renderOutlineList();this._renderSelBar();
+  }
   _select(type,id,from){
     if(!RS_TYPES[type])return;
     const f=this._findItem(type,id);
+    this.multi=[];
     this.sel={type:type,id:String(id)};
     // an element the room inherits lives in the shared (Global) list — edit it there
     if(f&&f.inherited&&!this.global&&from!=='inspector')this._setRoom(this.roomIdx,true,'select');
@@ -966,7 +1100,8 @@ class RocStudio{
   }
   deselect(){
     if(!this.sel)return;
-    this.sel=null;
+    this.sel=null;this.multi=[];
+    if(this._card&&typeof this._card._rocMark==='function')try{this._card._rocMark([]);}catch(_){}
     if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
     this._renderOutlineList();this._renderSelBar();
   }
@@ -987,49 +1122,172 @@ class RocStudio{
     this._app.classList.add('show-insp');this._app.classList.remove('show-outline');
   }
   deleteSel(){
-    const s=this.sel;if(!s)return;
+    const set=this._selSet();if(!set.length)return;
     const c=JSON.parse(rsJ(this.work));
-    const f=this._findItem(s.type,s.id,c);if(!f)return;
-    f.list.splice(f.idx,1);
-    this.sel=null;
+    const self=this;let n=0;
+    set.forEach(function(x){const f=self._findItem(x.type,x.id,c);if(f){f.list.splice(f.idx,1);n++;}});
+    if(!n)return;
+    this.sel=null;this.multi=[];
     this._commit(c,'studio');
   }
   duplicateSel(){
-    const s=this.sel;if(!s)return;
+    const set=this._selSet();if(!set.length)return;
     const c=JSON.parse(rsJ(this.work));
-    const f=this._findItem(s.type,s.id,c);if(!f)return;
-    const it=JSON.parse(rsJ(f.item));
-    it.id=rsUniqueId(f.list,RS_TYPES[s.type].idp,it.id);
-    if(it.top!=null)it.top=rsNudgePct(it.top,2);
-    if(it.left!=null)it.left=rsNudgePct(it.left,2);
-    f.list.splice(f.idx+1,0,it);
+    const self=this,made=[];
+    set.forEach(function(x){
+      const f=self._findItem(x.type,x.id,c);if(!f)return;
+      const it=JSON.parse(rsJ(f.item));
+      it.id=rsUniqueId(f.list,RS_TYPES[x.type].idp,it.id);
+      if(it.top!=null)it.top=rsNudgePct(it.top,2);
+      if(it.left!=null)it.left=rsNudgePct(it.left,2);
+      f.list.splice(f.idx+1,0,it);
+      made.push({type:x.type,id:String(it.id)});
+    });
+    if(!made.length)return;
     this._commit(c,'studio');
-    this._select(s.type,it.id,'studio');
+    this._selectMany(made);
+  }
+  // select a list of elements at once (the first one is the primary)
+  _selectMany(list){
+    if(!list.length)return;
+    this._select(list[0].type,list[0].id,'studio');
+    this.multi=list.slice(1);
+    this._reselectCanvas();this._renderOutlineList();this._renderSelBar();
   }
   copySel(){
-    const s=this.sel;if(!s)return false;
-    const f=this._findItem(s.type,s.id);if(!f)return false;
-    this._clip={type:s.type,item:JSON.parse(rsJ(f.item))};
+    const set=this._selSet();if(!set.length)return false;
+    const self=this,items=[];
+    set.forEach(function(x){const f=self._findItem(x.type,x.id);if(f)items.push({type:x.type,item:JSON.parse(rsJ(f.item))});});
+    if(!items.length)return false;
+    this._clip={items:items};
     try{localStorage.setItem('roc-studio-clip',rsJ(this._clip));}catch(_){}
     this._renderSelBar();
     return true;
   }
+  // the clipboard: {items:[{type,item}]} (v6.43.0), or {room} — a v6.42.0 {type,item} still reads
   _clipboard(){
-    if(this._clip)return this._clip;
-    try{const v=JSON.parse(localStorage.getItem('roc-studio-clip')||'null');if(v&&RS_TYPES[v.type]&&v.item)return v;}catch(_){}
+    let v=this._clip;
+    if(!v)try{v=JSON.parse(localStorage.getItem('roc-studio-clip')||'null');}catch(_){v=null;}
+    if(!v)return null;
+    if(v.type&&v.item)v={items:[{type:v.type,item:v.item}]};
+    if(v.room&&typeof v.room==='object')return v;
+    if(Array.isArray(v.items)&&v.items.length&&v.items.every(function(x){return x&&RS_TYPES[x.type]&&x.item;}))return v;
     return null;
   }
   paste(){
     const clip=this._clipboard();if(!clip)return;
-    const T=RS_TYPES[clip.type];
+    if(clip.room){this.pasteRoom();return;}
     const c=JSON.parse(rsJ(this.work));
-    const list=rsListForNew(c,this.roomIdx,this.global,T.key);
-    const it=JSON.parse(rsJ(clip.item));
-    it.id=rsUniqueId(list,T.idp,it.id);
-    if(list.some(function(x){return x&&x.top===it.top&&x.left===it.left;})){it.top=rsNudgePct(it.top,2);it.left=rsNudgePct(it.left,2);}
-    list.push(it);
+    const self=this,made=[];
+    clip.items.forEach(function(x){
+      const T=RS_TYPES[x.type];
+      const list=rsListForNew(c,self.roomIdx,self.global,T.key);
+      const it=JSON.parse(rsJ(x.item));
+      it.id=rsUniqueId(list,T.idp,it.id);
+      if(list.some(function(y){return y&&y.top===it.top&&y.left===it.left;})){it.top=rsNudgePct(it.top,2);it.left=rsNudgePct(it.left,2);}
+      list.push(it);
+      made.push({type:x.type,id:String(it.id)});
+    });
     this._commit(c,'studio');
-    this._select(clip.type,it.id,'studio');
+    this._selectMany(made);
+  }
+
+  selectAll(){
+    const self=this,all=[];
+    RS_TYPE_ORDER.forEach(function(type){
+      const T=RS_TYPES[type];if(!T.canvas||self.hidden.has(type)||self.locked.has(type))return;
+      (rsOwner(self.work,self.roomIdx,self.global,T.key).list||[]).forEach(function(it){if(it&&it.id!=null)all.push({type:type,id:String(it.id)});});
+    });
+    if(!all.length)return;
+    this.sel=all[0];this.multi=all.slice(1);
+    this._reselectCanvas();this._renderOutlineList();this._renderSelBar();
+  }
+  // ---------------------------------------------------------------- align / distribute (3b)
+  // Measured on the canvas (what you see), applied to top / left. Values that are not "%"
+  // strings are left alone — the button reports how many were skipped.
+  _boxes(){
+    const card=this._card,self=this;
+    if(!card||typeof card._rocBox!=='function')return[];
+    return this._selSet().filter(function(x){return RS_TYPES[x.type]&&RS_TYPES[x.type].canvas;}).map(function(x){
+      let b=null;try{b=card._rocBox(x.type,x.id);}catch(_){}
+      return b?{x:x,b:b}:null;
+    }).filter(Boolean);
+  }
+  align(edge){
+    const bs=this._boxes();if(bs.length<2)return 0;
+    const L=Math.min.apply(null,bs.map(function(o){return o.b.l;})),R=Math.max.apply(null,bs.map(function(o){return o.b.l+o.b.w;}));
+    const T=Math.min.apply(null,bs.map(function(o){return o.b.t;})),B=Math.max.apply(null,bs.map(function(o){return o.b.t+o.b.h;}));
+    const d=function(o){
+      switch(edge){
+        case'left':return{dl:L-o.b.l};case'right':return{dl:R-(o.b.l+o.b.w)};case'center':return{dl:(L+R)/2-(o.b.l+o.b.w/2)};
+        case'top':return{dt:T-o.b.t};case'bottom':return{dt:B-(o.b.t+o.b.h)};case'middle':return{dt:(T+B)/2-(o.b.t+o.b.h/2)};
+      }
+      return{};
+    };
+    return this._shiftBoxes(bs.map(function(o){return Object.assign({x:o.x},d(o));}));
+  }
+  distribute(axis){
+    const bs=this._boxes();if(bs.length<3)return 0;
+    const h=axis!=='vertical';
+    const pos=function(o){return h?o.b.l:o.b.t;},size=function(o){return h?o.b.w:o.b.h;};
+    bs.sort(function(a,b){return pos(a)-pos(b);});
+    const first=bs[0],last=bs[bs.length-1];
+    const span=pos(last)+size(last)-pos(first);
+    const sum=bs.reduce(function(a,o){return a+size(o);},0);
+    const gap=(span-sum)/(bs.length-1);
+    let cur=pos(first)+size(first)+gap;
+    const moves=[];
+    for(let i=1;i<bs.length-1;i++){const o=bs[i];const dd=cur-pos(o);moves.push(h?{x:o.x,dl:dd}:{x:o.x,dt:dd});cur+=size(o)+gap;}
+    return this._shiftBoxes(moves);
+  }
+  _shiftBoxes(moves){
+    const c=JSON.parse(rsJ(this.work));
+    const self=this;let skipped=0,moved=0;
+    moves.forEach(function(m){
+      const f=self._findItem(m.x.type,m.x.id,c);if(!f)return;
+      let ok=true;
+      if(m.dt&&Math.abs(m.dt)>0.01)ok=rsShiftPct(f.item,'top',m.dt)&&ok;
+      if(m.dl&&Math.abs(m.dl)>0.01)ok=rsShiftPct(f.item,'left',m.dl)&&ok;
+      if(ok)moved++;else skipped++;
+    });
+    this._lastSkipped=skipped;
+    this._commit(c,'studio');
+    this._reselectCanvas();this._renderSelBar();
+    return moved;
+  }
+
+  // ---------------------------------------------------------------- rooms (3b)
+  duplicateRoom(idx){
+    const c=JSON.parse(rsJ(this.work));
+    if(!Array.isArray(c.rooms)||!c.rooms[idx])return;
+    const r=rsRoomCopy(c.rooms,c.rooms[idx],this.t('copy_suffix'));
+    c.rooms.splice(idx+1,0,r);
+    this._commit(c,'studio');
+    this._setRoom(idx+1,false,'outline');
+  }
+  copyRoom(idx){
+    const r=this._rooms()[idx];if(!r)return;
+    this._clip={room:JSON.parse(rsJ(r))};
+    try{localStorage.setItem('roc-studio-clip',rsJ(this._clip));}catch(_){}
+    this._renderChrome();
+  }
+  pasteRoom(){
+    const clip=this._clipboard();if(!clip||!clip.room)return;
+    const c=JSON.parse(rsJ(this.work));
+    if(!Array.isArray(c.rooms)||!c.rooms.length)return; // a single-room card has no room list to add to
+    const r=rsRoomCopy(c.rooms,clip.room,this.t('copy_suffix'));
+    c.rooms.push(r);
+    this._commit(c,'studio');
+    this._setRoom(c.rooms.length-1,false,'outline');
+  }
+  deleteRoom(idx){
+    const rooms=this._rooms();if(rooms.length<2||!rooms[idx])return;
+    const c=JSON.parse(rsJ(this.work));
+    c.rooms.splice(idx,1);
+    this.sel=null;this.multi=[];
+    if(this.roomIdx>=idx&&this.roomIdx>0)this.roomIdx--;
+    this._commit(c,'studio');
+    this._setRoom(this.roomIdx,false,'outline');
   }
 
   // ---------------------------------------------------------------- add (draw-to-create, E3)
@@ -1133,8 +1391,21 @@ class RocStudio{
       return;
     }
     const s=this.sel;
+    const n=this._selSet().length;
     if(s&&RS_TYPES[s.type]){
-      b.appendChild(rsEl('span',{class:'chip'},[rsIcon(RS_TYPES[s.type].icon),rsEl('span',{text:s.id})]));
+      b.appendChild(rsEl('span',{class:'chip'},[rsIcon(RS_TYPES[s.type].icon),rsEl('span',{text:n>1?this.t('n_selected',{n:n}):s.id})]));
+      if(n>1){
+        const al=rsEl('span',{class:'seg aligns'});
+        [['left','mdi:align-horizontal-left'],['center','mdi:align-horizontal-center'],['right','mdi:align-horizontal-right'],['top','mdi:align-vertical-top'],['middle','mdi:align-vertical-center'],['bottom','mdi:align-vertical-bottom']].forEach(function(a){
+          al.appendChild(rsEl('button',{type:'button','data-act':'al-'+a[0],title:self.t('al_'+a[0]),'aria-label':self.t('al_'+a[0]),onclick:function(){self.align(a[0]);}},[rsIcon(a[1])]));
+        });
+        if(n>2){
+          al.appendChild(rsEl('button',{type:'button','data-act':'dist-h',title:self.t('dist_h'),'aria-label':self.t('dist_h'),onclick:function(){self.distribute('horizontal');}},[rsIcon('mdi:distribute-horizontal-center')]));
+          al.appendChild(rsEl('button',{type:'button','data-act':'dist-v',title:self.t('dist_v'),'aria-label':self.t('dist_v'),onclick:function(){self.distribute('vertical');}},[rsIcon('mdi:distribute-vertical-center')]));
+        }
+        b.appendChild(al);
+        if(this._lastSkipped)b.appendChild(rsEl('span',{class:'hint warn',text:this.t('al_skipped',{n:this._lastSkipped})}));
+      }
       b.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'dup',title:this.t('dup_hint'),onclick:function(){self.duplicateSel();}},[rsIcon('mdi:content-duplicate'),rsEl('span',{class:'lbl',text:this.t('dup')})]));
       b.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'copy',title:this.t('copy_hint'),onclick:function(){self.copySel();}},[rsIcon('mdi:content-copy'),rsEl('span',{class:'lbl',text:this.t('copy')})]));
       b.appendChild(rsEl('button',{class:'btn sm danger',type:'button','data-act':'del',title:this.t('del_hint'),onclick:function(){self.deleteSel();}},[rsIcon('mdi:delete-outline'),rsEl('span',{class:'lbl',text:this.t('del')})]));
@@ -1170,7 +1441,9 @@ class RocStudio{
     this.lastSrc='redo';this._afterChange('redo');
   }
   _afterChange(src){
-    if(this.sel&&!this._findItem(this.sel.type,this.sel.id))this.sel=null;
+    const self0=this;
+    this.multi=this.multi.filter(function(x){return!!self0._findItem(x.type,x.id);});
+    if(this.sel&&!this._findItem(this.sel.type,this.sel.id))this.sel=this.multi.shift()||null;
     const n=this._rooms().length;
     if(n&&this.roomIdx>=n)this.roomIdx=n-1;
     if(!n)this.global=false;
@@ -1226,8 +1499,18 @@ class RocStudio{
       const mk=function(label,icon,cur,fn){return rsEl('button',{class:'ol-item',type:'button','aria-current':String(!!cur),onclick:fn},[rsIcon(icon),rsEl('span',{text:label})]);};
       ol.appendChild(mk(this.t('global'),'mdi:earth',this.global,function(){self._setRoom(self.roomIdx,true,'outline');}));
       rooms.forEach(function(r,i){
-        ol.appendChild(mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',!self.global&&i===self.roomIdx,function(){self.sel=null;self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');}));
+        const cur=!self.global&&i===self.roomIdx;
+        const row=rsEl('div',{class:'ol-row'+(cur?' cur':'')});
+        row.appendChild(mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');}));
+        if(cur){
+          row.appendChild(rsEl('button',{class:'ol-act',type:'button','data-act':'room-dup',title:self.t('room_dup'),'aria-label':self.t('room_dup'),onclick:function(){self.duplicateRoom(i);}},[rsIcon('mdi:content-duplicate')]));
+          row.appendChild(rsEl('button',{class:'ol-act',type:'button','data-act':'room-copy',title:self.t('room_copy'),'aria-label':self.t('room_copy'),onclick:function(){self.copyRoom(i);}},[rsIcon('mdi:content-copy')]));
+          if(rooms.length>1)row.appendChild(rsEl('button',{class:'ol-act danger',type:'button','data-act':'room-del',title:self.t('room_del'),'aria-label':self.t('room_del'),onclick:function(){self._panel(self.t('room_del_title',{r:String(r.name||r.id||'')}),[self.t('room_del_body')],[{label:self.t('room_del'),cls:'danger',id:'room-del-ok',fn:function(){self.deleteRoom(i);}},{label:self.t('cancel'),cls:'primary',id:'cancel'}]);}},[rsIcon('mdi:delete-outline')]));
+        }
+        ol.appendChild(row);
       });
+      const clip=this._clipboard();
+      if(clip&&clip.room)ol.appendChild(rsEl('button',{class:'ol-item ol-paste',type:'button','data-act':'room-paste',onclick:function(){self.pasteRoom();}},[rsIcon('mdi:content-paste'),rsEl('span',{text:self.t('room_paste',{r:String(clip.room.name||clip.room.id||'')})})]));
     }
     this._renderOutlineList();
     this._renderSelBar();
@@ -1260,12 +1543,19 @@ class RocStudio{
       const items=(o.list||[]).filter(function(it){return it&&typeof it==='object'&&hit(type,it);});
       if(!items.length)return;
       shown+=items.length;
-      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal(T.panel);}},
+      const hid=self.hidden.has(type),lck=self.locked.has(type);
+      const head=rsEl('div',{class:'ol-row ol-kindrow'+(hid?' hid':'')});
+      head.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal(T.panel);}},
         [rsIcon(T.icon),rsEl('span',{text:self.t('k_'+T.key)}),o.inherited?rsEl('span',{class:'tag',text:self.t('inherited')}):null,rsEl('span',{class:'n',text:String(items.length)})]));
+      if(T.canvas||type==='overlay'||type==='badge'){
+        head.appendChild(rsEl('button',{class:'ol-act'+(hid?' on':''),type:'button','data-act':'hide-'+type,'aria-pressed':String(hid),title:self.t(hid?'layer_show':'layer_hide'),'aria-label':self.t(hid?'layer_show':'layer_hide'),onclick:function(){self.toggleLayer(type,'hide');}},[rsIcon(hid?'mdi:eye-off-outline':'mdi:eye-outline')]));
+        if(T.canvas)head.appendChild(rsEl('button',{class:'ol-act'+(lck?' on':''),type:'button','data-act':'lock-'+type,'aria-pressed':String(lck),title:self.t(lck?'layer_unlock':'layer_lock'),'aria-label':self.t(lck?'layer_unlock':'layer_lock'),onclick:function(){self.toggleLayer(type,'lock');}},[rsIcon(lck?'mdi:lock-outline':'mdi:lock-open-variant-outline')]));
+      }
+      box.appendChild(head);
       items.forEach(function(it){
-        const cur=!!(self.sel&&self.sel.type===type&&self.sel.id===String(it.id));
+        const cur=self._isSel(type,it.id);
         const sub=it.entity||(it.card&&it.card.entity)||it.icon||'';
-        box.appendChild(rsEl('button',{class:'ol-item ol-el',type:'button','data-type':type,'data-id':String(it.id),'aria-current':String(cur),onclick:function(){self._select(type,String(it.id),'outline');}},
+        box.appendChild(rsEl('button',{class:'ol-item ol-el'+(hid?' hid':''),type:'button','data-type':type,'data-id':String(it.id),'aria-current':String(cur),onclick:function(e){if(e.shiftKey||e.ctrlKey||e.metaKey)self._toggleSel(type,String(it.id),'outline');else self._select(type,String(it.id),'outline');}},
           [rsEl('span',{class:'nm',text:String(it.id==null?'':it.id)}),sub?rsEl('span',{class:'sub',text:String(sub)}):null]));
       });
     });
@@ -1324,6 +1614,7 @@ class RocStudio{
     if(k==='s'){e.preventDefault();e.stopPropagation();this.save();return;}
     if(inField||this._layers.length)return; // native undo / copy / paste inside fields
     if(k==='d'&&this.sel){e.preventDefault();e.stopPropagation();this.duplicateSel();return;}
+    if(k==='a'){e.preventDefault();e.stopPropagation();this.selectAll();return;}
     if(k==='c'&&this.sel){e.preventDefault();e.stopPropagation();this.copySel();return;}
     if(k==='v'&&this._clipboard()){e.preventDefault();e.stopPropagation();this.paste();return;}
     if(k==='z'&&!e.shiftKey){e.preventDefault();e.stopPropagation();this.undo();}

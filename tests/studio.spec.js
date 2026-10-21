@@ -15,7 +15,7 @@ const requests=[];
 test.beforeAll(async()=>{
   server=http.createServer((req,res)=>{
     const u=new URL(req.url,'http://x');requests.push(u.pathname+u.search);
-    const map={'/':path.join(__dirname,'harness','studio-shell.html'),'/room-overlay-card.js':CARD,'/room-overlay-card-studio.js':STUDIO};
+    const map={'/':path.join(__dirname,'harness','studio-shell.html'),'/switch':path.join(__dirname,'harness','switch-shell.html'),'/room-overlay-card.js':CARD,'/room-overlay-card-studio.js':STUDIO};
     const f=map[u.pathname];
     if(!f||!fs.existsSync(f)){res.writeHead(404);res.end('nope');return;}
     res.writeHead(200,{'Content-Type':f.endsWith('.html')?'text/html':'text/javascript','Cache-Control':'no-store'});
@@ -201,4 +201,109 @@ test('arrow keys typed in an inspector field do not move the selected element; e
   await page.mouse.move(g.x,g.y);await page.mouse.down();await page.mouse.move(g.x+cr.w*0.1,g.y,{steps:6});await page.mouse.up();await page.waitForTimeout(300);
   const left=await page.evaluate(C=>parseFloat(eval(C).work.rooms[0].elements[0].left),CUR);
   expect(left).toBeGreaterThan(13);expect(left).toBeLessThan(17);
+});
+
+// ---- Phase 3b (v6.43.0) ------------------------------------------------------------------------
+test('Shift-click builds a multi-selection; dragging one moves them all; align and distribute',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(async C=>{const S=eval(C);S._setFrame('landscape');await new Promise(r=>setTimeout(r,300));},CUR);
+  const z=await centreOf(page,'[data-z="z1"]'),i=await centreOf(page,'[data-ico="i1"]'),g=await centreOf(page,'[data-gauge="g1"]');
+  await page.mouse.click(z.x,z.y);
+  await page.keyboard.down('Shift');await page.mouse.click(i.x,i.y);await page.mouse.click(g.x,g.y);await page.keyboard.up('Shift');
+  await page.waitForTimeout(200);
+  const a=await page.evaluate(C=>{const S=eval(C);return{set:S._selSet().map(x=>x.id),chip:S._selBar.querySelector('.chip').textContent,aligns:!!S._selBar.querySelector('[data-act="al-left"]'),dist:!!S._selBar.querySelector('[data-act="dist-h"]'),
+    marked:S._card._rocMarked.length};},CUR);
+  expect(a.set.sort()).toEqual(['g1','i1','z1']);expect(a.chip).toBe('3 selected');expect(a.aligns&&a.dist).toBe(true);expect(a.marked).toBe(2);
+  // drag the zone: the icon and the gauge follow by the same amount
+  const before=await page.evaluate(C=>{const S=eval(C);const r=S.work.rooms[0];return{z:parseFloat(r.zones[0].left),i:parseFloat(r.icons[0].left),g:parseFloat(r.gauges[0].left)};},CUR);
+  const cr=await contentRect(page);
+  await page.mouse.move(z.x,z.y);await page.mouse.down();await page.mouse.move(z.x+cr.w*0.05,z.y,{steps:6});await page.mouse.up();await page.waitForTimeout(300);
+  const after=await page.evaluate(C=>{const S=eval(C);const r=S.work.rooms[0];return{z:parseFloat(r.zones[0].left),i:parseFloat(r.icons[0].left),g:parseFloat(r.gauges[0].left),set:S._selSet().length};},CUR);
+  const dz=after.z-before.z;
+  expect(dz).toBeGreaterThan(3);
+  expect(Math.abs((after.i-before.i)-dz)).toBeLessThan(0.11);expect(Math.abs((after.g-before.g)-dz)).toBeLessThan(0.11);
+  expect(after.set).toBe(3);
+  // align the top edges, measured on screen
+  await page.evaluate(C=>{const S=eval(C);S._selBar.querySelector('[data-act="al-top"]').click();},CUR);await page.waitForTimeout(300);
+  const tops=await page.evaluate(C=>{const S=eval(C);return['[data-z="z1"]','[data-ico="i1"]','[data-gauge="g1"]'].map(q=>S._card.shadowRoot.querySelector(q).getBoundingClientRect().top);},CUR);
+  expect(Math.max(...tops)-Math.min(...tops)).toBeLessThan(cr.h*0.002+1);
+  // distribute horizontally: equal gaps between the three boxes
+  await page.evaluate(C=>{const S=eval(C);S._selBar.querySelector('[data-act="dist-h"]').click();},CUR);await page.waitForTimeout(300);
+  const gaps=await page.evaluate(C=>{const S=eval(C);const b=['[data-z="z1"]','[data-ico="i1"]','[data-gauge="g1"]'].map(q=>S._card.shadowRoot.querySelector(q).getBoundingClientRect()).sort((p,q)=>p.left-q.left);return[b[1].left-b[0].right,b[2].left-b[1].right];},CUR);
+  expect(Math.abs(gaps[0]-gaps[1])).toBeLessThan(cr.w*0.002+1);
+  // one undo per operation
+  const u=await page.evaluate(C=>eval(C).undoStack.length,CUR);
+  await page.keyboard.press('Control+z');
+  expect(await page.evaluate(C=>eval(C).undoStack.length,CUR)).toBe(u-1);
+});
+
+test('hide and lock a layer on the canvas; Ctrl+A skips them',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.click('dialog.roc-studio >> [data-act="hide-icon"]');
+  const h=await page.evaluate(C=>{const S=eval(C);const e=S._card.shadowRoot.querySelector('[data-ico="i1"]');return{disp:getComputedStyle(e).display,cfg:S.work.rooms[0].icons.length,dirty:S._dirty()};},CUR);
+  expect(h).toEqual({disp:'none',cfg:1,dirty:false});           // view only — nothing changes in the config
+  await page.click('dialog.roc-studio >> [data-act="lock-zone"]');
+  const z=await centreOf(page,'[data-z="z1"]');
+  await page.mouse.click(z.x,z.y);await page.waitForTimeout(200);
+  expect(await page.evaluate(C=>{const S=eval(C);return S.sel&&S.sel.id;},CUR)).not.toBe('z1');
+  await page.evaluate(C=>eval(C)._dlg.focus(),CUR);
+  await page.keyboard.press('Control+a');
+  const all=await page.evaluate(C=>eval(C)._selSet().map(x=>x.type),CUR);
+  expect(all).not.toContain('icon');expect(all).not.toContain('zone');expect(all).toContain('gauge');
+  // survives a canvas re-render (room switch and back)
+  await page.evaluate(C=>{const S=eval(C);S._setRoom(1,false,'toolbar');S._setRoom(0,false,'toolbar');},CUR);
+  expect(await page.evaluate(C=>{const S=eval(C);return getComputedStyle(S._card.shadowRoot.querySelector('[data-ico="i1"]')).display;},CUR)).toBe('none');
+});
+
+test('duplicate, copy / paste and delete a room from the outline',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.click('dialog.roc-studio >> [data-act="room-dup"]');
+  const a=await page.evaluate(C=>{const S=eval(C);return{rooms:S.work.rooms.map(r=>[r.id,r.name]),idx:S.roomIdx,zones:(S.work.rooms[1].zones||[]).length};},CUR);
+  expect(a.rooms.map(r=>r[0])).toEqual(['a','a_2','b']);expect(a.rooms[1][1]).toBe('Living (copy)');expect(a.idx).toBe(1);expect(a.zones).toBe(1);
+  await page.click('dialog.roc-studio >> [data-act="room-copy"]');
+  await page.click('dialog.roc-studio >> [data-act="room-paste"]');
+  expect(await page.evaluate(C=>eval(C).work.rooms.map(r=>r.id),CUR)).toEqual(['a','a_2','b','a_3']);
+  await page.click('dialog.roc-studio >> [data-act="room-del"]');
+  await page.click('dialog.roc-studio >> [data-act="room-del-ok"]');
+  expect(await page.evaluate(C=>eval(C).work.rooms.map(r=>r.id),CUR)).toEqual(['a','a_2','b']);
+});
+
+test('gauges and blinds can be clicked and resized on the canvas (they ignore the pointer outside Edit mode)',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  const bl=await centreOf(page,'[data-gauge="__bl_b1"]');
+  await page.mouse.click(bl.x,bl.y);await page.waitForTimeout(200);
+  expect(await page.evaluate(C=>eval(C).sel,CUR)).toEqual({type:'blind',id:'b1'});
+  const h=await page.evaluate(C=>{const S=eval(C);const hs=[...S._card.shadowRoot.querySelectorAll('[data-gauge="__bl_b1"] .roc-rh')].map(x=>x.getBoundingClientRect());const se=hs.reduce((a,b)=>b.right+b.bottom>a.right+a.bottom?b:a);return{x:se.left+se.width/2,y:se.top+se.height/2};},CUR);
+  const cr=await contentRect(page);
+  const w0=await page.evaluate(C=>parseFloat(eval(C).work.rooms[0].blinds[0].width),CUR);
+  await page.mouse.move(h.x,h.y);await page.mouse.down();await page.mouse.move(h.x+cr.w*0.05,h.y+cr.h*0.05,{steps:5});await page.mouse.up();await page.waitForTimeout(300);
+  const w1=await page.evaluate(C=>parseFloat(eval(C).work.rooms[0].blinds[0].width),CUR);
+  expect(w1-w0).toBeGreaterThan(3);
+});
+
+// ---- room switch (v6.43.0 fix) -----------------------------------------------------------------
+test('wheel room switch: the old room does not linger and the slide is never cut short (slow embedded cards)',async({page})=>{
+  await page.goto(base+'/switch');
+  await page.waitForFunction(()=>window.__card&&window.__card._rendered);await page.waitForTimeout(600);
+  const r=await page.evaluate(async()=>{
+    window.__heavy=150;const c=window.__card;const made0=window.__made;
+    const out=[];let run=true;const t0=performance.now();
+    (function f(){const cs=[...c.shadowRoot.querySelectorAll('.wrap > .content')];
+      const g=cs.find(x=>x.style.zIndex==='600'),n=cs.find(x=>x.style.zIndex!=='600');
+      const tx=e=>{if(!e)return null;const t=getComputedStyle(e).transform;return t==='none'?0:new DOMMatrix(t).m41;};
+      out.push({t:performance.now()-t0,g:tx(g),n:tx(n)});if(run)requestAnimationFrame(f);})();
+    const wr=c.shadowRoot.querySelector('.wrap').getBoundingClientRect();
+    c.shadowRoot.querySelector('.wrap').dispatchEvent(new WheelEvent('wheel',{deltaY:100,bubbles:true,cancelable:true,composed:true,clientX:wr.left+50,clientY:wr.top+50}));
+    await new Promise(r=>setTimeout(r,1000));run=false;
+    return{out,room:c._roomIdx,made:window.__made-made0,w:wr.width};
+  });
+  expect(r.room).toBe(1);
+  // embedded cards are built once for the new room — the ghost no longer builds a second copy
+  expect(r.made).toBe(1);
+  // the slide is already well under way at the first frame after the slow card blocked the page
+  const firstMoved=r.out.find(x=>x.n!==null&&x.n<r.w*0.98);
+  expect(firstMoved.t).toBeLessThan(280);
+  // the ghost never disappears before the new room has arrived
+  const cut=r.out.find(x=>x.g===null&&x.n!==null&&Math.abs(x.n)>1);
+  expect(cut).toBeUndefined();
 });

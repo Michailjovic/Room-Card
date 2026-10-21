@@ -20,7 +20,11 @@
  * inspector; the outline lists every element (with search); add by clicking / drawing on the
  * image (every positioned type); duplicate, copy / paste across rooms, delete; edge and centre
  * snapping lives in the card (_snapPos).
+ *
+ * Phase 3b (v6.43.0) — multi-selection (Shift / Ctrl click, Ctrl+A), group move, align /
+ * distribute, hide / lock layers on the canvas (studio view only), duplicate / copy / paste /
+ * delete whole rooms.
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.42.0';
+const ROC_STUDIO_VERSION='6.43.0';

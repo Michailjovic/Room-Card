@@ -36,8 +36,9 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 0 — spikes | — | ✅ done (V7_PLAN §13) |
 | 1 — foundation (`src/`, schema, test tiers) | v6.40.0 | ✅ released |
 | 2 — Studio shell | v6.41.0 | ✅ released; gate G2 (author's PC and tablet) running |
-| 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | 🔨 built |
-| 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | next |
+| 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | ✅ built |
+| 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | 🔨 built (+ fix: room-switch lag) |
+| 4 — forms rebuilt (entity picker, action builder, sections, overview), new-card wizard | v6.44.0–6.45.0 | next |
 
 ## Shipped history (condensed)
 
@@ -130,6 +131,7 @@ failure broke HACS installs.
 | **v6.40.0** | v7 Phase 1 — source split into `src/` + `tools/assemble.js`, config schema registry (`src/schema/`), schema / compat / HA-in-the-loop test tiers; no rendering change |
 | **v6.41.0** | v7 Phase 2 — **Room Card Studio**: full-screen editor (lazy-loaded second file `room-overlay-card-studio.js`), live canvas in device frames, today's editor as the inspector, undo/redo, unsaved-changes guard, Apply to HA's editor or save straight to the dashboard (located by identity, conflict check), YAML view, history, schema check in the status bar |
 | **v6.42.0** *(unreleased)* | v7 Phase 3a — Studio canvas editing: one selection across canvas, outline and inspector; outline lists every element with search (E5); add any element by clicking / drawing on the image (E3); duplicate, copy/paste across rooms, delete, keyboard; edge/centre snap guides (E4); blinds/gauges/embedded cards arrangeable; ✎ Studio button in HA's dashboard edit mode; Edit mode (`test_mode`) retired as a setting; fix: dragging an inherited element hid all shared ones |
+| **v6.43.0** *(unreleased)* | v7 Phase 3b — Studio: multi-selection (Shift/Ctrl click, Ctrl+A), group move, align / distribute, hide / lock layers (view only), duplicate / copy / paste / delete rooms; fix: room switch held the old room ~1/3 s and cut the slide (wheel, nav); fix: gauges/blinds not grabbable on the canvas |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<!--
+  Room-switch harness (v6.43.0) for tests/studio.spec.js: three rooms, nav.wheel, and an embedded
+  card type whose construction is deliberately slow (window.__heavy ms) — the kind of room that
+  used to hold the OLD room on screen for ~1/3 s after a wheel switch and then cut the slide short.
+-->
+<html><head><meta charset="utf-8"><style>html,body{margin:0;background:#111}#d{width:1200px;height:700px}</style></head><body><div id="d"></div>
+<script type="module" src="/room-overlay-card.js"></script>
+<script type="module">
+window.__made=0;
+customElements.define('heavy-card',class extends HTMLElement{setConfig(c){} set hass(h){} constructor(){super();window.__made++;} connectedCallback(){const t=performance.now();while(performance.now()-t<(window.__heavy||0));this.textContent='heavy';}});
+await customElements.whenDefined('room-overlay-card');
+const svg=(c,t)=>'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="'+c+'"/><text x="100" y="400" font-size="200" fill="#fff">'+t+'</text></svg>');
+const hass={states:{},callService(){},language:'en',user:{name:'t',is_admin:true}};
+const rooms=[['#a33','A'],['#3a3','B'],['#33a','C']].map(([c,t],i)=>({id:'r'+i,name:t,base_image:svg(c,t),elements:[{id:'e'+i,top:'10%',left:'10%',width:'20%',height:'20%',card:{type:'custom:heavy-card'}}]}));
+const card=document.createElement('room-overlay-card');card.style.cssText='display:block;height:700px';
+card.setConfig({type:'custom:room-overlay-card',layout:{height:'container'},nav:{wheel:'both',style:'thumbnails'},rooms});card.hass=hass;
+document.getElementById('d').appendChild(card);window.__card=card;
+</script></body></html>

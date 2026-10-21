@@ -43,6 +43,16 @@ const ROC_STUDIO_STR={en:{
   dup:'Duplicate',dup_hint:'Duplicate (Ctrl+D)',copy_hint:'Copy (Ctrl+C) — paste into any room or card',
   del:'Delete',del_hint:'Delete (Del)',paste:'Paste',paste_hint:'Paste (Ctrl+V) into the room shown',
   search_ph:'Search elements…',no_match:'Nothing matches.',no_elements:'No elements yet — Add places the first one.',
+  // Phase 3b (v6.43.0)
+  n_selected:'{n} selected',
+  al_left:'Align left edges',al_center:'Align centres (horizontally)',al_right:'Align right edges',
+  al_top:'Align top edges',al_middle:'Align middles (vertically)',al_bottom:'Align bottom edges',
+  dist_h:'Distribute horizontally (equal gaps)',dist_v:'Distribute vertically (equal gaps)',
+  al_skipped:'{n} not moved (position not in %)',
+  copy_suffix:'(copy)',room_dup:'Duplicate this room',room_copy:'Copy this room (paste into any card)',
+  room_del:'Delete room',room_del_title:'Delete the room “{r}”?',room_del_body:'The room and everything in it is removed from the card. Undo brings it back.',
+  room_paste:'Paste room “{r}”',
+  layer_hide:'Hide on the canvas (studio only)',layer_show:'Show on the canvas',layer_lock:'Lock — cannot be selected or dragged',layer_unlock:'Unlock',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;

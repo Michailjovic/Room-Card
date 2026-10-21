@@ -338,6 +338,63 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('…but stays on a card that has it on, so it can be switched off',!!eOld.querySelector('#test_mode')&&eOld.querySelector('#test_mode').checked);
   eNew.remove();eOld.remove();
 
+  // ---- 7. Phase 3b (v6.43.0): multi-select, group move, layers, rooms; room-switch ghost --------
+  const E7=d.createElement('room-overlay-card-editor');E7.setConfig(P3());E7.hass=hass;d.body.appendChild(E7);
+  const S7=await C._rocStudio.open({from:'editor',editor:E7,hass});await wait(40);
+  const cv7=S7._card;
+  S7._select('zone','z1','test');
+  cv7.shadowRoot.querySelector('[data-ico="i1"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,composed:true,shiftKey:true}));
+  check('Shift-click on the canvas adds to the selection',J(S7._selSet())===J([{type:'icon',id:'i1'},{type:'zone',id:'z1'}]),J(S7._selSet()));
+  check('…the others are marked on the canvas',cv7._rocMarked.length===1);
+  check('…the selection bar counts them',/2 selected/.test(S7._selBar.textContent)&&!!S7._selBar.querySelector('[data-act="al-left"]')&&!S7._selBar.querySelector('[data-act="dist-h"]'));
+  S7._olList.querySelector('[data-id="b1"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,ctrlKey:true}));
+  check('Ctrl-click in the outline adds too (3 → distribute offered)',S7._selSet().length===3&&!!S7._selBar.querySelector('[data-act="dist-h"]'));
+  S7._toggleSel('icon','i1','test');
+  check('toggling a selected element takes it out',S7._selSet().length===2&&!S7._isSel('icon','i1'));
+  // group move: a canvas drag of one selected element moves the others by the same amount
+  const nc7=JSON.parse(J(cv7._config));nc7.rooms[0].zones[0].top='15%';nc7.rooms[0].zones[0].left='12%';
+  cv7._posOut(Object.assign({type:'custom:room-overlay-card'},nc7));await wait(40);
+  const b7=S7.work.rooms[0].blinds[0];
+  check('dragging one selected element moves the selection',b7.top==='15.0%'&&b7.left==='62.0%',J(b7));
+  check('…as one undo step',(S7.undo(),S7.work.rooms[0].blinds[0].top==='10%'&&S7.work.rooms[0].zones[0].top==='10%'));
+  S7.redo();
+  // multi delete / duplicate / copy-paste
+  S7.duplicateSel();
+  check('duplicate copies the whole selection and selects the copies',S7.work.rooms[0].zones.length===2&&S7.work.rooms[0].blinds.length===2&&S7._selSet().length===2&&S7._selSet().every(x=>x.id!=='z1'&&x.id!=='b1'));
+  S7.deleteSel();
+  check('delete removes the whole selection',S7.work.rooms[0].zones.length===1&&S7.work.rooms[0].blinds.length===1&&!S7.sel);
+  S7._selectMany([{type:'zone',id:'z1'},{type:'icon',id:'i1'}]);S7.copySel();
+  check('the clipboard holds every selected element',J(JSON.parse(w.localStorage.getItem('roc-studio-clip')).items.map(x=>x.item.id))===J(['z1','i1']));
+  S7._setRoom(1,false,'toolbar');S7.paste();
+  check('paste puts them all into the room shown, selected',S7.work.rooms[1].zones.length===1&&S7.work.rooms[1].icons.length===1&&S7._selSet().length===2);
+  w.localStorage.setItem('roc-studio-clip',J({type:'icon',item:{id:'old',icon:'mdi:lamp',top:'1%',left:'1%'}}));S7._clip=null;
+  S7.paste();
+  check('a v6.42.0 clipboard still pastes',S7.work.rooms[1].icons.some(x=>x.id==='old'));
+  // select all skips hidden / locked layers
+  S7._setRoom(0,false,'toolbar');S7.toggleLayer('icon','hide');S7.toggleLayer('zone','lock');
+  const w7=J(S7.work);
+  check('hide / lock live in the canvas stylesheet, not in the config',/\[data-ico\][^{]*\{display:none!important;\}/.test(cv7._rocExtraCss)&&/\[data-z\][^{]*\{pointer-events:none!important;\}/.test(cv7._rocExtraCss)&&J(S7.work)===w7);
+  check('…a style element is in the card',!!cv7.shadowRoot.querySelector('style.roc-xcss'));
+  S7.selectAll();
+  check('Ctrl+A selects the visible, unlocked elements only (inherited ones included)',S7._selSet().map(x=>x.id).sort().join()==='b1,l_shared',J(S7._selSet()));
+  S7.toggleLayer('icon','hide');S7.toggleLayer('zone','lock');
+  check('…and showing / unlocking again removes the stylesheet',!cv7.shadowRoot.querySelector('style.roc-xcss')&&cv7._rocExtraCss==='');
+  // rooms
+  S7.duplicateRoom(0);
+  check('duplicate room: unique id, (copy) name, no area_match, selected',S7.work.rooms[1].id==='a_2'&&S7.work.rooms[1].name==='A (copy)'&&S7.roomIdx===1);
+  S7.copyRoom(1);S7.pasteRoom();
+  check('copy / paste room appends a copy',S7.work.rooms.length===4&&S7.work.rooms[3].id==='a_3');
+  S7.deleteRoom(3);
+  check('delete room',S7.work.rooms.length===3);
+  S7.requestClose();if(layerBtn(S7,'discard'))layerBtn(S7,'discard').click();
+  E7.remove();
+  // room switch ghost: custom elements become plain boxes (no second construction)
+  let constructed=0;
+  w.customElements.define('probe-card',class extends w.HTMLElement{constructor(){super();constructed++;}});
+  const src=d.createElement('div');src.innerHTML='<div class="elcont" style="left:5%"><probe-card class="x" style="top:1px"></probe-card></div><ha-icon icon="mdi:lamp"></ha-icon>';
+  const before7=constructed;const gh=w.eval('rocGhostClone')(src);
+  check('the room-switch ghost does not construct embedded cards again',constructed===before7&&!gh.querySelector('probe-card')&&gh.querySelector('.elcont > div.x').getAttribute('style')==='top:1px'&&!!gh.querySelector('ha-icon'));
+
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

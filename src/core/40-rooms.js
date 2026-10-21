@@ -73,4 +73,20 @@ function cfgKey(c){
 // open on the viewed room. In-memory (survives HA's edit toggle, which is an SPA
 // nav that DROPS the URL hash); more reliable than url_sync for this purpose.
 const ROC_ROOM_MEM=new Map();
-
+// Room-switch ghost (v6.43.0): a copy of the old room's content for the 0.3 s slide / fade.
+// Custom elements (embedded HA cards, nav minis…) become plain boxes with the same class and
+// inline style — a deep cloneNode constructs every one of them again just to slide out, which
+// blocked the switch for a noticeable moment on rich rooms. ha-icon stays (cheap, and visible).
+function rocGhostClone(node){
+  if(node.nodeType!==1)return node.cloneNode(false);
+  const tag=node.tagName;
+  if(tag.indexOf('-')>0&&tag!=='HA-ICON'){
+    const d=document.createElement('div');
+    if(node.className&&typeof node.className==='string')d.className=node.className;
+    const st=node.getAttribute('style');if(st)d.setAttribute('style',st);
+    return d;
+  }
+  const c=node.cloneNode(false);
+  for(let ch=node.firstChild;ch;ch=ch.nextSibling)c.appendChild(rocGhostClone(ch));
+  return c;
+}

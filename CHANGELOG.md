@@ -1,5 +1,77 @@
 # Changelog
 
+## [6.43.0] - unreleased
+
+### Studio: canvas editing, part 2 (V7_PLAN.md Phase 3b)
+
+- **Multi-selection.**
+  - **Shift / Ctrl / ⌘ click** on the canvas or in the outline adds an element to the selection,
+    or takes it out. **Ctrl+A** selects every visible, unlocked element of the room.
+  - The extra elements get a dashed outline; the last one clicked keeps the handles and is the
+    one open in the inspector.
+  - The selection bar shows "*n* selected".
+- **Group move.** Dragging any selected element moves the whole selection by the same amount, as
+  one undo step.
+- **Align and distribute.** With 2+ elements selected:
+  - align left / centre / right / top / middle / bottom;
+  - with 3+, distribute horizontally or vertically with equal gaps.
+
+  Measured on the canvas (what you see, so a centred icon aligns by its centre), applied to `top`
+  / `left`. Positions not in `%` are left alone and counted.
+- **Duplicate, copy / paste, delete work on the whole selection.** The clipboard now holds several
+  elements; one copied by v6.42.0 still pastes.
+- **Layers: hide and lock per element type** (eye / lock in the outline). A hidden type disappears
+  from the canvas; a locked one cannot be selected or dragged. This is a view setting of the
+  studio only — nothing is written into the card config.
+- **Rooms in the outline:** duplicate, copy (paste into any card) and delete the current room.
+  - A copy gets a unique id and a "(copy)" name.
+  - Its `area_match` is dropped, so a presence sensor keeps following the original room.
+  - Deleting asks first; undo brings the room back.
+
+### Fixes
+
+- **Room switch: the old room lingered for ~1/3 s and the slide was cut short** (reported with
+  the mouse wheel; it also applied to nav taps). Three causes:
+  - the ghost of the old room was a deep copy, so every embedded HA card in it was built a second
+    time just to slide out;
+  - the slide ran on the main thread and froze while the new room mounted its cards;
+  - the ghost was removed 380 ms after the switch instead of when its slide ended, so a slide
+    that started late lost its old half and showed a black strip.
+
+  Now:
+  - the ghost copies embedded cards as plain boxes;
+  - both layers slide on the compositor;
+  - the new room's embedded cards mount once the slide has started;
+  - the ghost goes when its own transition ends.
+
+  On a room with a slow embedded card, the slide now starts at once instead of after the card is
+  built.
+- **Gauges and blinds could not be clicked, dragged or resized on the canvas.** They ignore the
+  pointer outside Edit mode, and Edit mode never switched that back on (v6.42.0 added their
+  handles, which therefore could not be grabbed).
+
+### Tests
+
+- `tests/studio.test.js`: 113 checks (+20). Covers:
+  - multi-select (canvas Shift-click, outline Ctrl-click, toggling out);
+  - group move as one undo step;
+  - multi duplicate / delete / copy / paste, and the v6.42.0 clipboard format;
+  - Ctrl+A skipping hidden and locked layers;
+  - layer CSS on and off, with the config untouched;
+  - room duplicate / copy / paste / delete;
+  - the room-switch ghost not constructing embedded cards.
+- `tests/studio.spec.js` (real Chromium): 16 tests (+5):
+  - Shift-click selection, group drag, align top and distribute with on-screen measurement, and
+    undo;
+  - hide / lock and Ctrl+A;
+  - room duplicate / copy / paste / delete;
+  - a blind clicked and resized on the canvas;
+  - **wheel room switch with a slow embedded card**: the card is built once, the slide is under
+    way at the first frame after it, and the ghost never leaves before the new room has arrived.
+    This test fails on v6.42.0.
+- Compat vs v6.42.0: 18 configs, 176 snapshots (room switches included), **identical**.
+- HA tier 11/11 on the minified files.
+
 ## [6.42.0] - unreleased
 
 ### Studio: canvas editing, part 1 (V7_PLAN.md Phase 3a) — and Edit mode retires

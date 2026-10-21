@@ -73,6 +73,16 @@ function makeBadgePos(b){
 }
 
 let _rocHelpers=null,_rocHelpersP=null;
+// Room-switch gate (v6.43.0): while a switch is starting its slide, new embedded cards wait for
+// it — HA cards can take a while to construct, and that used to hold the OLD room on screen.
+let rocCardGate=null;
+function rocGateCards(ms){
+  let release;
+  const p=new Promise(function(r){release=r;});
+  const t=setTimeout(function(){if(rocCardGate===p)rocCardGate=null;release();},ms||600);
+  rocCardGate=p;
+  return function(){clearTimeout(t);if(rocCardGate===p)rocCardGate=null;release();};
+}
 function getHelpers(){
   if(_rocHelpers)return Promise.resolve(_rocHelpers);
   if(window.loadCardHelpers){
@@ -87,7 +97,7 @@ function makeHACard(cfg,onReady){
   // (helpers handle lazy-loaded hui-* cards and render hui-error-card on failure)
   const wrap=document.createElement('div');
   wrap.style.cssText='width:100%;height:100%;display:block;';
-  getHelpers().then(function(h){
+  (rocCardGate||Promise.resolve()).then(getHelpers).then(function(h){
     let el=null;
     if(h&&typeof h.createCardElement==='function'){
       try{el=h.createCardElement(cfg);}catch(e){console.error('[room-overlay-card] createCardElement failed:',cfg.type,e);}
