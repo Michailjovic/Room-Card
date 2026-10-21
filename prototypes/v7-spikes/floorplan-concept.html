@@ -1,0 +1,385 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>
+<title>Živý půdorys</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: drafting-table page — one large interactive plan on top, a room inspector beside it,
+   then three short reference blocks (data sources, findings, render path). */
+:root{
+  --bg:#eef1f3; --paper:#f8fafb; --ink:#1d2a33; --ink-2:#55656f; --rule:#c9d3d9;
+  --wall:#2b3740; --wall-side:#4a5862; --wall-top:#1d262d;
+  --wood:#d9c2a3; --wood-line:#c4a984; --tile:#dfe3e2; --tile-line:#c3cac9;
+  --accent:#1f6f8b; --warm:#f2a33a; --heat:#e4572e; --cool:#4d9fd6; --ok:#2f8f5b; --warn:#c9822b;
+  --chip:#ffffffd9; --chip-line:#c9d3d9;
+  --f-display:"Archivo",system-ui,sans-serif; --f-body:"Archivo",system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#11171c; --paper:#161e24; --ink:#e3e9ed; --ink-2:#93a2ac; --rule:#2a3740;
+  --wall:#c9d3d9; --wall-side:#7d8d97; --wall-top:#e7edf0;
+  --wood:#5a4a39; --wood-line:#4a3c2e; --tile:#3a4246; --tile-line:#2f363a;
+  --accent:#5fb4d2; --warm:#ffb347; --heat:#ff6a3d; --cool:#5aaee6; --ok:#4cc184; --warn:#e3a14a;
+  --chip:#0e1418d9; --chip-line:#2f3c45; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#11171c; --paper:#161e24; --ink:#e3e9ed; --ink-2:#93a2ac; --rule:#2a3740;
+  --wall:#c9d3d9; --wall-side:#7d8d97; --wall-top:#e7edf0;
+  --wood:#5a4a39; --wood-line:#4a3c2e; --tile:#3a4246; --tile-line:#2f363a;
+  --accent:#5fb4d2; --warm:#ffb347; --heat:#ff6a3d; --cool:#5aaee6; --ok:#4cc184; --warn:#e3a14a;
+  --chip:#0e1418d9; --chip-line:#2f3c45; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:28px}
+header{display:grid;gap:6px}
+.eyebrow{font-family:var(--f-mono);font-size:12px;letter-spacing:.06em;color:var(--ink-2);text-transform:uppercase}
+h1{font-family:var(--f-display);font-stretch:78%;font-weight:760;font-size:clamp(30px,5vw,48px);line-height:1.05;margin:0;text-wrap:balance}
+.lede{max-width:68ch;color:var(--ink-2);margin:0}
+h2{font-family:var(--f-display);font-stretch:85%;font-weight:700;font-size:21px;margin:0 0 10px;text-wrap:balance}
+.board{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media (max-width:900px){.board{grid-template-columns:minmax(0,1fr)}}
+.stage{background:var(--paper);border:1px solid var(--rule);border-radius:10px;overflow:hidden;min-width:0}
+.bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:8px;overflow:hidden}
+.seg button{font:500 13px var(--f-body);background:none;border:0;color:var(--ink-2);padding:7px 12px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--paper)}
+.layers{display:flex;flex-wrap:wrap;gap:6px}
+.tog{font:500 12.5px var(--f-body);border:1px solid var(--rule);background:none;color:var(--ink-2);border-radius:999px;padding:5px 11px;cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.tog i{width:8px;height:8px;border-radius:50%;background:var(--dot,var(--ink-2));opacity:.35}
+.tog[aria-pressed="true"]{color:var(--ink);border-color:var(--ink-2)}
+.tog[aria-pressed="true"] i{opacity:1}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lbl{font-family:var(--f-mono);font-size:11px;color:var(--ink-2);letter-spacing:.04em;text-transform:uppercase}
+.scroll{overflow-x:auto}
+svg#plan{display:block;width:100%;min-width:720px;height:auto;touch-action:manipulation}
+.foot{display:flex;flex-wrap:wrap;gap:8px 18px;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--rule);font-family:var(--f-mono);font-size:11.5px;color:var(--ink-2)}
+aside.insp{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:16px;display:grid;gap:12px;min-width:0}
+.insp h3{font-family:var(--f-display);font-stretch:80%;font-size:26px;line-height:1.1;margin:0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px;margin:0}
+.kv dt{color:var(--ink-2)}
+.kv dd{margin:0;font-variant-numeric:tabular-nums;text-align:right}
+.ent{font-family:var(--f-mono);font-size:11px;color:var(--ink-2);word-break:break-all}
+.btn{font:600 13px var(--f-body);border:1px solid var(--ink);background:var(--ink);color:var(--paper);border-radius:8px;padding:8px 12px;cursor:pointer}
+.note{font-size:12.5px;color:var(--ink-2);margin:0}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+@media (max-width:900px){.cols{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--paper);border:1px solid var(--rule);border-radius:10px;padding:16px 18px;min-width:0}
+.card p{margin:0 0 10px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td{padding:6px 0;border-top:1px solid var(--rule);vertical-align:top}
+td:first-child{font-family:var(--f-mono);font-size:11.5px;padding-right:10px;color:var(--ink);word-break:break-word;width:46%}
+td:last-child{color:var(--ink-2)}
+ol,ul{margin:0;padding-left:20px;display:grid;gap:8px;font-size:14px}
+li b{color:var(--ink)}
+.flag{display:inline-block;font:600 10.5px var(--f-mono);letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:4px;border:1px solid currentColor;margin-right:4px}
+.flag.w{color:var(--warn)} .flag.k{color:var(--ok)}
+code{font-family:var(--f-mono);font-size:.88em}
+/* SVG */
+#floors{transition:transform .9s cubic-bezier(.3,.7,.2,1);transform-origin:0 0}
+.lab{transition:transform .9s cubic-bezier(.3,.7,.2,1)}
+.room{cursor:pointer}
+.sel .room-edge{stroke:var(--accent);stroke-width:5}
+.v-data .only-real,.v-data .only-plan,.v-iso .only-plan,.v-plan .only-iso,.v-data .only-iso,.v-iso .only-data,.v-plan .only-data{opacity:0;pointer-events:none}
+.fade{transition:opacity .5s ease}
+.v-iso #walls3d{transition-delay:.6s}
+.hide{opacity:0!important;pointer-events:none}
+@keyframes flow{to{stroke-dashoffset:-48}}
+@keyframes ping{0%{transform:scale(.4);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+.pipe{stroke-dasharray:14 10;animation:flow 1.6s linear infinite}
+.ping{transform-box:fill-box;transform-origin:center;animation:ping 2s ease-out infinite}
+@media (prefers-reduced-motion:reduce){.pipe,.ping{animation:none}#floors,.lab{transition:none}}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Room Card · koncept v7 · data z AnyVac, stav k 20. 10. 2026</div>
+    <h1>Živý půdorys tvého bytu</h1>
+    <p class="lede">Půdorys níže kreslí prohlížeč z geometrie, kterou AnyVac publikuje ze senzoru <code>sensor.kitchen_s8_maxv_ultra_anyvac_map</code>. Žádný obrázek ani AI. Teploty, topení a dok jsou skutečné hodnoty z tvého HA. Rozsvícení, přítomnost, okna a jízda vysavače jsou ukázkové scénáře.</p>
+  </header>
+
+  <div class="board">
+    <section class="stage" aria-label="Půdorys">
+      <div class="bar">
+        <div class="seg" role="group" aria-label="Pohled">
+          <button id="v-data" aria-pressed="false">Data z mapy</button>
+          <button id="v-plan" aria-pressed="true">Shora</button>
+          <button id="v-iso" aria-pressed="false">Izometrie</button>
+        </div>
+        <div class="seg" role="group" aria-label="Scénář">
+          <button id="s-now" aria-pressed="true">Teď</button>
+          <button id="s-eve" aria-pressed="false">Večer</button>
+          <button id="s-vac" aria-pressed="false">Úklid</button>
+        </div>
+      </div>
+      <div class="bar" style="padding-block:8px">
+        <span class="lbl">Vrstvy</span>
+        <div class="layers" id="layers"></div>
+      </div>
+      <div class="scroll"><svg id="plan" viewBox="0 0 1000 440" role="img" aria-label="Interaktivní půdorys bytu"></svg></div>
+      <div class="foot"><span id="scale">1 m = 80 px mapy · 1 px = 12,5 mm</span><span id="hint">Klepni na místnost. Na telefonu půdorys posuň do strany.</span><button class="tog" id="bench" type="button">Změřit výkon</button></div>
+      <div class="foot" id="bench-out" hidden></div>
+    </section>
+
+    <aside class="insp" aria-live="polite" id="insp"></aside>
+  </div>
+
+  <div class="cols">
+    <article class="card">
+      <h2>Co dává AnyVac</h2>
+      <p class="note">Atributy, které už dnes publikuje, a k čemu by v půdorysu sloužily.</p>
+      <table>
+        <tr><td>rooms[].outline_home_px</td><td>tvar místnosti: podlaha, zdi, ořez efektů</td></tr>
+        <tr><td>home_frame</td><td>měřítko a plátno (2828 × 1908 px, 12,5 mm/px)</td></tr>
+        <tr><td>vacuum_position_home_px, charger_home_px</td><td>robot a dok včetně natočení</td></tr>
+        <tr><td>live, path_dry/wet_home_px</td><td>živá poloha a stopa během úklidu</td></tr>
+        <tr><td>vacuum_room</td><td>ve které místnosti robot právě je</td></tr>
+        <tr><td>rooms_coverage, rooms_last_cleaned</td><td>vrstva úklidu: % a kdy naposledy</td></tr>
+        <tr><td>snap_wall_corner</td><td>přichycení oken a dveří k rohům zdí v editoru</td></tr>
+        <tr><td>snapshot_map_as_floorplan, detect_floorplan_fiducials</td><td>podklad pro AI render a jeho automatická kalibrace</td></tr>
+      </table>
+    </article>
+
+    <article class="card">
+      <h2>Co jsem v datech našel</h2>
+      <ul>
+        <li><span class="flag w">chyba</span><b>Kuchyň má rozbitý obrys.</b> <code>outline_home_px</code> je jen proužek 0,75 × 0,25 m, přitom bbox má 3,2 × 4,4 m. V náhledu je kuchyň proto nahrazená obdélníkem. Patří to opravit v AnyVac.</li>
+        <li><span class="flag w">párování</span><b>Chodba se v Roborocku jmenuje „Corridor“.</b> Místnosti se musí jednou přiřadit, nejlépe přes <code>home_room_id</code>.</li>
+        <li><span class="flag k">ok</span><b>Tři roboti, tři rámce.</b> S6 a S7 Bunker sdílí jeden rámec, S7 MaxV a S8 mají vlastní. Pro půdorys stačí jeden rámec a S8 pokrývá všech pět místností.</li>
+        <li><span class="flag k">ok</span><b>Obrysy mají v sobě nábytek.</b> Roborock mapuje uklízenou podlahu, ne zdi. Po vyhlazení (uzavření mezer do 0,5 m a srovnání do pravých úhlů) z 60 bodů zbude 6–10 a vznikne čistý půdorys.</li>
+        <li><span class="flag w">chybí</span><b>Okna a dveře v datech nejsou.</b> Dveře se dají odhadnout z míst, kde se místnosti dotýkají (v náhledu takto), okna jednou kliknout v editoru.</li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h2>Cesta k hezkému renderu</h2>
+      <p class="note">Pokud chceš vzhled jako tvůj Cockpit. Efekty pak kreslí karta podle stejné geometrie.</p>
+      <ol>
+        <li><code>anyvac.snapshot_map_as_floorplan</code> s <code>fiducials: true</code> uloží půdorys se 4 neviditelnými značkami v rámečku.</li>
+        <li>AI z něj vygeneruje render. Stačí, když zachová kompozici a uloží PNG s alfa kanálem.</li>
+        <li><code>anyvac.detect_floorplan_fiducials</code> značky najde a vrátí <code>home_anchors</code>, tedy převod mapa → render bez klikání.</li>
+        <li>Když AI značky zahodí, jednou se klikne 4–6 rohů. <code>snap_wall_corner</code> je přichytí k rohům zdí.</li>
+        <li>Světla, podlahovka, teplota i robot se ořežou podle obrysů místností a sedí na render bez ručních PNG overlayů.</li>
+      </ol>
+    </article>
+  </div>
+</div>
+
+<script>
+const D={"W":1368,"H":440,"pos":[818.0,74.0],"ch":[818.0,60.0],"rooms":[{"n":"Kitchen","p":[[732,48],[988,48],[988,400],[732,400]],"raw":[[828,400],[888,400],[888,380],[828,380]],"m2":14.1},{"n":"Bedroom","p":[[994,378],[994,188],[1042,188],[1042,44],[1308,44],[1308,148],[1332,148],[1332,264],[1308,264],[1308,378]],"raw":[[1012,380],[1308,380],[1308,260],[1320,260],[1320,264],[1332,264],[1332,148],[1308,148],[1308,44],[1044,44],[1044,64],[1040,64],[1040,76],[1044,76],[1044,92],[1040,92],[1040,188],[996,188],[996,196],[992,196],[992,256],[1000,256],[1000,260],[1008,260],[1008,264],[1016,264],[1016,268],[1024,268],[1024,272],[1036,272],[1036,276],[1044,276],[1044,280],[1052,280],[1052,284],[1060,284],[1060,292],[1048,292],[1048,288],[1040,288],[1040,284],[1032,284],[1032,280],[1024,280],[1024,276],[1016,276],[1016,272],[1008,272],[1008,268],[996,268],[996,328],[1000,328],[1000,336],[996,336],[996,368],[1000,368],[1000,372],[1004,372],[1004,376],[1012,376]],"m2":15.8},{"n":"Living room","p":[[40,370],[40,38],[469,38],[469,124],[518,124],[518,264],[468,264],[468,370]],"raw":[[264,372],[468,372],[468,264],[520,264],[512,260],[520,256],[520,196],[448,208],[460,196],[516,192],[516,124],[476,124],[472,164],[468,84],[432,84],[468,80],[468,40],[352,40],[356,88],[348,88],[312,84],[316,36],[40,36],[40,368],[44,352],[48,368],[252,368],[252,352],[240,356],[252,344],[252,328],[240,328],[240,320],[248,312],[284,312],[284,176],[344,176],[332,200],[316,196],[328,184],[296,196],[296,232],[348,232],[348,264],[296,264],[288,272],[288,300],[332,296],[340,316],[316,316],[320,344],[308,332],[312,316],[296,316],[308,328],[288,324],[288,352],[284,320],[256,320],[256,368],[264,368]],"m2":23.3},{"n":"Corridor","p":[[520,189],[604,189],[604,182],[730,182],[730,272],[532,272],[532,256],[520,256]],"raw":[[532,272],[728,272],[728,256],[732,256],[732,196],[728,196],[728,192],[736,192],[736,188],[656,188],[656,184],[668,184],[668,180],[660,180],[660,176],[604,176],[604,188],[588,188],[588,196],[580,196],[580,200],[568,200],[568,204],[556,204],[556,208],[548,208],[548,212],[540,212],[540,204],[552,204],[552,200],[564,200],[564,196],[576,196],[576,192],[584,192],[584,188],[536,188],[536,196],[520,196],[520,256],[532,256],[532,268]],"m2":2.8},{"n":"Bathroom","p":[[540,86],[664,86],[664,176],[558,176],[558,164],[540,164]],"raw":[[660,180],[664,180],[664,84],[588,84],[588,104],[584,104],[584,84],[556,84],[556,88],[552,88],[552,92],[548,92],[548,96],[544,96],[544,100],[540,100],[540,164],[556,164],[556,168],[560,168],[560,176],[660,176]],"m2":1.7}]};
+const ROOMS={
+ "Living room":{cz:"Obývák",t:22.3,h:52.8,heat:"idle",target:22,light:"light.light_group_living_room",win:"binary_sensor.versatile_living_room_window_state",climate:"climate.versatile_living_room",floor:"wood",cov:[41,100],last:"19. 10. 17:46",winAt:[[160,38],"h"]},
+ "Kitchen":{cz:"Kuchyň",t:22.5,h:52.8,heat:"idle",target:10,light:"light.panel_kitchen",win:"binary_sensor.versatile_kitchen_window_state",climate:"climate.versatile_kitchen",floor:"tile",cov:[100,100],last:"19. 10. 18:34",winAt:[[860,400],"h"]},
+ "Corridor":{cz:"Chodba",t:23.6,h:48.9,heat:null,light:"light.panel_hall",floor:"tile",cov:[100,100],last:"19. 10. 15:55",alias:"Roborock: Corridor"},
+ "Bathroom":{cz:"Koupelna",t:21.4,h:52.4,heat:null,light:"light.panel_bathroom",floor:"tile",cov:[100,100],last:"19. 10. 16:37"},
+ "Bedroom":{cz:"Ložnice",t:22.9,h:51.6,heat:"heating",target:23,light:"light.light_group_bedroom",win:"binary_sensor.versatile_bedroom_window_state",climate:"climate.versatile_bedroom",floor:"wood",cov:[35,100],last:"19. 10. 18:50",winAt:[[1180,44],"h"]}
+};
+const LAYERS=[["lights","Světla","var(--warm)"],["heat","Podlahovka","var(--heat)"],["temp","Teplota","var(--cool)"],["presence","Přítomnost","var(--accent)"],["windows","Okna a dveře","var(--ink-2)"],["vacuum","Vysavač","var(--ok)"],["clean","Úklid","var(--warn)"]];
+const S={view:"plan",scene:"now",sel:"Bedroom",on:{lights:true,heat:true,temp:false,presence:true,windows:true,vacuum:true,clean:false},lit:{},presence:null,winOpen:{},vac:null};
+const NS="http://www.w3.org/2000/svg",svg=document.getElementById("plan");
+const el=(t,a,p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e};
+const pts=p=>p.map(q=>q.join(",")).join(" ");
+const cen=p=>{let a=0,x=0,y=0;for(let i=0;i<p.length;i++){const [x0,y0]=p[i],[x1,y1]=p[(i+1)%p.length],f=x0*y1-x1*y0;a+=f;x+=(x0+x1)*f;y+=(y0+y1)*f}a/=2;return[x/(6*a),y/(6*a)]};
+const VB=[1000,440];
+// --- transforms: plan / data = fit; iso = rotate + squash, then fit
+function mats(){
+  const fit=(m)=>{const c=[[0,0],[D.W,0],[D.W,D.H],[0,D.H]].map(q=>[m[0]*q[0]+m[2]*q[1],m[1]*q[0]+m[3]*q[1]-(m.zMax||0)]);
+    const c2=[[0,0],[D.W,0],[D.W,D.H],[0,D.H]].map(q=>[m[0]*q[0]+m[2]*q[1],m[1]*q[0]+m[3]*q[1]]);
+    const all=c.concat(c2),xs=all.map(q=>q[0]),ys=all.map(q=>q[1]);
+    const w=Math.max(...xs)-Math.min(...xs),h=Math.max(...ys)-Math.min(...ys),pad=26;
+    const s=Math.min((VB[0]-2*pad)/w,(VB[1]-2*pad)/h);
+    const tx=(VB[0]-w*s)/2-Math.min(...xs)*s,ty=(VB[1]-h*s)/2-Math.min(...ys)*s;
+    return{a:m[0]*s,b:m[1]*s,c:m[2]*s,d:m[3]*s,e:tx,f:ty,s};};
+  const th=-14*Math.PI/180,k=.56,iso=[Math.cos(th),Math.sin(th)*k,-Math.sin(th),Math.cos(th)*k];iso.zMax=38;
+  return{plan:fit([1,0,0,1]),data:fit([1,0,0,1]),iso:fit(iso)};
+}
+const M=mats();
+const P=(v,x,y,z=0)=>{const m=M[v];return[m.a*x+m.c*y+m.e,m.b*x+m.d*y+m.f-z*m.s]};
+// --- defs
+const defs=el("defs",{},svg);
+function pat(id,w,h,draw){const p=el("pattern",{id,width:w,height:h,patternUnits:"userSpaceOnUse"},defs);draw(p)}
+pat("wood",120,22,p=>{el("rect",{width:120,height:22,fill:"var(--wood)"},p);el("path",{d:"M0 21.5H120 M70 0V22",stroke:"var(--wood-line)","stroke-width":1.5},p)});
+pat("wood2",120,22,p=>{el("rect",{width:120,height:22,fill:"var(--wood)"},p);el("path",{d:"M0 21.5H120 M20 0V22",stroke:"var(--wood-line)","stroke-width":1.5},p)});
+pat("tile",40,40,p=>{el("rect",{width:40,height:40,fill:"var(--tile)"},p);el("path",{d:"M0 .5H40 M.5 0V40",stroke:"var(--tile-line)","stroke-width":1.2},p)});
+pat("grid",80,80,p=>{el("rect",{width:80,height:80,fill:"none"},p);el("path",{d:"M0 .5H80 M.5 0V80",stroke:"var(--rule)","stroke-width":1},p)});
+pat("hatch",14,14,p=>{el("path",{d:"M0 14L14 0",stroke:"var(--warn)","stroke-width":2,opacity:.55},p)});
+const glowG=el("radialGradient",{id:"glow"},defs);el("stop",{offset:"0","stop-color":"#ffd27a","stop-opacity":".95"},glowG);el("stop",{offset:".55","stop-color":"#ffb347","stop-opacity":".45"},glowG);el("stop",{offset:"1","stop-color":"#ffb347","stop-opacity":"0"},glowG);
+D.rooms.forEach((r,i)=>{const c=el("clipPath",{id:"clip"+i},defs);el("polygon",{points:pts(r.p)},c)});
+// --- doors: where two rooms touch along parallel edges
+function edges(p){return p.map((a,i)=>[a,p[(i+1)%p.length]])}
+const doors=[];
+for(let i=0;i<D.rooms.length;i++)for(let j=i+1;j<D.rooms.length;j++)for(const [a1,b1] of edges(D.rooms[i].p))for(const [a2,b2] of edges(D.rooms[j].p)){
+  const v1=a1[0]===b1[0],v2=a2[0]===b2[0];if(v1!==v2)continue;
+  const ax=v1?0:1,o=v1?1:0;if(Math.abs(a1[ax]-a2[ax])>16)continue;
+  const lo=Math.max(Math.min(a1[o],b1[o]),Math.min(a2[o],b2[o])),hi=Math.min(Math.max(a1[o],b1[o]),Math.max(a2[o],b2[o]));
+  if(hi-lo<40)continue;const mid=(lo+hi)/2,len=Math.min(72,hi-lo-12),at=(a1[ax]+a2[ax])/2;
+  doors.push({v:v1,at,lo:mid-len/2,hi:mid+len/2,rooms:[i,j]});
+}
+// --- layers
+const gFloor=el("g",{id:"floors"},svg);
+const g={};
+["grid","data","floor","temp","heat","clean","lights","walls","doors","wins","trail","presence"].forEach(n=>g[n]=el("g",{class:"fade"},gFloor));
+g.grid.classList.add("only-data");g.data.classList.add("only-data");
+el("rect",{x:-200,y:-200,width:D.W+400,height:D.H+400,fill:"url(#grid)"},g.grid);
+const walls3d=el("g",{id:"walls3d",class:"fade only-iso"},svg);
+const gTop=el("g",{},svg);
+// floors + rooms
+const roomEls=[];
+D.rooms.forEach((r,i)=>{
+  const R=ROOMS[r.n];
+  const f=el("polygon",{points:pts(r.p),fill:R.floor==="wood"?(i%2?"url(#wood2)":"url(#wood)"):"url(#tile)",class:"room only-real"},g.floor);
+  f.addEventListener("click",()=>select(r.n));
+  // data view: raw outline + cleaned
+  el("polygon",{points:pts(r.raw),fill:"var(--accent)","fill-opacity":r.n==="Kitchen"?.6:.18,stroke:"var(--accent)","stroke-width":1.5},g.data);
+  el("polygon",{points:pts(r.p),fill:"none",stroke:"var(--ink)","stroke-width":2,"stroke-dasharray":"8 6"},g.data);
+  const hit=el("polygon",{points:pts(r.p),fill:"transparent",class:"room only-data"},g.data);hit.addEventListener("click",()=>select(r.n));
+  // temp tint
+  const tt=el("polygon",{points:pts(r.p),fill:"var(--cool)","fill-opacity":0},g.temp);
+  // heating serpentine
+  const hp=el("g",{"clip-path":`url(#clip${i})`},g.heat);
+  if(R.heat){const [x0,y0,x1,y1]=bbox(r.p);let d="",y=y0+18,dir=1;while(y<y1-10){d+=(d?"L":"M")+(dir>0?x0+18:x1-18)+" "+y+"L"+(dir>0?x1-18:x0+18)+" "+y;y+=22;dir*=-1}
+    el("path",{d,fill:"none",stroke:"var(--cool)","stroke-width":4,"stroke-linejoin":"round",opacity:.45},hp);
+    if(R.heat==="heating")el("path",{d,fill:"none",stroke:"var(--heat)","stroke-width":5,"stroke-linejoin":"round",class:"pipe"},hp);}
+  // clean
+  const cl=el("g",{"clip-path":`url(#clip${i})`},g.clean);el("polygon",{points:pts(r.p),fill:"url(#hatch)"},cl);
+  // lights
+  const c=cen(r.p),[bx0,by0,bx1,by1]=bbox(r.p),rad=Math.max(bx1-bx0,by1-by0)*.75;
+  const lg=el("g",{"clip-path":`url(#clip${i})`,opacity:0,style:"transition:opacity .8s ease;mix-blend-mode:screen"},g.lights);
+  el("circle",{cx:c[0],cy:c[1],r:rad,fill:"url(#glow)"},lg);
+  // plan walls
+  el("polygon",{points:pts(r.p),fill:"none",stroke:"var(--wall)","stroke-width":16,"stroke-linejoin":"miter",class:"only-plan room-edge-w"},g.walls);
+  const edge=el("polygon",{points:pts(r.p),fill:"none",stroke:"transparent","stroke-width":0,class:"room-edge"},g.walls);
+  roomEls.push({r,R,f,tt,lg,cl,edge,hp});
+});
+function bbox(p){const xs=p.map(q=>q[0]),ys=p.map(q=>q[1]);return[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)]}
+// door openings (plan)
+doors.forEach(dr=>{const w=24;const r=dr.v?{x:dr.at-w/2,y:dr.lo,width:w,height:dr.hi-dr.lo}:{x:dr.lo,y:dr.at-w/2,width:dr.hi-dr.lo,height:w};
+  el("rect",Object.assign({fill:"url(#tile)",class:"only-plan"},r),g.doors);
+  const sw=dr.hi-dr.lo,arc=dr.v?`M${dr.at} ${dr.lo} a${sw} ${sw} 0 0 1 ${sw} ${sw}`:`M${dr.lo} ${dr.at} a${sw} ${sw} 0 0 0 ${sw} ${-sw}`;
+  el("path",{d:arc,fill:"none",stroke:"var(--ink-2)","stroke-width":1.5,"stroke-dasharray":"4 4",class:"only-plan"},g.doors);});
+// windows (demo positions on outer walls)
+const winEls={};
+for(const n in ROOMS){const R=ROOMS[n];if(!R.winAt)continue;const [[x,y]]=R.winAt;
+  const gw=el("g",{},g.wins);el("rect",{x:x-45,y:y-9,width:90,height:18,fill:"var(--paper)",stroke:"var(--wall)","stroke-width":2},gw);
+  const pane=el("line",{x1:x-45,y1:y,x2:x+45,y2:y,stroke:"var(--accent)","stroke-width":4},gw);winEls[n]={gw,pane,x,y};}
+// presence ping
+const pres=el("g",{opacity:0,style:"transition:opacity .4s"},g.presence);
+// trail + robot
+const trail=el("polyline",{fill:"none",stroke:"var(--ok)","stroke-width":10,"stroke-linecap":"round","stroke-linejoin":"round",opacity:.35,points:""},g.trail);
+// 3D walls built per view
+function build3d(){walls3d.innerHTML="";const H=38,quads=[];
+  D.rooms.forEach(r=>{for(const [a,b] of edges(r.p)){
+    // subtract door intervals on this edge
+    const v=a[0]===b[0],o=v?1:0,ax=v?0:1;let segs=[[Math.min(a[o],b[o]),Math.max(a[o],b[o])]];
+    doors.filter(dr=>dr.v===v&&Math.abs(dr.at-a[ax])<12).forEach(dr=>{segs=segs.flatMap(([l,h])=>dr.hi<=l||dr.lo>=h?[[l,h]]:[[l,dr.lo],[dr.hi,h]].filter(s=>s[1]-s[0]>2))});
+    segs.forEach(([l,h])=>{const p1=v?[a[0],l]:[l,a[1]],p2=v?[a[0],h]:[h,a[1]];
+      const dep=(P("iso",(p1[0]+p2[0])/2,(p1[1]+p2[1])/2)[1]);quads.push({p1,p2,dep,v});});
+  }});
+  quads.sort((q1,q2)=>q1.dep-q2.dep);
+  quads.forEach(q=>{const A=P("iso",...q.p1),B=P("iso",...q.p2),At=P("iso",...q.p1,H),Bt=P("iso",...q.p2,H);
+    el("polygon",{points:pts([A,B,Bt,At]),fill:q.v?"var(--wall-side)":"var(--wall)",opacity:.92},walls3d);
+    el("line",{x1:At[0],y1:At[1],x2:Bt[0],y2:Bt[1],stroke:"var(--wall-top)","stroke-width":6,"stroke-linecap":"square"},walls3d);});
+}
+build3d();
+// labels + robot in screen space
+const labs=D.rooms.map((r,i)=>{const gl=el("g",{class:"lab"},gTop);
+  const box=el("rect",{x:-48,y:-24,rx:6,width:96,height:44,fill:"var(--chip)",stroke:"var(--chip-line)"},gl);
+  const t1=el("text",{x:0,y:-6,"text-anchor":"middle","font-family":"var(--f-display)","font-weight":700,"font-size":13,fill:"var(--ink)"},gl);t1.textContent=ROOMS[r.n].cz;
+  const t2=el("text",{x:0,y:12,"text-anchor":"middle","font-family":"var(--f-mono)","font-size":11,fill:"var(--ink-2)"},gl);
+  gl.style.cursor="pointer";gl.addEventListener("click",()=>select(r.n));return{gl,t2,box,r};});
+const robot=el("g",{class:"lab"},gTop);el("circle",{r:11,fill:"var(--paper)",stroke:"var(--ok)","stroke-width":3},robot);el("circle",{r:3.5,fill:"var(--ok)"},robot);
+const dock=el("g",{class:"lab"},gTop);el("rect",{x:-9,y:-6,width:18,height:12,rx:3,fill:"var(--ink-2)"},dock);
+const pingG=el("g",{class:"lab",opacity:0,style:"transition:opacity .4s"},gTop);el("circle",{r:16,fill:"var(--accent)",opacity:.25,class:"ping"},pingG);el("circle",{r:7,fill:"var(--accent)",stroke:"var(--paper)","stroke-width":2.5},pingG);
+// --- render
+const mat=v=>{const m=M[v];return`matrix(${m.a},${m.b},${m.c},${m.d},${m.e},${m.f})`};
+let robotAt=D.pos.slice();
+const LOFF={"Bathroom":[0,-26],"Corridor":[10,22]};
+function place(){const v=S.view==="data"?"data":S.view;
+  gFloor.style.transform=mat(v);
+  labs.forEach(L=>{const c=cen(L.r.p),o=LOFF[L.r.n]||[0,0];let p=P(v,c[0]+o[0],c[1]+o[1],v==="iso"?24:0);L.gl.style.transform=`translate(${p[0]}px,${p[1]}px)`});
+  let p=P(v,robotAt[0],robotAt[1]);robot.style.transform=`translate(${p[0]}px,${p[1]}px)`;
+  p=P(v,D.ch[0],D.ch[1]-14);dock.style.transform=`translate(${p[0]}px,${p[1]}px)`;
+  if(S.presence){const r=D.rooms.find(x=>x.n===S.presence),c=cen(r.p);p=P(v,c[0]+40,c[1]+70);pingG.style.transform=`translate(${p[0]}px,${p[1]}px)`}
+}
+function tempColor(t){const k=Math.max(0,Math.min(1,(t-21)/3));return k}
+function render(){
+  svg.setAttribute("class","v-"+S.view);
+  document.querySelectorAll("#v-data,#v-plan,#v-iso").forEach(b=>b.setAttribute("aria-pressed",b.id==="v-"+S.view));
+  document.querySelectorAll("#s-now,#s-eve,#s-vac").forEach(b=>b.setAttribute("aria-pressed",b.id==="s-"+S.scene));
+  const real=S.view!=="data";
+  g.lights.classList.toggle("hide",!S.on.lights||!real);g.heat.classList.toggle("hide",!S.on.heat||!real);g.temp.classList.toggle("hide",!S.on.temp||!real);
+  g.clean.classList.toggle("hide",!S.on.clean||!real);g.wins.classList.toggle("hide",!S.on.windows||!real);g.doors.classList.toggle("hide",!S.on.windows||!real);
+  g.trail.classList.toggle("hide",!S.on.vacuum||!real);robot.classList.toggle("hide",!S.on.vacuum);dock.classList.toggle("hide",!S.on.vacuum);
+  pingG.setAttribute("opacity",S.on.presence&&S.presence&&real?1:0);
+  roomEls.forEach(E=>{const n=E.r.n,R=E.R,lit=!!S.lit[n];
+    E.lg.setAttribute("opacity",lit?1:0);
+    const k=tempColor(R.t);E.tt.setAttribute("fill",k>.5?"var(--heat)":"var(--cool)");E.tt.setAttribute("fill-opacity",(.12+Math.abs(k-.5)*.5).toFixed(2));
+    E.cl.setAttribute("opacity",R.cov[0]<100?1:.25);
+    E.edge.setAttribute("stroke",S.sel===n?"var(--accent)":"transparent");E.edge.setAttribute("stroke-width",S.sel===n?5:0);});
+  for(const n in winEls){const o=!!S.winOpen[n];winEls[n].pane.setAttribute("stroke",o?"var(--heat)":"var(--accent)");winEls[n].pane.setAttribute("stroke-dasharray",o?"6 6":"none")}
+  labs.forEach(L=>{const R=ROOMS[L.r.n];let s=R.t.toFixed(1).replace(".",",")+" °C";
+    if(S.on.clean&&real)s=R.cov[0]+" % · "+R.last.split(" ")[2];else if(S.on.heat&&R.heat==="heating"&&real)s+=" ▲";L.t2.textContent=s;
+    L.box.setAttribute("stroke",S.sel===L.r.n?"var(--accent)":"var(--chip-line)");});
+  place();inspector();
+}
+function inspector(){const r=D.rooms.find(x=>x.n===S.sel),R=ROOMS[S.sel];const lit=!!S.lit[S.sel];
+  const heat=R.heat?(R.heat==="heating"?"topí → "+R.target+" °C":"nečinná (cíl "+R.target+" °C)"):"—";
+  document.getElementById("insp").innerHTML=`<div class="lbl">Vybraná místnost${R.alias?" · "+R.alias:""}</div><h3>${R.cz}</h3>
+  <dl class="kv"><dt>Plocha podlahy</dt><dd>${r.m2.toLocaleString("cs-CZ")} m²</dd><dt>Teplota</dt><dd>${R.t.toLocaleString("cs-CZ")} °C</dd><dt>Vlhkost</dt><dd>${R.h.toLocaleString("cs-CZ")} %</dd>
+  <dt>Podlahovka</dt><dd>${heat}</dd><dt>Světlo</dt><dd>${lit?"svítí":"zhasnuto"}</dd><dt>Vysáto / vytřeno</dt><dd>${R.cov[0]} % / ${R.cov[1]} %</dd><dt>Naposledy</dt><dd>${R.last}</dd></dl>
+  <button class="btn" id="tl">${lit?"Zhasnout":"Rozsvítit"} (ukázka)</button>
+  <div class="ent">${R.light}${R.climate?"<br>"+R.climate:""}${R.win?"<br>"+R.win:""}</div>
+  <p class="note">Teplota, vlhkost, podlahovka a úklid jsou skutečné hodnoty z HA a AnyVac. Světlo je jen simulace v náhledu.</p>`;
+  document.getElementById("tl").onclick=()=>{S.lit[S.sel]=!lit;render()};}
+function select(n){S.sel=n;render()}
+// --- vacuum demo run (lawnmower in Living room, from dock through corridor)
+let raf=null;
+function vacRoute(){const L=D.rooms.find(r=>r.n==="Living room").p;const pts=[D.pos,[818,226],[620,226],[500,226]];
+  let y=60,dir=-1;while(y<350){pts.push([dir<0?450:60,y]);pts.push([dir<0?60:450,y]);y+=36;dir*=-1}
+  pts.push([500,226],[818,226],D.pos);return pts}
+function runVac(){cancelAnimationFrame(raf);const route=vacRoute();const segs=[];let tot=0;
+  for(let i=1;i<route.length;i++){const l=Math.hypot(route[i][0]-route[i-1][0],route[i][1]-route[i-1][1]);segs.push(l);tot+=l}
+  const t0=performance.now(),dur=22000,done=[];
+  const step=now=>{if(S.scene!=="vac"){robotAt=D.pos.slice();trail.setAttribute("points","");place();return}
+    let d=((now-t0)%dur)/dur*tot,i=0;while(i<segs.length&&d>segs[i]){d-=segs[i];i++}
+    if(i>=segs.length)i=segs.length-1;const a=route[i],b=route[i+1]||a,f=segs[i]?d/segs[i]:0;
+    robotAt=[a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f];trail.setAttribute("points",pts(route.slice(0,i+1).concat([robotAt])));
+    let p=P(S.view==="data"?"data":S.view,robotAt[0],robotAt[1]);robot.style.transition="none";robot.style.transform=`translate(${p[0]}px,${p[1]}px)`;
+    raf=requestAnimationFrame(step)};raf=requestAnimationFrame(step);}
+// --- scenes
+function scene(s){S.scene=s;S.lit={};S.winOpen={};S.presence=null;
+  if(s==="eve"){S.lit={"Living room":1,"Kitchen":1,"Corridor":1};S.presence="Living room";S.winOpen={"Bedroom":1};S.on.lights=S.on.presence=true}
+  if(s==="vac"){S.on.vacuum=true;S.on.clean=true;S.sel="Living room";runVac()}else{robot.style.transition="";robotAt=D.pos.slice();trail.setAttribute("points","")}
+  if(s==="now")S.on.clean=false;
+  syncToggles();render()}
+// --- controls
+const lw=document.getElementById("layers");
+LAYERS.forEach(([k,label,col])=>{const b=document.createElement("button");b.className="tog";b.id="l-"+k;b.style.setProperty("--dot",col);b.innerHTML=`<i></i>${label}`;
+  b.onclick=()=>{S.on[k]=!S.on[k];syncToggles();render()};lw.appendChild(b)});
+function syncToggles(){LAYERS.forEach(([k])=>document.getElementById("l-"+k).setAttribute("aria-pressed",!!S.on[k]))}
+["data","plan","iso"].forEach(v=>document.getElementById("v-"+v).onclick=()=>{S.view=v;robot.style.transition="";render()});
+["now","eve","vac"].forEach(s=>document.getElementById("s-"+s).onclick=()=>scene(s));
+syncToggles();render();
+// --- performance probe (spike S5): 4 s of state bursts + two top↔iso transitions, rAF frame deltas
+window.__bench=async function(){
+  const saved={view:S.view,lit:Object.assign({},S.lit),on:Object.assign({},S.on)};
+  S.on.lights=S.on.heat=S.on.vacuum=S.on.presence=true;render();
+  const d=[];let last=performance.now(),run=true;
+  const tick=t=>{d.push(t-last);last=t;if(run)requestAnimationFrame(tick)};requestAnimationFrame(tick);
+  const names=D.rooms.map(r=>r.n);const t0=performance.now();let i=0;
+  while(performance.now()-t0<4000){
+    const n=names[i++%names.length];S.lit[n]=!S.lit[n];ROOMS[n].t=+(ROOMS[n].t+(Math.random()-.5)*.2).toFixed(1);render();
+    if(i===10){S.view=S.view==="iso"?"plan":"iso";render()}
+    if(i===30){S.view=S.view==="iso"?"plan":"iso";render()}
+    await new Promise(r=>setTimeout(r,100));
+  }
+  run=false;await new Promise(r=>setTimeout(r,50));
+  S.view=saved.view;S.lit=saved.lit;S.on=saved.on;syncToggles();render();
+  const f=d.slice(2).sort((a,b)=>a-b),q=p=>f[Math.min(f.length-1,Math.floor(p*f.length))];
+  return{frames:f.length,median:+q(.5).toFixed(1),p95:+q(.95).toFixed(1),worst:+f[f.length-1].toFixed(1),over50:f.filter(x=>x>50).length,ua:navigator.userAgent.slice(0,80)};
+};
+document.getElementById("bench").onclick=async function(){const o=document.getElementById("bench-out");o.hidden=false;o.textContent="Měřím 4 s…";
+  const r=await window.__bench();const ok=r.median<=17.5&&r.worst<=50;
+  o.textContent=(ok?"V pořádku · ":"Pod rozpočtem · ")+"snímků "+r.frames+" · medián "+r.median+" ms · p95 "+r.p95+" ms · nejhorší "+r.worst+" ms · nad 50 ms: "+r.over50+" (rozpočet: medián ≤ 16,7 ms, nejhorší ≤ 50 ms)";};
+</script>
+</body></html>

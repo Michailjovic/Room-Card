@@ -69,16 +69,17 @@ height: calc(100dvh - var(--header-height, 56px))
 Options under `layout:`:
 
 - `height: viewport` (default) — formula above.
+- `height: fill` (v6.13.0) — like `viewport`, but also pins the portrait profile to the screen height.
 - `height: container` — fill the parent element (for embedding scenarios).
 - `height: <css length>` — fixed (e.g. `800px`, `90vh`).
-- `header_offset: auto | <px>` — default `auto` (`--header-height`).
+
+The header height comes from HA's own `--header-height` variable (56 px when it is not set).
 
 ## Config schema
 
 ```yaml
 layout:
-  height: viewport          # viewport | container | <css length>
-  header_offset: auto       # auto | <px>
+  height: viewport          # viewport | fill | container | <css length>
   orientation: auto         # auto | portrait | landscape
   threshold: 1.0            # w/h ratio; below => portrait
   gap: 0px                  # grid gap, optional

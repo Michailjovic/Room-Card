@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.30.1** (2026-10-20, v5.2.0/v5.3.0 and v6.26–v6.29 unused). Verified against Home
+Current release: **v6.31.0** (2026-10-20, v5.2.0/v5.3.0 and v6.26–v6.29 unused). Verified against Home
 Assistant 2026.6.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -20,6 +20,16 @@ version number gets reserved-then-reused.
 Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped · ⛔ dropped · 🅿️ parked
 
 ---
+
+## 🎯 v7 — Studio, Floorplan, AnyVac (agreed 2026-10-21, releases from v6.40.0)
+
+Full plan: [`V7_PLAN.md`](V7_PLAN.md). In short: the card's own **full-screen editor (Studio)**
+replaces HA's editor panel for forms and spatial work; a new **floorplan page** draws the home
+top-down or isometric from the vacuum map via **AnyVac** (or hand-drawn), with lights, floor
+heating, windows with blinds, doors and any entity placed on it; v7.0.0 ships with a rebuilt
+documentation set, an AI-readable spec (`docs/AI_SPEC.md` + `llms.txt`) and the HACS default
+submission. It absorbs the old v7.0.0 plan (AI README), the live floorplan (1b), the overview's
+cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the cockpit preset.
 
 ## Shipped history (condensed)
 
@@ -108,7 +118,8 @@ failure broke HACS installs.
 | **v6.25.0** | `nav.rows` + `nav.cards_position` (multi-row thumbnail grid, GUI), live minis cover narrow thumbnails, HQ-resampled thumbnail images (no moiré), GUI keeps nav keys it has no field for |
 | **v6.25.1** | Fix: the new nav row / strip-card fields alone now enable Save; e2e suite updated to the v6.24.1 full-screen portrait panels |
 | **v6.30.0** | **Overview page** — `rooms[].overview`: every room as a live tile with state chips, optional header (pills, nav strip cards), left/right card columns and a section dock; regions collapse into the grid; photo tiles or rows on phones; zoom transition tile ↔ room; the live strip is parked, not re-mounted; full GUI. See [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) |
-| **v6.31.0** *(unreleased)* | Overview: grid order with ▲▼ in the GUI (`grid.rooms`, independent of the nav), optional room names (`grid.names`, `overview_tile.show_name`), fix: `fade` / zoom start under HA's Lit `ha-card`, fix: touchpad swipe left the view / skipped rooms |
+| **v6.31.0** | Overview: grid order with ▲▼ in the GUI (`grid.rooms`, independent of the nav), optional room names (`grid.names`, `overview_tile.show_name`), fix: `fade` / zoom start under HA's Lit `ha-card`, fix: touchpad swipe left the view / skipped rooms |
+| **v6.40.0** *(unreleased)* | v7 Phase 1 — source split into `src/` + `tools/assemble.js`, config schema registry (`src/schema/`), schema / compat / HA-in-the-loop test tiers; no rendering change |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 
@@ -198,7 +209,7 @@ this release) gives the submission screenshots something finished to show off.
    - 🎯 Still open, unversioned: a worked cockpit preset for `PRESETS.md` (planned since kap.8,
      not tied to a version number).
 
-1b. 🅿️ **Live floorplan (v7 vision)** — one floorplan image with live mini room cards at absolute
+1b. ➡️ **Superseded by [`V7_PLAN.md`](V7_PLAN.md) §6** — *Live floorplan (v7 vision)* — one floorplan image with live mini room cards at absolute
    positions on it, reusing the `nav.live: full` mount/scale mechanism and `zoom` pan/zoom; click a
    room to enter it. Wants its own planning document (in the style of `NAV_LIVE_FULL_PLAN.md`)
    before any code.

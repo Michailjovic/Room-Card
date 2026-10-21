@@ -1,0 +1,110 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Syntax check
+        run: node --check room-overlay-card.js
+
+      # v6.40.0: room-overlay-card.js is assembled from src/ (tools/assemble.js).
+      # Fails when someone edited src/ without re-assembling, or the root file directly.
+      - name: Assembled file matches src/
+        run: node tools/assemble.js --check
+
+      - name: Smoke tests (pure functions)
+        run: node tests/smoke.test.js
+
+      - name: Render tests (jsdom)
+        run: npm i --no-save jsdom && node tests/render.test.js
+
+      # Lifecycle tier: what happens when HA MOVES the card element (edit-mode
+      # toggle → disconnect + connect) and when config fields use their scalar
+      # shorthand. Polyfills IntersectionObserver/ResizeObserver, which jsdom
+      # lacks — see the header comment in tests/lifecycle.test.js.
+      - name: Lifecycle tests (jsdom)
+        run: node tests/lifecycle.test.js
+
+      # v6.16.0 design refresh: shared value formatter, tile states, section
+      # launcher status, nav chip/thumbnail styling + the analysis fixes.
+      - name: Design tests (jsdom)
+        run: node tests/design.test.js
+      - name: Overview tests (jsdom)
+        run: node tests/overview.test.js
+
+      # v6.40.0: config schema registry — validator, reference configs, documented
+      # examples and every key the card reads must be in src/schema/roc-schema.js.
+      - name: Schema tests (jsdom)
+        run: node tests/schema.test.js
+
+      # The release asset is the MINIFIED bundle, so the minified bundle is what
+      # has to be green — not just the source. All three tiers accept a path
+      # argument for exactly this reason. Catches a terser setting that silently
+      # breaks the card (e.g. anyone ever enabling property mangling).
+      - name: Build + verify the minified bundle
+        run: npm i --no-save terser && npm run build:verify
+
+  e2e:
+    # Real-renderer geometry tier — headless Chromium measures PIXELS against
+    # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,
+    # anti-breathing). See V5_PLAN.md phase D.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
+
+      - name: Geometry e2e
+        run: npx playwright test
+
+  ha:
+    # v6.40.0: a real Home Assistant (Docker, pinned to the version the author runs)
+    # with the card installed; Playwright drives the real frontend — the card inside
+    # HA's Lit ha-card, the editor dialog, dashboard save paths, the studio dialog
+    # stacking. See tests/ha/run-ha.js and V7_PLAN.md §13.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
+
+      - name: HA-in-the-loop tests
+        run: npm run test:ha
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: plugin

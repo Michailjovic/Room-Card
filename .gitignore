@@ -5,3 +5,5 @@ test-results/
 playwright-report/
 bedroom-card.yaml
 flat-multiroom.yaml
+prototypes/v7-spikes/tokens.json
+prototypes/v7-spikes/ha/

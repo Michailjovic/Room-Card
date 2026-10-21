@@ -145,7 +145,7 @@ badges:
             state: cleaning
             or:
               entity: vacuum.s8_maxv_ultra
-                state: cleaning
+              state: cleaning
         value: "#e74c3c"
       - value: "#2ecc71"
     label:

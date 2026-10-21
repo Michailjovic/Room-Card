@@ -553,7 +553,6 @@ rooms:
         slat_color: rgba(0,0,0,0.9)
         slat_count: 17
         attribute: current_position
-        invert: true
         control:
           placement: float
           top: 21%

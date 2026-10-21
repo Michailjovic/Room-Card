@@ -141,16 +141,29 @@ This README is a landing page — the full reference lives here:
 
 ## Development
 
-`room-overlay-card.js` is the single source of truth — hand-maintained vanilla JS, no framework,
-no source-file split. `npm run build` produces the minified release asset (terser, property
-mangling off) that HACS installs; the repo itself stays readable and needs no build step to run
-from a manual/local install.
+The source lives in `src/` as plain-JavaScript parts (no framework, no transpiling) that
+`npm run assemble` concatenates, in the order listed in `src/manifest.json`, into
+`room-overlay-card.js`. That assembled file stays committed — it is what a manual/local install
+loads and what every test tier runs against — and CI fails when it is out of date with `src/`.
+`npm run build` then produces the minified release asset (terser, property mangling off) that
+HACS installs.
+
+```
+src/core/     shared helpers: layout, glow, transform, migration, rooms, sections, overview, formatting…
+src/card/     the card element (room-overlay-card)
+src/editor/   the GUI editor element (room-overlay-card-editor) and its YAML helpers
+src/schema/   the config schema registry — every key, its type and scope (not loaded by dashboards)
+tools/        assemble.js
+```
 
 ```bash
-npm test              # smoke + render + lifecycle + design + overview tiers (node, jsdom)
-npm run test:e2e       # Playwright geometry regression tests, real Chromium
+npm run assemble        # src/ → room-overlay-card.js (run after every edit in src/)
+npm test                # assemble check + smoke, render, lifecycle, design, overview, schema tiers (jsdom)
+npm run test:e2e        # Playwright geometry regression tests, real Chromium
+npm run test:compat     # render every reference config with the last release and this build, compare
+npm run test:ha         # real Home Assistant in Docker: editor dialog, dashboard save paths
 npm run build           # build the minified dist/ bundle
-npm run build:verify    # build, then run the full test suite against the minified bundle
+npm run build:verify    # build, then run the test tiers against the minified bundle
 ```
 
 ---

@@ -1,6 +1,59 @@
 # Changelog
 
-## [6.31.0] - unreleased
+## [6.40.0] - unreleased
+
+### v7 foundation (V7_PLAN.md Phase 1) — no change for dashboards
+
+First release of the v7 line (studio, floorplan, AnyVac — see [`V7_PLAN.md`](V7_PLAN.md)).
+Everything here is groundwork; **a dashboard renders exactly as on v6.31.0** (verified below).
+
+- **Source split into `src/`.** The 10.7k-line `room-overlay-card.js` is now assembled from 15
+  ordered parts (`src/core/…`, `src/card/…`, `src/editor/…`) by `tools/assemble.js`
+  (`npm run assemble`). The parts are plain script that share one scope once concatenated —
+  exactly the scope the single file always had — so the assembled file is the same JavaScript
+  as before, byte for byte apart from a "generated file" note in its header and the version.
+  The root file stays committed (manual installs, every test tier); `assemble --check` runs
+  first in `npm test`, `build` and `build:verify`, so CI fails when it is out of date with `src/`.
+- **Config schema registry** (`src/schema/roc-schema.js`): every key the card understands,
+  with its type, allowed values, defaults where they are fixed, room scope and legacy (v3) keys,
+  plus `rocValidate(config)` → errors (wrong type / value outside the allowed list), warnings
+  (unknown key) and infos (v3 keys migrated on load). Not loaded by dashboards; used by the tests
+  now, by the studio, the generated configuration reference and `docs/AI_SPEC.md` later. Enum
+  values were taken from the code, not from the docs.
+- **New test tiers:**
+  - `tests/schema.test.js` (in `npm test` and `build:verify`): validator behaviour; every reference
+    config validates clean; every key in the documented YAML examples is in the schema; the
+    card's own key lists (`ROOM_KEYS`, `EL_DEDICATED_KEYS`, `TILE_DEDICATED_KEYS`, action types)
+    match it; and every snake_case key the card reads is in the schema — a new config key cannot
+    ship without a schema entry.
+  - `tests/compat.test.js` (`npm run test:compat`): renders every reference config with the last
+    release (git tag, or `--ref` / `--base`) and with this build at a desktop and a phone viewport,
+    switches rooms, opens the editor, and compares the card DOM, the editor HTML and the collected
+    config. Moved into the repo from a local harness.
+  - `tests/ha/` (`npm run test:ha`): a real Home Assistant 2026.10.2 in Docker, onboarded by script,
+    the card installed as a resource, Playwright on the real frontend — the card renders inside HA's
+    Lit `ha-card`, the editor opens in HA's dialog, a card is located in the dashboard config by
+    object identity (duplicate `card_id`s included), a dashboard save replaces exactly one card and
+    detects a concurrent edit, a non-admin cannot save, and a modal `<dialog>` on `<body>` stacks above
+    HA's editor dialog and hosts the card + editor. These are the Home Assistant behaviours the studio
+    will rely on (V7_PLAN §13).
+
+### Fixes found by the new tests
+
+- `example-bedroom.yaml` did not parse (wrong indentation in a nested `or:` condition of the
+  vacuum badge).
+- `flat-multiroom-v4.yaml`: removed `invert: true` from a blind — `invert` is a slider-zone key;
+  blinds never read it (the inversion comes from `min: 100` / `max: 0`).
+- `LAYOUT.md` documented `layout.header_offset`, which the card never implemented; replaced by the
+  real behaviour (HA's `--header-height`) and the missing `height: fill` option.
+
+Verified: all jsdom tiers + schema tier green, also against the minified bundle (`build:verify`);
+Playwright e2e 37/37 (the 4× CPU-throttled zoom frame-time test stays timing-sensitive in a
+2-core container, unchanged code); compat harness — 17 configs (the repo's reference files and the
+author's two cockpit configs + 12 synthetic nav variants), 166 snapshots, **0 differences** against
+v6.31.0; HA-in-the-loop tier 8/8 against Home Assistant 2026.10.2.
+
+## [6.31.0] - 2026-10-20
 
 ### Overview page: grid order in the GUI, optional room names, working fade, touchpad fixes
 

@@ -1,8 +1,11 @@
 /**
  * room-overlay-card — MIT License (see ROC_VERSION below for the current version)
  * https://github.com/Michailjovic/Room-Card
+ *
+ * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
+ * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='6.31.0';
+const ROC_VERSION='6.40.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
