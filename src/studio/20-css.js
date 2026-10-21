@@ -37,6 +37,22 @@ select.room{height:32px;border-radius:8px;border:1px solid var(--rs-line);backgr
 .ol-item .n{margin-left:auto;font-size:12px;color:var(--rs-txt2);font-variant-numeric:tabular-nums;}
 .ol-item .tag{font-size:10px;color:var(--rs-txt2);border:1px solid var(--rs-line);border-radius:4px;padding:0 4px;}
 .ol-item.empty{opacity:.45;}
+.ol-search{width:100%;height:30px;margin:0 0 6px;padding:0 8px;border-radius:6px;border:1px solid var(--rs-line);background:var(--rs-bg);color:inherit;font:inherit;font-size:13px;}
+.ol-kind{font-weight:600;margin-top:4px;}
+.ol-el{padding:4px 8px 4px 34px;font-size:13px;gap:6px;}
+.ol-el .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ol-el .sub{margin-left:auto;font-size:11px;color:var(--rs-txt2);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ol-empty{font-size:12px;color:var(--rs-txt2);padding:6px 8px;}
+.cv-bar{min-height:36px;}
+.selbar{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.selbar .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;background:var(--rs-sub);color:var(--primary-text-color,#e8eaed);}
+.selbar .hint{color:var(--rs-acc);font-weight:600;}
+.btn.sm{height:26px;padding:0 8px;font-size:12px;gap:4px;}
+.btn.sm ha-icon{--mdc-icon-size:16px;}
+.place{position:absolute;inset:0;z-index:30;cursor:crosshair;touch-action:none;}
+.place-box{position:absolute;display:none;border:2px dashed var(--rs-acc);background:rgba(3,169,244,.12);pointer-events:none;}
+.addgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px;}
+.addbtn{height:40px;justify-content:flex-start;}
 .canvas{grid-area:canvas;position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;}
 .cv-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;color:var(--rs-txt2);border-bottom:1px solid var(--rs-line);flex-wrap:wrap;}
 .stage{position:relative;flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:16px;

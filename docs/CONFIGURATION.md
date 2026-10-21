@@ -39,7 +39,7 @@ GUI editor — see [`EDITOR.md`](EDITOR.md) for the tab-by-tab walkthrough.
 | `rooms` | list | — | Multi-room definitions (see [Multi-room](#multi-room-one-card--whole-home)) |
 | `rooms[].overview` | bool/object | — | Makes that room an overview page — every room as a tile (see [Overview page](#overview-page-v6300)) |
 | `nav` | object | — | Multi-room navigation strip |
-| `test_mode` | bool | `false` | Edit mode — outlines, click-to-select, resize handles, editor's live preview |
+| `test_mode` | bool | `false` | **Legacy** Edit mode — outlines, click-to-select, resize handles on the dashboard card itself, editor's live preview. Since v6.42.0 the [Studio](EDITOR.md#room-card-studio) does all of it without saving a flag into the card; the editor only shows the toggle while it is on, so it can be switched off |
 | `tap_action` | action | — | Action on card background click |
 | `hold_feedback` | bool | `true` | Show the hold-gesture progress ring |
 | `hold_color` | string | — | Color of the in-progress hold ring |
@@ -121,8 +121,8 @@ Rules and notes:
   usual choice for a cockpit, so the room photo stays right under the nav strip) or `bottom` for
   the opposite. Purely cosmetic — it doesn't change which region owns the space, only where the
   photo sits inside it (v6.14.0).
-- **Edit mode** shows region outlines with names, a live viewport + profile badge, and a
-  **profile switch button** to preview the other profile.
+- The **[Studio](EDITOR.md#room-card-studio)** shows region outlines with names (Arrange) and
+  previews either profile in its Tablet / Tablet portrait / Phone frames.
 - Everything is editable in the GUI **Layout tab**: height source, orientation/threshold,
   per-device pin, both profile grids and all region placements — see [`EDITOR.md`](EDITOR.md#the-four-tabs).
 
@@ -789,9 +789,9 @@ does.
 
 **GUI editor.** `vacuum_widgets` has its own panel (Elements tab → "Vacuum status widgets"), same
 as `icons`/`badges`/`gauges`. It gives you dedicated fields for id/icon/size/z-index/top/left/group,
-and — with the editor's **Interactive preview** (`test_mode`) turned on — you can drag the widget
-directly on the room image to put it in any corner, exactly like icons and labels; the Top/Left
-fields update automatically. Below Top/Left there's also a **Quick position** grid of nine buttons
+and in the [Studio](EDITOR.md#room-card-studio) you can drag the widget directly on the room
+image to put it in any corner, exactly like icons and labels; the Top/Left fields update
+automatically. Below Top/Left there's also a **Quick position** grid of nine buttons
 (the four corners, the four edge midpoints, and centre) — click one to snap the widget straight to
 that spot based on its current Size, with no dragging involved. It writes plain `top`/`left` values
 just like typing into those fields by hand, so it's a safe fallback for placing the widget on setups
@@ -1016,7 +1016,7 @@ In the GUI these live in the **Elements** tab under *Light glow*: a live falloff
 colour picker with an **Auto** button (hands the colour back to the light), an intensity slider, and
 fields for everything above except the per-profile overrides.
 
-Turn on **Edit mode** and each glow gets a dashed box labelled with its id: drag it onto the lamp,
+In the [Studio](EDITOR.md#room-card-studio) (Arrange) each glow gets a dashed box labelled with its id: drag it onto the lamp,
 click it once and pull a round handle to resize (a circle stays round; an ellipse or wash gets
 width, height and corner handles). Because `top`/`left` is the centre, resizing grows the glow
 symmetrically. A glow stays visible even when its light is off, so you can place it at any time of
@@ -1857,8 +1857,8 @@ weather moods, dimmer zones, door portals, Bermuda presence multiroom…).
 
 ## Positioning tips
 
-All `top`, `left`, `width`, `height` values are percentage strings relative to the card. Enable
-**Edit mode** to position by eye: click an element to select it, drag to move (snaps to 0.5 %,
-Alt = free), drag handles to resize, arrow keys to nudge, or draw a new zone on an empty area.
-The live viewport/profile badge shows which layout profile is active. Full Edit-mode walkthrough:
-[`EDITOR.md`](EDITOR.md#edit-mode).
+All `top`, `left`, `width`, `height` values are percentage strings relative to the card. Open the
+**[Studio](EDITOR.md#room-card-studio)** to position by eye: click an element to select it, drag to
+move (snaps to a 0.5 % grid and to the edges and centres of other elements, Alt = free), drag
+handles to resize, arrow keys to nudge, or *Add* a new element by clicking or drawing on the image.
+The canvas bar shows which layout profile the frame produces.

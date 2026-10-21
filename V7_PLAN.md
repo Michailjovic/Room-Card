@@ -112,12 +112,12 @@ its own and field-tested before the next one starts.
 | **0** | Spikes S1–S6 (§3). | M | none |
 | **1** | **Foundation** (§5.1): source split into modules + bundler producing the same single viewer file (+ lazy studio chunk per S2); config **schema registry** (§5.2) covering every existing key; HA-in-the-loop tier (S4) in CI; compat harness extended with the author's config. No user-visible change. | L | 6.40.0 |
 | **2** | **Studio shell** (§5.3–5.5): full-screen workspace, live canvas (the card rendered directly), today's editor tabs hosted unchanged in a side panel, both save paths, undo/redo, unsaved-changes guard, *Open Studio* button in HA's editor and in card edit mode. Opt-in; HA editor untouched. | L | 6.41.0 |
-| **3** | **Canvas editing** (§5.6): select on canvas → inspector, drag/resize/rotate, snap guides (old E4), draw-to-create for every element type (E3), search/filter (E5), inline save errors (E6), multi-select, copy/paste of elements and whole rooms, keyboard shortcuts, touch gestures. | L | 6.42.0 |
-| **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. | XL | 6.43.0–6.44.0 |
-| **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. | L | 6.45.0 |
-| **6** | **Bindings** (§6.4): lights (colour + brightness glow), floor heating, temperature tint, humidity, presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.46.0 |
-| **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.47.0 |
-| **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.48.0 |
+| **3** | **Canvas editing** (§5.6): select on canvas → inspector, drag/resize/rotate, snap guides (old E4), draw-to-create for every element type (E3), search/filter (E5), inline save errors (E6), multi-select, copy/paste of elements and whole rooms, keyboard shortcuts, touch gestures. Split in two releases: **3a** (selection, outline + search, add on the image, copy/paste/delete, snap guides, Edit mode retired) and **3b** (multi-select, align/distribute, layers, room copy). | L | 6.42.0–6.43.0 |
+| **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. | XL | 6.44.0–6.45.0 |
+| **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. | L | 6.46.0 |
+| **6** | **Bindings** (§6.4): lights (colour + brightness glow), floor heating, temperature tint, humidity, presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.47.0 |
+| **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.48.0 |
+| **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.49.0 |
 | **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
 | **10** | **Documentation & launch** (§9): README, guides, generated reference, AI spec + `llms.txt`, PRESETS refresh incl. cockpit + floorplan presets, screenshots/GIFs, live demo, repo cleanup, HACS default submission. | L | **7.0.0** |
 
@@ -515,3 +515,45 @@ companion app (author), and the tablet run of the S5 probe.
   happens on this build.
 - **Release workflow** (author-edited): it must upload `dist/room-overlay-card-studio.js` (+ map)
   and verify it like the card.
+
+### Phase 3a — v6.42.0
+
+- **Phase 3 is split** (2026-10-21, proposed with v6.42.0 — author to confirm): 3a = v6.42.0, 3b = v6.43.0 (multi-select,
+  align/distribute, hide/lock per layer, duplicate/copy whole rooms). Phases 4–8 move one minor
+  version later (table in §4).
+- **One selection, three views.**
+  - The card's existing Edit-mode selection reports through `_rocSelSink(type,id)`, and
+    `_rocSelect(type,id)` selects without echoing back.
+  - The studio maps the type to its config list and to the editor's item panel
+    (`details[data-panel="<pre>-<index>"]`) through one table, `RS_TYPES` in
+    `src/studio/35-elements.js`.
+  - Inspector → canvas listens to *clicks on item headers*, not to `toggle`. Panels that re-open
+    on an editor re-render fire `toggle` too and would move the selection.
+- **Inherited lists.** An element a room inherits lives in the top-level list.
+  - The card's `_roomArr` now edits it there. Before, it created an empty room list, which hid
+    every shared element of that type after one drag: a latent Edit-mode bug, fixed.
+  - New elements use copy-on-write (`_roomArrNew` in the card, `rsListForNew` in the studio): the
+    room gets its own copy of the shared list first, so nothing on screen disappears.
+  - Selecting an inherited element switches the studio to Global, where its panel is.
+- **Snapping (E4)** measures what is on screen. Candidates are the DOM boxes of the other
+  elements (edges and centres) plus the image's edges and centre. The dragged element contributes
+  its own box offset, so anchoring per type (centred icons and glows, top-left zones) needs no
+  special cases.
+- **Add (E3)** places through a pointer layer over the stage, using pointer events, so touch works.
+  Defaults are the editor's own "+ Add" values, copied in `RS_TYPES`. If the editor's defaults
+  change, change both.
+- **Edit mode retired as a setting.** HA sets `editMode` / `preview` on every card while a
+  dashboard is in edit mode (probed on HA 2026.10.2: masonry, panel, sections). The card shows a
+  Studio button from it, with these conditions:
+  - only with a `lovelace` ancestor: HA's editor-dialog preview is in edit mode too;
+  - not under `hui-card-edit-mode`: a sections view covers the card with HA's click-to-edit
+    layer, so there the way in is the card editor;
+  - for administrators only.
+
+  `test_mode` keeps working (compatibility contract). The editor shows its toggle only while it is
+  on.
+- **Not done, on purpose:**
+  - *Rotate*: the card has no rotation key for elements. The plan's "drag/resize/rotate" needs a
+    config key first, which belongs to a later phase.
+  - *Inline save errors (E6)*: covered by the studio for its own save paths (conflict and failure
+    panels). The legacy test-mode Save keeps its overlay.

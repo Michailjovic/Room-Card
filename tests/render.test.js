@@ -325,10 +325,12 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
     rooms:[{id:'living',name:'Living'},{id:'kitchen',name:'Kitchen'}]});
   edEdit.hass={states:{},user:{name:'x'}};
   t('no separate Drag-edit preview checkbox remains',!edEdit.querySelector('#prev-on'));
-  t('Edit mode checkbox present, off by default',!!edEdit.querySelector('#test_mode')&&edEdit.querySelector('#test_mode').checked===false);
+  // v6.42.0: Edit mode retired as a setting (the studio replaces it) — the toggle only appears
+  // on a card that already has test_mode on, so it can be switched off (tested below)
+  t('no Edit mode toggle on a card without it (v6.42.0)',!edEdit.querySelector('#test_mode'));
   t('preview not mounted while Edit mode is off',!edEdit._prevCard&&!edEdit.querySelector('#roc-prev-host'));
-  t('Room, Edit mode, Haptics and YAML all carry an icon',
-    !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:cursor-move"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:code-braces"]'));
+  t('Room, Studio, Haptics and YAML all carry an icon',
+    !!edEdit.querySelector('ha-icon[icon="mdi:door"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:fullscreen"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:vibrate"]')&&!!edEdit.querySelector('ha-icon[icon="mdi:code-braces"]'));
   const advBtn=edEdit.querySelector('#roc-adv-toggle');
   t('YAML toggle lives in the title row as an icon button right before Undo/Redo, not a labelled checkbox',
     advBtn&&advBtn.tagName==='BUTTON'&&!!advBtn.nextElementSibling&&advBtn.nextElementSibling.id==='roc-undo');
@@ -348,16 +350,17 @@ t('weather toggle pre-checked when loaded config already has weather_nav_mini',e
   advBtn.dispatchEvent(new w.Event('click',{bubbles:true}));
   t('clicking YAML toggle again hides them',
     edEdit.querySelector('.roc-ed').classList.contains('roc-hideadv'));
-  const tmBox=edEdit.querySelector('#test_mode');
-  tmBox.checked=true;
-  tmBox.dispatchEvent(new w.Event('change',{bubbles:true}));
-  t('checking Edit mode mounts the live preview immediately (no extra _render needed)',!!edEdit._prevCard&&!!edEdit.querySelector('#roc-prev-host'));
-  t('checking Edit mode persists test_mode:true to the fired config',!!outEdit&&outEdit.test_mode===true);
+  // a card that still has Edit mode on (legacy): toggle shown checked, preview mounted
+  edEdit.setConfig({type:'custom:room-overlay-card',base_image:'/local/x.webp',test_mode:true,
+    rooms:[{id:'living',name:'Living'},{id:'kitchen',name:'Kitchen'}]});
+  edEdit._render();
+  t('legacy Edit mode: toggle shown, checked, preview mounted',!!edEdit.querySelector('#test_mode')&&edEdit.querySelector('#test_mode').checked&&!!edEdit._prevCard&&!!edEdit.querySelector('#roc-prev-host'));
   const tmBox2=edEdit.querySelector('#test_mode');
   tmBox2.checked=false;
   tmBox2.dispatchEvent(new w.Event('change',{bubbles:true}));
   t('unchecking Edit mode unmounts the preview',!edEdit._prevCard&&!edEdit.querySelector('#roc-prev-host'));
   t('unchecking Edit mode deletes test_mode from the fired config',!!outEdit&&outEdit.test_mode===undefined);
+  t('…and the toggle is then gone for good',!edEdit.querySelector('#test_mode'));
 }
 
 // --- drag/resize edits relayed from the editor preview must not leak the preview's

@@ -85,14 +85,17 @@ To install a specific version (for example to roll back), open the card in HACS 
 
 1. **Add the card** to a dashboard — *Add card → Custom: Room Overlay Card*.
 2. The editor opens on a single step: **set a background image** (a room photo or floor-plan, e.g. `/local/bedroom.webp`). The rest of the editor appears once it's set.
-3. Turn on **Edit mode** in the header. Now drag elements straight onto the image.
-4. In the **Elements** tab, add an icon, label, zone or embedded card and drop it on the right spot.
-5. Save. That's it — you never had to touch YAML.
+3. Press **Studio** in the editor header: the card opens full-screen on a live canvas, with the
+   editor next to it.
+4. **Add** an icon, label, zone, gauge, light glow, blind or embedded card and click (or drag a
+   box) on the image where it belongs. Click any element to select it: it opens in the editor
+   panel on the right, and you can drag it, resize it, duplicate, copy it to another room or
+   delete it.
+5. **Apply & close**, then Save in Home Assistant. That's it — you never had to touch YAML.
 
-Want more room? **Studio** in the editor header (or **✎ Studio** on the card in Edit mode) opens
-the [Room Card Studio](docs/EDITOR.md#room-card-studio-v6410): the same editor full-screen next to
-a large live canvas with tablet / portrait / phone frames, undo/redo and saving straight to the
-dashboard.
+On the dashboard itself, Home Assistant's edit mode (the pencil) puts a **✎ Studio** button on the
+card, which saves straight to the dashboard — handy on a wall tablet. More in the
+[editor guide](docs/EDITOR.md#room-card-studio).
 
 The smallest possible card in YAML:
 
@@ -138,7 +141,7 @@ This README is a landing page — the full reference lives here:
 | Doc | What's in it |
 |---|---|
 | **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** | Every YAML key: layout grids, filters, overlays, gauges, blinds & cover control, zones, badges, icons/labels, embedded cards, light controls, multi-room, the overview page, a complete example |
-| **[docs/EDITOR.md](docs/EDITOR.md)** | The GUI editor tab by tab, Edit mode, the full-screen Room Card Studio, and a summary of the editor UX rebuild that shipped in v5.9.0–v5.10.1 |
+| **[docs/EDITOR.md](docs/EDITOR.md)** | The full-screen Room Card Studio, the GUI editor tab by tab, the legacy Edit mode, and a summary of the editor UX rebuild that shipped in v5.9.0–v5.10.1 |
 | **[LAYOUT.md](LAYOUT.md)** | Layout-engine implementation spec, for the curious or the contributing |
 | **[PRESETS.md](PRESETS.md)** | Copy-paste recipes — day/night filters, weather moods, dimmer zones, door portals, presence multiroom, a whole-home overview page |
 

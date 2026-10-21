@@ -1,6 +1,90 @@
 # Changelog
 
-## [6.41.0] - unreleased
+## [6.42.0] - unreleased
+
+### Studio: canvas editing, part 1 (V7_PLAN.md Phase 3a) — and Edit mode retires
+
+- **Selection everywhere.**
+  - Click an element on the canvas, its row in the outline, or its header in the inspector — all
+    three follow.
+  - The inspector opens exactly that element's panel, scrolls to it and flashes it.
+  - A selection bar on the canvas offers **Duplicate / Copy / Delete** (and **Paste**), so it all
+    works on a touch screen.
+  - An element the room only inherits from the shared defaults opens in **Global**, where it
+    lives.
+- **Outline lists every element** of the room (or Global) by type, with id and entity, and a
+  **search box** (id, entity, icon, type) — backlog E5.
+- **Add any element on the image (E3).**
+  - *Add* lists every type: zones, icons, labels, gauges, light glows, blinds, embedded cards and
+    vacuum widgets are placed with a click, or a dragged box for the sized ones.
+  - Badges, overlay images and groups go straight to the inspector.
+  - New elements get the editor's own defaults and a unique id, and open selected.
+  - Adding to a room that inherited the shared list gives the room its own copy first, so nothing
+    on screen disappears.
+- **Keyboard** (outside text fields):
+  - **Del** deletes;
+  - **Ctrl+D** duplicates;
+  - **Ctrl+C / Ctrl+V** copy and paste, also into another room or another card (the copy is kept
+    in this browser);
+  - **Esc** cancels placing, then clears the selection, then closes.
+- **Snap guides (E4).**
+  - A dragged element snaps its left / centre / right and top / centre / bottom to the same lines
+    of every other element and of the image, with a guide line. Both are measured from what is on
+    screen, so centred icons and glows align by their centres.
+  - The 0.5 % grid and **Alt** = free stay.
+- **More of the card can be arranged on the canvas:**
+  - **blinds** can be selected, dragged and resized;
+  - **gauges** move by dragging their body;
+  - **embedded cards** move by a grip above them (the card itself stays usable).
+- **Dashboard edit mode → Studio.** Home Assistant sets `editMode` on every card while a dashboard
+  is in edit mode (verified on HA 2026.10.2). The card now shows a **✎ Studio** button then, in
+  masonry and panel views:
+  - for administrators only;
+  - only on the dashboard itself, not in the preview inside HA's editor dialog.
+
+  It saves straight to the dashboard. Sections views cover each card with HA's own click-to-edit
+  layer, so there the way in is the card editor's Studio button.
+- **Edit mode (`test_mode`) is retired as a setting.**
+  - Everything it did is in the studio, and it worked by saving a flag into the card that left the
+    dashboard card editable for everyone.
+  - The editor shows the toggle only on a card that still has it on, so it can be switched off.
+  - Such cards keep working exactly as before, including their ✎ Studio button.
+  - The editor's onboarding and Layout-tab hints now point to the Studio.
+
+### Fixes
+
+- **Dragging an element a room inherits hid all of them.** In Edit mode, dragging, resizing or
+  nudging an element the room inherits from the top level gave the room an empty list of its own,
+  which hid every shared element of that type. Such edits now change the shared element.
+- **Arrow keys typed into an editor field** moved the element selected on the card. They no longer
+  do.
+
+### Tests
+
+- `tests/studio.test.js`: 93 checks (+31). Covers:
+  - selection canvas ↔ outline ↔ inspector (inherited elements included);
+  - search;
+  - duplicate, delete, undo, and copy/paste across rooms;
+  - keyboard shortcuts;
+  - add with defaults and position, non-canvas types, placing and cancelling;
+  - copy-on-write for inherited lists, and `_roomArr` on inherited elements;
+  - the edit-mode Studio button (dashboard only, admin only);
+  - the retired Edit-mode toggle.
+- `tests/studio.spec.js` (real Chromium): 11 tests (+4):
+  - a real click opens the inspector panel, and an inspector header selects on the canvas;
+  - Add → click and Add zone → drag;
+  - a dragged icon snaps its centre to a zone edge, with a guide;
+  - arrow keys in a field do not move anything;
+  - an embedded card moves by its grip.
+- HA tier: 11 tests (+1).
+  - The new test covers masonry, panel and sections views in HA's dashboard edit mode (Studio
+    button shown and clickable → studio saving to the right card; none under the sections
+    layer).
+  - The card-editor test now also checks that HA's editor preview gets no Studio button.
+- Compat vs v6.41.0: 18 configs, 176 snapshots, the card DOM **identical**. The only editor
+  differences are the expected ones (Edit-mode toggle, two hint texts).
+
+## [6.41.0] - 2026-10-21
 
 ### Room Card Studio — the full-screen editor, first version (V7_PLAN.md Phase 2)
 

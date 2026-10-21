@@ -15,10 +15,15 @@
  * dialog (spike S1), the real card on a canvas in a device frame, today's editor hosted
  * unchanged as the inspector (§5.5), undo/redo, an unsaved-changes guard and the two save paths
  * (§5.4): back through HA's card editor, or straight to the dashboard with a conflict check.
+ *
+ * Phase 3a (v6.42.0) — canvas editing, first part: selection shared by canvas, outline and
+ * inspector; the outline lists every element (with search); add by clicking / drawing on the
+ * image (every positioned type); duplicate, copy / paste across rooms, delete; edge and centre
+ * snapping lives in the card (_snapPos).
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.41.0';
+const ROC_STUDIO_VERSION='6.42.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -322,6 +327,16 @@ const ROC_STUDIO_STR={en:{
   hist_empty:'Nothing saved from the studio in this browser yet.',restore:'Restore',
   canvas_err:'The card cannot render this config: {m}',
   ver_mismatch:'Studio v{s} with card v{c} — reload the page (browser cache)',
+  // Phase 3 (v6.42.0)
+  add:'Add',add_hint:'Add an element — then click or drag on the image to place it',add_title:'Add an element',
+  add_body:'Pick a type. Elements that sit on the image are placed with a click (or a drag for a box); the others are added to the inspector.',
+  add_body_room:'Pick a type. It is added to the room shown — switch to Global first for an element every room shares. Elements on the image are placed with a click (or a drag for a box).',
+  t_zone:'Zone',t_icon:'Icon',t_label:'Label',t_gauge:'Gauge',t_glow:'Light glow',t_blind:'Blind',t_element:'Embedded card',
+  t_vacuum_widget:'Vacuum widget',t_badge:'Badge',t_overlay:'Overlay image',t_group:'Group',
+  place_hint:'{t}: click on the image, or drag a box — Esc cancels',
+  dup:'Duplicate',dup_hint:'Duplicate (Ctrl+D)',copy_hint:'Copy (Ctrl+C) — paste into any room or card',
+  del:'Delete',del_hint:'Delete (Del)',paste:'Paste',paste_hint:'Paste (Ctrl+V) into the room shown',
+  search_ph:'Search elements…',no_match:'Nothing matches.',no_elements:'No elements yet — Add places the first one.',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;
@@ -405,6 +420,22 @@ select.room{height:32px;border-radius:8px;border:1px solid var(--rs-line);backgr
 .ol-item .n{margin-left:auto;font-size:12px;color:var(--rs-txt2);font-variant-numeric:tabular-nums;}
 .ol-item .tag{font-size:10px;color:var(--rs-txt2);border:1px solid var(--rs-line);border-radius:4px;padding:0 4px;}
 .ol-item.empty{opacity:.45;}
+.ol-search{width:100%;height:30px;margin:0 0 6px;padding:0 8px;border-radius:6px;border:1px solid var(--rs-line);background:var(--rs-bg);color:inherit;font:inherit;font-size:13px;}
+.ol-kind{font-weight:600;margin-top:4px;}
+.ol-el{padding:4px 8px 4px 34px;font-size:13px;gap:6px;}
+.ol-el .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ol-el .sub{margin-left:auto;font-size:11px;color:var(--rs-txt2);max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ol-empty{font-size:12px;color:var(--rs-txt2);padding:6px 8px;}
+.cv-bar{min-height:36px;}
+.selbar{margin-left:auto;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.selbar .chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;background:var(--rs-sub);color:var(--primary-text-color,#e8eaed);}
+.selbar .hint{color:var(--rs-acc);font-weight:600;}
+.btn.sm{height:26px;padding:0 8px;font-size:12px;gap:4px;}
+.btn.sm ha-icon{--mdc-icon-size:16px;}
+.place{position:absolute;inset:0;z-index:30;cursor:crosshair;touch-action:none;}
+.place-box{position:absolute;display:none;border:2px dashed var(--rs-acc);background:rgba(3,169,244,.12);pointer-events:none;}
+.addgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px;}
+.addbtn{height:40px;justify-content:flex-start;}
 .canvas{grid-area:canvas;position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;}
 .cv-bar{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:12px;color:var(--rs-txt2);border-bottom:1px solid var(--rs-line);flex-wrap:wrap;}
 .stage{position:relative;flex:1;min-height:0;overflow:hidden;display:flex;align-items:center;justify-content:center;padding:16px;
@@ -512,6 +543,60 @@ function rsHistPush(k,cfg){
     localStorage.setItem(k,JSON.stringify(a.slice(0,10)));
   }catch(_){}
 }
+// ---- Element model (Phase 3, v6.42.0) ------------------------------------------------------
+// One row per element type the studio can select, create, copy and delete.
+//  key    config list            pre    the editor's item panel prefix (details data-panel="<pre>-<i>")
+//  panel  the editor section      canvas the card can select / drag it on the canvas (Arrange mode)
+//  draw   'box' = drag a rectangle, 'point' = click (a click on a box type gives the default size)
+//  def    defaults for a new one — the same values the editor's own "+ Add" buttons use
+//  idp    id prefix of a new one (also the editor's)
+const RS_TYPES={
+  zone:{key:'zones',pre:'z',panel:'zones',icon:'mdi:gesture-tap',canvas:true,draw:'box',idp:'zone_',def:{width:'10%',height:'10%'}},
+  icon:{key:'icons',pre:'ico',panel:'icons',icon:'mdi:star-four-points-outline',canvas:true,draw:'point',idp:'icon_',def:{icon:'mdi:help',size:'24px'}},
+  label:{key:'labels',pre:'lbl',panel:'labels',icon:'mdi:format-text',canvas:true,draw:'point',idp:'label_',def:{entity:''}},
+  gauge:{key:'gauges',pre:'g',panel:'gauges',icon:'mdi:gauge',canvas:true,draw:'box',idp:'gauge_',def:{width:'2%',height:'20%',entity:'',min:0,max:100}},
+  glow:{key:'glows',pre:'gw',panel:'glows',icon:'mdi:lightbulb-on-outline',canvas:true,draw:'point',idp:'glow_',centre:true,def:{entity:'',size:'25%',intensity:0.7}},
+  blind:{key:'blinds',pre:'bl',panel:'blinds',icon:'mdi:blinds-horizontal',canvas:true,draw:'box',idp:'blind_',def:{width:'20%',height:'40%',entity:'',min:0,max:100,blind_type:'roller'}},
+  element:{key:'elements',pre:'el',panel:'elements',icon:'mdi:card-bulleted-outline',canvas:true,draw:'box',idp:'el_',def:{width:'30%',height:'20%',card:{type:'tile',entity:''}}},
+  vacuum_widget:{key:'vacuum_widgets',pre:'vw',panel:'vacuum_widgets',icon:'mdi:robot-vacuum',canvas:true,draw:'point',idp:'vac_',def:{icon:'mdi:robot-vacuum',size:'44px',vacuums:[]}},
+  badge:{key:'badges',pre:'b',panel:'badges',icon:'mdi:label-outline',canvas:false,idp:'badge_',def:{position:'bottom-left'}},
+  overlay:{key:'overlays',pre:'ov',panel:'overlays',icon:'mdi:layers-outline',canvas:false,idp:'overlay_',def:{image:'',transition:'2s ease'}},
+  group:{key:'groups',pre:'grp',panel:'groups',icon:'mdi:dock-window',canvas:false,idp:'group_',def:{visible:false}},
+};
+const RS_TYPE_ORDER=['zone','icon','label','gauge','glow','blind','element','vacuum_widget','badge','overlay','group'];
+const RS_PRE2TYPE={};Object.keys(RS_TYPES).forEach(function(t){RS_PRE2TYPE[RS_TYPES[t].pre]=t;});
+
+// The room object a scope refers to (null = the top level / a single-room card).
+function rsRoom(cfg,roomIdx,global){
+  return(!global&&Array.isArray(cfg.rooms)&&cfg.rooms.length)?cfg.rooms[Math.max(0,Math.min(roomIdx,cfg.rooms.length-1))]:null;
+}
+// Where an element of this type lives for the scope: the room's own list, else the inherited
+// top-level list (the card's _roomArr does the same since v6.42.0).
+function rsOwner(cfg,roomIdx,global,key){
+  const r=rsRoom(cfg,roomIdx,global);
+  if(r&&Array.isArray(r[key]))return{list:r[key],inherited:false};
+  if(Array.isArray(cfg[key]))return{list:cfg[key],inherited:!!r};
+  return{list:null,inherited:false};
+}
+// The list a NEW element goes to: the room's own (a copy of the inherited one first, so nothing
+// on screen disappears), or the top level in Global / a single-room card.
+function rsListForNew(cfg,roomIdx,global,key){
+  const r=rsRoom(cfg,roomIdx,global);
+  const t=r||cfg;
+  if(!Array.isArray(t[key]))t[key]=(r&&Array.isArray(cfg[key]))?JSON.parse(rsJ(cfg[key])):[];
+  return t[key];
+}
+function rsUniqueId(list,prefix,want){
+  const used=new Set((list||[]).map(function(x){return x&&x.id;}));
+  if(want&&!used.has(want))return want;
+  let base=want?String(want).replace(/_\d+$/,''):prefix.replace(/_$/,'');
+  let n=(list||[]).length+1;
+  while(used.has(base+'_'+n))n++;
+  return base+'_'+n;
+}
+// shift a percentage position a little (duplicate / paste on top of the original)
+function rsNudgePct(v,d){const m=/^(-?\d+(?:\.\d+)?)%$/.exec(String(v==null?'':v));return m?Math.max(0,Math.min(98,parseFloat(m[1])+d)).toFixed(1)+'%':v;}
+function rsPct(n){return(Math.round(Math.max(0,Math.min(100,n))*10)/10).toFixed(1)+'%';}
 // ---- The studio -----------------------------------------------------------------------------
 // Device frames for the canvas. The card chooses its layout profile from the frame's size (its
 // _rocVp viewport override), so "Tablet portrait" shows the portrait profile on a landscape PC.
@@ -547,6 +632,9 @@ class RocStudio{
     this.frame=(window.innerWidth||0)>=(window.innerHeight||0)?'landscape':'fit';this.mode='arrange';
     this.undoStack=[];this.redoStack=[];this.lastCommit=0;this.lastSrc='';
     this.roomIdx=0;this.global=false;
+    this.sel=null;           // {type,id} — the selected element (canvas, outline and inspector agree)
+    this.search='';          // outline filter
+    this._placeType=null;    // element type being placed on the canvas (Add)
     this._layers=[];this._timers=[];
   }
   t(k,v){return rocT((this.hass&&this.hass.language||'en').split('-')[0],k,v);}
@@ -616,6 +704,8 @@ class RocStudio{
       self._modeBtns[k]=b;mseg.appendChild(b);
     });
     bar.appendChild(mseg);
+    this._addBtn=rsEl('button',{class:'btn',title:this.t('add_hint'),onclick:function(){self._showAdd();}},[rsIcon('mdi:plus'),rsEl('span',{class:'lbl',text:this.t('add')})]);
+    bar.appendChild(this._addBtn);
     this._undoBtn=rsEl('button',{class:'btn icon',title:this.t('undo'),'aria-label':this.t('undo'),onclick:function(){self.undo();}},[rsIcon('mdi:undo')]);
     this._redoBtn=rsEl('button',{class:'btn icon',title:this.t('redo'),'aria-label':this.t('redo'),onclick:function(){self.redo();}},[rsIcon('mdi:redo')]);
     bar.appendChild(this._undoBtn);bar.appendChild(this._redoBtn);
@@ -633,11 +723,21 @@ class RocStudio{
 
     // outline
     this._outline=rsEl('nav',{class:'outline','aria-label':this.t('outline')});
+    this._olRooms=rsEl('div');
+    this._olSearch=rsEl('input',{class:'ol-search',type:'search',placeholder:this.t('search_ph'),'aria-label':this.t('search_ph'),oninput:function(){self.search=self._olSearch.value;self._renderOutlineList();}});
+    this._olList=rsEl('div');
+    this._outline.appendChild(this._olRooms);
+    this._outline.appendChild(rsEl('div',{class:'ol-h',text:this.t('elements')}));
+    this._outline.appendChild(this._olSearch);
+    this._outline.appendChild(this._olList);
     app.appendChild(this._outline);
 
     // canvas
     const cv=rsEl('main',{class:'canvas'});
     this._cvInfo=rsEl('div',{class:'cv-bar'});
+    this._cvSize=rsEl('span');
+    this._selBar=rsEl('span',{class:'selbar'});
+    this._cvInfo.appendChild(this._cvSize);this._cvInfo.appendChild(this._selBar);
     this._stage=rsEl('div',{class:'stage'});
     this._fbox=rsEl('div',{class:'fbox'});
     this._frameEl=rsEl('div',{class:'frame'});
@@ -694,6 +794,19 @@ class RocStudio{
       const tgt=e.composedPath?e.composedPath()[0]:e.target;
       if(tgt&&tgt.id==='room-select')self._setRoom(ed._editRoomIdx||0,!!ed._editGlobal,'editor');
     });
+    ed.addEventListener('click',function(e){
+      const sm=e.target&&e.target.closest?e.target.closest('summary'):null;
+      const d=sm&&sm.parentElement;
+      if(!d||d.tagName!=='DETAILS'||!d.dataset.panel)return;
+      setTimeout(function(){
+        if(!d.open)return;
+        const m=/^([a-z]+)-(\d+)$/.exec(d.dataset.panel);
+        const type=m&&RS_PRE2TYPE[m[1]];
+        if(!type)return;
+        const item=((ed._roomView()||{})[RS_TYPES[type].key]||[])[parseInt(m[2],10)];
+        if(item&&item.id!=null)self._select(type,String(item.id),'inspector');
+      },0);
+    },true);
     ed.setConfig(I.clone(this.work));
     this._ed=ed;
     this._insp.appendChild(ed);
@@ -704,6 +817,7 @@ class RocStudio{
     const card=document.createElement('room-overlay-card');
     card._rocSink=function(nc){self._onCanvas(nc);};
     card._rocRoomSink=function(idx){self._onCanvasRoom(idx);};
+    card._rocSelSink=function(type,id){self._onCanvasSel(type,id);};
     card._rocVp={w:1280,h:800};
     if(this._rooms().length)card._roomIdx=this.roomIdx;
     this._card=card;
@@ -760,6 +874,7 @@ class RocStudio{
         card.setConfig(self._canvasCfg());
         if(self._cvErr){self._cvErr.remove();self._cvErr=null;}
         card.style.display='';
+        self._reselectCanvas();
       }catch(e){
         card.style.display='none';
         if(!self._cvErr){self._cvErr=rsEl('div',{class:'cv-err'});self._stage.appendChild(self._cvErr);}
@@ -774,6 +889,7 @@ class RocStudio{
     if(card._roomIdx!==this.roomIdx){
       card._roomIdx=this.roomIdx;
       if(card._hass&&card._config){card._rendered=false;try{card._render();}catch(_){}}
+      this._reselectCanvas();
     }
   }
   _setFrame(k){
@@ -807,7 +923,8 @@ class RocStudio{
       if(card._rendered)try{card._onWinResize();}catch(_){}
     }
     const prof=this.I.profile(this.work,w,h);
-    this._cvInfo.textContent=w+' × '+h+' · '+prof+(s<1?' · '+Math.round(s*100)+' %':'');
+    this._cvSize.textContent=w+' × '+h+' · '+prof+(s<1?' · '+Math.round(s*100)+' %':'');
+    if(this._placeLayer)this._placeLayer.style.display='';
   }
   _onCanvas(nc){
     // a drag / draw on the canvas (Arrange mode) — the card already shows it
@@ -815,7 +932,214 @@ class RocStudio{
   }
   _onCanvasRoom(idx){
     if(idx===this.roomIdx&&!this.global)return;
+    this.sel=null;
     this._setRoom(idx,false,'canvas');
+  }
+  _onCanvasSel(type,id){
+    if(!type){if(this.sel&&RS_TYPES[this.sel.type]&&RS_TYPES[this.sel.type].canvas){this.sel=null;this._renderOutlineList();this._renderSelBar();}return;}
+    this._select(type,String(id),'canvas');
+  }
+  _reselectCanvas(){
+    const card=this._card;
+    if(!card||this.mode!=='arrange'||typeof card._rocSelect!=='function')return;
+    const s=this.sel;
+    try{card._rocSelect(s&&RS_TYPES[s.type]&&RS_TYPES[s.type].canvas?s.type:null,s?s.id:null);}catch(_){}
+  }
+
+  // ---------------------------------------------------------------- selection (Phase 3)
+  _findItem(type,id,cfg){
+    const T=RS_TYPES[type];if(!T)return null;
+    const o=rsOwner(cfg||this.work,this.roomIdx,this.global,T.key);
+    if(!o.list)return null;
+    const i=o.list.findIndex(function(x){return x&&String(x.id)===String(id);});
+    return i<0?null:{list:o.list,idx:i,item:o.list[i],inherited:o.inherited};
+  }
+  _select(type,id,from){
+    if(!RS_TYPES[type])return;
+    const f=this._findItem(type,id);
+    this.sel={type:type,id:String(id)};
+    // an element the room inherits lives in the shared (Global) list — edit it there
+    if(f&&f.inherited&&!this.global&&from!=='inspector')this._setRoom(this.roomIdx,true,'select');
+    if(from!=='canvas')this._reselectCanvas();
+    if(from!=='inspector')this._revealItem(type,id);
+    this._renderOutlineList();this._renderSelBar();
+  }
+  deselect(){
+    if(!this.sel)return;
+    this.sel=null;
+    if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
+    this._renderOutlineList();this._renderSelBar();
+  }
+  // open the element's own panel in the inspector, scroll to it and flash it
+  _revealItem(type,id){
+    const ed=this._ed,T=RS_TYPES[type];if(!ed||!T)return;
+    const list=(ed._roomView()||{})[T.key]||[];
+    const i=list.findIndex(function(x){return x&&String(x.id)===String(id);});
+    const tab=ed.querySelector('[data-roctab="elements"]');if(tab)tab.click();
+    const sec=ed.querySelector('details[data-panel="'+T.panel+'"]');if(sec)sec.open=true;
+    const d=i>=0?ed.querySelector('details[data-panel="'+T.pre+'-'+i+'"]'):null;
+    const target=d||sec;
+    if(!target)return;
+    if(d)d.open=true;
+    try{target.scrollIntoView({block:'start',behavior:'smooth'});}catch(_){try{target.scrollIntoView();}catch(__){}}
+    const sm=target.querySelector('summary');
+    if(sm){sm.style.outline='2px solid var(--primary-color,#03a9f4)';sm.style.outlineOffset='1px';clearTimeout(sm._rsT);sm._rsT=setTimeout(function(){sm.style.outline='';sm.style.outlineOffset='';},1400);}
+    this._app.classList.add('show-insp');this._app.classList.remove('show-outline');
+  }
+  deleteSel(){
+    const s=this.sel;if(!s)return;
+    const c=JSON.parse(rsJ(this.work));
+    const f=this._findItem(s.type,s.id,c);if(!f)return;
+    f.list.splice(f.idx,1);
+    this.sel=null;
+    this._commit(c,'studio');
+  }
+  duplicateSel(){
+    const s=this.sel;if(!s)return;
+    const c=JSON.parse(rsJ(this.work));
+    const f=this._findItem(s.type,s.id,c);if(!f)return;
+    const it=JSON.parse(rsJ(f.item));
+    it.id=rsUniqueId(f.list,RS_TYPES[s.type].idp,it.id);
+    if(it.top!=null)it.top=rsNudgePct(it.top,2);
+    if(it.left!=null)it.left=rsNudgePct(it.left,2);
+    f.list.splice(f.idx+1,0,it);
+    this._commit(c,'studio');
+    this._select(s.type,it.id,'studio');
+  }
+  copySel(){
+    const s=this.sel;if(!s)return false;
+    const f=this._findItem(s.type,s.id);if(!f)return false;
+    this._clip={type:s.type,item:JSON.parse(rsJ(f.item))};
+    try{localStorage.setItem('roc-studio-clip',rsJ(this._clip));}catch(_){}
+    this._renderSelBar();
+    return true;
+  }
+  _clipboard(){
+    if(this._clip)return this._clip;
+    try{const v=JSON.parse(localStorage.getItem('roc-studio-clip')||'null');if(v&&RS_TYPES[v.type]&&v.item)return v;}catch(_){}
+    return null;
+  }
+  paste(){
+    const clip=this._clipboard();if(!clip)return;
+    const T=RS_TYPES[clip.type];
+    const c=JSON.parse(rsJ(this.work));
+    const list=rsListForNew(c,this.roomIdx,this.global,T.key);
+    const it=JSON.parse(rsJ(clip.item));
+    it.id=rsUniqueId(list,T.idp,it.id);
+    if(list.some(function(x){return x&&x.top===it.top&&x.left===it.left;})){it.top=rsNudgePct(it.top,2);it.left=rsNudgePct(it.left,2);}
+    list.push(it);
+    this._commit(c,'studio');
+    this._select(clip.type,it.id,'studio');
+  }
+
+  // ---------------------------------------------------------------- add (draw-to-create, E3)
+  _showAdd(){
+    const self=this;
+    const grid=rsEl('div',{class:'addgrid'});
+    let close=null;
+    RS_TYPE_ORDER.forEach(function(type){
+      const T=RS_TYPES[type];
+      grid.appendChild(rsEl('button',{class:'btn addbtn',type:'button','data-type':type,onclick:function(){if(close)close();self.add(type);}},
+        [rsIcon(T.icon),rsEl('span',{text:self.t('t_'+type)})]));
+    });
+    close=this._panel(this.t('add_title'),[this.t(this._rooms().length&&!this.global?'add_body_room':'add_body'),grid],[{label:this.t('cancel'),id:'cancel'}]);
+  }
+  // canvas types: place by clicking / drawing on the image; the others are added straight away
+  add(type){
+    const T=RS_TYPES[type];if(!T)return;
+    if(!T.canvas){this._create(type,null);return;}
+    if(this.mode!=='arrange')this._setMode('arrange');
+    this._startPlace(type);
+  }
+  _startPlace(type){
+    const self=this;
+    this._cancelPlace();
+    this._placeType=type;
+    const layer=rsEl('div',{class:'place'});
+    const box=rsEl('div',{class:'place-box'});
+    layer.appendChild(box);
+    let sx=0,sy=0,down=false,pid=null;
+    const sr=function(){return self._stage.getBoundingClientRect();};
+    layer.addEventListener('pointerdown',function(e){
+      if(e.button!==undefined&&e.button!==0)return;
+      e.preventDefault();down=true;pid=e.pointerId;sx=e.clientX;sy=e.clientY;
+      try{layer.setPointerCapture(pid);}catch(_){}
+      box.style.display='none';
+    });
+    layer.addEventListener('pointermove',function(e){
+      if(!down)return;
+      const r=sr();
+      box.style.display='block';
+      box.style.left=(Math.min(sx,e.clientX)-r.left)+'px';box.style.top=(Math.min(sy,e.clientY)-r.top)+'px';
+      box.style.width=Math.abs(e.clientX-sx)+'px';box.style.height=Math.abs(e.clientY-sy)+'px';
+    });
+    const up=function(e){
+      if(!down)return;down=false;
+      try{layer.releasePointerCapture(pid);}catch(_){}
+      self._placeAt(sx,sy,e.clientX,e.clientY);
+    };
+    layer.addEventListener('pointerup',up);
+    layer.addEventListener('pointercancel',function(){down=false;box.style.display='none';});
+    this._stage.appendChild(layer);
+    this._placeLayer=layer;
+    this._renderSelBar();
+  }
+  _cancelPlace(){
+    if(this._placeLayer){this._placeLayer.remove();this._placeLayer=null;}
+    if(this._placeType){this._placeType=null;this._renderSelBar();}
+  }
+  // client coordinates of the press and the release → a new element on the image
+  _placeAt(x0,y0,x1,y1){
+    const type=this._placeType;
+    const cont=this._card&&this._card.shadowRoot&&this._card.shadowRoot.querySelector('.content');
+    this._cancelPlace();
+    if(!type||!cont)return;
+    const cr=cont.getBoundingClientRect();
+    if(!(cr.width>0&&cr.height>0))return;
+    const px=function(x){return(x-cr.left)/cr.width*100;},py=function(y){return(y-cr.top)/cr.height*100;};
+    const dragged=Math.abs(x1-x0)+Math.abs(y1-y0)>8;
+    const pos={};
+    if(RS_TYPES[type].draw==='box'&&dragged){
+      const l=Math.max(0,Math.min(px(x0),px(x1))),t=Math.max(0,Math.min(py(y0),py(y1)));
+      const w=Math.min(100-l,Math.abs(px(x1)-px(x0))),h=Math.min(100-t,Math.abs(py(y1)-py(y0)));
+      pos.top=rsPct(t);pos.left=rsPct(l);
+      if(w>=1)pos.width=rsPct(w);
+      if(h>=1)pos.height=rsPct(h);
+    }else{
+      pos.top=rsPct(py(y1));pos.left=rsPct(px(x1));
+    }
+    this._create(type,pos);
+  }
+  _create(type,pos){
+    const T=RS_TYPES[type];
+    const c=JSON.parse(rsJ(this.work));
+    const list=rsListForNew(c,this.roomIdx,this.global,T.key);
+    const it={id:rsUniqueId(list,T.idp)};
+    if(pos){it.top=pos.top;it.left=pos.left;}
+    const def=JSON.parse(rsJ(T.def));
+    for(const k in def)if(!(pos&&pos[k]!==undefined))it[k]=def[k];
+    if(pos&&pos.width)it.width=pos.width;
+    if(pos&&pos.height)it.height=pos.height;
+    list.push(it);
+    this._commit(c,'studio');
+    this._select(type,it.id,'studio');
+  }
+  _renderSelBar(){
+    const self=this,b=this._selBar;if(!b)return;
+    b.innerHTML='';
+    if(this._placeType){
+      b.appendChild(rsEl('span',{class:'hint',text:this.t('place_hint',{t:this.t('t_'+this._placeType)})}));
+      b.appendChild(rsEl('button',{class:'btn sm',type:'button',onclick:function(){self._cancelPlace();}},[this.t('cancel')]));
+      return;
+    }
+    const s=this.sel;
+    if(s&&RS_TYPES[s.type]){
+      b.appendChild(rsEl('span',{class:'chip'},[rsIcon(RS_TYPES[s.type].icon),rsEl('span',{text:s.id})]));
+      b.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'dup',title:this.t('dup_hint'),onclick:function(){self.duplicateSel();}},[rsIcon('mdi:content-duplicate'),rsEl('span',{class:'lbl',text:this.t('dup')})]));
+      b.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'copy',title:this.t('copy_hint'),onclick:function(){self.copySel();}},[rsIcon('mdi:content-copy'),rsEl('span',{class:'lbl',text:this.t('copy')})]));
+      b.appendChild(rsEl('button',{class:'btn sm danger',type:'button','data-act':'del',title:this.t('del_hint'),onclick:function(){self.deleteSel();}},[rsIcon('mdi:delete-outline'),rsEl('span',{class:'lbl',text:this.t('del')})]));
+    }
+    if(this._clipboard())b.appendChild(rsEl('button',{class:'btn sm',type:'button','data-act':'paste',title:this.t('paste_hint'),onclick:function(){self.paste();}},[rsIcon('mdi:content-paste'),rsEl('span',{class:'lbl',text:this.t('paste')})]));
   }
 
   // ---------------------------------------------------------------- state
@@ -846,6 +1170,7 @@ class RocStudio{
     this.lastSrc='redo';this._afterChange('redo');
   }
   _afterChange(src){
+    if(this.sel&&!this._findItem(this.sel.type,this.sel.id))this.sel=null;
     const n=this._rooms().length;
     if(n&&this.roomIdx>=n)this.roomIdx=n-1;
     if(!n)this.global=false;
@@ -894,25 +1219,18 @@ class RocStudio{
       rooms.forEach(function(r,i){sel.appendChild(rsEl('option',{value:String(i),text:String(r.name||r.id||('room '+(i+1)))}));});
       sel.value=this.global?'global':String(this.roomIdx);
     }
-    // outline
-    const ol=this._outline;ol.innerHTML='';
+    // outline: rooms
+    const ol=this._olRooms;ol.innerHTML='';
     if(rooms.length){
       ol.appendChild(rsEl('div',{class:'ol-h',text:this.t('rooms')}));
       const mk=function(label,icon,cur,fn){return rsEl('button',{class:'ol-item',type:'button','aria-current':String(!!cur),onclick:fn},[rsIcon(icon),rsEl('span',{text:label})]);};
       ol.appendChild(mk(this.t('global'),'mdi:earth',this.global,function(){self._setRoom(self.roomIdx,true,'outline');}));
       rooms.forEach(function(r,i){
-        ol.appendChild(mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',!self.global&&i===self.roomIdx,function(){self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');}));
+        ol.appendChild(mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',!self.global&&i===self.roomIdx,function(){self.sel=null;self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');}));
       });
     }
-    const scope=rooms.length&&!this.global?rooms[this.roomIdx]:this.work;
-    ol.appendChild(rsEl('div',{class:'ol-h',text:this.t('elements')}));
-    RS_KINDS.forEach(function(k){
-      let v=scope&&scope[k[0]],inh=false;
-      if(v==null&&scope!==self.work&&self.work[k[0]]!=null){v=self.work[k[0]];inh=true;}
-      const cnt=k[0]==='light_controls'?((v&&Array.isArray(v.entities))?v.entities.length:0):(Array.isArray(v)?v.length:0);
-      ol.appendChild(rsEl('button',{class:'ol-item'+(cnt?'':' empty'),type:'button',onclick:function(){self._reveal(k[1]);}},
-        [rsIcon(k[2]),rsEl('span',{text:self.t('k_'+(k[0]==='light_controls'?'lights':k[0]))}),inh&&cnt?rsEl('span',{class:'tag',text:self.t('inherited')}):null,rsEl('span',{class:'n',text:String(cnt)})]));
-    });
+    this._renderOutlineList();
+    this._renderSelBar();
     // undo / redo
     this._undoBtn.disabled=!this.undoStack.length;
     this._redoBtn.disabled=!this.redoStack.length;
@@ -924,6 +1242,40 @@ class RocStudio{
     this._tgtEl.textContent=tg.kind==='editor'?this.t('tgt_editor'):(tg.kind==='dashboard'?this.t('tgt_dash',{d:tg.dashName,p:tg.where}):this.t('tgt_yaml',{r:this.t(tg.reason||'r_notfound')}));
     clearTimeout(this._vT);
     this._vT=setTimeout(function(){self._renderValidation();},120);
+  }
+  // outline: every element of the room (or Global) by type, filtered by the search box
+  _renderOutlineList(){
+    const self=this,box=this._olList;if(!box)return;
+    box.innerHTML='';
+    const q=String(this.search||'').trim().toLowerCase();
+    const hit=function(type,it){
+      if(!q)return true;
+      const hay=[type,self.t('t_'+type),it.id,it.name,it.entity,it.icon,it.card&&it.card.entity,it.card&&it.card.type].filter(Boolean).join(' ').toLowerCase();
+      return hay.indexOf(q)>=0;
+    };
+    let shown=0;
+    RS_TYPE_ORDER.forEach(function(type){
+      const T=RS_TYPES[type];
+      const o=rsOwner(self.work,self.roomIdx,self.global,T.key);
+      const items=(o.list||[]).filter(function(it){return it&&typeof it==='object'&&hit(type,it);});
+      if(!items.length)return;
+      shown+=items.length;
+      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal(T.panel);}},
+        [rsIcon(T.icon),rsEl('span',{text:self.t('k_'+T.key)}),o.inherited?rsEl('span',{class:'tag',text:self.t('inherited')}):null,rsEl('span',{class:'n',text:String(items.length)})]));
+      items.forEach(function(it){
+        const cur=!!(self.sel&&self.sel.type===type&&self.sel.id===String(it.id));
+        const sub=it.entity||(it.card&&it.card.entity)||it.icon||'';
+        box.appendChild(rsEl('button',{class:'ol-item ol-el',type:'button','data-type':type,'data-id':String(it.id),'aria-current':String(cur),onclick:function(){self._select(type,String(it.id),'outline');}},
+          [rsEl('span',{class:'nm',text:String(it.id==null?'':it.id)}),sub?rsEl('span',{class:'sub',text:String(sub)}):null]));
+      });
+    });
+    const lc=(rsRoom(self.work,self.roomIdx,self.global)||{}).light_controls||self.work.light_controls;
+    const lcn=lc&&Array.isArray(lc.entities)?lc.entities.length:0;
+    if(lcn&&(!q||'light controls lights'.indexOf(q)>=0)){
+      shown+=1;
+      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal('lights');}},[rsIcon('mdi:tune-vertical'),rsEl('span',{text:self.t('k_lights')}),rsEl('span',{class:'n',text:String(lcn)})]));
+    }
+    if(!shown)box.appendChild(rsEl('div',{class:'ol-empty',text:q?this.t('no_match'):this.t('no_elements')}));
   }
   _validate(){
     try{return RocSchema.rocValidate(this.work).filter(function(x){return x.level!=='info';});}catch(e){return[{path:'',level:'error',msg:String(e&&e.message||e)}];}
@@ -956,17 +1308,24 @@ class RocStudio{
     if(e.key==='Escape'){
       e.preventDefault();e.stopPropagation();
       if(this._layers.length){this._layers[this._layers.length-1]();return;}
+      if(this._placeType){this._cancelPlace();return;}
+      if(this.sel){this.deselect();return;}
       if(this._app.classList.contains('show-outline')||this._app.classList.contains('show-insp')){this._app.classList.remove('show-outline','show-insp');return;}
       const card=this._card;
       if(card&&card._sectionOpen&&typeof card._closeSection==='function'){card._closeSection();return;}
       this.requestClose();
       return;
     }
+    const tag=(tgt&&tgt.tagName||'').toLowerCase();
+    const inField=tag==='input'||tag==='textarea'||tag==='select'||!!(tgt&&tgt.isContentEditable);
+    if(!inField&&!this._layers.length&&(e.key==='Delete'||e.key==='Backspace')&&this.sel&&!e.ctrlKey&&!e.metaKey){e.preventDefault();e.stopPropagation();this.deleteSel();return;}
     if(!(e.ctrlKey||e.metaKey)||e.altKey)return;
     const k=String(e.key||'').toLowerCase();
     if(k==='s'){e.preventDefault();e.stopPropagation();this.save();return;}
-    const tag=(tgt&&tgt.tagName||'').toLowerCase();
-    if(tag==='input'||tag==='textarea'||tag==='select'||(tgt&&tgt.isContentEditable))return; // native undo inside fields
+    if(inField||this._layers.length)return; // native undo / copy / paste inside fields
+    if(k==='d'&&this.sel){e.preventDefault();e.stopPropagation();this.duplicateSel();return;}
+    if(k==='c'&&this.sel){e.preventDefault();e.stopPropagation();this.copySel();return;}
+    if(k==='v'&&this._clipboard()){e.preventDefault();e.stopPropagation();this.paste();return;}
     if(k==='z'&&!e.shiftKey){e.preventDefault();e.stopPropagation();this.undo();}
     else if(k==='y'||(k==='z'&&e.shiftKey)){e.preventDefault();e.stopPropagation();this.redo();}
   }
@@ -1109,7 +1468,7 @@ class RocStudio{
     if(this.C)this.C._rocStudioOpen=false;
     const d=this._dlg;
     if(d){try{if(d.open&&typeof d.close==='function')d.close();}catch(_){}d.remove();}
-    if(this._card){this._card._rocSink=null;this._card._rocRoomSink=null;}
+    if(this._card){this._card._rocSink=null;this._card._rocRoomSink=null;this._card._rocSelSink=null;}
     this._card=null;this._ed=null;
   }
 }

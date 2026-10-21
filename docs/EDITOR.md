@@ -14,10 +14,12 @@ editor as it exists today, then summarizes the UX rebuild that got it here.
 2. The editor opens on a single step: **set a background image** (a room photo or floor-plan,
    e.g. `/local/bedroom.webp`) or a live camera. The rest of the editor appears once one is set —
    a narrow, unambiguous first step with no premature choices.
-3. Turn on **Edit mode** in the header. Now drag elements straight onto the image.
-4. In the **Elements** tab, add an icon, label, zone or embedded card and drop it on the right
-   spot.
-5. Save. You never had to touch YAML.
+3. Press **Studio** in the header. The card opens full-screen on a live canvas with this editor
+   beside it ([Room Card Studio](#room-card-studio)).
+4. **Add** an icon, label, zone, gauge, light glow, blind or embedded card and click (or drag a
+   box) where it belongs on the image. Click any element to select it: its panel opens on the
+   right.
+5. **Apply & close**, then Save. You never had to touch YAML.
 
 ![Image tab — background, filters, live preview](../screenshots/editor-image-tab.png)
 
@@ -32,10 +34,11 @@ mock-up.*
 
 - **Room picker** — when the card is multi-room, switches which room the *Image* and *Elements*
   tabs edit.
-- **Edit mode** — see [below](#edit-mode).
-- **Haptics** — feedback on actions (companion app) and hold-gesture registration.
 - **Studio** — opens this editor full-screen next to a large live canvas, see
-  [Room Card Studio](#room-card-studio-v6410).
+  [Room Card Studio](#room-card-studio).
+- **Haptics** — feedback on actions (companion app) and hold-gesture registration.
+- **Edit mode (legacy)** — only on a card that still has `test_mode: true`, so it can be switched
+  off; see [below](#edit-mode-legacy).
 
 ## The five tabs
 
@@ -211,7 +214,103 @@ are static images or living miniatures of each room.
 The underlying YAML (`nav.live`, `nav.mini.*`) is documented in
 [Configuration → Multi-room](CONFIGURATION.md#multi-room-one-card--whole-home).
 
-## Edit mode
+## Room Card Studio
+
+The studio (v6.41.0, canvas editing since v6.42.0) is where cards are built. It takes the whole
+screen, above Home Assistant's own dialog, and shows the real card large on a canvas next to this
+editor. It is the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5); later releases add
+multi-select and alignment, and rebuild the forms.
+
+**Opening it**
+
+- the **Studio** button in the editor header;
+- on the dashboard: switch Home Assistant's dashboard to edit mode (the pencil) and press
+  **✎ Studio** on the card. It saves straight to the dashboard — handy on a wall tablet. (In a
+  *sections* view HA covers each card with its own click-to-edit layer: click the card, then
+  **Studio** in the editor.) The button appears for administrators only.
+
+```
+┌ toolbar: room · frame (Fit / Tablet / Tablet portrait / Phone) · Arrange / Live · Add · undo / redo · YAML · History · Save ┐
+│ outline (rooms, every element, search) │ canvas — the real card, live states │ inspector (this editor) │
+└ status bar: config check · unsaved changes · where Save goes ┘
+```
+
+**Selecting.** Click an element on the canvas, its row in the outline, or its header in the
+inspector — all three follow. The inspector opens exactly that element's panel and scrolls to it.
+The canvas bar shows the selection with **Duplicate**, **Copy** and **Delete** (and **Paste**
+once something is copied), so all of it works on a touch screen too. An element the room only
+*inherits* from the shared defaults is opened in **Global**, where it lives.
+
+**Moving and resizing** (canvas in *Arrange*):
+
+- drag to move; it snaps to a 0.5 % grid and, with a blue guide line, to the left / centre /
+  right and top / centre / bottom of every other element and of the image — hold **Alt** for free
+  movement;
+- drag a handle to resize (zones, gauges, blinds, embedded cards, light glows);
+- an embedded card moves by the small grip above it (the card itself stays usable);
+- arrow keys nudge the selection (Shift = 0.1 %); keys typed into a field never move anything.
+
+**Adding.** **Add** lists every element type. Zones, icons, labels, gauges, light glows, blinds,
+embedded cards and vacuum widgets are then placed on the image: click where it goes, or drag a
+box for the sized ones. Badges, overlay images and groups are added straight to the inspector. A
+new element gets the same defaults as the editor's own "+ Add" buttons and a unique id, and it
+opens selected. It goes to the room shown, or to the shared defaults in **Global**. If the room so
+far inherited that list, the room gets its own copy first, so nothing on screen disappears.
+
+**Keyboard** (outside text fields): **Del** deletes, **Ctrl+D** duplicates, **Ctrl+C / Ctrl+V**
+copy and paste (also into another room or another card — the copy is kept in this browser),
+**Ctrl+Z / Ctrl+Y** undo / redo, **Ctrl+S** saves, **Esc** cancels placing, then clears the
+selection, then closes.
+
+**Other parts of the screen**
+
+- **Inspector.** This editor, unchanged. Every tab and field works the same.
+- **Canvas frames.**
+  - *Tablet* (1280 × 800), *Tablet portrait* (800 × 1280) and *Phone* (390 × 844) are scaled to
+    fit; *Fit* is the real size of the canvas.
+  - The card chooses its layout profile from the frame as it would from a screen, so you can check
+    the portrait layout on a PC.
+- **Canvas modes.**
+  - *Arrange*: select, drag, resize, add. Taps do nothing.
+  - *Live*: the card exactly as on the dashboard, with real actions.
+- **Outline.** The rooms (click to switch), then every element of the room by type, with a search
+  box (id, entity, icon, type). A type's header opens its section in the inspector. Rooms stay in
+  sync everywhere: toolbar, outline, inspector and the card's own nav strip.
+- **Undo / redo.** Covers everything done in the studio; a burst of typing in one field is one
+  step.
+- **Status bar.**
+  - The *config check* (wrong types, values outside the allowed list, unknown keys, missing ids,
+    each with its full path).
+  - Whether there are unsaved changes.
+  - Where *Save* goes.
+- **YAML.** The whole card config, with Copy.
+- **History.** The last 10 versions saved or applied from the studio in this browser. Restoring
+  one is an ordinary undoable change.
+
+**Saving** depends on where you opened it:
+
+| Opened from | Primary button | What happens |
+|---|---|---|
+| HA's card editor | **Apply & close** (Ctrl+S) | The config goes back into HA's editor; press **Save** there as usual. HA's editor undo can revert the whole studio session. |
+| The card on the dashboard | **Save** (Ctrl+S) | Saved straight to the dashboard. The studio finds *this* card even if another one has the same `card_id`, and refuses to overwrite it if it was changed elsewhere (another tab or device) since you opened it. You can still overwrite on purpose or copy the YAML. |
+| Read-only cases | **Copy YAML** | You are not an administrator, the dashboard is in YAML mode or generated, or the card is not part of a dashboard. |
+
+**Closing.** Escape or ✕ with unsaved changes asks first: save, discard or keep editing.
+
+**Installing.** The studio is a second file, `room-overlay-card-studio.js`. It is downloaded only
+the first time you open the studio, never by a dashboard that just shows the card. HACS installs
+it automatically. A manual install needs both files in the same folder; the Studio button tells
+you if the second one is missing.
+
+---
+
+## Edit mode (legacy)
+
+> **Since v6.42.0 the [Studio](#room-card-studio) replaces Edit mode.** It did its work by saving
+> `test_mode: true` into the card, which put the dashboard card into this state for everyone until
+> someone switched it off. Existing cards keep working exactly as before; the editor shows the
+> toggle only while it is on, so it can be switched off, and new cards no longer offer it.
+
 
 `test_mode: true`, or the header toggle — same field, one name. Puts the card into a safe
 editing state instead of its normal live behaviour: real tap/hold actions are suppressed, and
@@ -238,68 +337,6 @@ pick a different room in the editor.
 The editor also has **undo/redo** (↶ ↷ or Ctrl+Z / Ctrl+Y). Removing an item shows a short
 **“Removed Zone: … · UNDO”** bar at the bottom of the editor for 10 seconds — the same undo, one
 tap away on a phone.
-
----
-
-## Room Card Studio (v6.41.0)
-
-The studio is the same editor with room to breathe. It takes the whole screen, above Home
-Assistant's own dialog, and shows the real card large on a canvas next to it. It is the first step
-of the v7 editor ([`V7_PLAN.md`](../V7_PLAN.md) §5). Later releases add selection and handles on
-the canvas and rebuilt forms.
-
-**Opening it**
-
-- the **Studio** button in the editor header;
-- the **✎ Studio** button on the card while it is in Edit mode, straight from the dashboard (for
-  example on a wall tablet).
-
-```
-┌ toolbar: room · frame (Tablet / Tablet portrait / Phone / Fit) · Arrange / Live · undo / redo · YAML · History · Save ┐
-│ outline (rooms, element counts) │ canvas — the real card, live states │ inspector (this editor) │
-└ status bar: config check · unsaved changes · where Save goes ┘
-```
-
-**Parts of the screen**
-
-- **Inspector.** This editor, unchanged. Every tab and field works the same.
-- **Canvas frames.**
-  - *Tablet* (1280 × 800), *Tablet portrait* (800 × 1280) and *Phone* (390 × 844) are scaled to
-    fit; *Fit* is the real size of the canvas.
-  - The card chooses its layout profile from the frame as it would from a screen, so you can check
-    the portrait layout on a PC.
-- **Canvas modes.**
-  - *Arrange* is Edit mode: drag, resize and draw zones as described above. Taps do nothing.
-  - *Live* is the card exactly as on the dashboard, with real actions.
-- **Outline.** The rooms (click to switch) and how many elements of each type the room has.
-  Clicking a type opens its section in the inspector. Rooms stay in sync everywhere: toolbar,
-  outline, inspector and the card's own nav strip.
-- **Undo / redo.** Ctrl+Z / Ctrl+Y, or the toolbar. Covers everything done in the studio; a burst
-  of typing in one field is one step.
-- **Status bar.**
-  - The *config check* (wrong types, values outside the allowed list, unknown keys, missing ids,
-    each with its full path).
-  - Whether there are unsaved changes.
-  - Where *Save* goes.
-- **YAML.** The whole card config, with Copy.
-- **History.** The last 10 versions saved or applied from the studio in this browser. Restoring
-  one is an ordinary undoable change.
-
-**Saving** depends on where you opened it:
-
-| Opened from | Primary button | What happens |
-|---|---|---|
-| HA's card editor | **Apply & close** (Ctrl+S) | The config goes back into HA's editor; press **Save** there as usual. HA's editor undo can revert the whole studio session. |
-| The card on the dashboard | **Save** (Ctrl+S) | Saved straight to the dashboard. The studio finds *this* card even if another one has the same `card_id`, and refuses to overwrite it if it was changed elsewhere (another tab or device) since you opened it. You can still overwrite on purpose or copy the YAML. |
-| Read-only cases | **Copy YAML** | You are not an administrator, the dashboard is in YAML mode or generated, or the card is not part of a dashboard. |
-
-**Closing.** Escape or ✕ with unsaved changes asks first: save, discard or keep editing. Escape
-first closes an open panel or section.
-
-**Installing.** The studio is a second file, `room-overlay-card-studio.js`. It is downloaded only
-the first time you open the studio, never by a dashboard that just shows the card. HACS installs
-it automatically. A manual install needs both files in the same folder; the Studio button tells
-you if the second one is missing.
 
 ---
 

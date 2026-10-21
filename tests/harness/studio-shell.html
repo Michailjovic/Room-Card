@@ -26,9 +26,14 @@
 await customElements.whenDefined('room-overlay-card');
 await customElements.whenDefined('room-overlay-card-editor');
 const svg=c=>'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="'+c+'"/></svg>');
-const hass={states:{'light.x':{state:'on',attributes:{friendly_name:'Lamp'}}},callService(){},language:'en',user:{name:'t',is_admin:true},themes:{}};
+const hass={states:{'light.x':{state:'on',attributes:{friendly_name:'Lamp'}},'cover.x':{state:'open',attributes:{current_position:60}}},callService(){},language:'en',user:{name:'t',is_admin:true},themes:{}};
 const cfg={type:'custom:room-overlay-card',card_id:'h',test_mode:true,aspect_ratio:'16/9',layout:{height:'container'},
-  rooms:[{id:'a',name:'Living',base_image:svg('#123'),zones:[{id:'z1',top:'20%',left:'20%',width:'20%',height:'20%'}]},
+  labels:[{id:'l_shared',top:'80%',left:'10%',entity:'light.x'}],
+  rooms:[{id:'a',name:'Living',base_image:svg('#123'),zones:[{id:'z1',top:'20%',left:'20%',width:'20%',height:'20%'}],
+          icons:[{id:'i1',icon:'mdi:lamp',top:'60%',left:'60%',size:'32px'}],
+          gauges:[{id:'g1',top:'30%',left:'80%',width:'3%',height:'25%',entity:'light.x',min:0,max:100}],
+          blinds:[{id:'b1',top:'10%',left:'50%',width:'15%',height:'30%',entity:'cover.x',min:0,max:100,blind_type:'roller'}],
+          elements:[{id:'e1',top:'62%',left:'5%',width:'20%',height:'15%',card:{type:'markdown',content:'x'}}]},
          {id:'b',name:'Kitchen',base_image:svg('#321')}]};
 const card=document.createElement('room-overlay-card');
 card.style.cssText='display:block;height:500px;';

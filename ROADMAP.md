@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.40.0** (2026-10-21, v5.2.0/v5.3.0, v6.26–v6.29 and v6.32–v6.39 unused). Verified against Home
+Current release: **v6.41.0** (2026-10-21, v5.2.0/v5.3.0, v6.26–v6.29 and v6.32–v6.39 unused). Verified against Home
 Assistant 2026.10.2.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -35,8 +35,9 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 |---|---|---|
 | 0 — spikes | — | ✅ done (V7_PLAN §13) |
 | 1 — foundation (`src/`, schema, test tiers) | v6.40.0 | ✅ released |
-| 2 — Studio shell | v6.41.0 | 🔨 built, awaiting release + gate G2 (author's PC and tablet) |
-| 3 — canvas editing | v6.42.0 | next |
+| 2 — Studio shell | v6.41.0 | ✅ released; gate G2 (author's PC and tablet) running |
+| 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | 🔨 built |
+| 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | next |
 
 ## Shipped history (condensed)
 
@@ -127,7 +128,8 @@ failure broke HACS installs.
 | **v6.30.0** | **Overview page** — `rooms[].overview`: every room as a live tile with state chips, optional header (pills, nav strip cards), left/right card columns and a section dock; regions collapse into the grid; photo tiles or rows on phones; zoom transition tile ↔ room; the live strip is parked, not re-mounted; full GUI. See [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) |
 | **v6.31.0** | Overview: grid order with ▲▼ in the GUI (`grid.rooms`, independent of the nav), optional room names (`grid.names`, `overview_tile.show_name`), fix: `fade` / zoom start under HA's Lit `ha-card`, fix: touchpad swipe left the view / skipped rooms |
 | **v6.40.0** | v7 Phase 1 — source split into `src/` + `tools/assemble.js`, config schema registry (`src/schema/`), schema / compat / HA-in-the-loop test tiers; no rendering change |
-| **v6.41.0** *(unreleased)* | v7 Phase 2 — **Room Card Studio**: full-screen editor (lazy-loaded second file `room-overlay-card-studio.js`), live canvas in device frames, today's editor as the inspector, undo/redo, unsaved-changes guard, Apply to HA's editor or save straight to the dashboard (located by identity, conflict check), YAML view, history, schema check in the status bar |
+| **v6.41.0** | v7 Phase 2 — **Room Card Studio**: full-screen editor (lazy-loaded second file `room-overlay-card-studio.js`), live canvas in device frames, today's editor as the inspector, undo/redo, unsaved-changes guard, Apply to HA's editor or save straight to the dashboard (located by identity, conflict check), YAML view, history, schema check in the status bar |
+| **v6.42.0** *(unreleased)* | v7 Phase 3a — Studio canvas editing: one selection across canvas, outline and inspector; outline lists every element with search (E5); add any element by clicking / drawing on the image (E3); duplicate, copy/paste across rooms, delete, keyboard; edge/centre snap guides (E4); blinds/gauges/embedded cards arrangeable; ✎ Studio button in HA's dashboard edit mode; Edit mode (`test_mode`) retired as a setting; fix: dragging an inherited element hid all shared ones |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 
@@ -277,9 +279,9 @@ already exist.
 | # | Item | Note |
 |---|---|---|
 | E7 | **Haptic on hold-registered** | ✅ shipped v5.8.0 — fires a haptic tick the moment a hold action registers, toggleable from the editor |
-| E3 | Draw-to-create for all element types | rubber-band currently makes zones only |
-| E4 | Edge / centre snap guides | complements the 0.5 % grid + edge snap |
-| E5 | Editor list filter / search | for long element lists |
+| E3 | Draw-to-create for all element types | rubber-band currently makes zones only — ✅ v6.42.0 (Studio) |
+| E4 | Edge / centre snap guides | complements the 0.5 % grid + edge snap — ✅ v6.42.0 (Studio) |
+| E5 | Editor list filter / search | for long element lists — ✅ v6.42.0 (Studio) |
 | E6 | Inline save-failure hint | surface a failed Save in-editor |
 | D7 | Editor round-trip test harness | automate collect → config → re-render checks |
 

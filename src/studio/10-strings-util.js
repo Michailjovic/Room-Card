@@ -33,6 +33,16 @@ const ROC_STUDIO_STR={en:{
   hist_empty:'Nothing saved from the studio in this browser yet.',restore:'Restore',
   canvas_err:'The card cannot render this config: {m}',
   ver_mismatch:'Studio v{s} with card v{c} — reload the page (browser cache)',
+  // Phase 3 (v6.42.0)
+  add:'Add',add_hint:'Add an element — then click or drag on the image to place it',add_title:'Add an element',
+  add_body:'Pick a type. Elements that sit on the image are placed with a click (or a drag for a box); the others are added to the inspector.',
+  add_body_room:'Pick a type. It is added to the room shown — switch to Global first for an element every room shares. Elements on the image are placed with a click (or a drag for a box).',
+  t_zone:'Zone',t_icon:'Icon',t_label:'Label',t_gauge:'Gauge',t_glow:'Light glow',t_blind:'Blind',t_element:'Embedded card',
+  t_vacuum_widget:'Vacuum widget',t_badge:'Badge',t_overlay:'Overlay image',t_group:'Group',
+  place_hint:'{t}: click on the image, or drag a box — Esc cancels',
+  dup:'Duplicate',dup_hint:'Duplicate (Ctrl+D)',copy_hint:'Copy (Ctrl+C) — paste into any room or card',
+  del:'Delete',del_hint:'Delete (Del)',paste:'Paste',paste_hint:'Paste (Ctrl+V) into the room shown',
+  search_ph:'Search elements…',no_match:'Nothing matches.',no_elements:'No elements yet — Add places the first one.',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;

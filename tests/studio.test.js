@@ -240,6 +240,104 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('a card outside Edit mode has no Studio button',!plain.shadowRoot.querySelector('.tm-studio'));
   plain.remove();
 
+  // ---- 6. Phase 3 (v6.42.0): selection, outline, add / copy / delete, Edit mode retired ------
+  const P3=()=>({type:'custom:room-overlay-card',card_id:'p3',
+    labels:[{id:'l_shared',top:'80%',left:'10%',entity:'light.x'}],
+    rooms:[{id:'a',name:'A',base_image:IMG+'a',zones:[{id:'z1',top:'10%',left:'10%',width:'20%',height:'20%'}],icons:[{id:'i1',icon:'mdi:lamp',top:'50%',left:'50%'}],
+             blinds:[{id:'b1',top:'10%',left:'60%',width:'10%',height:'30%',entity:'cover.x'}]},
+           {id:'b',name:'B',base_image:IMG+'b'}]});
+  const E6=d.createElement('room-overlay-card-editor');E6.setConfig(P3());E6.hass=hass;d.body.appendChild(E6);
+  const S6=await C._rocStudio.open({from:'editor',editor:E6,hass});await wait(40);
+  const cv6=S6._card,ed6=S6._ed;
+  check('canvas card exposes programmatic selection',typeof cv6._rocSelect==='function');
+  // canvas → studio → inspector
+  const icoEl=cv6.shadowRoot.querySelector('[data-ico="i1"]');
+  icoEl.dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,composed:true}));
+  check('a click on an element selects it in the studio',S6.sel&&S6.sel.type==='icon'&&S6.sel.id==='i1',J(S6.sel));
+  check('…and opens exactly its panel in the inspector',ed6.querySelector('[data-roctab="elements"]')&&!!ed6.querySelector('details[data-panel="icons"]').open&&!!ed6.querySelector('details[data-panel="ico-0"]').open);
+  check('…and marks it in the outline',[...S6._olList.querySelectorAll('[aria-current="true"]')].map(x=>x.dataset.id).join()==='i1');
+  check('selection bar offers duplicate / copy / delete',!!S6._selBar.querySelector('[data-act="dup"]')&&!!S6._selBar.querySelector('[data-act="del"]'));
+  // outline → canvas
+  S6._olList.querySelector('[data-id="b1"]').click();
+  check('outline click selects on the canvas (blinds included)',cv6._selectedTM&&cv6._selectedTM.type==='blind'&&cv6._selectedTM.id==='b1'&&!!ed6.querySelector('details[data-panel="bl-0"]').open);
+  // inspector → canvas (a click on an item header)
+  const zsum=ed6.querySelector('details[data-panel="z-0"] > summary');
+  zsum.click();await wait(10);
+  check('opening an item in the inspector selects it on the canvas',S6.sel.type==='zone'&&cv6._selectedTM&&cv6._selectedTM.id==='z1');
+  // an element the room inherits is edited in Global
+  cv6.shadowRoot.querySelector('[data-lbl="l_shared"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true,cancelable:true,composed:true}));
+  check('an inherited element switches the studio to Global and opens it there',S6.global===true&&S6.sel.id==='l_shared'&&!!ed6.querySelector('details[data-panel="lbl-0"]').open);
+  S6._setRoom(0,false,'toolbar');S6.deselect();
+  // search
+  S6._olSearch.value='cover';S6._olSearch.dispatchEvent(new w.Event('input'));
+  check('outline search filters by entity / id / type',[...S6._olList.querySelectorAll('.ol-el')].map(x=>x.dataset.id).join()==='b1');
+  S6._olSearch.value='';S6._olSearch.dispatchEvent(new w.Event('input'));
+  // duplicate / delete / copy-paste across rooms (with undo)
+  S6._select('zone','z1','test');S6.duplicateSel();
+  const zs=S6.work.rooms[0].zones;
+  check('duplicate: unique id, offset, selected',zs.length===2&&zs[1].id!=='z1'&&zs[1].top==='12.0%'&&S6.sel.id===zs[1].id,J(zs[1]));
+  S6.deleteSel();
+  check('delete removes it and clears the selection',S6.work.rooms[0].zones.length===1&&!S6.sel);
+  S6.undo();
+  check('…undo brings it back',S6.work.rooms[0].zones.length===2);
+  S6.undo();
+  S6._select('icon','i1','test');S6.copySel();S6._setRoom(1,false,'toolbar');S6.paste();
+  check('copy + paste into another room',Array.isArray(S6.work.rooms[1].icons)&&S6.work.rooms[1].icons[0].id==='i1'&&S6.work.rooms[1].icons[0].icon==='mdi:lamp'&&S6.sel.id==='i1');
+  S6.paste();
+  check('pasting again gives a new id and a shifted position',S6.work.rooms[1].icons.length===2&&S6.work.rooms[1].icons[1].id!=='i1'&&S6.work.rooms[1].icons[1].top==='52.0%',J(S6.work.rooms[1].icons[1]));
+  // keyboard
+  const key=(k,o)=>S6._dlg.dispatchEvent(new w.KeyboardEvent('keydown',Object.assign({key:k,bubbles:true,cancelable:true},o||{})));
+  key('Delete');
+  check('Del deletes the selected element',S6.work.rooms[1].icons.length===1&&!S6.sel);
+  S6._select('icon','i1','test');key('d',{ctrlKey:true});
+  check('Ctrl+D duplicates',S6.work.rooms[1].icons.length===2);
+  key('Escape');
+  check('Escape first clears the selection (studio stays open)',!S6.sel&&dialogs().length===1);
+  // add: a canvas type is placed, a non-canvas type is created straight away
+  S6._setRoom(0,false,'toolbar');
+  S6._create('gauge',{top:'40.0%',left:'40.0%'});
+  const gN=S6.work.rooms[0].gauges;
+  check('a new gauge gets the editor\'s defaults, a unique id and the clicked position',gN&&gN.length===1&&gN[0].id==='gauge_1'&&gN[0].top==='40.0%'&&gN[0].width==='2%'&&gN[0].max===100,J(gN));
+  check('…and is selected and opened in the inspector',S6.sel.type==='gauge'&&!!ed6.querySelector('details[data-panel="g-0"]').open);
+  S6._create('zone',{top:'5.0%',left:'5.0%',width:'30.0%',height:'15.0%'});
+  check('a drawn box keeps its size',S6.work.rooms[0].zones.slice(-1)[0].width==='30.0%');
+  S6.add('overlay');
+  check('a type that is not on the image is added at once',S6.work.rooms[0].overlays&&S6.work.rooms[0].overlays[0].id==='overlay_1'&&S6.sel.type==='overlay');
+  S6.add('icon');
+  check('a canvas type waits for a click on the image',S6._placeType==='icon'&&!!S6._sr.querySelector('.place'));
+  key('Escape');
+  check('Escape cancels placing',!S6._placeType&&!S6._sr.querySelector('.place'));
+  S6._setRoom(1,false,'toolbar');S6._create('label',{top:'20.0%',left:'20.0%'});
+  const rB=S6.work.rooms[1];
+  check('adding to a room that inherited a list copies the shared items first (nothing disappears)',rB.labels&&rB.labels.length===2&&rB.labels[0].id==='l_shared');
+  S6.requestClose();if(layerBtn(S6,'discard'))layerBtn(S6,'discard').click();
+  E6.remove();
+  // card: a drag on an inherited element edits it in the shared list (used to hide them all)
+  const ci=d.createElement('room-overlay-card');ci.setConfig(Object.assign(P3(),{test_mode:true}));ci.hass=hass;d.body.appendChild(ci);await wait(20);
+  let relayed=null;ci._rocSink=c=>{relayed=c;};
+  const arr=ci._roomArr(JSON.parse(J(ci._config)),'labels');
+  check('_roomArr returns the shared list for an inherited element',arr.length===1&&arr[0].id==='l_shared');
+  ci.remove();
+  // dashboard edit mode → Studio button on the card; Edit mode toggle retired
+  const dashRoot=d.createElement('hui-root');dashRoot.lovelace={config:{views:[]},mode:'storage'};d.body.appendChild(dashRoot);
+  const cd=d.createElement('room-overlay-card');cd.setConfig({type:'custom:room-overlay-card',base_image:IMG});cd.hass=hass;dashRoot.appendChild(cd);await wait(10);
+  check('no Studio button outside HA\'s edit mode',!cd.shadowRoot.querySelector('.roc-studio-chip'));
+  cd.editMode=true;
+  check('HA\'s edit mode shows a Studio button on a dashboard card',!!cd.shadowRoot.querySelector('.roc-studio-chip')&&cd.editMode===true);
+  const looseCard=d.createElement('room-overlay-card');looseCard.setConfig({type:'custom:room-overlay-card',base_image:IMG});looseCard.hass=hass;d.body.appendChild(looseCard);await wait(10);looseCard.editMode=true;
+  check('…but not on a card outside a dashboard (HA\'s editor preview is in edit mode too)',!looseCard.shadowRoot.querySelector('.roc-studio-chip'));
+  looseCard.remove();
+  cd.editMode=false;
+  check('…and it goes away with it',!cd.shadowRoot.querySelector('.roc-studio-chip'));
+  const nonAdmin=Object.assign({},hass,{user:{name:'v',is_admin:false}});cd.hass=nonAdmin;cd.editMode=true;
+  check('no Studio button for a non-admin',!cd.shadowRoot.querySelector('.roc-studio-chip'));
+  cd.remove();dashRoot.remove();
+  const eNew=d.createElement('room-overlay-card-editor');eNew.setConfig({type:'custom:room-overlay-card',base_image:IMG});eNew.hass=hass;d.body.appendChild(eNew);
+  const eOld=d.createElement('room-overlay-card-editor');eOld.setConfig({type:'custom:room-overlay-card',base_image:IMG,test_mode:true});eOld.hass=hass;d.body.appendChild(eOld);
+  check('Edit mode toggle is gone for cards without it',!eNew.querySelector('#test_mode'));
+  check('…but stays on a card that has it on, so it can be switched off',!!eOld.querySelector('#test_mode')&&eOld.querySelector('#test_mode').checked);
+  eNew.remove();eOld.remove();
+
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

@@ -31,6 +31,7 @@
         "studio/10-strings-util.js",
         "studio/20-css.js",
         "studio/30-targets.js",
+        "studio/35-elements.js",
         "studio/40-studio.js",
         "studio/90-register.js"
       ]

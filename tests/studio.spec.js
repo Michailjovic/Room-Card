@@ -131,3 +131,74 @@ test('a missing studio file gives a clear message instead of failing silently',a
   await page.waitForFunction(()=>/not found/.test(window.__h.card.shadowRoot.querySelector('.tm-studio').textContent));
   expect(await page.evaluate(()=>!!document.querySelector('dialog.roc-studio'))).toBe(false);
 });
+
+// ---- Phase 3 (v6.42.0) -------------------------------------------------------------------------
+const CUR='customElements.get("room-overlay-card")._rocStudio.Studio.current';
+async function centreOf(page,sel){return page.evaluate(([C,sel])=>{const S=eval(C);const r=S._card.shadowRoot.querySelector(sel).getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2,w:r.width,h:r.height};},[CUR,sel]);}
+async function contentRect(page){return page.evaluate(C=>{const S=eval(C);const r=S._card.shadowRoot.querySelector('.content').getBoundingClientRect();return{l:r.left,t:r.top,w:r.width,h:r.height};},CUR);}
+
+test('click on the canvas selects the element and opens it in the inspector; inspector → canvas too',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  const ic=await centreOf(page,'[data-ico="i1"]');
+  await page.mouse.click(ic.x,ic.y);await page.waitForTimeout(500);
+  const a=await page.evaluate(C=>{const S=eval(C);const d=S._ed.querySelector('details[data-panel="ico-0"]');const r=d.getBoundingClientRect(),ir=S._insp.getBoundingClientRect();
+    return{sel:S.sel,open:d.open,visible:r.top<ir.bottom&&r.bottom>ir.top,outline:[...S._olList.querySelectorAll('[aria-current="true"]')].map(x=>x.dataset.id)};},CUR);
+  expect(a).toEqual({sel:{type:'icon',id:'i1'},open:true,visible:true,outline:['i1']});
+  // a click on another item's header in the inspector moves the selection on the canvas
+  await page.click('dialog.roc-studio >> details[data-panel="gauges"] > summary');   // open the Gauges section first
+  await page.click('dialog.roc-studio >> details[data-panel="g-0"] > summary');await page.waitForTimeout(300);
+  expect(await page.evaluate(C=>{const S=eval(C);return{sel:S.sel,cv:S._card._selectedTM&&S._card._selectedTM.id};},CUR)).toEqual({sel:{type:'gauge',id:'g1'},cv:'g1'});
+});
+
+test('Add → click places a new element where clicked; Add zone → drag draws its box',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  const cr=await contentRect(page);
+  await page.evaluate(C=>eval(C)._showAdd(),CUR);
+  await page.click('dialog.roc-studio >> .addbtn[data-type="label"]');
+  await page.mouse.click(cr.l+cr.w*0.25,cr.t+cr.h*0.45);await page.waitForTimeout(300);
+  const a=await page.evaluate(C=>{const S=eval(C);const l=S.work.rooms[0].labels;return{sel:S.sel,l:l&&l.map(x=>[x.id,parseFloat(x.top),parseFloat(x.left)])};},CUR);
+  expect(a.sel.type).toBe('label');expect(a.l.map(x=>x[0])).toContain(a.sel.id);
+  const nl=a.l.find(x=>x[0]===a.sel.id);a.l[1]=nl;
+  expect(Math.abs(a.l[1][1]-45)).toBeLessThan(0.6);expect(Math.abs(a.l[1][2]-25)).toBeLessThan(0.6);
+  await page.evaluate(C=>eval(C).add('zone'),CUR);
+  await page.mouse.move(cr.l+cr.w*0.6,cr.t+cr.h*0.5);await page.mouse.down();
+  await page.mouse.move(cr.l+cr.w*0.75,cr.t+cr.h*0.7,{steps:6});await page.mouse.up();await page.waitForTimeout(300);
+  const z=await page.evaluate(C=>{const S=eval(C);return S.work.rooms[0].zones.slice(-1)[0];},CUR);
+  expect(Math.abs(parseFloat(z.width)-15)).toBeLessThan(0.6);expect(Math.abs(parseFloat(z.height)-20)).toBeLessThan(0.6);
+  expect(await page.evaluate(C=>eval(C)._card._selectedTM.id,CUR)).toBe(z.id);
+});
+
+test('snap guides: a dragged icon snaps its centre to another element\'s edge',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  const cr=await contentRect(page);
+  const z=await page.evaluate(C=>{const S=eval(C);const r=S._card.shadowRoot.querySelector('[data-z="z1"]').getBoundingClientRect();return{right:r.right};},CUR);
+  const ic=await centreOf(page,'[data-ico="i1"]');
+  // aim the icon's centre 0.3 % of the width right of the zone's right edge
+  const tx=z.right+cr.w*0.003;
+  await page.mouse.move(ic.x,ic.y);await page.mouse.down();
+  await page.mouse.move((ic.x+tx)/2,ic.y-20,{steps:4});await page.mouse.move(tx,ic.y-40,{steps:4});
+  const guide=await page.evaluate(C=>{const S=eval(C);const g=S._card._gdV;return g&&g.style.display;},CUR);
+  await page.mouse.up();await page.waitForTimeout(200);
+  const after=await centreOf(page,'[data-ico="i1"]');
+  expect(guide).toBe('block');
+  expect(Math.abs(after.x-z.right)/cr.w*100).toBeLessThan(0.15);
+});
+
+test('arrow keys typed in an inspector field do not move the selected element; embedded cards move by their grip',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  const ic=await centreOf(page,'[data-ico="i1"]');
+  await page.mouse.click(ic.x,ic.y);await page.waitForTimeout(300);
+  const before=await page.evaluate(C=>eval(C).work.rooms[0].icons[0].top,CUR);
+  await page.click('dialog.roc-studio >> details[data-panel="ico-0"] input[type="text"] >> nth=0');
+  await page.keyboard.press('ArrowDown');await page.keyboard.press('ArrowDown');await page.waitForTimeout(400);
+  expect(await page.evaluate(C=>eval(C).work.rooms[0].icons[0].top,CUR)).toBe(before);
+  // the embedded card: select, then drag the grip
+  const el=await centreOf(page,'[data-el="e1"]');
+  await page.mouse.click(el.x,el.y);await page.waitForTimeout(300);
+  const g=await page.evaluate(C=>{const S=eval(C);const gr=S._card.shadowRoot.querySelector('[data-el="e1"] .roc-grip');const r=gr.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2,shown:getComputedStyle(gr).display};},CUR);
+  expect(g.shown).toBe('block');
+  const cr=await contentRect(page);
+  await page.mouse.move(g.x,g.y);await page.mouse.down();await page.mouse.move(g.x+cr.w*0.1,g.y,{steps:6});await page.mouse.up();await page.waitForTimeout(300);
+  const left=await page.evaluate(C=>parseFloat(eval(C).work.rooms[0].elements[0].left),CUR);
+  expect(left).toBeGreaterThan(13);expect(left).toBeLessThan(17);
+});

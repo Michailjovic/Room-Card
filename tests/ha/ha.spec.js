@@ -17,6 +17,7 @@ const DASH={views:[
   {path:'s',title:'Sections',type:'sections',sections:[{type:'grid',cards:[CARD({aspect_ratio:'21/9'})]}]},
   {path:'k',title:'Stack',cards:[{type:'vertical-stack',cards:[{type:'markdown',content:'x'},CARD({aspect_ratio:'1/1'})]}]},
   {path:'e',title:'Edit mode',cards:[CARD({aspect_ratio:'16/9'}),CARD({aspect_ratio:'4/3',test_mode:true})]},
+  {path:'p',title:'Panel',type:'panel',cards:[CARD({aspect_ratio:'21/9'})]},
 ]};
 // Locate THIS card instance in the dashboard config by object identity (hui-card.config is the
 // frozen object from lovelace.config) → returns a path like ['views',0,'cards',1].
@@ -124,6 +125,9 @@ test('studio from HA\'s card editor: loads from the resource URL, sits above HA\
   await page.evaluate(async D=>{eval(D);const root=d(document.body,'hui-root')[0];root.lovelace.setEditMode(true);await new Promise(r=>setTimeout(r,1500));
     const opt=d(document.body,'hui-card-options')[0];[...opt.shadowRoot.querySelectorAll('ha-button,mwc-button,button')].find(b=>/Edit/.test(b.textContent)).click();
     await new Promise(r=>setTimeout(r,3000));
+    // HA puts its editor preview in edit mode too — the dashboard-only Studio button must not show there
+    const pv=d(d(document.body,'hui-dialog-edit-card')[0].shadowRoot,'room-overlay-card');
+    window.__pvChip=pv.length&&pv.every(c=>c.editMode===true)?pv.some(c=>!!c.shadowRoot.querySelector('.roc-studio-chip')):'no preview in edit mode';
     d(document.body,'room-overlay-card-editor')[0].querySelector('#roc-studio').click();},DEEP);
   await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
   expect(reqs[0]).toMatch(/\/local\/room-overlay-card-studio\.js\?v=\d+\.\d+\.\d+$/);
@@ -135,7 +139,7 @@ test('studio from HA\'s card editor: loads from the resource URL, sits above HA\
     const icon=S._sr.querySelector('.bar ha-icon');
     const wr=S._card.shadowRoot.querySelector('.wrap').getBoundingClientRect();
     const out={kind:S.target.kind,modal:S._dlg.matches(':modal'),onTop,haDialogOpen:d(document.body,'dialog').filter(x=>x!==S._dlg&&x.open).length,
-      iconRendered:!!(icon&&icon.shadowRoot&&icon.shadowRoot.innerHTML.length),canvasW:Math.round(wr.width)};
+      iconRendered:!!(icon&&icon.shadowRoot&&icon.shadowRoot.innerHTML.length),canvasW:Math.round(wr.width),previewChip:window.__pvChip};
     S._ed._fire(Object.assign({},S._ed._config,{aspect_ratio:'2/1'}));   // an edit in the hosted editor
     const before=d(document.body,'hui-dialog-edit-card')[0]._cardConfig;
     out.haUntouched=before&&before.aspect_ratio==='16/9';
@@ -150,7 +154,7 @@ test('studio from HA\'s card editor: loads from the resource URL, sits above HA\
     out.saved=lc.views[0].cards[0].aspect_ratio;out.other=lc.views[0].cards[1].aspect_ratio; // cards[1] = 5/4 from the save test above
     return out;},DEEP);
   console.log('studio/editor',JSON.stringify(r));
-  expect(r).toMatchObject({kind:'editor',modal:true,onTop:true,haDialogOpen:1,iconRendered:true,haUntouched:true,closed:true,haGot:'2/1',saved:'2/1',other:'5/4'});
+  expect(r).toMatchObject({previewChip:false,kind:'editor',modal:true,onTop:true,haDialogOpen:1,iconRendered:true,haUntouched:true,closed:true,haGot:'2/1',saved:'2/1',other:'5/4'});
   expect(r.canvasW).toBeGreaterThan(300);
 });
 test('studio from an Edit-mode card on the dashboard: saves exactly that card, the dashboard updates, a concurrent edit is refused',async({page})=>{
@@ -176,4 +180,29 @@ test('studio from an Edit-mode card on the dashboard: saves exactly that card, t
   console.log('studio/dashboard',JSON.stringify(r));
   expect(r).toMatchObject({kind:'dashboard',path:['views',3,'cards',1],ok1:true,c0:'16/9',c1:'3/2',tm:true,ok2:false,conflictShown:true,final:'5/4'});
   expect(r.live).toContain('3/2');
+});
+test('v6.42.0: in HA\'s dashboard edit mode the card offers a Studio button (masonry, panel); sections views leave it to HA\'s editor',async({page})=>{
+  await login(page,TOK);
+  const out={};
+  for(const view of ['m','p','s']){
+    await page.goto(B+'/roc-test/'+view);await hass(page);
+    await page.waitForFunction(D=>{eval(D);return d(document.body,'room-overlay-card').some(c=>c._rendered);},DEEP,{timeout:30000});
+    out[view]=await page.evaluate(async D=>{eval(D);
+      const c0=d(document.body,'room-overlay-card')[0];const before=!!c0.shadowRoot.querySelector('.roc-studio-chip');
+      d(document.body,'hui-root')[0].lovelace.setEditMode(true);await new Promise(r=>setTimeout(r,2500));
+      const c=d(document.body,'room-overlay-card')[0];const b=c.shadowRoot.querySelector('.roc-studio-chip');
+      if(!b)return{before,editMode:c.editMode,chip:false};
+      const r=b.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;let t=document.elementFromPoint(cx,cy);while(t&&t.shadowRoot){const n=t.shadowRoot.elementFromPoint(cx,cy);if(!n||n===t)break;t=n}
+      return{before,editMode:c.editMode,chip:true,onTop:t===b,x:cx,y:cy};},DEEP);
+    if(out[view].chip){
+      await page.mouse.click(out[view].x,out[view].y);
+      await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
+      out[view].studio=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const r={kind:S.target.kind,path:S.target.path};S.close();return r;});
+      delete out[view].x;delete out[view].y;
+    }
+  }
+  console.log('edit-mode chip',JSON.stringify(out));
+  expect(out.m).toMatchObject({before:false,editMode:true,chip:true,onTop:true,studio:{kind:'dashboard',path:['views',0,'cards',0]}});
+  expect(out.p).toMatchObject({before:false,editMode:true,chip:true,onTop:true,studio:{kind:'dashboard',path:['views',4,'cards',0]}});
+  expect(out.s).toMatchObject({before:false,editMode:true,chip:false});
 });

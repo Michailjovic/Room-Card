@@ -15,7 +15,12 @@
  * dialog (spike S1), the real card on a canvas in a device frame, today's editor hosted
  * unchanged as the inspector (§5.5), undo/redo, an unsaved-changes guard and the two save paths
  * (§5.4): back through HA's card editor, or straight to the dashboard with a conflict check.
+ *
+ * Phase 3a (v6.42.0) — canvas editing, first part: selection shared by canvas, outline and
+ * inspector; the outline lists every element (with search); add by clicking / drawing on the
+ * image (every positioned type); duplicate, copy / paste across rooms, delete; edge and centre
+ * snapping lives in the card (_snapPos).
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.41.0';
+const ROC_STUDIO_VERSION='6.42.0';

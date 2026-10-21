@@ -80,6 +80,52 @@ class RoomOverlayCard extends HTMLElement{
     this._config=cfg;this._rendered=false;if(this._hass)this._render();
   }
 
+  // Home Assistant sets editMode (and preview) on every card while the DASHBOARD is in edit mode
+  // (verified on HA 2026.10.2: masonry, sections and panel views). The card then offers a
+  // Studio button of its own (v6.42.0), so the saved Edit-mode setting is no longer needed to
+  // reach the studio from the dashboard.
+  set editMode(v){
+    const n=!!v;
+    if(n===!!this._haEdit)return;
+    this._haEdit=n;
+    this._syncStudioChip();
+  }
+  get editMode(){return!!this._haEdit;}
+  _syncStudioChip(){
+    const sr=this.shadowRoot;if(!sr)return;
+    const c=this._config;
+    const admin=!(this._hass&&this._hass.user&&this._hass.user.is_admin===false);
+    // Sections views cover each card with HA's own click-to-edit layer (hui-card-edit-mode): a
+    // button underneath could not be pressed, and HA's editor has the Studio button anyway.
+    // Only on the dashboard itself: an ancestor holds the dashboard (lovelace) — not the preview
+    // inside HA's card-editor dialog, which HA also puts in edit mode.
+    let covered=false,onDash=false;
+    for(let n=this,i=0;n&&i<60;i++){
+      n=n.parentNode||n.host;if(!n)break;
+      if(n.tagName==='HUI-CARD-EDIT-MODE')covered=true;
+      if(n.lovelace&&n.lovelace.config){onDash=true;break;}
+    }
+    const want=!!(this._haEdit&&onDash&&c&&!c.test_mode&&!c._roc_preview&&!c._roc_studio&&!c._roc_mini&&!c._roc_ghost&&admin&&!covered);
+    let b=sr.querySelector('.roc-studio-chip');
+    if(!want){if(b)b.remove();return;}
+    if(b&&b.isConnected)return;
+    const host=sr.querySelector('.wrap');if(!host)return;
+    b=document.createElement('button');
+    b.className='roc-studio-chip';b.type='button';b.title='Open the full-screen Room Card Studio';
+    b.innerHTML='&#9998; Studio';
+    b.style.cssText='position:absolute;top:8px;right:8px;z-index:900;background:rgba(40,70,140,0.92);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:8px;padding:6px 14px;font:600 13px/1.2 sans-serif;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);';
+    ['pointerdown','mousedown','touchstart','touchend','dblclick'].forEach(function(t){b.addEventListener(t,function(e){e.stopPropagation();},{passive:true});});
+    const self=this;
+    b.addEventListener('click',function(e){
+      e.stopPropagation();e.preventDefault();
+      b.disabled=true;
+      rocOpenStudio({from:'dashboard',card:self,hass:self._hass})
+        .catch(function(err){b.textContent='\u26A0 '+((err&&err.message)||String(err));})
+        .then(function(){b.disabled=false;});
+    });
+    host.appendChild(b);
+  }
+
   set hass(h){
     this._hass=h;if(!this._config)return;
     if(!this._rendered){this._render();return;}
@@ -2594,6 +2640,30 @@ navSelf._navChipInto(chipCont,chCfg,r);
           _dpFire(nc);this._update();
         });
       }
+      // Gauges and blinds move by dragging their body (v6.42.0)
+      for(const g of(c.gauges||[])){
+        const el=this._gaugeEls[g.id];if(!el)continue;
+        el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=rocClone(this._config);
+          const gc=this._roomArr(nc,'gauges').find(x=>x.id===g.id);if(gc){gc.top=top;gc.left=left;}
+          _dpFire(nc);this._update();
+        });
+      }
+      for(const b of(c.blinds||[])){
+        const el=this._gaugeEls['__bl_'+b.id];if(!el)continue;
+        el.style.cursor='grab';
+        this._makeDraggable(el,(top,left)=>{
+          const nc=rocClone(this._config);
+          const bc=this._roomArr(nc,'blinds').find(x=>x.id===b.id);if(bc){bc.top=top;bc.left=left;}
+          _dpFire(nc);this._update();
+        });
+        this._makeResizable(el,(top,left,width,height)=>{
+          const nc=rocClone(this._config);
+          const bc=this._roomArr(nc,'blinds').find(x=>x.id===b.id);if(bc){bc.top=top;bc.left=left;bc.width=width;bc.height=height;}
+          _dpFire(nc);this._update();
+        });
+      }
       // Resize handles — zones, elements, gauges
       for(const z of(c.zones||[])){
         const el=this._zoneEls[z.id];if(!el)continue;
@@ -2610,6 +2680,16 @@ navSelf._navChipInto(chipCont,chCfg,r);
           const ec=this._roomArr(nc,'elements').find(x=>x.id===elCfg.id);if(ec){ec.top=top;ec.left=left;ec.width=width;ec.height=height;}
           _dpFire(nc);this._update();
         });
+        // the body is the embedded card itself (it stays usable), so it moves by a grip (v6.42.0)
+        const grip=document.createElement('div');
+        grip.className='roc-rh roc-grip';grip.title='Drag to move';
+        grip.style.cssText='position:absolute;top:-14px;left:calc(50% - 14px);width:28px;height:12px;border-radius:6px;background:var(--primary-color,#03a9f4);border:2px solid #fff;box-sizing:border-box;z-index:1001;cursor:move;display:none;touch-action:none;';
+        cont.appendChild(grip);
+        this._makeDraggable(grip,(top,left)=>{
+          const nc=rocClone(this._config);
+          const ec=this._roomArr(nc,'elements').find(x=>x.id===elCfg.id);if(ec){ec.top=top;ec.left=left;}
+          _dpFire(nc);this._update();
+        },cont);
       }
       for(const g of(c.gauges||[])){
         const el=this._gaugeEls[g.id];if(!el)continue;
@@ -2628,12 +2708,32 @@ navSelf._navChipInto(chipCont,chCfg,r);
         el.style.outlineOffset='2px';
         el.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='block';}); // show only the selected element's handles
         this._selectedTM={el,type,id};
+        if(!_selSilent&&typeof this._rocSelSink==='function')try{this._rocSelSink(type,id);}catch(_){} // studio: open it in the inspector
       };
-      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';this._selectedTM.el.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='none';});this._selectedTM=null;}};
+      let _selSilent=false;
+      const _deselectTM=()=>{if(this._selectedTM){this._selectedTM.el.style.outline=_tmOutline(this._selectedTM.type);this._selectedTM.el.style.outlineOffset='';this._selectedTM.el.querySelectorAll('.roc-rh').forEach(function(h){h.style.display='none';});this._selectedTM=null;if(!_selSilent&&typeof this._rocSelSink==='function')try{this._rocSelSink(null,null);}catch(_){}}};
+      // Studio (v6.42.0): select / deselect from outside (outline, inspector) without echoing
+      // back through _rocSelSink. Returns false when the element is not on the canvas.
+      const _tmEl=(type,id)=>{
+        if(type==='blind')return this._gaugeEls['__bl_'+id]||null;
+        const m={zone:this._zoneEls,icon:this._icoEls,label:this._lblEls,gauge:this._gaugeEls,element:this._contEls,glow:this._glowEditEls,vacuum_widget:this._vwEls}[type];
+        return m&&m[id]||null;
+      };
+      this._rocSelect=(type,id)=>{
+        _selSilent=true;
+        try{
+          if(!type){_deselectTM();return true;}
+          const el=_tmEl(type,id);if(!el){_deselectTM();return false;}
+          _selectTM(el,type,id);return true;
+        }finally{_selSilent=false;}
+      };
       let _nudgeTimer=null;
       const _nudgeFn=(e)=>{
         if(!this._selectedTM)return;
         if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Escape'].includes(e.key))return;
+        // keys typed into a field (the editor, the studio's inspector) are not nudges (v6.42.0)
+        const _kt=e.composedPath?e.composedPath()[0]:e.target;
+        if(_kt&&(/^(INPUT|TEXTAREA|SELECT)$/.test(_kt.tagName||'')||_kt.isContentEditable))return;
         if(e.key==='Escape'){_deselectTM();return;}
         e.preventDefault();
         const step=e.shiftKey?0.1:1;
@@ -2648,7 +2748,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
         clearTimeout(_nudgeTimer);
         _nudgeTimer=setTimeout(()=>{
           const nc=rocClone(this._config);
-          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):type==='vacuum_widget'?this._roomArr(nc,'vacuum_widgets'):type==='glow'?this._roomArr(nc,'glows'):null;
+          const arr=type==='zone'?this._roomArr(nc,'zones'):type==='icon'?this._roomArr(nc,'icons'):type==='label'?this._roomArr(nc,'labels'):type==='element'?this._roomArr(nc,'elements'):type==='gauge'?this._roomArr(nc,'gauges'):type==='vacuum_widget'?this._roomArr(nc,'vacuum_widgets'):type==='glow'?this._roomArr(nc,'glows'):type==='blind'?this._roomArr(nc,'blinds'):null;
           const item=(arr||[]).find(x=>x.id===id);
           if(item){item.top=el.style.top;item.left=el.style.left;}
           _dpFire(nc);
@@ -2685,6 +2785,10 @@ navSelf._navChipInto(chipCont,chCfg,r);
         const el=this._gaugeEls[g.id];if(!el)continue;
         el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'gauge',g.id);},true);
       }
+      for(const b of(c.blinds||[])){
+        const el=this._gaugeEls['__bl_'+b.id];if(!el)continue;
+        el.addEventListener('click',(e)=>{e.stopImmediatePropagation();e.preventDefault();_selectTM(el,'blind',b.id);},true);
+      }
       // Click on card background → deselect
       const _hacard=this.shadowRoot.querySelector('ha-card');
       if(_hacard)_hacard.addEventListener('click',_deselectTM);
@@ -2718,7 +2822,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
           _dwJustDrew=true;setTimeout(function(){_dwJustDrew=false;},300);
           if(w<2||h<2)return; // too small — ignore accidental drags
           const nc=rocClone(drawSelf._config);
-          const dwZones=drawSelf._roomArr(nc,'zones');
+          const dwZones=drawSelf._roomArrNew(nc,'zones');
           let n=dwZones.length+1,id='zone_'+n;
           while(dwZones.some(function(z){return z.id===id;})){n++;id='zone_'+n;}
           dwZones.push({id:id,top:tp.toFixed(1)+'%',left:l.toFixed(1)+'%',width:w.toFixed(1)+'%',height:h.toFixed(1)+'%'});
@@ -2804,6 +2908,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     this._relevantAttrSources=[...this._extractAttrSources(c),...[..._ex.attrs].map(s=>{const i=s.indexOf(' ');return{entity:s.slice(0,i),attr:s.slice(i+1)};})];
     this._prevStates={};
     this._rendered=true;
+    if(this._haEdit)this._syncStudioChip();
     this._preloadImages();
     // Editor → card highlight (panel opened in GUI editor flashes the element)
     const hlSelf=this;
@@ -2889,24 +2994,53 @@ navSelf._navChipInto(chipCont,chCfg,r);
     this._layoutStage();
   }
 
-  _snapCandidates(){
-    const c=this._config,tops=[],lefts=[];
-    ['zones','icons','labels','gauges','vacuum_widgets','glows','blinds','elements'].forEach(function(k){
-      (c[k]||[]).forEach(function(it){
-        const t=parseFloat(it.top),l=parseFloat(it.left);
-        if(!isNaN(t))tops.push(t);
-        if(!isNaN(l))lefts.push(l);
-      });
+  // Snap lines (E4, v6.42.0): the VISUAL left/centre/right and top/centre/bottom of every other
+  // element on the image, plus the image's edges and centre — measured from the DOM, so each
+  // type's own anchoring (centred icons and glows, top-left zones…) is handled the same way.
+  // All values are % of .content, like top/left.
+  _snapCandidates(selfEl){
+    const tops=[0,50,100],lefts=[0,50,100];
+    const cont=this.shadowRoot&&this.shadowRoot.querySelector('.content');
+    if(!cont)return{tops:tops,lefts:lefts};
+    const cr=cont.getBoundingClientRect();
+    if(!(cr.width>0&&cr.height>0))return{tops:tops,lefts:lefts};
+    const seen=new Set();
+    [this._zoneEls,this._icoEls,this._lblEls,this._gaugeEls,this._contEls,this._vwEls,this._glowEditEls].forEach(function(m){
+      for(const k in(m||{})){
+        const el=m[k];
+        if(!el||el===selfEl||seen.has(el))continue;seen.add(el);
+        const r=el.getBoundingClientRect();if(!(r.width>0||r.height>0))continue;
+        const t=(r.top-cr.top)/cr.height*100,h=r.height/cr.height*100,l=(r.left-cr.left)/cr.width*100,w=r.width/cr.width*100;
+        tops.push(t,t+h/2,t+h);lefts.push(l,l+w/2,l+w);
+      }
     });
     return{tops:tops,lefts:lefts};
   }
+  // Where the dragged element's visual box sits relative to its top/left (in %), so its edges
+  // and centre — not only its top/left point — can snap.
+  _snapBox(el,cr,top,left){
+    try{
+      const r=el.getBoundingClientRect();
+      if(!(cr.width>0&&cr.height>0)||!(r.width>0||r.height>0))return null;
+      return{dt:(r.top-cr.top)/cr.height*100-top,dl:(r.left-cr.left)/cr.width*100-left,h:r.height/cr.height*100,w:r.width/cr.width*100};
+    }catch(_){return null;}
+  }
 
-  _snapPos(t,l,free,cands){
+  _snapPos(t,l,free,cands,box){
     if(free){this._hideGuides();return{t:t,l:l};}
     t=Math.round(t*2)/2;l=Math.round(l*2)/2; // 0.5 % grid
+    const TH=0.6;
+    const best=function(pos,offs,lines){
+      let bd=TH,hit=null;
+      for(const o of offs)for(const ln of lines){const d=Math.abs(pos+o-ln);if(d<bd){bd=d;hit={pos:ln-o,line:ln};}}
+      return hit;
+    };
+    const oT=box?[box.dt,box.dt+box.h/2,box.dt+box.h]:[0];
+    const oL=box?[box.dl,box.dl+box.w/2,box.dl+box.w]:[0];
+    const hT=best(t,oT,cands.tops),hL=best(l,oL,cands.lefts);
     let gh=null,gv=null;
-    for(const ct of cands.tops)if(Math.abs(t-ct)<0.45){t=ct;gh=ct;break;}
-    for(const cl of cands.lefts)if(Math.abs(l-cl)<0.45){l=cl;gv=cl;break;}
+    if(hT){t=Math.round(hT.pos*10)/10;gh=hT.line;}
+    if(hL){l=Math.round(hL.pos*10)/10;gv=hL.line;}
     if(this._gdH){if(gh!==null){this._gdH.style.top=gh+'%';this._gdH.style.display='block';}else this._gdH.style.display='none';}
     if(this._gdV){if(gv!==null){this._gdV.style.left=gv+'%';this._gdV.style.display='block';}else this._gdV.style.display='none';}
     return{t:t,l:l};
@@ -2918,10 +3052,23 @@ navSelf._navChipInto(chipCont,chCfg,r);
   }
 
   // Active-room scoped array access for test-mode editing (drag/resize/draw)
+  // An element a room INHERITS (the room has no list of its own) lives in the top-level list:
+  // edits go there. Only when neither has one is the room's list created. (Before v6.42.0 the
+  // room got a new EMPTY list here, which hid the inherited elements after a drag.)
   _roomArr(nc,key){
     if(this._editGlobal){if(!nc[key])nc[key]=[];return nc[key];}
     const t=Array.isArray(nc.rooms)&&nc.rooms.length?nc.rooms[Math.max(0,Math.min(this._roomIdx,nc.rooms.length-1))]:nc;
-    if(!t[key])t[key]=[];
+    if(Array.isArray(t[key]))return t[key];
+    if(t!==nc&&Array.isArray(nc[key]))return nc[key];
+    t[key]=[];
+    return t[key];
+  }
+  // The list a NEW element is added to: the room's own; when the room so far inherited the
+  // shared list, it gets a copy of it first, so what is on screen stays.
+  _roomArrNew(nc,key){
+    if(this._editGlobal){if(!nc[key])nc[key]=[];return nc[key];}
+    const t=Array.isArray(nc.rooms)&&nc.rooms.length?nc.rooms[Math.max(0,Math.min(this._roomIdx,nc.rooms.length-1))]:nc;
+    if(!Array.isArray(t[key]))t[key]=(t!==nc&&Array.isArray(nc[key]))?rocClone(nc[key]):[];
     return t[key];
   }
 
@@ -3738,17 +3885,20 @@ navSelf._navChipInto(chipCont,chCfg,r);
     });
   }
 
-  _makeDraggable(el,onDrop){
+  _makeDraggable(handle,onDrop,target){
     const self=this;
+    const el=target||handle; // the element that moves (a grip can move its parent)
     let dragOccurred=false;
-    el.addEventListener('mousedown',function(e){
+    handle.addEventListener('mousedown',function(e){
       if(e.button!==0)return;
+      if(target){e.stopPropagation();e.preventDefault();}
       const cont=self.shadowRoot.querySelector('.content');
       if(!cont)return;
       const rect=cont.getBoundingClientRect();
       const startX=e.clientX,startY=e.clientY;
       const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
-      const cands=self._snapCandidates();
+      const cands=self._snapCandidates(el);
+      const box=self._snapBox(el,rect,startTop,startLeft);
       let moved=false;
       function onMove(e){
         const dx=e.clientX-startX,dy=e.clientY-startY;
@@ -3757,23 +3907,24 @@ navSelf._navChipInto(chipCont,chCfg,r);
         const sp=self._snapPos(
           Math.max(0,Math.min(98,startTop+dy/rect.height*100)),
           Math.max(0,Math.min(98,startLeft+dx/rect.width*100)),
-          e.altKey,cands);
+          e.altKey,cands,box);
         el.style.top=sp.t.toFixed(1)+'%';
         el.style.left=sp.l.toFixed(1)+'%';
       }
       function onUp(){document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);self._hideGuides();if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
       document.addEventListener('mousemove',onMove);document.addEventListener('mouseup',onUp);
     });
-    el.addEventListener('touchstart',function(e){
+    handle.addEventListener('touchstart',function(e){
       const cont=self.shadowRoot.querySelector('.content');if(!cont)return;
+      if(target)e.stopPropagation();
       const rect=cont.getBoundingClientRect();
       const t0=e.touches[0],startX=t0.clientX,startY=t0.clientY;
       const startTop=parseFloat(el.style.top)||0,startLeft=parseFloat(el.style.left)||0;
       let moved=false;
-      const tCands=self._snapCandidates();
-      function onTMove(e){const t=e.touches[0],dx=t.clientX-startX,dy=t.clientY-startY;if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;moved=true;e.preventDefault();e.stopPropagation();const sp=self._snapPos(Math.max(0,Math.min(98,startTop+dy/rect.height*100)),Math.max(0,Math.min(98,startLeft+dx/rect.width*100)),false,tCands);el.style.top=sp.t.toFixed(1)+'%';el.style.left=sp.l.toFixed(1)+'%';}
-      function onTEnd(){el.removeEventListener('touchmove',onTMove);el.removeEventListener('touchend',onTEnd);self._hideGuides();if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
-      el.addEventListener('touchmove',onTMove,{passive:false});el.addEventListener('touchend',onTEnd);
+      const tCands=self._snapCandidates(el),tBox=self._snapBox(el,rect,startTop,startLeft);
+      function onTMove(e){const t=e.touches[0],dx=t.clientX-startX,dy=t.clientY-startY;if(!moved&&Math.sqrt(dx*dx+dy*dy)<5)return;moved=true;e.preventDefault();e.stopPropagation();const sp=self._snapPos(Math.max(0,Math.min(98,startTop+dy/rect.height*100)),Math.max(0,Math.min(98,startLeft+dx/rect.width*100)),false,tCands,tBox);el.style.top=sp.t.toFixed(1)+'%';el.style.left=sp.l.toFixed(1)+'%';}
+      function onTEnd(){handle.removeEventListener('touchmove',onTMove);handle.removeEventListener('touchend',onTEnd);self._hideGuides();if(moved){dragOccurred=true;setTimeout(function(){dragOccurred=false;},400);onDrop(el.style.top,el.style.left);}}
+      handle.addEventListener('touchmove',onTMove,{passive:false});handle.addEventListener('touchend',onTEnd);
     },{passive:true});
     // Suppress click after drag — capture phase fires before zone/icon tap listeners
     el.addEventListener('click',function(e){if(dragOccurred){e.stopImmediatePropagation();e.preventDefault();dragOccurred=false;}},true);
@@ -4483,8 +4634,10 @@ navSelf._navChipInto(chipCont,chCfg,r);
       // MutationObserver cover anything that mounts even later.
       const self=this;
       try{this._layoutRootHeight();this._watchEditBar();}catch(_){}
+      if(this._haEdit)this._syncStudioChip(); // wrapped into / out of HA's edit chrome
       setTimeout(function(){
         if(!self._rendered||!self.isConnected)return;
+        if(self._haEdit)self._syncStudioChip();
         self._requestPin('reconnect-settle');
         self._watchEditBar();
       },0);
