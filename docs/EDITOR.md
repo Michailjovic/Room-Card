@@ -243,12 +243,19 @@ The canvas bar shows the selection with **Duplicate**, **Copy** and **Delete** (
 once something is copied), so all of it works on a touch screen too. An element the room only
 *inherits* from the shared defaults is opened in **Global**, where it lives.
 
-**Properties** (v6.44.0) — the inspector's first tab, a form for:
+**Properties** (v6.44.0, sub-forms and card-level forms since v6.45.0) — the inspector's first
+tab, a form for:
 
 - the **selected element** (any type);
-- with nothing selected, the **room** shown (name, id, icon, background image or camera,
-  `area_match`);
-- in **Global**, or on a single-room card, the **shared defaults** (background image / camera).
+- with nothing selected, the **room** shown: name, id, icon, background image or camera,
+  `area_match`, navigation (chips, mini preview), the overview page and the room's overview
+  tile, image & weather, light controls, cards above / below, the tap on the image;
+- in **Global**, or on a single-room card, the **shared defaults** every room falls back to;
+- the card-level items in the outline's **Card** group:
+  - **Card settings:** aspect ratio, image fit, follow mode, URL sync, zoom, parallax, haptics…;
+  - **Navigation:** the nav strip;
+  - each **Section**, with its tiles and the elements tagged into it. **+** adds one, blank or
+    from a recipe; the header's buttons reorder or delete it.
 
 The fields come from the card's schema, grouped into *General*, *Position & size*, *Actions*,
 *Visibility* and *Advanced (YAML)*:
@@ -260,16 +267,31 @@ The fields come from the card's schema, grouped into *General*, *Position & size
   templates, image paths (with a thumbnail).
 - **Actions:** pick the type (more info, toggle, navigate, URL, perform action, open section,
   switch room, groups…), then its own fields. Changing the type keeps `confirmation` / `haptic`.
-- **YAML** for structured values (conditions, embedded cards, sliders…). Invalid YAML is shown and
-  not saved. Keys that take one value or a list of conditions (`color`, `icon`, `label`…) have a
-  link to switch between the two.
+- **Sub-forms and lists:**
+  - an option that holds an object opens as a sub-form (a blind's cover control, an element's
+    tile, the overview page…);
+  - a list has one row per item with **add, move up / down, remove** (section tiles, light-control
+    entities, nav chips, cover presets…);
+  - **Edit as YAML** switches any of them to YAML and back.
+
+  An on/off or entity setting that can take more options (`control: true`, `overview: true`,
+  `weather_overlay: weather.home`) has **More options…**.
+- **Suggestions:** *Section* and *Group* fields list the ids in the card; `area_match` lists Home
+  Assistant's areas. Any other value can still be typed.
+- **YAML** for conditions and embedded card configs. Invalid YAML is shown and not saved. Keys
+  that take one value or a list of conditions (`color`, `icon`, `label`…) have a link to switch
+  between the two.
+- **Inherited settings:** a room field left empty shows the shared value from Global as its
+  placeholder. Light controls set only in Global offer *Edit it in Global* or *Give this room its
+  own copy*.
 - **Advanced (YAML)** shows profile overrides (`portrait:` / `landscape:`) and any key the form
   does not know. They are kept exactly as they are.
 
 A field changes only its own key when you leave it (Tab / Enter / click elsewhere). Problems the
 config check finds are shown under the field they are about, as a dot in the outline and as a red
-ring on the canvas. The **ID** field renames the element (the selection follows). The **↗** button in the
-form's header opens the same thing in *All settings*, where every option is.
+ring on the canvas; a collapsed part of the form with a problem inside gets a dot. The **ID** field
+renames the element (the selection follows); renaming a section or a group also updates what
+refers to it. The **↗** button in the form's header opens the same thing in *All settings*.
 
 **Several at once** (v6.43.0):
 

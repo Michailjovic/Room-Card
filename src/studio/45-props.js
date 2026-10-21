@@ -122,8 +122,8 @@ function rsPicker(input,getItems,onPick,render){
   return wrap;
 }
 // entity picker: search id / friendly name / area, preferred domains first, live state shown
-function rsEntityInput(ctx,value,domains,onChange){
-  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:'light.living_room'});
+function rsEntityInput(ctx,value,domains,onChange,ph){
+  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:ph||'light.living_room'});
   inp.value=value||'';
   const hint=rsEl('div',{class:'pf-sub'});
   const showHint=function(){
@@ -180,14 +180,14 @@ function rsSimpleWidget(ctx,a,value,onChange,o){
   }
   if(a.indexOf('enum:')===0){
     const sel=rsEl('select',{class:'pf-in'});
-    sel.appendChild(rsEl('option',{value:'',text:o.dflt!==undefined?'— '+ctx.t('dflt')+' ('+o.dflt+') —':'— '+ctx.t('not_set')+' —'}));
+    sel.appendChild(rsEl('option',{value:'',text:o.ph?'— '+o.ph+' —':(o.dflt!==undefined?'— '+ctx.t('dflt')+' ('+o.dflt+') —':'— '+ctx.t('not_set')+' —')}));
     a.slice(5).split('|').forEach(function(v){sel.appendChild(rsEl('option',{value:v,text:v===''?'(empty)':v}));});
     if(value!==undefined&&value!==null&&a.slice(5).split('|').indexOf(String(value))<0)sel.appendChild(rsEl('option',{value:String(value),text:String(value)+' ?'}));
     sel.value=value==null?'':String(value);
     sel.addEventListener('change',function(){onChange(sel.value===''?undefined:sel.value);});
     return sel;
   }
-  if(a==='entity')return rsEntityInput(ctx,value,o.domains,onChange);
+  if(a==='entity')return rsEntityInput(ctx,value,o.domains,onChange,o.ph);
   if(a==='color'){
     const box=rsEl('div',{class:'pf-color'});
     const sw=rsEl('input',{type:'color'});
@@ -210,7 +210,18 @@ function rsSimpleWidget(ctx,a,value,onChange,o){
   if(a==='num')inp.step='any';
   if(a==='len')inp.placeholder='10% · 24px';
   if(a==='url')inp.placeholder='/local/…';
+  if(o.ph)inp.placeholder=o.ph; // the value a room inherits from the shared defaults
   inp.value=value==null?'':String(value);
+  // suggestions grounded in the config or Home Assistant (section / group / room ids, areas…);
+  // any other value can still be typed
+  if(o.choices&&o.choices.length&&a!=='num'){
+    const dl=rsEl('datalist',{id:'rs-dl-'+Math.random().toString(36).slice(2)});
+    o.choices.forEach(function(c){dl.appendChild(rsEl('option',{value:c[0],label:c[1]!==c[0]?c[1]:null}));});
+    inp.setAttribute('list',dl.id);
+    const box=rsEl('div',{class:'pf-dl'});box.appendChild(inp);box.appendChild(dl);
+    inp.addEventListener('change',function(){const v=inp.value.trim();if(v===''){onChange(undefined);return;}onChange(v);});
+    return box;
+  }
   inp.addEventListener('change',function(){
     const v=inp.value.trim();
     if(v===''){onChange(undefined);return;}
@@ -315,98 +326,287 @@ function rsActionWidget(ctx,value,onChange,o){
   return box;
 }
 
+
+// ---- nested objects and lists (Phase 4b, v6.45.0) -------------------------------------------------
+// `obj:X` and `list:X` keys whose schema X the registry knows get a sub-form / a list editor, so
+// sections and their tiles, the nav, light controls, the overview page, cover controls… are forms
+// too. Schemas built on conditions stay YAML (a form would not be simpler). Depth is capped.
+const RS_YAML_SCHEMAS=['cond','condVal','baseImageCond','filterCond','companion','ovSideCard'];
+const RS_MAX_DEPTH=4;
+function rsFormSchema(name){const S=RocSchema.ROC_SCHEMA;return(name&&S[name]&&RS_YAML_SCHEMAS.indexOf(name)<0)?S[name]:null;}
+function rsIsObj(v){return!!v&&typeof v==='object'&&!Array.isArray(v);}
+function rsCount(v){return rsIsObj(v)?Object.keys(v).length:(Array.isArray(v)?v.length:0);}
+// a short name for a list item: its title / name / id / entity…
+function rsItemLabel(it,i){
+  if(it==null||it==='')return'#'+(i+1);
+  if(typeof it!=='object')return String(it);
+  const v=it.title||it.name||it.id||it.entity||(it.pill&&(it.pill.entity||it.pill.text))||(it.card&&it.card.type)||it.type||(it.position!=null?String(it.position)+' %':'')||(it.value!=null?String(it.value):'');
+  return v?String(v):'#'+(i+1);
+}
+function rsNest(ctx,label,openKey,count,body,extra){
+  const d=rsEl('details',{class:'pf-nest','data-nest':openKey});
+  if(ctx.open.has(openKey))d.open=true;
+  d.addEventListener('toggle',function(){if(d.open)ctx.open.add(openKey);else ctx.open.delete(openKey);});
+  const sm=rsEl('summary',null,[rsEl('span',{class:'nl',text:label}),rsEl('span',{class:'n',text:count?String(count):''})]);
+  (extra||[]).forEach(function(x){sm.appendChild(x);});
+  d.appendChild(sm);d.appendChild(body);
+  return d;
+}
+// the fields of one object of schema `name`; keys the schema does not know stay (YAML box)
+function rsObjForm(ctx,name,obj,onChange,o){
+  const sch=rsFormSchema(name);
+  let cur=rsIsObj(obj)?obj:{};
+  const grid=rsEl('div',{class:'pf-grid pf-subgrid'});
+  const set=function(k,v){const n=Object.assign({},cur);if(v===undefined)delete n[k];else n[k]=v;cur=n;onChange(Object.keys(n).length?n:undefined);};
+  Object.keys(sch.keys).forEach(function(k){
+    const def=sch.keys[k];if(def.legacy&&cur[k]===undefined)return;
+    grid.appendChild(rsKeyField(ctx,k,def,cur[k],function(v){set(k,v);},{depth:o.depth,rel:o.rel+'.'+k,item:cur,schema:name}));
+  });
+  const other={};Object.keys(cur).forEach(function(k){if(!sch.keys[k])other[k]=cur[k];});
+  if(Object.keys(other).length){
+    const ob=rsFieldBox(ctx.t('other_keys'),'_other',true);
+    ob.appendChild(rsYamlWidget(ctx,other,function(v){
+      if(v===undefined)v={};if(!rsIsObj(v))return;
+      const n=Object.assign({},cur);Object.keys(other).forEach(function(k){if(!(k in v))delete n[k];});Object.assign(n,v);cur=n;onChange(n);
+    },2));
+    grid.appendChild(ob);
+  }
+  return grid;
+}
+// a list of objects of schema `name`: one collapsible row per item, add / move / remove.
+// A schema with `scalar` (light entities, nav chips…) keeps a plain string item a string.
+function rsListWidget(ctx,name,arr,onChange,o){
+  const sch=rsFormSchema(name);
+  let cur=Array.isArray(arr)?arr:[];
+  const box=rsEl('div',{class:'pf-list'});
+  const sk=sch.scalar;
+  const commit=function(n,rebuild){cur=n;onChange(n.length?n:undefined);if(rebuild)ctx.rerender();};
+  cur.forEach(function(it,i){
+    const rel=o.rel+'['+i+']';
+    const scalar=sk&&(it==null||typeof it!=='object');
+    const obj=scalar?(function(){const x={};if(it!=null&&it!=='')x[sk]=it;return x;})():it;
+    const btn=function(icon,act,title,fn,dis){return rsEl('button',{type:'button',class:'pf-ib','data-act':act,title:title,'aria-label':title,disabled:dis?true:null,onclick:function(e){e.preventDefault();e.stopPropagation();fn();}},[rsIcon(icon)]);};
+    const tools=rsEl('span',{class:'pf-tools'},[
+      btn('mdi:arrow-up','up',ctx.t('move_up'),function(){const n=cur.slice();n.splice(i-1,0,n.splice(i,1)[0]);commit(n,true);},i===0),
+      btn('mdi:arrow-down','down',ctx.t('move_down'),function(){const n=cur.slice();n.splice(i+1,0,n.splice(i,1)[0]);commit(n,true);},i===cur.length-1),
+      btn('mdi:delete-outline','remove',ctx.t('remove'),function(){const n=cur.slice();n.splice(i,1);commit(n,true);}),
+    ]);
+    let body;
+    if(!rsIsObj(obj)||o.depth>=RS_MAX_DEPTH)body=rsYamlWidget(ctx,it,function(v){const n=cur.slice();n[i]=v;commit(n);},3);
+    else body=rsObjForm(ctx,name,obj,function(v){
+      let nv=v===undefined?{}:v;
+      if(scalar&&Object.keys(nv).every(function(k){return k===sk;}))nv=nv[sk]!==undefined?nv[sk]:''; // still just the entity: stays a plain string
+      const n=cur.slice();n[i]=nv;commit(n);
+    },{depth:o.depth+1,rel:rel});
+    const row=rsNest(ctx,rsItemLabel(obj,i),'n:'+rel,0,body,[tools]);
+    row.classList.add('pf-item');
+    ctx.pin(row,rel,true);
+    box.appendChild(row);
+  });
+  box.appendChild(rsEl('button',{type:'button',class:'pf-add','data-act':'add-item',onclick:function(){
+    const n=cur.slice();n.push(sk&&cur.every(function(x){return x==null||typeof x!=='object';})?'':{});
+    const k='n:'+o.rel+'['+(n.length-1)+']';ctx.open.add(k);if(ctx.focusNest)ctx.focusNest(k);commit(n,true);
+  }},[rsIcon('mdi:plus'),rsEl('span',{text:ctx.t('add_item')})]));
+  return box;
+}
+// a list of plain values (list:str / list:len): one input per value
+function rsScalarList(ctx,a,arr,onChange,o){
+  let cur=Array.isArray(arr)?arr.slice():[];
+  const box=rsEl('div',{class:'pf-slist'});
+  const commit=function(n,rebuild){cur=n;onChange(n.length?n:undefined);if(rebuild)ctx.rerender();};
+  cur.forEach(function(v,i){
+    const w=rsSimpleWidget(ctx,a,v,function(nv){const n=cur.slice();if(nv===undefined)n.splice(i,1);else n[i]=nv;commit(n,nv===undefined);},{choices:o.choices});
+    box.appendChild(rsEl('div',{class:'pf-srow'},[w,rsEl('button',{type:'button',class:'pf-ib','data-act':'remove',title:ctx.t('remove'),'aria-label':ctx.t('remove'),onclick:function(){const n=cur.slice();n.splice(i,1);commit(n,true);}},[rsIcon('mdi:close')])]));
+  });
+  const add=rsSimpleWidget(ctx,a,undefined,function(nv){if(nv===undefined)return;commit(cur.concat([nv]),true);},{choices:o.choices,ph:ctx.t('add_value')});
+  box.appendChild(rsEl('div',{class:'pf-srow add'},[add]));
+  return box;
+}
+
 // ---- one field for a schema key ----------------------------------------------------------------
-// prof:X → X, or {portrait, landscape} of X; unions → the simple alternative unless the value is
-// structured (then YAML, with a switch back)
-function rsKeyField(ctx,key,def,value,onChange,msgs){
+// prof:X → X, or {portrait, landscape} of X; unions pick the alternative that fits the value:
+// a simple widget, a sub-form (obj:X), a list editor (list:X) — anything else is YAML.
+// o: {depth, rel (path below the form's target, for pinned messages), item, inherit, schema}
+function rsKeyField(ctx,key,def,value,onChange,o){
+  o=o||{};const depth=o.depth||0,rel=o.rel||key;
   const t=String(def.t);
   const isProf=t.indexOf('prof:')===0;
   const inner=isProf?t.slice(5):t;
   const alts=rsAlts(inner);
-  const simple=rsPickSimple(alts,isProf&&value&&typeof value==='object'&&!Array.isArray(value)?(value.portrait!==undefined?value.portrait:value.landscape):value);
+  const simple=rsPickSimple(alts,isProf&&rsIsObj(value)?(value.portrait!==undefined?value.portrait:value.landscape):value);
   const hasStruct=alts.some(function(a){return!rsIsSimple(a);});
+  const objName=(alts.find(function(a){return a.indexOf('obj:')===0&&rsFormSchema(a.slice(4));})||'').slice(4);
+  const listName=(alts.find(function(a){return a.indexOf('list:')===0&&rsFormSchema(a.slice(5));})||'').slice(5);
+  const sList=alts.find(function(a){return a==='list:str'||a==='list:len';});
   const iconKey=key==='icon'&&simple==='str';
-  const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey};
+  const choices=ctx.choices?ctx.choices(key,o.schema):null;
+  const inh=o.inherit;
+  const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey,choices:choices,
+    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:String(inh)}):null};
+  const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
+  const canDeep=depth<RS_MAX_DEPTH;
+  const asObj=!yamlMode&&canDeep&&objName&&(rsIsObj(value)||(value===undefined&&!simple));
+  const asList=!yamlMode&&canDeep&&!isProf&&listName&&(Array.isArray(value)||(value===undefined&&!simple));
+  const asSList=!yamlMode&&!isProf&&sList&&!listName&&(value===undefined?!simple:(Array.isArray(value)&&value.every(function(x){return x==null||typeof x!=='object';})));
   const isAct=t==='action';
-  const wide=isAct||!simple||simple==='tmpl'||simple==='entity'||simple==='url'||iconKey||(hasStruct&&(Array.isArray(value)||(value&&typeof value==='object'&&!isProf)));
-  const box=rsFieldBox(ctx.labels[key]||rsLabel(key),key,wide);
-  if(isAct){box.appendChild(rsActionWidget(ctx,value,onChange,{entity:ctx.item&&ctx.item.entity}));rsMsgs(box,msgs);return box;}
-  const perProf=isProf&&value&&typeof value==='object'&&!Array.isArray(value)&&(('portrait'in value)||('landscape'in value));
+  const label=ctx.labels[key]||rsLabel(key);
+  const wide=isAct||asObj||asList||asSList||!simple||simple==='tmpl'||simple==='entity'||simple==='url'||iconKey||(hasStruct&&(Array.isArray(value)||(rsIsObj(value)&&!isProf)));
+  const box=rsFieldBox(label,key,wide);
+  const links=rsEl('div',{class:'pf-links'});
+  const link=function(txt,fn,act){links.appendChild(rsEl('button',{type:'button',class:'pf-link','data-act':act||null,text:txt,onclick:fn}));};
+  const done=function(exact){if(links.childNodes.length)box.appendChild(links);ctx.pin(box,rel,exact);return box;};
+  // a room that only inherits a structured value: say so, edit it in Global or copy it here
+  if(value===undefined&&inh!==undefined&&inh!==null&&typeof inh==='object'){
+    box.appendChild(rsEl('div',{class:'pf-inh'},[rsEl('span',{text:ctx.t('inh_shared')})]));
+    link(ctx.t('inh_edit'),function(){ctx.goGlobal();},'inh-edit');
+    link(ctx.t('inh_copy'),function(){onChange(JSON.parse(rsJ(inh)));ctx.open.add('n:'+rel);ctx.rerender();},'inh-copy');
+    return done(false);
+  }
+  if(isAct){box.appendChild(rsActionWidget(ctx,value,onChange,{entity:o.item&&o.item.entity}));return done(false);}
+  const perProf=isProf&&rsIsObj(value)&&(('portrait'in value)||('landscape'in value));
   if(perProf){
     ['portrait','landscape'].forEach(function(p){
       const row=rsEl('div',{class:'pf-prof'});row.appendChild(rsEl('span',{class:'pf-tag',text:p}));
       row.appendChild(simple?rsSimpleWidget(ctx,simple,value[p],function(v){const n=Object.assign({},value);if(v===undefined)delete n[p];else n[p]=v;value=n;onChange(Object.keys(n).length?n:undefined);},wo):rsYamlWidget(ctx,value[p],function(v){const n=Object.assign({},value);if(v===undefined)delete n[p];else n[p]=v;value=n;onChange(n);}));
       box.appendChild(row);
     });
-    box.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('one_value'),onclick:function(){onChange(value.landscape!==undefined?value.landscape:value.portrait);ctx.rerender();}}));
-    rsMsgs(box,msgs);return box;
+    link(ctx.t('one_value'),function(){onChange(value.landscape!==undefined?value.landscape:value.portrait);ctx.rerender();});
+    return done(false);
   }
+  if(asObj){
+    box.appendChild(rsNest(ctx,ctx.t('n_options',{n:rsCount(value)}),'n:'+rel,0,rsObjForm(ctx,objName,value,onChange,{depth:depth+1,rel:rel})));
+    const sAlt=alts.find(rsIsSimple);
+    if(sAlt)link(ctx.t('as_simple'),function(){onChange(sAlt==='bool'?true:undefined);ctx.rerender();},'as-simple');
+    link(ctx.t('as_yaml'),function(){ctx.yamlKeys.add(rel);ctx.rerender();},'as-yaml');
+    return done(true);
+  }
+  if(asList){
+    box.appendChild(rsListWidget(ctx,listName,value,onChange,{depth:depth+1,rel:rel}));
+    link(ctx.t('as_yaml'),function(){ctx.yamlKeys.add(rel);ctx.rerender();},'as-yaml');
+    return done(true);
+  }
+  if(asSList){box.appendChild(rsScalarList(ctx,sList.slice(5),value,onChange,{choices:choices}));return done(false);}
   const structured=!simple||(value!==undefined&&value!==null&&typeof value==='object');
   if(structured){
     box.appendChild(rsYamlWidget(ctx,value,onChange,Array.isArray(value)&&value.length>2?4:3));
-    if(alts.some(rsIsSimple)&&hasStruct)box.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('as_simple'),onclick:function(){onChange(undefined);ctx.rerender();}}));
-  }else{
-    box.appendChild(rsSimpleWidget(ctx,simple,value,onChange,wo));
-    const links=rsEl('div',{class:'pf-links'});
-    if(isProf)links.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('per_profile'),onclick:function(){onChange({portrait:value,landscape:value});ctx.rerender();}}));
-    if(alts.indexOf('list:condVal')>=0)links.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('as_conditions'),onclick:function(){onChange([{condition:{entity:'',state:'on'},value:value===undefined?'':value},{value:value===undefined?'':value}]);ctx.rerender();}}));
-    if(links.childNodes.length)box.appendChild(links);
+    if(yamlMode&&(objName||listName)&&canDeep)link(ctx.t('as_form'),function(){ctx.yamlKeys.delete(rel);ctx.rerender();},'as-form');
+    else if(alts.some(rsIsSimple)&&hasStruct)link(ctx.t('as_simple'),function(){onChange(undefined);ctx.rerender();},'as-simple');
+    return done(false);
   }
-  rsMsgs(box,msgs);
-  return box;
+  // a value that can grow into an object: show / hide "More options…" as soon as it is set / cleared
+  const grows=objName&&canDeep&&(simple==='bool'||simple==='entity');
+  box.appendChild(rsSimpleWidget(ctx,simple,value,grows?function(v){onChange(v);if((value===undefined||value===false)!==(v===undefined||v===false))ctx.rerender();}:onChange,wo));
+  if(isProf)link(ctx.t('per_profile'),function(){onChange({portrait:value,landscape:value});ctx.rerender();});
+  if(alts.indexOf('list:condVal')>=0)link(ctx.t('as_conditions'),function(){onChange([{condition:{entity:'',state:'on'},value:value===undefined?'':value},{value:value===undefined?'':value}]);ctx.rerender();},'as-conditions');
+  // a simple value that can grow into an object: `true` → {} (still on), an entity → {entity: …}
+  if(objName&&canDeep&&value!==undefined){
+    const ok=rsFormSchema(objName).keys;
+    const grow=simple==='bool'&&value===true?{}:(simple==='entity'&&value?(ok.entity?{entity:value}:(ok.default?{default:value}:null)):null);
+    if(grow)link(ctx.t('more_options'),function(){onChange(grow);ctx.open.add('n:'+rel);ctx.rerender();},'more-options');
+  }
+  return done(false);
 }
 
 // ---- the panel -----------------------------------------------------------------------------------
-// target: {kind:'element',type,id} | {kind:'room'} | {kind:'card'} (single-room card / Global)
-// ctx: {t, I, hass, work, scope, item, path, findings, domains, labels, open:Set, inherited, multi,
-//       set(k,v), setRest(keys,obj), rename(id), rerender(), openAll()}
+// target.kind: element | room | card (single-room card, Global, or "Card settings") | section | nav
+// ctx: {t, I, hass, work, scope, item, path, findings, domains, labels, open:Set, yamlKeys:Set,
+//       inherited, multi, shared (the top level a room falls back to), set(k,v), setRest(keys,obj),
+//       rename(id), rerender(), openAll(), goGlobal(), choices(key), select(type,id,roomIdx),
+//       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
+const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
+function rsFormSpec(ctx,target){
+  const S=RocSchema.ROC_SCHEMA;
+  const item=ctx.item;
+  if(target.kind==='element'){
+    const T=RS_TYPES[target.type];
+    const keys=(S[RS_SCHEMA_OF[target.type]]||{keys:{}}).keys;
+    const order=Object.keys(keys);
+    const isIn=function(l){return function(k){return l.indexOf(k)>=0;};};
+    return{keys:keys,title:String(item.id),icon:T.icon,type:ctx.t('t_'+target.type),idRow:true,rest:'element',groups:[
+      ['main',order.filter(function(k){return!isIn(RS_POS_KEYS)(k)&&!isIn(RS_ACT_KEYS)(k)&&!isIn(RS_VIS_KEYS)(k)&&!isIn(RS_PROF_KEYS)(k)&&k!=='id';})],
+      ['position',order.filter(isIn(RS_POS_KEYS))],
+      ['actions',order.filter(isIn(RS_ACT_KEYS))],
+      ['visibility',order.filter(isIn(RS_VIS_KEYS))],
+    ]};
+  }
+  const roomGroups=[
+    ['image',['base_image_conditions','weather_overlay','filter_conditions','brightness_model']],
+    ['lights',['light_controls']],
+    ['cards',['cards_above','cards_below']],
+    ['room_tap',['tap_action']],
+  ];
+  if(target.kind==='room'){
+    return{keys:S.room.keys,title:String(item.name||item.id||''),icon:'mdi:door',type:ctx.t('room'),rest:'room',groups:[['main',RS_ROOM_KEYS],
+      ['room_nav',['nav_hidden','nav_mini','weather_nav_mini','chips']],['overview',['overview','overview_tile']]].concat(roomGroups)};
+  }
+  if(target.kind==='card'){
+    const keys=Object.assign({},S.room.keys,S.card.keys);
+    const multi=Array.isArray(ctx.work.rooms)&&ctx.work.rooms.length>0;
+    const cardKeys=RS_CARD_ONLY.filter(function(k){return multi||['room_entity','room_state_entity','follow_mode','follow_hold','url_sync','weather_nav_mini'].indexOf(k)<0;});
+    return{keys:keys,title:ctx.t(target.settings?'card_settings':(ctx.global?'global':'card_form')),icon:target.settings?'mdi:cog-outline':(ctx.global?'mdi:earth':'mdi:image-outline'),type:'',rest:null,
+      groups:[[multi?'defaults':'main',RS_CARD_KEYS]].concat(roomGroups).concat([['card',cardKeys]])};
+  }
+  if(target.kind==='section'){
+    return{keys:S.section.keys,title:String(item.title||item.id),icon:item.icon&&/^mdi:/.test(item.icon)?item.icon:'mdi:view-dashboard-outline',type:ctx.t('t_section'),idRow:true,rest:'object',groups:[
+      ['main',['title','icon','subtitle']],['panel',['placement','placement_portrait','size','columns','badge','backdrop']],
+      ['content',['source','domain','tiles','card']],['visibility',['visible_template']]]};
+  }
+  if(target.kind==='nav'){
+    return{keys:S.nav.keys,title:ctx.t('nav_form'),icon:'mdi:dots-horizontal-circle-outline',type:'',rest:'object',groups:[
+      ['main',['style','position','live','height','width','mobile_height','rows','cards_position']],['behaviour',['wheel','follow_button','dim_inactive']],
+      ['nav_chips',['chips']],['nav_cards',['cards']],['nav_mini',['mini']]]};
+  }
+  return null;
+}
 function rsBuildProps(ctx,target){
   const root=rsEl('div',{class:'props'});
-  const S=RocSchema.ROC_SCHEMA;
-  let item,schemaKeys,title,icon,groups;
+  const spec=rsFormSpec(ctx,target);
+  if(!spec){root.appendChild(rsEl('div',{class:'pf-empty',text:ctx.t('props_empty')}));return root;}
+  const item=ctx.item,schemaKeys=spec.keys;
   const prefix=ctx.path||'';
   const rel=function(p){return prefix?p.slice(prefix.length+1):p;};
   const under=function(p){return!prefix||p===prefix||p.indexOf(prefix+'.')===0||p.indexOf(prefix+'[')===0;};
-  if(target.kind==='room'||target.kind==='card'){
-    item=ctx.item;schemaKeys=S.room.keys;
-    title=target.kind==='room'?String(item.name||item.id||''):ctx.t(ctx.global?'global':'card_form');
-    icon=target.kind==='room'?'mdi:door':(ctx.global?'mdi:earth':'mdi:image-outline');
-    groups=[['main',target.kind==='room'?RS_ROOM_KEYS:RS_CARD_KEYS]];
-  }else{
-    const T=RS_TYPES[target.type];
-    item=ctx.item;schemaKeys=(S[RS_SCHEMA_OF[target.type]]||{keys:{}}).keys;title=String(item.id);icon=T.icon;
-    const keyOrder=Object.keys(schemaKeys);
-    const isIn=function(l){return function(k){return l.indexOf(k)>=0;};};
-    groups=[
-      ['main',keyOrder.filter(function(k){return!isIn(RS_POS_KEYS)(k)&&!isIn(RS_ACT_KEYS)(k)&&!isIn(RS_VIS_KEYS)(k)&&!isIn(RS_PROF_KEYS)(k)&&k!=='id';})],
-      ['position',keyOrder.filter(isIn(RS_POS_KEYS))],
-      ['actions',keyOrder.filter(isIn(RS_ACT_KEYS))],
-      ['visibility',keyOrder.filter(isIn(RS_VIS_KEYS))],
-    ];
-  }
-  const head=rsEl('div',{class:'pf-head'},[rsIcon(icon),rsEl('span',{class:'pf-title',text:title}),
-    rsEl('span',{class:'pf-type',text:target.kind==='element'?ctx.t('t_'+target.type):(target.kind==='room'?ctx.t('room'):'')})]);
-  if(ctx.inherited)head.appendChild(rsEl('span',{class:'tag',text:ctx.t('inherited')}));
-  head.appendChild(rsEl('button',{type:'button',class:'btn sm pf-open','data-act':'open-all',title:ctx.t('open_all'),'aria-label':ctx.t('open_all'),onclick:function(){ctx.openAll();}},[rsIcon('mdi:open-in-new')]));
-  root.appendChild(head);
-  if(ctx.multi>1)root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t('props_multi',{n:ctx.multi,id:title})}));
   let findings=(ctx.findings||[]).filter(function(f){return under(f.path);});
-  const msgsFor=function(k){return findings.filter(function(f){const r=rel(f.path);return r===k||r.indexOf(k+'.')===0||r.indexOf(k+'[')===0;});};
-  const pinned=[]; // [box, () => msgs]
-  const pin=function(box,fn){pinned.push([box,fn]);rsMsgs(box,fn());return box;};
-  // id (elements): renaming keeps the selection
-  if(target.kind==='element'){
+  // pinned validation: a leaf field shows its own findings and those below it; a sub-form or a
+  // list row (exact) only its own — its fields show the rest
+  const pinned=[];
+  const msgsFor=function(r,exact){return findings.filter(function(f){const x=rel(f.path);return x===r||(!exact&&(x.indexOf(r+'.')===0||x.indexOf(r+'[')===0));});};
+  ctx.pin=function(box,r,exact){const fn=function(){return msgsFor(r,exact);};pinned.push([box,fn]);rsMsgs(box,fn());return box;};
+  const head=rsEl('div',{class:'pf-head'},[rsIcon(spec.icon),rsEl('span',{class:'pf-title',text:spec.title}),rsEl('span',{class:'pf-type',text:spec.type||''})]);
+  if(ctx.inherited)head.appendChild(rsEl('span',{class:'tag',text:ctx.t('inherited')}));
+  const hb=rsEl('span',{class:'pf-hbtns'});
+  const hbtn=function(icon,act,title,fn,dis){hb.appendChild(rsEl('button',{type:'button',class:'btn sm','data-act':act,title:title,'aria-label':title,disabled:dis?true:null,onclick:fn},[rsIcon(icon)]));};
+  if(target.kind==='section'){
+    hbtn('mdi:arrow-up','sec-up',ctx.t('move_up'),function(){ctx.sectionAct('up');},target.idx===0);
+    hbtn('mdi:arrow-down','sec-down',ctx.t('move_down'),function(){ctx.sectionAct('down');},target.idx>=((ctx.work.sections||[]).length-1));
+    hbtn('mdi:delete-outline','sec-del',ctx.t('sec_del'),function(){ctx.sectionAct('delete');});
+  }
+  hbtn('mdi:open-in-new','open-all',ctx.t('open_all'),function(){ctx.openAll();});
+  head.appendChild(hb);
+  root.appendChild(head);
+  if(ctx.multi>1)root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t('props_multi',{n:ctx.multi,id:spec.title})}));
+  // id: renaming keeps the selection (sections and groups take their references along)
+  if(spec.idRow){
     const idBox=rsFieldBox('ID','id',false);
-    const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false'});inp.value=String(item.id);
+    const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false'});inp.value=String(item.id==null?'':item.id);
     inp.addEventListener('change',function(){const v=inp.value.trim();if(v&&v!==String(item.id))ctx.rename(v);else inp.value=String(item.id);});
     idBox.appendChild(inp);
-    root.appendChild(rsEl('div',{class:'pf-grid pf-idrow'},[pin(idBox,function(){return msgsFor('id');})]));
+    root.appendChild(rsEl('div',{class:'pf-grid pf-idrow'},[ctx.pin(idBox,'id',false)]));
+  }
+  // a section: the elements tagged into it, anywhere in the card
+  if(target.kind==='section'&&ctx.members){
+    const m=ctx.members(item.id);
+    const mb=rsEl('div',{class:'pf-members'},[rsEl('span',{class:'pf-l',text:ctx.t('sec_members',{n:m.length})})]);
+    m.forEach(function(x){mb.appendChild(rsEl('button',{type:'button',class:'pf-chip','data-member':x.type+':'+x.id,onclick:function(){ctx.select(x.type,x.id,x.room);}},[rsIcon(RS_TYPES[x.type].icon),rsEl('span',{text:x.id+(x.roomName?' · '+x.roomName:'')})]));});
+    if(!m.length)mb.appendChild(rsEl('span',{class:'pf-sub',text:ctx.t('sec_members_none')}));
+    root.appendChild(mb);
   }
   const shown=new Set(['id']);
-  groups.forEach(function(g){
-    const keys=g[1].filter(function(k){return schemaKeys[k]&&!schemaKeys[k].legacy;});
-    if(!keys.length)return;
+  groups:
+  for(const g of spec.groups){
+    const keys=g[1].filter(function(k){return schemaKeys[k]&&!(schemaKeys[k].legacy&&item[k]===undefined);});
+    if(!keys.length)continue groups;
     const sec=rsEl('details',{class:'pf-sec','data-sec':g[0]});
     if(ctx.open.has(g[0]))sec.open=true;
     sec.addEventListener('toggle',function(){if(sec.open)ctx.open.add(g[0]);else ctx.open.delete(g[0]);});
@@ -415,36 +615,47 @@ function rsBuildProps(ctx,target){
     const grid=rsEl('div',{class:'pf-grid'});
     keys.forEach(function(k){
       shown.add(k);
-      grid.appendChild(pin(rsKeyField(ctx,k,schemaKeys[k],item[k],function(v){ctx.set(k,v);},[]),function(){return msgsFor(k);}));
+      const inh=ctx.shared&&schemaKeys[k].room?ctx.shared[k]:undefined;
+      grid.appendChild(rsKeyField(ctx,k,schemaKeys[k],item[k],function(v){ctx.set(k,v);},{depth:0,rel:k,item:item,inherit:item[k]===undefined?inh:undefined,schema:spec.schema}));
     });
     sec.appendChild(grid);
     root.appendChild(sec);
-  });
-  // elements: profile overrides and keys the schema does not know; a room: keys the schema does
-  // not know — YAML, kept exactly as they are (KEEP)
+  }
+  // keys the form does not list: elements — profile overrides and unknown keys; rooms, sections,
+  // the nav — keys the schema does not know. YAML, kept exactly as they are (KEEP)
   const rest={};
-  if(target.kind!=='card')Object.keys(item).forEach(function(k){
+  if(spec.rest)Object.keys(item).forEach(function(k){
     if(shown.has(k))return;
-    if(target.kind==='room'?!schemaKeys[k]:true)rest[k]=item[k];
+    if(spec.rest==='element'||!schemaKeys[k])rest[k]=item[k];
   });
   const nrest=Object.keys(rest).length;
-  if(target.kind==='element'||nrest){
+  if(spec.rest==='element'||nrest){
+    const roomish=spec.rest!=='element';
     const adv=rsEl('details',{class:'pf-sec','data-sec':'advanced'});
     if(ctx.open.has('advanced'))adv.open=true;
     adv.addEventListener('toggle',function(){if(adv.open)ctx.open.add('advanced');else ctx.open.delete('advanced');});
-    adv.appendChild(rsEl('summary',null,[rsEl('span',{text:ctx.t(target.kind==='room'?'g_room_more':'g_advanced')}),rsEl('span',{class:'n',text:nrest?String(nrest):''})]));
+    adv.appendChild(rsEl('summary',null,[rsEl('span',{text:ctx.t(roomish?'g_room_more':'g_advanced')}),rsEl('span',{class:'n',text:nrest?String(nrest):''})]));
     const ab=rsEl('div',{class:'pf-grid'});
-    const advBox=rsFieldBox(ctx.t(target.kind==='room'?'adv_room_hint':'adv_hint'),'_rest',true);
-    advBox.appendChild(rsYamlWidget(ctx,nrest?rest:undefined,function(v){if(v===undefined)v={};if(!v||typeof v!=='object'||Array.isArray(v))return;ctx.setRest(Object.keys(rest),v);},4));
-    ab.appendChild(pin(advBox,function(){return findings.filter(function(f){const r=rel(f.path).split(/[.[]/)[0];return Object.prototype.hasOwnProperty.call(rest,r);});}));
-    adv.appendChild(ab);
+    const advBox=rsFieldBox(ctx.t(roomish?'adv_room_hint':'adv_hint'),'_rest',true);
+    advBox.appendChild(rsYamlWidget(ctx,nrest?rest:undefined,function(v){if(v===undefined)v={};if(!rsIsObj(v))return;ctx.setRest(Object.keys(rest),v);},4));
+    pinned.push([advBox,function(){return findings.filter(function(f){const r=rel(f.path).split(/[.[]/)[0];return Object.prototype.hasOwnProperty.call(rest,r);});}]);
+    rsMsgs(advBox,pinned[pinned.length-1][1]());
+    ab.appendChild(advBox);adv.appendChild(ab);
     root.appendChild(adv);
   }
   if(target.kind==='room')root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t('room_more_hint')}));
-  if(target.kind==='card')root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t(ctx.global?'props_global_hint':'props_card_hint')}));
+  if(target.kind==='card'&&!target.settings)root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t(ctx.global?'props_global_hint':'props_card_hint')}));
   root._rsRefresh=function(all){
     findings=(all||[]).filter(function(f){return under(f.path);});
     pinned.forEach(function(p){rsMsgs(p[0],p[1]());});
+    rsMarkNests(root);
   };
   return root;
+}
+// a collapsed section / sub-form / list row says when something inside it has a problem
+function rsMarkNests(root){
+  root.querySelectorAll('details.pf-nest,details.pf-sec').forEach(function(d){
+    const e=!!d.querySelector('.pf-msg.v.error');
+    d.classList.toggle('has-err',e);d.classList.toggle('has-warn',!e&&!!d.querySelector('.pf-msg.v.warn'));
+  });
 }

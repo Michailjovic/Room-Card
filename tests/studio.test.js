@@ -167,6 +167,10 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
       }
       s.deselect();
     }
+    for(const cs of [['card'],['nav']].concat((s.work.sections||[]).map(x=>['section',x&&x.id]))){
+      try{s.selectCard(cs[0],cs[1]);s._syncProps(true);propsForms++;if(!s._propsPane.querySelector('.pf-head'))rtBad.push(f+': no form for '+cs.join(':'));}catch(err){rtBad.push(f+': '+cs.join(':')+': '+err.message);}
+    }
+    s.deselect();
     if(s._dirty())rtBad.push(f+': browsing the Properties forms changed the config');
     s._setTab('all');
     await s.save();
@@ -563,6 +567,116 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('…and write their value',S9.work.badges[0].position==='bottom-right');
   S9.requestClose();if(layerBtn(S9,'discard'))layerBtn(S9,'discard').click();E9.remove();
   check('card internals expose the action types for the builder',Array.isArray(C._rocInternals.actTypes)&&C._rocInternals.actTypes.some(x=>x[0]==='perform-action'));
+
+  // ---- 9. Phase 4b (v6.45.0): sub-forms, lists, card-level forms -------------------------------
+  w.localStorage.removeItem('roc-studio-tab');
+  const P10=()=>({type:'custom:room-overlay-card',card_id:'p10',base_image:IMG,
+    light_controls:{entities:['light.x'],columns:2},
+    sections:[{id:'media',title:'Media',tiles:[{name:'TV',entity:'light.x'}]},{id:'heat',title:'Heat'}],
+    groups:[{id:'grp',visible:false}],
+    rooms:[{id:'a',name:'A',base_image:IMG+'a',
+        zones:[{id:'z1',top:'10%',left:'10%',width:'20%',height:'20%',section:'media',group:'grp',tap_action:{action:'open-section',section:'media'}}],
+        blinds:[{id:'b1',top:'10%',left:'60%',width:'10%',height:'30%',entity:'cover.blind'}]},
+      {id:'b',name:'B',base_image:IMG+'b',overview:true,light_controls:{entities:['light.x',{entity:'light.x',name:'Lamp'}]}}],
+    nav:{style:'tabs'}});
+  const E10=d.createElement('room-overlay-card-editor');E10.setConfig(P10());E10.hass=hass8;d.body.appendChild(E10);
+  const S10=await C._rocStudio.open({from:'editor',editor:E10,hass:hass8});await wait(100);
+  const pn=S10._propsPane,f10=k=>pn.querySelector('.pf-field[data-key="'+k+'"]');
+  const lc0=J(S10.work.light_controls);
+  check('the outline lists Card settings, Navigation and every section (with how many elements it holds)',!!S10._olCard.querySelector('[data-card="card"]')&&!!S10._olCard.querySelector('[data-card="nav"]')&&[...S10._olCard.querySelectorAll('[data-card^="section:"]')].map(b=>b.dataset.card).join()==='section:media,section:heat'&&S10._olCard.querySelector('[data-card="section:media"] .sub').textContent==='1');
+  // room form: inherited light controls
+  S10._propsOpen.add('lights');S10._syncProps(true);
+  check('a room that inherits the shared light controls says so',!!f10('light_controls').querySelector('.pf-inh')&&!!f10('light_controls').querySelector('[data-act="inh-copy"]'));
+  f10('light_controls').querySelector('[data-act="inh-copy"]').click();
+  check('…"own copy" copies them into the room, Global untouched',J(S10.work.rooms[0].light_controls)===lc0&&J(S10.work.light_controls)===lc0);
+  // light entities: a list; a plain entity string stays a string
+  S10._setRoom(1,false,'toolbar');S10._propsOpen.add('lights');S10._propsOpen.add('n:light_controls');S10._syncProps(true);
+  const rows=()=>[...f10('light_controls').querySelectorAll('.pf-list > .pf-item')];
+  check('light entities are a list (string and object items)',rows().length===2&&rows()[0].querySelector('summary .nl').textContent==='light.x'&&rows()[1].querySelector('summary .nl').textContent==='Lamp');
+  const nm0=rows()[0].querySelector('.pf-field[data-key="name"] input');change(nm0,'Ceiling');
+  check('naming a plain entity turns it into {entity, name}',J(S10.work.rooms[1].light_controls.entities[0])===J({entity:'light.x',name:'Ceiling'}));
+  change(rows()[0].querySelector('.pf-field[data-key="name"] input'),'');
+  check('…and back to a plain string when only the entity is left',S10.work.rooms[1].light_controls.entities[0]==='light.x');
+  rows()[1].querySelector('[data-act="up"]').click();
+  check('move up reorders the list',S10.work.rooms[1].light_controls.entities[0].name==='Lamp');
+  f10('light_controls').querySelector('.pf-list > [data-act="add-item"]').click();
+  check('Add appends an item (a plain value in a list of plain values… here mixed: an object) and opens it',S10.work.rooms[1].light_controls.entities.length===3&&rows().length===3&&rows()[2].open);
+  rows()[2].querySelector('[data-act="remove"]').click();
+  check('remove takes it out',S10.work.rooms[1].light_controls.entities.length===2);
+  const colIn=f10('light_controls').querySelector('.pf-field[data-key="columns"] input');change(colIn,'3');
+  check('a sub-form field writes inside the object only',S10.work.rooms[1].light_controls.columns===3&&J(S10.work.rooms[1].light_controls.entities)===J([{entity:'light.x',name:'Lamp'},'light.x']));
+  // overview room: bool|obj grows
+  S10._propsOpen.add('overview');S10._syncProps(true);
+  const ov=f10('overview');
+  check('overview: true is a checkbox with "More options…"',ov.querySelector('input[type="checkbox"]').checked&&!!ov.querySelector('[data-act="more-options"]'));
+  ov.querySelector('[data-act="more-options"]').click();
+  check('…which turns it into an object (still on) and opens its form',J(S10.work.rooms[1].overview)==='{}'&&!!f10('overview').querySelector('.pf-nest[open] .pf-field[data-key="grid"]'));
+  f10('overview').querySelector('[data-act="as-simple"]').click();
+  check('…and back to plain on',S10.work.rooms[1].overview===true);
+  // YAML switch
+  f10('light_controls').querySelector('[data-act="as-yaml"]').click();
+  check('a sub-form can be edited as YAML',!!f10('light_controls').querySelector('textarea')&&!!f10('light_controls').querySelector('[data-act="as-form"]'));
+  f10('light_controls').querySelector('[data-act="as-form"]').click();
+  check('…and back as a form',!!f10('light_controls').querySelector('.pf-nest'));
+  // pinned validation inside a sub-form
+  const cbad=JSON.parse(J(S10.work));cbad.rooms[1].light_controls.columns='three';S10._commit(cbad,'test');S10._renderValidation();S10._syncProps(true);S10._renderValidation();
+  const colF=f10('light_controls').querySelector('.pf-field[data-key="columns"]');
+  check('a problem deep in a sub-form is pinned to its field, and its collapsed parents are marked',/expected num/.test((colF.querySelector('.pf-msg.v')||{}).textContent||'')&&f10('light_controls').querySelector('.pf-nest').classList.contains('has-err')&&pn.querySelector('[data-sec="lights"]').classList.contains('has-err'));
+  S10.undo();
+  // element: section / group suggestions, tile sub-form, cover control
+  S10._setRoom(0,false,'toolbar');S10._select('zone','z1','outline');S10._propsOpen.add('visibility');S10._syncProps(true);
+  check('Section / Group fields suggest the ids in the card',[...f10('section').querySelectorAll('datalist option')].map(o=>o.value).join()==='media,heat'&&[...f10('group').querySelectorAll('datalist option')].map(o=>o.value).join()==='grp');
+  const tileName=f10('tile').querySelector('.pf-field[data-key="name"] input');change(tileName,'Main light');
+  check('an element\'s tile is a sub-form; a field creates the object',J(S10.work.rooms[0].zones[0].tile)===J({name:'Main light'}));
+  S10._select('blind','b1','outline');S10._syncProps(true);
+  const ctl=f10('control');ctl.querySelector('input[type="checkbox"]').click();
+  check('cover control: the checkbox turns it on',S10.work.rooms[0].blinds[0].control===true);
+  f10('control').querySelector('[data-act="more-options"]').click();
+  change(f10('control').querySelector('.pf-field[data-key="name"] input'),'Blind');
+  check('…More options gives its form',J(S10.work.rooms[0].blinds[0].control)===J({name:'Blind'}));
+  const pl=f10('control').querySelector('.pf-field[data-key="presets"]');
+  pl.querySelector('[data-act="add-item"]').click();
+  change(f10('control').querySelector('.pf-field[data-key="presets"] .pf-field[data-key="position"] input'),'40');
+  check('…with its presets as a list',J(S10.work.rooms[0].blinds[0].control.presets)===J([{position:40}]));
+  // sections
+  S10.selectCard('section','media');
+  check('a section in the outline opens its form (no element selected)',!S10.sel&&pn.querySelector('.pf-title').textContent==='Media'&&S10._olCard.querySelector('[data-card="section:media"]').getAttribute('aria-current')==='true');
+  check('…listing the elements tagged into it',[...pn.querySelectorAll('.pf-members [data-member]')].map(b=>b.dataset.member).join()==='zone:z1');
+  S10._propsOpen.add('content');S10._syncProps(true);
+  check('…and its tiles as a list',[...f10('tiles').querySelectorAll('.pf-item summary .nl')].map(x=>x.textContent).join()==='TV');
+  change(pn.querySelector('.pf-idrow input'),'tv');
+  const z10=S10.work.rooms[0].zones[0];
+  check('renaming a section takes its references along (element tag, open-section action)',S10.work.sections[0].id==='tv'&&z10.section==='tv'&&z10.tap_action.section==='tv'&&S10.cardSel.id==='tv');
+  pn.querySelector('[data-act="sec-down"]').click();
+  check('sections reorder',S10.work.sections.map(x=>x.id).join()==='heat,tv'&&pn.querySelector('.pf-title').textContent==='Media');
+  pn.querySelector('[data-act="sec-del"]').click();
+  check('…and delete (Undo brings it back)',S10.work.sections.map(x=>x.id).join()==='heat'&&!S10.cardSel&&(S10.undo(),S10.work.sections.length===2));
+  S10._showAddSection();
+  check('Add section offers the editor\'s recipes (one needing a missing card is disabled)',!!S10._sr.querySelector('.layer [data-recipe="media"]')&&S10._sr.querySelector('.layer [data-recipe="electricity"]').disabled);
+  S10._sr.querySelector('.layer [data-recipe="heating"]').click();
+  const ns=S10.work.sections.slice(-1)[0];
+  check('…a recipe makes a section with the editor\'s defaults, selected',ns.id==='heating'&&ns.domain==='climate'&&ns.source==='auto'&&S10.cardSel.id==='heating');
+  // group rename takes element refs
+  S10._setRoom(0,true,'toolbar');S10._select('group','grp','outline');change(pn.querySelector('.pf-idrow input'),'grp2');
+  check('renaming a group updates the elements in it',S10.work.groups[0].id==='grp2'&&S10.work.rooms[0].zones[0].group==='grp2');
+  // nav and card settings
+  S10.selectCard('nav');
+  check('Navigation opens the nav form',pn.querySelector('.pf-title').textContent==='Navigation'&&f10('style').querySelector('select').value==='tabs');
+  const nst=f10('style').querySelector('select');nst.value='';nst.dispatchEvent(new w.Event('change'));
+  check('…clearing its last key removes `nav:` (no empty object left)',!('nav' in S10.work));
+  S10.undo();
+  S10.selectCard('card');S10._propsOpen.add('card');S10._syncProps(true);
+  check('Card settings: card-wide keys (aspect ratio, follow mode…)',!!f10('aspect_ratio')&&!!f10('follow_mode')&&!!f10('base_image'));
+  const fm=f10('follow_mode').querySelector('select');fm.value='manual';fm.dispatchEvent(new w.Event('change'));
+  check('…write to the top level',S10.work.follow_mode==='manual');
+  S10.deselect();
+  check('Escape / deselect leaves the card-level form for the room form',!S10.cardSel&&S10.global===true&&/Global/.test(pn.querySelector('.pf-title').textContent));
+  // weather_overlay: an entity grows into {entity}
+  S10._setRoom(0,false,'toolbar');S10._propsOpen.add('image');S10._syncProps(true);
+  change(f10('weather_overlay').querySelector('input'),'weather.home');
+  f10('weather_overlay').querySelector('[data-act="more-options"]').click();
+  check('an entity value grows into {entity: …} with More options',J(S10.work.rooms[0].weather_overlay)===J({entity:'weather.home'}));
+  S10.requestClose();if(layerBtn(S10,'discard'))layerBtn(S10,'discard').click();E10.remove();
 
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);

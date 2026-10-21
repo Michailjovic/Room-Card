@@ -30,7 +30,13 @@
  * picker, icon picker (Home Assistant's MDI list), colour, length, action builder and YAML for
  * structured keys; validation pinned to fields, outline rows and the canvas. The classic editor
  * stays one tab away (All settings).
+ *
+ * Phase 4b (v6.45.0) — sub-forms and list editors for every `obj:` / `list:` key the schema
+ * describes (section tiles, light controls, nav chips, the overview page, cover controls…); the
+ * room form grows to navigation, overview, image & weather, light controls and cards; card-level
+ * forms in the outline: Card settings, Navigation and Sections (add from the editor's recipes,
+ * reorder, delete, rename with their references, the elements tagged into each).
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.44.0';
+const ROC_STUDIO_VERSION='6.45.0';

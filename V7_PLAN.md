@@ -113,11 +113,11 @@ its own and field-tested before the next one starts.
 | **1** | **Foundation** (§5.1): source split into modules + bundler producing the same single viewer file (+ lazy studio chunk per S2); config **schema registry** (§5.2) covering every existing key; HA-in-the-loop tier (S4) in CI; compat harness extended with the author's config. No user-visible change. | L | 6.40.0 |
 | **2** | **Studio shell** (§5.3–5.5): full-screen workspace, live canvas (the card rendered directly), today's editor tabs hosted unchanged in a side panel, both save paths, undo/redo, unsaved-changes guard, *Open Studio* button in HA's editor and in card edit mode. Opt-in; HA editor untouched. | L | 6.41.0 |
 | **3** | **Canvas editing** (§5.6): select on canvas → inspector, drag/resize/rotate, snap guides (old E4), draw-to-create for every element type (E3), search/filter (E5), inline save errors (E6), multi-select, copy/paste of elements and whole rooms, keyboard shortcuts, touch gestures. Split in two releases: **3a** (selection, outline + search, add on the image, copy/paste/delete, snap guides, Edit mode retired) and **3b** (multi-select, align/distribute, layers, room copy). | L | 6.42.0–6.43.0 |
-| **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. | XL | 6.44.0–6.45.0 |
-| **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. | L | 6.46.0 |
-| **6** | **Bindings** (§6.4): lights (colour + brightness glow), floor heating, temperature tint, humidity, presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.47.0 |
-| **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.48.0 |
-| **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.49.0 |
+| **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. Split in three releases: **4a** (the Properties form, pickers, action builder, pinned validation), **4b** (sub-forms and lists: sections/tiles, light controls, nav, overview, cover control; card-level forms) and **4c** (the new-card wizard). | XL | 6.44.0–6.46.0 |
+| **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. | L | 6.47.0 |
+| **6** | **Bindings** (§6.4): lights (colour + brightness glow), floor heating, temperature tint, humidity, presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.48.0 |
+| **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.49.0 |
+| **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
 | **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
 | **10** | **Documentation & launch** (§9): README, guides, generated reference, AI spec + `llms.txt`, PRESETS refresh incl. cockpit + floorplan presets, screenshots/GIFs, live demo, repo cleanup, HACS default submission. | L | **7.0.0** |
 
@@ -629,3 +629,45 @@ companion app (author), and the tablet run of the S5 probe.
   canvas, and the next drag became a native drag of that text. The edit canvas now has
   `user-select:none`, no native `dragstart`, and Shift / Ctrl mousedowns do not select text.
   Playwright is pinned (1.64.1) so local and CI agree.
+
+### Phase 4b — v6.45.0
+
+- **Phase 4 is split again** (2026-10-21): 4b = v6.45.0 (the forms), 4c = v6.46.0 (the new-card
+  wizard). Phases 5–8 move one minor version later (table in §4).
+- **Sub-forms and lists are generic.** `rsKeyField` picks, for a union, the alternative that fits
+  the value:
+  - a simple widget;
+  - `obj:X` → `rsObjForm` (a collapsible sub-form of schema X);
+  - `list:X` → `rsListWidget` (rows with add / move / remove, each a sub-form);
+  - `list:str|len` → `rsScalarList`;
+  - anything else → YAML.
+
+  So everything the schema describes became a form at once: section tiles, light controls,
+  nav chips, the overview page, cover controls, tile quick actions, brightness models…
+  - Schemas built on conditions (`cond`, `condVal`, `baseImageCond`, `filterCond`) and the
+    card-holding `companion` / `ovSideCard` stay YAML (`RS_YAML_SCHEMAS`).
+  - Depth is capped at 4.
+  - Each sub-form can be switched to YAML and back (per path, `_yamlKeys`).
+- **Values that grow:** `true` → `{}` (still on: `control`, `overview`, `parallax` are read as
+  truthy, checked in the card) and an entity → `{entity}` / `{default}` via "More options…";
+  "Use a single value" goes back.
+- **Scalar items** (`lightEntity`, `navChip`, `ovChip` have `scalar:`) stay plain strings until a
+  second key is set, and go back to a string when only the entity is left (KEEP).
+- **Inherited room keys:**
+  - a simple field shows the shared value as its placeholder;
+  - a structured one (e.g. `light_controls` set in Global) shows "uses the shared setting" with
+    *Edit it in Global* / *Give this room its own copy*. It never silently writes to the shared
+    defaults from a room.
+- **Card-level targets** (`cardSel`): *Card settings* (top-level keys + room defaults),
+  *Navigation* (`nav`, removed again when emptied), and *Sections*.
+  - Sections can be added blank or from the editor's own recipes (`_recipeDef` on the hosted
+    editor), reordered and deleted.
+  - Renaming a section carries its references along (elements' `section:`, `open-section`
+    actions, the overview dock's `sections:`). Renaming a group carries the `group:` keys along.
+  - A section's form lists the elements tagged into it, across rooms.
+- **Suggestions, never invented:** Section / Group / overview `rooms` / dock `sections` suggest the
+  ids in the config; `area_match` suggests Home Assistant's areas; a section's `domain` suggests
+  the domains of the entities HA has. All are datalists, so other values can still be typed.
+- **Pinned validation goes deep:** findings are matched by path below the target
+  (`light_controls.entities[1].entity`). Collapsed sections, sub-forms and list rows get a dot when
+  something inside has a problem (`rsMarkNests`).

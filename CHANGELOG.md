@@ -1,6 +1,53 @@
 # Changelog
 
-## [6.44.0] - unreleased
+## [6.45.0] - unreleased
+
+### Studio: forms for everything the schema describes (V7_PLAN.md Phase 4b)
+
+- **Sub-forms and lists.** Every option that holds an object or a list now has its own form:
+  - an object → a collapsible sub-form (e.g. an element's `tile`, a blind's cover `control`, the
+    overview page, `brightness_model`);
+  - a list → one row per item with **add, move up / down, remove** (section tiles and their quick
+    actions, light-control entities, nav chips, cover presets, overview header items…);
+  - a list of plain values (an overview's `rooms`, the dock's `sections`, `area_match`) → one
+    field per value.
+
+  Any sub-form can be switched to **YAML** and back. Condition lists and embedded card configs
+  stay YAML.
+- **Values that grow.** A setting that is on/off or an entity can take more options:
+  - `control: true` → its options (placement, presets…);
+  - `overview: true` → the overview page layout;
+  - `weather_overlay: weather.home` → `{entity: …}` with effect, opacity…
+
+  *More options…* opens them; *Use a single value* goes back.
+- **The room form** now covers navigation (chips, mini preview), the overview page and the room's
+  overview tile, image & weather (weather overlay, brightness model, image / filter conditions),
+  light controls, the cards above / below and the tap on the image.
+- **Settings a room inherits** from Global:
+  - a simple field shows the shared value as its placeholder;
+  - light controls (or another structured setting) set only in Global say so, with *Edit it in
+    Global* and *Give this room its own copy*.
+- **Card in the outline** — new card-level forms:
+  - **Card settings:** aspect ratio, image fit, follow mode, URL sync, zoom, parallax, haptics,
+    hold feedback… plus the room defaults.
+  - **Navigation:** style, position, live previews, wheel, chips, cards, mini previews.
+  - **Sections:**
+    - add one blank or from the editor's recipes (appliances, cleaning, media, heating, covers,
+      electricity, weather);
+    - reorder or delete;
+    - each section's form lists the elements tagged into it, across rooms (a click selects one).
+- **Rename with references.** Renaming a section updates the elements tagged into it, its
+  `open-section` actions and the overview dock. Renaming a group updates the elements in it.
+- **Suggestions from the config and from Home Assistant:**
+  - *Section* and *Group* fields suggest the ids the card has;
+  - an overview's `rooms` suggests the room ids;
+  - `area_match` suggests Home Assistant's areas.
+
+  Any other value can still be typed.
+- **Validation inside sub-forms:** the message sits under the field deep inside. Collapsed
+  sections, sub-forms and list rows get a dot when something inside has a problem.
+
+## [6.44.0] - 2026-10-21
 
 ### Studio: the Properties form (V7_PLAN.md Phase 4a)
 

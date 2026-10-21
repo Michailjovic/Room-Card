@@ -386,6 +386,61 @@ test('validation is pinned: the field says what is wrong and the element is ring
 });
 
 
+// ---- Phase 4b (v6.45.0): sections, lists, card-level forms ---------------------------------------
+test('sections: add one from a recipe, give it a tile with the entity picker, tag a zone, rename it — the tag follows',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.click('dialog.roc-studio >> .ol-cardbox [data-act="sec-add"]');
+  await page.click('dialog.roc-studio >> .layer [data-recipe="media"]');await page.waitForTimeout(200);
+  const a=await page.evaluate(C=>{const S=eval(C);return{sec:S.work.sections,title:S._propsPane.querySelector('.pf-title').textContent,cur:S._olCard.querySelector('[aria-current="true"]').dataset.card};},CUR);
+  expect(a.sec).toEqual([{id:'media',title:'Media',icon:'mdi:cast',placement:'sheet-right',source:'auto',domain:'media_player'}]);
+  expect(a.title).toBe('Media');expect(a.cur).toBe('section:media');
+  await page.click(PF+' details[data-sec="content"] > summary');
+  await page.click(PF+' .pf-field[data-key="tiles"] [data-act="add-item"]');await page.waitForTimeout(150);
+  // the new row opens with the cursor in its first field
+  expect(await page.evaluate(C=>{const S=eval(C);const ae=S._sr.activeElement;const it=ae&&ae.closest('.pf-item');return it&&it.dataset.nest+'/'+ae.closest('.pf-field').dataset.key;},CUR)).toBe('n:tiles[0]/id');
+  const ent=PF+' .pf-field[data-key="tiles"] .pf-item .pf-field[data-key="entity"] input';
+  await page.click(ent);await page.keyboard.type('lamp');await page.waitForTimeout(100);
+  await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');await page.waitForTimeout(150);
+  await page.fill(PF+' .pf-field[data-key="tiles"] .pf-item .pf-field[data-key="name"] input','Lamp');await page.keyboard.press('Tab');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.sections[0].tiles,CUR)).toEqual([{entity:'light.x',name:'Lamp'}]);
+  // tag the zone: its Section field suggests the section ids
+  const z=await centreOf(page,'[data-z="z1"]');await page.mouse.click(z.x,z.y);await page.waitForTimeout(200);
+  await page.click(PF+' details[data-sec="visibility"] > summary');
+  const sf=PF+' .pf-field[data-key="section"] input';
+  expect(await page.evaluate(C=>[...eval(C)._propsPane.querySelectorAll('.pf-field[data-key="section"] datalist option')].map(o=>o.value),CUR)).toEqual(['media']);
+  await page.fill(sf,'media');await page.keyboard.press('Tab');await page.waitForTimeout(150);
+  // back to the section: the zone is listed in it; renaming takes the tag along
+  await page.click('dialog.roc-studio >> .ol-cardbox [data-card="section:media"]');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>[...eval(C)._propsPane.querySelectorAll('[data-member]')].map(b=>b.dataset.member),CUR)).toEqual(['zone:z1']);
+  await page.fill(PF+' .pf-idrow input','tv');await page.keyboard.press('Tab');await page.waitForTimeout(200);
+  expect(await page.evaluate(C=>{const S=eval(C);return[S.work.sections[0].id,S.work.rooms[0].zones[0].section,S._olCard.querySelector('[aria-current="true"]').dataset.card];},CUR)).toEqual(['tv','tv','section:tv']);
+  // a member chip jumps to the element
+  await page.click(PF+' [data-member="zone:z1"]');await page.waitForTimeout(200);
+  expect(await page.evaluate(C=>{const S=eval(C);return{sel:S.sel,cv:S._card._selectedTM&&S._card._selectedTM.id};},CUR)).toEqual({sel:{type:'zone',id:'z1'},cv:'z1'});
+});
+
+test('light controls as a list: a plain entity stays a string until it gets a name; Navigation and Card settings are forms',async({page})=>{
+  await page.goto(base+'/');await ready(page);await openFromCard(page);
+  await page.evaluate(C=>{const S=eval(C);const c=JSON.parse(JSON.stringify(S.work));c.rooms[0].light_controls={entities:['light.x']};S._commit(c,'test');},CUR);
+  await page.click('dialog.roc-studio >> [data-act="lights"]');await page.waitForTimeout(200);
+  const lc=PF+' .pf-field[data-key="light_controls"]';
+  await page.click(lc+' .pf-nest > summary');
+  await page.click(lc+' .pf-item > summary');
+  await page.fill(lc+' .pf-item .pf-field[data-key="name"] input','Ceiling');await page.keyboard.press('Tab');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.rooms[0].light_controls.entities,CUR)).toEqual([{entity:'light.x',name:'Ceiling'}]);
+  await page.fill(lc+' .pf-item .pf-field[data-key="name"] input','');await page.keyboard.press('Tab');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.rooms[0].light_controls.entities,CUR)).toEqual(['light.x']);
+  await page.click('dialog.roc-studio >> .ol-cardbox [data-card="nav"]');await page.waitForTimeout(150);
+  await page.selectOption(PF+' .pf-field[data-key="style"] select','tabs');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.nav,CUR)).toEqual({style:'tabs'});
+  await page.click('dialog.roc-studio >> .ol-cardbox [data-card="card"]');await page.waitForTimeout(150);
+  await page.click(PF+' details[data-sec="card"] > summary');
+  await page.selectOption(PF+' .pf-field[data-key="follow_mode"] select','manual');await page.waitForTimeout(150);
+  expect(await page.evaluate(C=>eval(C).work.follow_mode,CUR)).toBe('manual');
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(C=>{const S=eval(C);return{cs:S.cardSel,title:S._propsPane.querySelector('.pf-title').textContent};},CUR)).toEqual({cs:null,title:'Living'});
+});
+
 test('screenshot: the Properties form (visual check, not an assertion)',async({page})=>{
   await page.goto(base+'/');await ready(page);await openFromCard(page);
   await page.evaluate(C=>{const S=eval(C);const c=JSON.parse(JSON.stringify(S.work));c.rooms[0].gauges[0].height='tall';S._commit(c,'test');S._select('gauge','g1','outline');S._propsOpen.add('actions');S._syncProps(true);},CUR);

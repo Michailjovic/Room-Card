@@ -66,8 +66,19 @@ const ROC_STUDIO_STR={en:{
   g_main:'General',g_position:'Position & size',g_actions:'Actions',g_visibility:'Visibility',g_advanced:'Advanced (YAML)',g_room_more:'More (YAML)',
   adv_hint:'Profile overrides (portrait / landscape) and keys the form does not list — kept exactly as they are',
   adv_room_hint:'Room keys the schema does not know — kept exactly as they are',
-  room_more_hint:'The overview tile, navigation chips, weather, the lighting model and the room\'s cards are in All settings for now.',
+  room_more_hint:'The room\'s elements are on the canvas and in the outline; the card layout (rows, columns, regions) is in All settings.',
   mark_err:'Has errors',mark_warn:'Has warnings',
+  // Phase 4b (v6.45.0) — card-level forms, sub-forms and lists
+  card_h:'Card',card_settings:'Card settings',nav_form:'Navigation',sections_h:'Sections',t_section:'Section',
+  sec_add:'Add a section',sec_add_body:'A section is a panel that opens over the card (appliances, media, heating…). Start blank or from a recipe — the same ones as the editor\'s.',
+  sec_blank:'Blank',sec_needs:'Needs its card to be installed',sec_del:'Delete this section (Undo brings it back)',
+  sec_members:'In this section: {n}',sec_members_none:'Nothing yet — set an element\'s Section field (Visibility) to this id.',
+  move_up:'Move up',move_down:'Move down',remove:'Remove',add_item:'Add',add_value:'Add…',
+  n_options:'Options ({n})',as_yaml:'Edit as YAML',as_form:'Edit as a form',more_options:'More options…',other_keys:'Other keys (kept as they are)',
+  shared_ph:'shared: {v}',inh_shared:'Uses the shared setting from Global.',inh_edit:'Edit it in Global',inh_copy:'Give this room its own copy',
+  g_defaults:'Room defaults',g_image:'Image & weather',g_lights:'Light controls',g_cards:'Cards above / below',g_room_tap:'Tap on the image',
+  g_room_nav:'Navigation',g_overview:'Overview page',g_card:'Card',g_panel:'Panel',g_content:'Content',g_behaviour:'Behaviour',
+  g_nav_chips:'Chips',g_nav_cards:'Cards in the nav',g_nav_mini:'Mini previews',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;

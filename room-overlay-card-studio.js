@@ -30,10 +30,16 @@
  * picker, icon picker (Home Assistant's MDI list), colour, length, action builder and YAML for
  * structured keys; validation pinned to fields, outline rows and the canvas. The classic editor
  * stays one tab away (All settings).
+ *
+ * Phase 4b (v6.45.0) — sub-forms and list editors for every `obj:` / `list:` key the schema
+ * describes (section tiles, light controls, nav chips, the overview page, cover controls…); the
+ * room form grows to navigation, overview, image & weather, light controls and cards; card-level
+ * forms in the outline: Card settings, Navigation and Sections (add from the editor's recipes,
+ * reorder, delete, rename with their references, the elements tagged into each).
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.44.0';
+const ROC_STUDIO_VERSION='6.45.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -370,8 +376,19 @@ const ROC_STUDIO_STR={en:{
   g_main:'General',g_position:'Position & size',g_actions:'Actions',g_visibility:'Visibility',g_advanced:'Advanced (YAML)',g_room_more:'More (YAML)',
   adv_hint:'Profile overrides (portrait / landscape) and keys the form does not list — kept exactly as they are',
   adv_room_hint:'Room keys the schema does not know — kept exactly as they are',
-  room_more_hint:'The overview tile, navigation chips, weather, the lighting model and the room\'s cards are in All settings for now.',
+  room_more_hint:'The room\'s elements are on the canvas and in the outline; the card layout (rows, columns, regions) is in All settings.',
   mark_err:'Has errors',mark_warn:'Has warnings',
+  // Phase 4b (v6.45.0) — card-level forms, sub-forms and lists
+  card_h:'Card',card_settings:'Card settings',nav_form:'Navigation',sections_h:'Sections',t_section:'Section',
+  sec_add:'Add a section',sec_add_body:'A section is a panel that opens over the card (appliances, media, heating…). Start blank or from a recipe — the same ones as the editor\'s.',
+  sec_blank:'Blank',sec_needs:'Needs its card to be installed',sec_del:'Delete this section (Undo brings it back)',
+  sec_members:'In this section: {n}',sec_members_none:'Nothing yet — set an element\'s Section field (Visibility) to this id.',
+  move_up:'Move up',move_down:'Move down',remove:'Remove',add_item:'Add',add_value:'Add…',
+  n_options:'Options ({n})',as_yaml:'Edit as YAML',as_form:'Edit as a form',more_options:'More options…',other_keys:'Other keys (kept as they are)',
+  shared_ph:'shared: {v}',inh_shared:'Uses the shared setting from Global.',inh_edit:'Edit it in Global',inh_copy:'Give this room its own copy',
+  g_defaults:'Room defaults',g_image:'Image & weather',g_lights:'Light controls',g_cards:'Cards above / below',g_room_tap:'Tap on the image',
+  g_room_nav:'Navigation',g_overview:'Overview page',g_card:'Card',g_panel:'Panel',g_content:'Content',g_behaviour:'Behaviour',
+  g_nav_chips:'Chips',g_nav_cards:'Cards in the nav',g_nav_mini:'Mini previews',
 }};
 function rocT(lang,key,vars){
   const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;
@@ -556,6 +573,40 @@ textarea.pf-in{height:auto;padding:6px 8px;resize:vertical;font:12px/1.45 ui-mon
 .rs-opt .o-st{grid-column:2;grid-row:1/span 2;align-self:center;font-size:11px;color:var(--rs-txt2);max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .rs-opt.none{color:var(--rs-txt2);cursor:default;}
 .ol-item .vd{width:7px;height:7px;border-radius:50%;flex:none;margin-left:4px;}
+.ol-cardbox{margin-bottom:4px;}
+.ol-card .nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ol-card .sub{margin-left:auto;font-size:11px;color:var(--rs-txt2);}
+.ol-static{cursor:default;}.ol-static:hover{background:none;}
+.pf-hbtns{margin-left:auto;display:inline-flex;gap:4px;flex:none;}
+.pf-hbtns .btn{padding:0 6px;}
+.pf-nest{border:1px solid var(--rs-line);border-radius:8px;background:var(--rs-panel);}
+.pf-nest>summary{cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:8px;list-style:none;font-size:13px;min-height:32px;}
+.pf-nest>summary::-webkit-details-marker{display:none;}
+.pf-nest>summary::before{content:'';width:0;height:0;border:4px solid transparent;border-left:6px solid var(--rs-txt2);margin-right:-2px;transition:transform .15s;flex:none;}
+.pf-nest[open]>summary::before{transform:rotate(90deg) translateX(2px);}
+.pf-nest>summary .nl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pf-nest>summary .n{margin-left:auto;font-size:11px;color:var(--rs-txt2);}
+.pf-subgrid{padding:6px 10px 10px;}
+.pf-list,.pf-slist{display:flex;flex-direction:column;gap:6px;}
+.pf-item>summary .pf-tools{margin-left:auto;display:inline-flex;gap:2px;}
+.pf-ib{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;border-radius:6px;cursor:pointer;color:var(--rs-txt2);flex:none;}
+.pf-ib:hover:not([disabled]){background:var(--rs-sub);color:var(--primary-text-color,#e8eaed);}
+.pf-ib[disabled]{opacity:.3;cursor:default;}
+.pf-ib ha-icon{--mdc-icon-size:16px;}
+.pf-add{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--rs-line);background:none;border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--rs-acc);font-size:12px;}
+.pf-add ha-icon{--mdc-icon-size:16px;}
+.pf-srow{display:flex;gap:4px;align-items:center;}
+.pf-srow>.pf-in,.pf-srow>.pf-dl,.pf-srow>.pf-ent,.pf-srow>.pf-url{flex:1;min-width:0;}
+.pf-dl{width:100%;}
+.pf-inh{font-size:12px;color:var(--rs-txt2);padding:6px 8px;border:1px dashed var(--rs-line);border-radius:6px;}
+.pf-members{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:2px;}
+.pf-members .pf-l{width:100%;}
+.pf-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--rs-line);background:var(--rs-bg);border-radius:12px;padding:2px 8px;cursor:pointer;font-size:12px;color:inherit;}
+.pf-chip:hover{border-color:var(--rs-acc);}
+.pf-chip ha-icon{--mdc-icon-size:14px;}
+details.has-err>summary::after,details.has-warn>summary::after{content:'';width:7px;height:7px;border-radius:50%;flex:none;order:9;}
+details.has-err>summary::after{background:var(--rs-err);}
+details.has-warn>summary::after{background:var(--rs-warn);}
 .ol-el .vd{order:3;}
 .vd.error{background:var(--rs-err);} .vd.warn{background:var(--rs-warn);}
 .status{grid-area:status;display:flex;align-items:center;gap:14px;padding:6px 12px;font-size:12px;color:var(--rs-txt2);background:var(--rs-panel);border-top:1px solid var(--rs-line);flex-wrap:wrap;}
@@ -863,8 +914,8 @@ function rsPicker(input,getItems,onPick,render){
   return wrap;
 }
 // entity picker: search id / friendly name / area, preferred domains first, live state shown
-function rsEntityInput(ctx,value,domains,onChange){
-  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:'light.living_room'});
+function rsEntityInput(ctx,value,domains,onChange,ph){
+  const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false',placeholder:ph||'light.living_room'});
   inp.value=value||'';
   const hint=rsEl('div',{class:'pf-sub'});
   const showHint=function(){
@@ -921,14 +972,14 @@ function rsSimpleWidget(ctx,a,value,onChange,o){
   }
   if(a.indexOf('enum:')===0){
     const sel=rsEl('select',{class:'pf-in'});
-    sel.appendChild(rsEl('option',{value:'',text:o.dflt!==undefined?'— '+ctx.t('dflt')+' ('+o.dflt+') —':'— '+ctx.t('not_set')+' —'}));
+    sel.appendChild(rsEl('option',{value:'',text:o.ph?'— '+o.ph+' —':(o.dflt!==undefined?'— '+ctx.t('dflt')+' ('+o.dflt+') —':'— '+ctx.t('not_set')+' —')}));
     a.slice(5).split('|').forEach(function(v){sel.appendChild(rsEl('option',{value:v,text:v===''?'(empty)':v}));});
     if(value!==undefined&&value!==null&&a.slice(5).split('|').indexOf(String(value))<0)sel.appendChild(rsEl('option',{value:String(value),text:String(value)+' ?'}));
     sel.value=value==null?'':String(value);
     sel.addEventListener('change',function(){onChange(sel.value===''?undefined:sel.value);});
     return sel;
   }
-  if(a==='entity')return rsEntityInput(ctx,value,o.domains,onChange);
+  if(a==='entity')return rsEntityInput(ctx,value,o.domains,onChange,o.ph);
   if(a==='color'){
     const box=rsEl('div',{class:'pf-color'});
     const sw=rsEl('input',{type:'color'});
@@ -951,7 +1002,18 @@ function rsSimpleWidget(ctx,a,value,onChange,o){
   if(a==='num')inp.step='any';
   if(a==='len')inp.placeholder='10% · 24px';
   if(a==='url')inp.placeholder='/local/…';
+  if(o.ph)inp.placeholder=o.ph; // the value a room inherits from the shared defaults
   inp.value=value==null?'':String(value);
+  // suggestions grounded in the config or Home Assistant (section / group / room ids, areas…);
+  // any other value can still be typed
+  if(o.choices&&o.choices.length&&a!=='num'){
+    const dl=rsEl('datalist',{id:'rs-dl-'+Math.random().toString(36).slice(2)});
+    o.choices.forEach(function(c){dl.appendChild(rsEl('option',{value:c[0],label:c[1]!==c[0]?c[1]:null}));});
+    inp.setAttribute('list',dl.id);
+    const box=rsEl('div',{class:'pf-dl'});box.appendChild(inp);box.appendChild(dl);
+    inp.addEventListener('change',function(){const v=inp.value.trim();if(v===''){onChange(undefined);return;}onChange(v);});
+    return box;
+  }
   inp.addEventListener('change',function(){
     const v=inp.value.trim();
     if(v===''){onChange(undefined);return;}
@@ -1056,98 +1118,287 @@ function rsActionWidget(ctx,value,onChange,o){
   return box;
 }
 
+
+// ---- nested objects and lists (Phase 4b, v6.45.0) -------------------------------------------------
+// `obj:X` and `list:X` keys whose schema X the registry knows get a sub-form / a list editor, so
+// sections and their tiles, the nav, light controls, the overview page, cover controls… are forms
+// too. Schemas built on conditions stay YAML (a form would not be simpler). Depth is capped.
+const RS_YAML_SCHEMAS=['cond','condVal','baseImageCond','filterCond','companion','ovSideCard'];
+const RS_MAX_DEPTH=4;
+function rsFormSchema(name){const S=RocSchema.ROC_SCHEMA;return(name&&S[name]&&RS_YAML_SCHEMAS.indexOf(name)<0)?S[name]:null;}
+function rsIsObj(v){return!!v&&typeof v==='object'&&!Array.isArray(v);}
+function rsCount(v){return rsIsObj(v)?Object.keys(v).length:(Array.isArray(v)?v.length:0);}
+// a short name for a list item: its title / name / id / entity…
+function rsItemLabel(it,i){
+  if(it==null||it==='')return'#'+(i+1);
+  if(typeof it!=='object')return String(it);
+  const v=it.title||it.name||it.id||it.entity||(it.pill&&(it.pill.entity||it.pill.text))||(it.card&&it.card.type)||it.type||(it.position!=null?String(it.position)+' %':'')||(it.value!=null?String(it.value):'');
+  return v?String(v):'#'+(i+1);
+}
+function rsNest(ctx,label,openKey,count,body,extra){
+  const d=rsEl('details',{class:'pf-nest','data-nest':openKey});
+  if(ctx.open.has(openKey))d.open=true;
+  d.addEventListener('toggle',function(){if(d.open)ctx.open.add(openKey);else ctx.open.delete(openKey);});
+  const sm=rsEl('summary',null,[rsEl('span',{class:'nl',text:label}),rsEl('span',{class:'n',text:count?String(count):''})]);
+  (extra||[]).forEach(function(x){sm.appendChild(x);});
+  d.appendChild(sm);d.appendChild(body);
+  return d;
+}
+// the fields of one object of schema `name`; keys the schema does not know stay (YAML box)
+function rsObjForm(ctx,name,obj,onChange,o){
+  const sch=rsFormSchema(name);
+  let cur=rsIsObj(obj)?obj:{};
+  const grid=rsEl('div',{class:'pf-grid pf-subgrid'});
+  const set=function(k,v){const n=Object.assign({},cur);if(v===undefined)delete n[k];else n[k]=v;cur=n;onChange(Object.keys(n).length?n:undefined);};
+  Object.keys(sch.keys).forEach(function(k){
+    const def=sch.keys[k];if(def.legacy&&cur[k]===undefined)return;
+    grid.appendChild(rsKeyField(ctx,k,def,cur[k],function(v){set(k,v);},{depth:o.depth,rel:o.rel+'.'+k,item:cur,schema:name}));
+  });
+  const other={};Object.keys(cur).forEach(function(k){if(!sch.keys[k])other[k]=cur[k];});
+  if(Object.keys(other).length){
+    const ob=rsFieldBox(ctx.t('other_keys'),'_other',true);
+    ob.appendChild(rsYamlWidget(ctx,other,function(v){
+      if(v===undefined)v={};if(!rsIsObj(v))return;
+      const n=Object.assign({},cur);Object.keys(other).forEach(function(k){if(!(k in v))delete n[k];});Object.assign(n,v);cur=n;onChange(n);
+    },2));
+    grid.appendChild(ob);
+  }
+  return grid;
+}
+// a list of objects of schema `name`: one collapsible row per item, add / move / remove.
+// A schema with `scalar` (light entities, nav chips…) keeps a plain string item a string.
+function rsListWidget(ctx,name,arr,onChange,o){
+  const sch=rsFormSchema(name);
+  let cur=Array.isArray(arr)?arr:[];
+  const box=rsEl('div',{class:'pf-list'});
+  const sk=sch.scalar;
+  const commit=function(n,rebuild){cur=n;onChange(n.length?n:undefined);if(rebuild)ctx.rerender();};
+  cur.forEach(function(it,i){
+    const rel=o.rel+'['+i+']';
+    const scalar=sk&&(it==null||typeof it!=='object');
+    const obj=scalar?(function(){const x={};if(it!=null&&it!=='')x[sk]=it;return x;})():it;
+    const btn=function(icon,act,title,fn,dis){return rsEl('button',{type:'button',class:'pf-ib','data-act':act,title:title,'aria-label':title,disabled:dis?true:null,onclick:function(e){e.preventDefault();e.stopPropagation();fn();}},[rsIcon(icon)]);};
+    const tools=rsEl('span',{class:'pf-tools'},[
+      btn('mdi:arrow-up','up',ctx.t('move_up'),function(){const n=cur.slice();n.splice(i-1,0,n.splice(i,1)[0]);commit(n,true);},i===0),
+      btn('mdi:arrow-down','down',ctx.t('move_down'),function(){const n=cur.slice();n.splice(i+1,0,n.splice(i,1)[0]);commit(n,true);},i===cur.length-1),
+      btn('mdi:delete-outline','remove',ctx.t('remove'),function(){const n=cur.slice();n.splice(i,1);commit(n,true);}),
+    ]);
+    let body;
+    if(!rsIsObj(obj)||o.depth>=RS_MAX_DEPTH)body=rsYamlWidget(ctx,it,function(v){const n=cur.slice();n[i]=v;commit(n);},3);
+    else body=rsObjForm(ctx,name,obj,function(v){
+      let nv=v===undefined?{}:v;
+      if(scalar&&Object.keys(nv).every(function(k){return k===sk;}))nv=nv[sk]!==undefined?nv[sk]:''; // still just the entity: stays a plain string
+      const n=cur.slice();n[i]=nv;commit(n);
+    },{depth:o.depth+1,rel:rel});
+    const row=rsNest(ctx,rsItemLabel(obj,i),'n:'+rel,0,body,[tools]);
+    row.classList.add('pf-item');
+    ctx.pin(row,rel,true);
+    box.appendChild(row);
+  });
+  box.appendChild(rsEl('button',{type:'button',class:'pf-add','data-act':'add-item',onclick:function(){
+    const n=cur.slice();n.push(sk&&cur.every(function(x){return x==null||typeof x!=='object';})?'':{});
+    const k='n:'+o.rel+'['+(n.length-1)+']';ctx.open.add(k);if(ctx.focusNest)ctx.focusNest(k);commit(n,true);
+  }},[rsIcon('mdi:plus'),rsEl('span',{text:ctx.t('add_item')})]));
+  return box;
+}
+// a list of plain values (list:str / list:len): one input per value
+function rsScalarList(ctx,a,arr,onChange,o){
+  let cur=Array.isArray(arr)?arr.slice():[];
+  const box=rsEl('div',{class:'pf-slist'});
+  const commit=function(n,rebuild){cur=n;onChange(n.length?n:undefined);if(rebuild)ctx.rerender();};
+  cur.forEach(function(v,i){
+    const w=rsSimpleWidget(ctx,a,v,function(nv){const n=cur.slice();if(nv===undefined)n.splice(i,1);else n[i]=nv;commit(n,nv===undefined);},{choices:o.choices});
+    box.appendChild(rsEl('div',{class:'pf-srow'},[w,rsEl('button',{type:'button',class:'pf-ib','data-act':'remove',title:ctx.t('remove'),'aria-label':ctx.t('remove'),onclick:function(){const n=cur.slice();n.splice(i,1);commit(n,true);}},[rsIcon('mdi:close')])]));
+  });
+  const add=rsSimpleWidget(ctx,a,undefined,function(nv){if(nv===undefined)return;commit(cur.concat([nv]),true);},{choices:o.choices,ph:ctx.t('add_value')});
+  box.appendChild(rsEl('div',{class:'pf-srow add'},[add]));
+  return box;
+}
+
 // ---- one field for a schema key ----------------------------------------------------------------
-// prof:X → X, or {portrait, landscape} of X; unions → the simple alternative unless the value is
-// structured (then YAML, with a switch back)
-function rsKeyField(ctx,key,def,value,onChange,msgs){
+// prof:X → X, or {portrait, landscape} of X; unions pick the alternative that fits the value:
+// a simple widget, a sub-form (obj:X), a list editor (list:X) — anything else is YAML.
+// o: {depth, rel (path below the form's target, for pinned messages), item, inherit, schema}
+function rsKeyField(ctx,key,def,value,onChange,o){
+  o=o||{};const depth=o.depth||0,rel=o.rel||key;
   const t=String(def.t);
   const isProf=t.indexOf('prof:')===0;
   const inner=isProf?t.slice(5):t;
   const alts=rsAlts(inner);
-  const simple=rsPickSimple(alts,isProf&&value&&typeof value==='object'&&!Array.isArray(value)?(value.portrait!==undefined?value.portrait:value.landscape):value);
+  const simple=rsPickSimple(alts,isProf&&rsIsObj(value)?(value.portrait!==undefined?value.portrait:value.landscape):value);
   const hasStruct=alts.some(function(a){return!rsIsSimple(a);});
+  const objName=(alts.find(function(a){return a.indexOf('obj:')===0&&rsFormSchema(a.slice(4));})||'').slice(4);
+  const listName=(alts.find(function(a){return a.indexOf('list:')===0&&rsFormSchema(a.slice(5));})||'').slice(5);
+  const sList=alts.find(function(a){return a==='list:str'||a==='list:len';});
   const iconKey=key==='icon'&&simple==='str';
-  const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey};
+  const choices=ctx.choices?ctx.choices(key,o.schema):null;
+  const inh=o.inherit;
+  const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey,choices:choices,
+    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:String(inh)}):null};
+  const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
+  const canDeep=depth<RS_MAX_DEPTH;
+  const asObj=!yamlMode&&canDeep&&objName&&(rsIsObj(value)||(value===undefined&&!simple));
+  const asList=!yamlMode&&canDeep&&!isProf&&listName&&(Array.isArray(value)||(value===undefined&&!simple));
+  const asSList=!yamlMode&&!isProf&&sList&&!listName&&(value===undefined?!simple:(Array.isArray(value)&&value.every(function(x){return x==null||typeof x!=='object';})));
   const isAct=t==='action';
-  const wide=isAct||!simple||simple==='tmpl'||simple==='entity'||simple==='url'||iconKey||(hasStruct&&(Array.isArray(value)||(value&&typeof value==='object'&&!isProf)));
-  const box=rsFieldBox(ctx.labels[key]||rsLabel(key),key,wide);
-  if(isAct){box.appendChild(rsActionWidget(ctx,value,onChange,{entity:ctx.item&&ctx.item.entity}));rsMsgs(box,msgs);return box;}
-  const perProf=isProf&&value&&typeof value==='object'&&!Array.isArray(value)&&(('portrait'in value)||('landscape'in value));
+  const label=ctx.labels[key]||rsLabel(key);
+  const wide=isAct||asObj||asList||asSList||!simple||simple==='tmpl'||simple==='entity'||simple==='url'||iconKey||(hasStruct&&(Array.isArray(value)||(rsIsObj(value)&&!isProf)));
+  const box=rsFieldBox(label,key,wide);
+  const links=rsEl('div',{class:'pf-links'});
+  const link=function(txt,fn,act){links.appendChild(rsEl('button',{type:'button',class:'pf-link','data-act':act||null,text:txt,onclick:fn}));};
+  const done=function(exact){if(links.childNodes.length)box.appendChild(links);ctx.pin(box,rel,exact);return box;};
+  // a room that only inherits a structured value: say so, edit it in Global or copy it here
+  if(value===undefined&&inh!==undefined&&inh!==null&&typeof inh==='object'){
+    box.appendChild(rsEl('div',{class:'pf-inh'},[rsEl('span',{text:ctx.t('inh_shared')})]));
+    link(ctx.t('inh_edit'),function(){ctx.goGlobal();},'inh-edit');
+    link(ctx.t('inh_copy'),function(){onChange(JSON.parse(rsJ(inh)));ctx.open.add('n:'+rel);ctx.rerender();},'inh-copy');
+    return done(false);
+  }
+  if(isAct){box.appendChild(rsActionWidget(ctx,value,onChange,{entity:o.item&&o.item.entity}));return done(false);}
+  const perProf=isProf&&rsIsObj(value)&&(('portrait'in value)||('landscape'in value));
   if(perProf){
     ['portrait','landscape'].forEach(function(p){
       const row=rsEl('div',{class:'pf-prof'});row.appendChild(rsEl('span',{class:'pf-tag',text:p}));
       row.appendChild(simple?rsSimpleWidget(ctx,simple,value[p],function(v){const n=Object.assign({},value);if(v===undefined)delete n[p];else n[p]=v;value=n;onChange(Object.keys(n).length?n:undefined);},wo):rsYamlWidget(ctx,value[p],function(v){const n=Object.assign({},value);if(v===undefined)delete n[p];else n[p]=v;value=n;onChange(n);}));
       box.appendChild(row);
     });
-    box.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('one_value'),onclick:function(){onChange(value.landscape!==undefined?value.landscape:value.portrait);ctx.rerender();}}));
-    rsMsgs(box,msgs);return box;
+    link(ctx.t('one_value'),function(){onChange(value.landscape!==undefined?value.landscape:value.portrait);ctx.rerender();});
+    return done(false);
   }
+  if(asObj){
+    box.appendChild(rsNest(ctx,ctx.t('n_options',{n:rsCount(value)}),'n:'+rel,0,rsObjForm(ctx,objName,value,onChange,{depth:depth+1,rel:rel})));
+    const sAlt=alts.find(rsIsSimple);
+    if(sAlt)link(ctx.t('as_simple'),function(){onChange(sAlt==='bool'?true:undefined);ctx.rerender();},'as-simple');
+    link(ctx.t('as_yaml'),function(){ctx.yamlKeys.add(rel);ctx.rerender();},'as-yaml');
+    return done(true);
+  }
+  if(asList){
+    box.appendChild(rsListWidget(ctx,listName,value,onChange,{depth:depth+1,rel:rel}));
+    link(ctx.t('as_yaml'),function(){ctx.yamlKeys.add(rel);ctx.rerender();},'as-yaml');
+    return done(true);
+  }
+  if(asSList){box.appendChild(rsScalarList(ctx,sList.slice(5),value,onChange,{choices:choices}));return done(false);}
   const structured=!simple||(value!==undefined&&value!==null&&typeof value==='object');
   if(structured){
     box.appendChild(rsYamlWidget(ctx,value,onChange,Array.isArray(value)&&value.length>2?4:3));
-    if(alts.some(rsIsSimple)&&hasStruct)box.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('as_simple'),onclick:function(){onChange(undefined);ctx.rerender();}}));
-  }else{
-    box.appendChild(rsSimpleWidget(ctx,simple,value,onChange,wo));
-    const links=rsEl('div',{class:'pf-links'});
-    if(isProf)links.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('per_profile'),onclick:function(){onChange({portrait:value,landscape:value});ctx.rerender();}}));
-    if(alts.indexOf('list:condVal')>=0)links.appendChild(rsEl('button',{type:'button',class:'pf-link',text:ctx.t('as_conditions'),onclick:function(){onChange([{condition:{entity:'',state:'on'},value:value===undefined?'':value},{value:value===undefined?'':value}]);ctx.rerender();}}));
-    if(links.childNodes.length)box.appendChild(links);
+    if(yamlMode&&(objName||listName)&&canDeep)link(ctx.t('as_form'),function(){ctx.yamlKeys.delete(rel);ctx.rerender();},'as-form');
+    else if(alts.some(rsIsSimple)&&hasStruct)link(ctx.t('as_simple'),function(){onChange(undefined);ctx.rerender();},'as-simple');
+    return done(false);
   }
-  rsMsgs(box,msgs);
-  return box;
+  // a value that can grow into an object: show / hide "More options…" as soon as it is set / cleared
+  const grows=objName&&canDeep&&(simple==='bool'||simple==='entity');
+  box.appendChild(rsSimpleWidget(ctx,simple,value,grows?function(v){onChange(v);if((value===undefined||value===false)!==(v===undefined||v===false))ctx.rerender();}:onChange,wo));
+  if(isProf)link(ctx.t('per_profile'),function(){onChange({portrait:value,landscape:value});ctx.rerender();});
+  if(alts.indexOf('list:condVal')>=0)link(ctx.t('as_conditions'),function(){onChange([{condition:{entity:'',state:'on'},value:value===undefined?'':value},{value:value===undefined?'':value}]);ctx.rerender();},'as-conditions');
+  // a simple value that can grow into an object: `true` → {} (still on), an entity → {entity: …}
+  if(objName&&canDeep&&value!==undefined){
+    const ok=rsFormSchema(objName).keys;
+    const grow=simple==='bool'&&value===true?{}:(simple==='entity'&&value?(ok.entity?{entity:value}:(ok.default?{default:value}:null)):null);
+    if(grow)link(ctx.t('more_options'),function(){onChange(grow);ctx.open.add('n:'+rel);ctx.rerender();},'more-options');
+  }
+  return done(false);
 }
 
 // ---- the panel -----------------------------------------------------------------------------------
-// target: {kind:'element',type,id} | {kind:'room'} | {kind:'card'} (single-room card / Global)
-// ctx: {t, I, hass, work, scope, item, path, findings, domains, labels, open:Set, inherited, multi,
-//       set(k,v), setRest(keys,obj), rename(id), rerender(), openAll()}
+// target.kind: element | room | card (single-room card, Global, or "Card settings") | section | nav
+// ctx: {t, I, hass, work, scope, item, path, findings, domains, labels, open:Set, yamlKeys:Set,
+//       inherited, multi, shared (the top level a room falls back to), set(k,v), setRest(keys,obj),
+//       rename(id), rerender(), openAll(), goGlobal(), choices(key), select(type,id,roomIdx),
+//       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
+const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
+function rsFormSpec(ctx,target){
+  const S=RocSchema.ROC_SCHEMA;
+  const item=ctx.item;
+  if(target.kind==='element'){
+    const T=RS_TYPES[target.type];
+    const keys=(S[RS_SCHEMA_OF[target.type]]||{keys:{}}).keys;
+    const order=Object.keys(keys);
+    const isIn=function(l){return function(k){return l.indexOf(k)>=0;};};
+    return{keys:keys,title:String(item.id),icon:T.icon,type:ctx.t('t_'+target.type),idRow:true,rest:'element',groups:[
+      ['main',order.filter(function(k){return!isIn(RS_POS_KEYS)(k)&&!isIn(RS_ACT_KEYS)(k)&&!isIn(RS_VIS_KEYS)(k)&&!isIn(RS_PROF_KEYS)(k)&&k!=='id';})],
+      ['position',order.filter(isIn(RS_POS_KEYS))],
+      ['actions',order.filter(isIn(RS_ACT_KEYS))],
+      ['visibility',order.filter(isIn(RS_VIS_KEYS))],
+    ]};
+  }
+  const roomGroups=[
+    ['image',['base_image_conditions','weather_overlay','filter_conditions','brightness_model']],
+    ['lights',['light_controls']],
+    ['cards',['cards_above','cards_below']],
+    ['room_tap',['tap_action']],
+  ];
+  if(target.kind==='room'){
+    return{keys:S.room.keys,title:String(item.name||item.id||''),icon:'mdi:door',type:ctx.t('room'),rest:'room',groups:[['main',RS_ROOM_KEYS],
+      ['room_nav',['nav_hidden','nav_mini','weather_nav_mini','chips']],['overview',['overview','overview_tile']]].concat(roomGroups)};
+  }
+  if(target.kind==='card'){
+    const keys=Object.assign({},S.room.keys,S.card.keys);
+    const multi=Array.isArray(ctx.work.rooms)&&ctx.work.rooms.length>0;
+    const cardKeys=RS_CARD_ONLY.filter(function(k){return multi||['room_entity','room_state_entity','follow_mode','follow_hold','url_sync','weather_nav_mini'].indexOf(k)<0;});
+    return{keys:keys,title:ctx.t(target.settings?'card_settings':(ctx.global?'global':'card_form')),icon:target.settings?'mdi:cog-outline':(ctx.global?'mdi:earth':'mdi:image-outline'),type:'',rest:null,
+      groups:[[multi?'defaults':'main',RS_CARD_KEYS]].concat(roomGroups).concat([['card',cardKeys]])};
+  }
+  if(target.kind==='section'){
+    return{keys:S.section.keys,title:String(item.title||item.id),icon:item.icon&&/^mdi:/.test(item.icon)?item.icon:'mdi:view-dashboard-outline',type:ctx.t('t_section'),idRow:true,rest:'object',groups:[
+      ['main',['title','icon','subtitle']],['panel',['placement','placement_portrait','size','columns','badge','backdrop']],
+      ['content',['source','domain','tiles','card']],['visibility',['visible_template']]]};
+  }
+  if(target.kind==='nav'){
+    return{keys:S.nav.keys,title:ctx.t('nav_form'),icon:'mdi:dots-horizontal-circle-outline',type:'',rest:'object',groups:[
+      ['main',['style','position','live','height','width','mobile_height','rows','cards_position']],['behaviour',['wheel','follow_button','dim_inactive']],
+      ['nav_chips',['chips']],['nav_cards',['cards']],['nav_mini',['mini']]]};
+  }
+  return null;
+}
 function rsBuildProps(ctx,target){
   const root=rsEl('div',{class:'props'});
-  const S=RocSchema.ROC_SCHEMA;
-  let item,schemaKeys,title,icon,groups;
+  const spec=rsFormSpec(ctx,target);
+  if(!spec){root.appendChild(rsEl('div',{class:'pf-empty',text:ctx.t('props_empty')}));return root;}
+  const item=ctx.item,schemaKeys=spec.keys;
   const prefix=ctx.path||'';
   const rel=function(p){return prefix?p.slice(prefix.length+1):p;};
   const under=function(p){return!prefix||p===prefix||p.indexOf(prefix+'.')===0||p.indexOf(prefix+'[')===0;};
-  if(target.kind==='room'||target.kind==='card'){
-    item=ctx.item;schemaKeys=S.room.keys;
-    title=target.kind==='room'?String(item.name||item.id||''):ctx.t(ctx.global?'global':'card_form');
-    icon=target.kind==='room'?'mdi:door':(ctx.global?'mdi:earth':'mdi:image-outline');
-    groups=[['main',target.kind==='room'?RS_ROOM_KEYS:RS_CARD_KEYS]];
-  }else{
-    const T=RS_TYPES[target.type];
-    item=ctx.item;schemaKeys=(S[RS_SCHEMA_OF[target.type]]||{keys:{}}).keys;title=String(item.id);icon=T.icon;
-    const keyOrder=Object.keys(schemaKeys);
-    const isIn=function(l){return function(k){return l.indexOf(k)>=0;};};
-    groups=[
-      ['main',keyOrder.filter(function(k){return!isIn(RS_POS_KEYS)(k)&&!isIn(RS_ACT_KEYS)(k)&&!isIn(RS_VIS_KEYS)(k)&&!isIn(RS_PROF_KEYS)(k)&&k!=='id';})],
-      ['position',keyOrder.filter(isIn(RS_POS_KEYS))],
-      ['actions',keyOrder.filter(isIn(RS_ACT_KEYS))],
-      ['visibility',keyOrder.filter(isIn(RS_VIS_KEYS))],
-    ];
-  }
-  const head=rsEl('div',{class:'pf-head'},[rsIcon(icon),rsEl('span',{class:'pf-title',text:title}),
-    rsEl('span',{class:'pf-type',text:target.kind==='element'?ctx.t('t_'+target.type):(target.kind==='room'?ctx.t('room'):'')})]);
-  if(ctx.inherited)head.appendChild(rsEl('span',{class:'tag',text:ctx.t('inherited')}));
-  head.appendChild(rsEl('button',{type:'button',class:'btn sm pf-open','data-act':'open-all',title:ctx.t('open_all'),'aria-label':ctx.t('open_all'),onclick:function(){ctx.openAll();}},[rsIcon('mdi:open-in-new')]));
-  root.appendChild(head);
-  if(ctx.multi>1)root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t('props_multi',{n:ctx.multi,id:title})}));
   let findings=(ctx.findings||[]).filter(function(f){return under(f.path);});
-  const msgsFor=function(k){return findings.filter(function(f){const r=rel(f.path);return r===k||r.indexOf(k+'.')===0||r.indexOf(k+'[')===0;});};
-  const pinned=[]; // [box, () => msgs]
-  const pin=function(box,fn){pinned.push([box,fn]);rsMsgs(box,fn());return box;};
-  // id (elements): renaming keeps the selection
-  if(target.kind==='element'){
+  // pinned validation: a leaf field shows its own findings and those below it; a sub-form or a
+  // list row (exact) only its own — its fields show the rest
+  const pinned=[];
+  const msgsFor=function(r,exact){return findings.filter(function(f){const x=rel(f.path);return x===r||(!exact&&(x.indexOf(r+'.')===0||x.indexOf(r+'[')===0));});};
+  ctx.pin=function(box,r,exact){const fn=function(){return msgsFor(r,exact);};pinned.push([box,fn]);rsMsgs(box,fn());return box;};
+  const head=rsEl('div',{class:'pf-head'},[rsIcon(spec.icon),rsEl('span',{class:'pf-title',text:spec.title}),rsEl('span',{class:'pf-type',text:spec.type||''})]);
+  if(ctx.inherited)head.appendChild(rsEl('span',{class:'tag',text:ctx.t('inherited')}));
+  const hb=rsEl('span',{class:'pf-hbtns'});
+  const hbtn=function(icon,act,title,fn,dis){hb.appendChild(rsEl('button',{type:'button',class:'btn sm','data-act':act,title:title,'aria-label':title,disabled:dis?true:null,onclick:fn},[rsIcon(icon)]));};
+  if(target.kind==='section'){
+    hbtn('mdi:arrow-up','sec-up',ctx.t('move_up'),function(){ctx.sectionAct('up');},target.idx===0);
+    hbtn('mdi:arrow-down','sec-down',ctx.t('move_down'),function(){ctx.sectionAct('down');},target.idx>=((ctx.work.sections||[]).length-1));
+    hbtn('mdi:delete-outline','sec-del',ctx.t('sec_del'),function(){ctx.sectionAct('delete');});
+  }
+  hbtn('mdi:open-in-new','open-all',ctx.t('open_all'),function(){ctx.openAll();});
+  head.appendChild(hb);
+  root.appendChild(head);
+  if(ctx.multi>1)root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t('props_multi',{n:ctx.multi,id:spec.title})}));
+  // id: renaming keeps the selection (sections and groups take their references along)
+  if(spec.idRow){
     const idBox=rsFieldBox('ID','id',false);
-    const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false'});inp.value=String(item.id);
+    const inp=rsEl('input',{type:'text',class:'pf-in',spellcheck:'false'});inp.value=String(item.id==null?'':item.id);
     inp.addEventListener('change',function(){const v=inp.value.trim();if(v&&v!==String(item.id))ctx.rename(v);else inp.value=String(item.id);});
     idBox.appendChild(inp);
-    root.appendChild(rsEl('div',{class:'pf-grid pf-idrow'},[pin(idBox,function(){return msgsFor('id');})]));
+    root.appendChild(rsEl('div',{class:'pf-grid pf-idrow'},[ctx.pin(idBox,'id',false)]));
+  }
+  // a section: the elements tagged into it, anywhere in the card
+  if(target.kind==='section'&&ctx.members){
+    const m=ctx.members(item.id);
+    const mb=rsEl('div',{class:'pf-members'},[rsEl('span',{class:'pf-l',text:ctx.t('sec_members',{n:m.length})})]);
+    m.forEach(function(x){mb.appendChild(rsEl('button',{type:'button',class:'pf-chip','data-member':x.type+':'+x.id,onclick:function(){ctx.select(x.type,x.id,x.room);}},[rsIcon(RS_TYPES[x.type].icon),rsEl('span',{text:x.id+(x.roomName?' · '+x.roomName:'')})]));});
+    if(!m.length)mb.appendChild(rsEl('span',{class:'pf-sub',text:ctx.t('sec_members_none')}));
+    root.appendChild(mb);
   }
   const shown=new Set(['id']);
-  groups.forEach(function(g){
-    const keys=g[1].filter(function(k){return schemaKeys[k]&&!schemaKeys[k].legacy;});
-    if(!keys.length)return;
+  groups:
+  for(const g of spec.groups){
+    const keys=g[1].filter(function(k){return schemaKeys[k]&&!(schemaKeys[k].legacy&&item[k]===undefined);});
+    if(!keys.length)continue groups;
     const sec=rsEl('details',{class:'pf-sec','data-sec':g[0]});
     if(ctx.open.has(g[0]))sec.open=true;
     sec.addEventListener('toggle',function(){if(sec.open)ctx.open.add(g[0]);else ctx.open.delete(g[0]);});
@@ -1156,38 +1407,49 @@ function rsBuildProps(ctx,target){
     const grid=rsEl('div',{class:'pf-grid'});
     keys.forEach(function(k){
       shown.add(k);
-      grid.appendChild(pin(rsKeyField(ctx,k,schemaKeys[k],item[k],function(v){ctx.set(k,v);},[]),function(){return msgsFor(k);}));
+      const inh=ctx.shared&&schemaKeys[k].room?ctx.shared[k]:undefined;
+      grid.appendChild(rsKeyField(ctx,k,schemaKeys[k],item[k],function(v){ctx.set(k,v);},{depth:0,rel:k,item:item,inherit:item[k]===undefined?inh:undefined,schema:spec.schema}));
     });
     sec.appendChild(grid);
     root.appendChild(sec);
-  });
-  // elements: profile overrides and keys the schema does not know; a room: keys the schema does
-  // not know — YAML, kept exactly as they are (KEEP)
+  }
+  // keys the form does not list: elements — profile overrides and unknown keys; rooms, sections,
+  // the nav — keys the schema does not know. YAML, kept exactly as they are (KEEP)
   const rest={};
-  if(target.kind!=='card')Object.keys(item).forEach(function(k){
+  if(spec.rest)Object.keys(item).forEach(function(k){
     if(shown.has(k))return;
-    if(target.kind==='room'?!schemaKeys[k]:true)rest[k]=item[k];
+    if(spec.rest==='element'||!schemaKeys[k])rest[k]=item[k];
   });
   const nrest=Object.keys(rest).length;
-  if(target.kind==='element'||nrest){
+  if(spec.rest==='element'||nrest){
+    const roomish=spec.rest!=='element';
     const adv=rsEl('details',{class:'pf-sec','data-sec':'advanced'});
     if(ctx.open.has('advanced'))adv.open=true;
     adv.addEventListener('toggle',function(){if(adv.open)ctx.open.add('advanced');else ctx.open.delete('advanced');});
-    adv.appendChild(rsEl('summary',null,[rsEl('span',{text:ctx.t(target.kind==='room'?'g_room_more':'g_advanced')}),rsEl('span',{class:'n',text:nrest?String(nrest):''})]));
+    adv.appendChild(rsEl('summary',null,[rsEl('span',{text:ctx.t(roomish?'g_room_more':'g_advanced')}),rsEl('span',{class:'n',text:nrest?String(nrest):''})]));
     const ab=rsEl('div',{class:'pf-grid'});
-    const advBox=rsFieldBox(ctx.t(target.kind==='room'?'adv_room_hint':'adv_hint'),'_rest',true);
-    advBox.appendChild(rsYamlWidget(ctx,nrest?rest:undefined,function(v){if(v===undefined)v={};if(!v||typeof v!=='object'||Array.isArray(v))return;ctx.setRest(Object.keys(rest),v);},4));
-    ab.appendChild(pin(advBox,function(){return findings.filter(function(f){const r=rel(f.path).split(/[.[]/)[0];return Object.prototype.hasOwnProperty.call(rest,r);});}));
-    adv.appendChild(ab);
+    const advBox=rsFieldBox(ctx.t(roomish?'adv_room_hint':'adv_hint'),'_rest',true);
+    advBox.appendChild(rsYamlWidget(ctx,nrest?rest:undefined,function(v){if(v===undefined)v={};if(!rsIsObj(v))return;ctx.setRest(Object.keys(rest),v);},4));
+    pinned.push([advBox,function(){return findings.filter(function(f){const r=rel(f.path).split(/[.[]/)[0];return Object.prototype.hasOwnProperty.call(rest,r);});}]);
+    rsMsgs(advBox,pinned[pinned.length-1][1]());
+    ab.appendChild(advBox);adv.appendChild(ab);
     root.appendChild(adv);
   }
   if(target.kind==='room')root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t('room_more_hint')}));
-  if(target.kind==='card')root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t(ctx.global?'props_global_hint':'props_card_hint')}));
+  if(target.kind==='card'&&!target.settings)root.appendChild(rsEl('div',{class:'pf-note',text:ctx.t(ctx.global?'props_global_hint':'props_card_hint')}));
   root._rsRefresh=function(all){
     findings=(all||[]).filter(function(f){return under(f.path);});
     pinned.forEach(function(p){rsMsgs(p[0],p[1]());});
+    rsMarkNests(root);
   };
   return root;
+}
+// a collapsed section / sub-form / list row says when something inside it has a problem
+function rsMarkNests(root){
+  root.querySelectorAll('details.pf-nest,details.pf-sec').forEach(function(d){
+    const e=!!d.querySelector('.pf-msg.v.error');
+    d.classList.toggle('has-err',e);d.classList.toggle('has-warn',!e&&!!d.querySelector('.pf-msg.v.warn'));
+  });
 }
 // ---- The studio -----------------------------------------------------------------------------
 // Device frames for the canvas. The card chooses its layout profile from the frame's size (its
@@ -1236,6 +1498,8 @@ class RocStudio{
     this.tab=tab;
     this._propsOpen=new Set(['main','position']); // Properties sections kept open across selections
     this._propsSig='';this._propsKey='';this._propsSkip=false;
+    this.cardSel=null;          // v6.45.0: Card settings / Navigation / a section, shown in Properties
+    this._yamlKeys=new Set();   // sub-forms the user switched to YAML (by path)
   }
   t(k,v){return rocT((this.hass&&this.hass.language||'en').split('-')[0],k,v);}
 
@@ -1324,9 +1588,11 @@ class RocStudio{
     // outline
     this._outline=rsEl('nav',{class:'outline','aria-label':this.t('outline')});
     this._olRooms=rsEl('div');
+    this._olCard=rsEl('div',{class:'ol-cardbox'});
     this._olSearch=rsEl('input',{class:'ol-search',type:'search',placeholder:this.t('search_ph'),'aria-label':this.t('search_ph'),oninput:function(){self.search=self._olSearch.value;self._renderOutlineList();}});
     this._olList=rsEl('div');
     this._outline.appendChild(this._olRooms);
+    this._outline.appendChild(this._olCard);
     this._outline.appendChild(rsEl('div',{class:'ol-h',text:this.t('elements')}));
     this._outline.appendChild(this._olSearch);
     this._outline.appendChild(this._olList);
@@ -1636,6 +1902,7 @@ class RocStudio{
     if(!RS_TYPES[type])return;
     id=String(id);
     if(!this.sel){this._select(type,id,from);return;}
+    this.cardSel=null;
     if(this._isSel(type,id)){
       if(this.sel.type===type&&this.sel.id===id)this.sel=this.multi.shift()||null;
       else this.multi=this.multi.filter(function(x){return!(x.type===type&&x.id===id);});
@@ -1650,7 +1917,7 @@ class RocStudio{
   _select(type,id,from){
     if(!RS_TYPES[type])return;
     const f=this._findItem(type,id);
-    this.multi=[];
+    this.multi=[];this.cardSel=null;
     this.sel={type:type,id:String(id)};
     // an element the room inherits lives in the shared (Global) list — edit it there
     if(f&&f.inherited&&!this.global&&from!=='inspector'&&from!=='drag')this._setRoom(this.roomIdx,true,'select');
@@ -1659,8 +1926,8 @@ class RocStudio{
     this._renderOutlineList();this._renderSelBar();
   }
   deselect(){
-    if(!this.sel)return;
-    this.sel=null;this.multi=[];
+    if(!this.sel&&!this.cardSel)return;
+    this.sel=null;this.multi=[];this.cardSel=null;
     if(this._card&&typeof this._card._rocMark==='function')try{this._card._rocMark([]);}catch(_){}
     if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
     this._renderOutlineList();this._renderSelBar();
@@ -1783,6 +2050,7 @@ class RocStudio{
       (rsOwner(self.work,self.roomIdx,self.global,T.key).list||[]).forEach(function(it){if(it&&it.id!=null)all.push({type:type,id:String(it.id)});});
     });
     if(!all.length)return;
+    this.cardSel=null;
     this.sel=all[0];this.multi=all.slice(1);
     this._reselectCanvas();this._renderOutlineList();this._renderSelBar();
   }
@@ -1968,6 +2236,7 @@ class RocStudio{
   }
   _renderSelBar(){
     const self=this,b=this._selBar;if(!b)return;
+    this._renderCardOutline();
     this._syncProps();
     b.innerHTML='';
     if(this._placeType){
@@ -2004,6 +2273,12 @@ class RocStudio{
   _propsTarget(){
     const s=this.sel;
     if(s&&RS_TYPES[s.type]){const f=this._findItem(s.type,s.id);if(f)return{kind:'element',type:s.type,id:s.id,f:f};}
+    const cs=this.cardSel;
+    if(cs){
+      if(cs.kind==='section'){const l=Array.isArray(this.work.sections)?this.work.sections:[];const i=l.findIndex(function(x){return x&&String(x.id)===String(cs.id);});if(i>=0)return{kind:'section',id:String(cs.id),idx:i};}
+      else if(cs.kind==='nav'&&this._rooms().length)return{kind:'nav'};
+      else if(cs.kind==='card')return{kind:'card',settings:true};
+    }
     if(this._rooms().length&&!this.global)return{kind:'room'};
     return{kind:'card'};
   }
@@ -2030,6 +2305,7 @@ class RocStudio{
     };
     if(this._olList)this._olList.querySelectorAll('.ol-el[data-type]').forEach(function(b){const p=self._itemPath(b.getAttribute('data-type'),b.getAttribute('data-id'));dot(b,p?self._levelOf(p):'');});
     if(this._olRooms)this._olRooms.querySelectorAll('[data-room]').forEach(function(b){dot(b,self._levelOf('rooms['+b.getAttribute('data-room')+']'));});
+    if(this._olCard)this._olCard.querySelectorAll('[data-vpath]').forEach(function(b){dot(b,self._levelOf(b.getAttribute('data-vpath')));});
     if(outlineOnly)return;
     if(this._propsPane){const r=this._propsPane.firstChild;if(r&&r._rsRefresh)r._rsRefresh(this._findings||[]);}
     this._applyLayerCss();
@@ -2056,11 +2332,14 @@ class RocStudio{
     const pane=this._propsPane;if(!pane)return;
     if(this.tab!=='props'){this._propsSig='';return;}
     const tg=this._propsTarget();
-    const key=tg.kind+':'+(tg.type||'')+':'+(tg.id||'')+'@'+(this.global?'g':this.roomIdx);
+    const key=tg.kind+(tg.settings?'*':'')+':'+(tg.type||'')+':'+(tg.id||'')+'@'+(this.global?'g':this.roomIdx);
     let data;
+    const top=function(w){const o={};Object.keys(w).forEach(function(k){if(k!=='rooms')o[k]=w[k];});return rsJ(o);};
     if(tg.kind==='element')data=rsJ(tg.f.item)+(tg.f.inherited?'i':'');
-    else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx]);
-    else{const w=this.work,o={};RS_CARD_KEYS.forEach(function(k){o[k]=w[k];});data=rsJ(o);}
+    else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx])+top(this.work);   // + the shared values it may inherit
+    else if(tg.kind==='section')data=rsJ(this.work.sections[tg.idx])+'#'+tg.idx+'/'+this.work.sections.length+this._membersSig();
+    else if(tg.kind==='nav')data=rsJ(this.work.nav||null);
+    else data=top(this.work);
     const sig=key+'|'+data+'|'+this._selSet().length;
     if(!force&&sig===this._propsSig)return;
     if(!force&&this._propsSkip&&key===this._propsKey){this._propsSig=sig;this._propsSkip=false;return;}
@@ -2070,28 +2349,65 @@ class RocStudio{
     // the same target rebuilt (undo, a canvas drag): the focus goes back to the same field
     let fk=null;
     const ae=this._sr&&this._sr.activeElement;
-    if(same&&ae&&pane.contains(ae)&&!ae.closest('.rs-pick')){const f=ae.closest('.pf-field');if(f)fk=f.getAttribute('data-key');}
+    if(same&&ae&&pane.contains(ae)&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)&&!ae.closest('.rs-pick')){const f=ae.closest('.pf-field');if(f)fk=f.getAttribute('data-key');}
+    const fn=this._focusNest;this._focusNest=null;
     this._propsSig=sig;this._propsKey=key;
     pane.innerHTML='';
-    pane.appendChild(rsBuildProps(this._propsCtx(tg),tg));
+    const ctx=this._propsCtx(tg);
+    pane.appendChild(rsBuildProps(ctx,tg));
+    rsMarkNests(pane);
     pane.scrollTop=same?st:0;
-    if(fk){const f=pane.querySelector('.pf-field[data-key="'+fk+'"]');const el=f&&f.querySelector('input,select,textarea');if(el)try{el.focus({preventScroll:true});}catch(_){}}
+    if(fn){ // a list item just added: its first field
+      const d=[...pane.querySelectorAll('details[data-nest]')].find(function(x){return x.getAttribute('data-nest')===fn;});
+      const el=d&&d.querySelector('input:not([type="checkbox"]):not([type="color"]),select,textarea');
+      if(el){try{el.focus({preventScroll:true});d.scrollIntoView({block:'nearest'});}catch(_){}}
+    }else if(fk){const f=pane.querySelector('.pf-field[data-key="'+fk+'"]');const el=f&&f.querySelector('input,select,textarea');if(el)try{el.focus({preventScroll:true});}catch(_){}}
   }
+  // every element tagged into a section (`section: <id>`), in the shared lists and in each room
+  _members(secId){
+    const out=[],w=this.work,rooms=this._rooms();
+    const scan=function(o,room,roomName){RS_TYPE_ORDER.forEach(function(type){(Array.isArray(o[RS_TYPES[type].key])?o[RS_TYPES[type].key]:[]).forEach(function(it){if(it&&it.id!=null&&String(it.section)===String(secId))out.push({type:type,id:String(it.id),room:room,roomName:roomName});});});};
+    scan(w,-1,rooms.length?this.t('global'):'');
+    rooms.forEach(function(r,i){if(r)scan(r,i,String(r.name||r.id||''));});
+    return out;
+  }
+  _membersSig(){const self=this;return rsJ((this.work.sections||[]).map(function(s){return s&&self._members(s.id).length;}));}
   _propsCtx(tg){
-    const self=this;
-    const room=rsRoom(this.work,this.roomIdx,this.global);
+    const self=this,I=this.I,w=this.work;
+    const room=rsRoom(w,this.roomIdx,this.global);
     let item,path,inherited=false;
     if(tg.kind==='element'){item=tg.f.item;inherited=tg.f.inherited;path=this._itemPath(tg.type,tg.id);}
     else if(tg.kind==='room'){item=this._rooms()[this.roomIdx];path='rooms['+this.roomIdx+']';}
-    else{item=this.work;path='';}
+    else if(tg.kind==='section'){item=w.sections[tg.idx];path='sections['+tg.idx+']';}
+    else if(tg.kind==='nav'){item=w.nav&&typeof w.nav==='object'?w.nav:{};path='nav';}
+    else{item=w;path='';}
+    const ids=function(list){const o=[];(list||[]).forEach(function(x){if(x&&x.id!=null&&o.indexOf(String(x.id))<0)o.push(String(x.id));});return o;};
     return{
-      t:function(k,v){return self.t(k,v);},I:this.I,
+      t:function(k,v){return self.t(k,v);},I:I,
       get hass(){return self.hass;},
-      work:this.work,scope:room||this.work,item:item,path:path,global:this.global,
+      work:w,scope:room||w,item:item,path:path,global:this.global,
+      shared:tg.kind==='room'?w:null,
       findings:this._findings||this._validate(),
       domains:tg.kind==='element'?(RS_DOMAINS[tg.type]||null):null,
       labels:{z_index:'Z-index',hold_delay:'Hold delay (ms)'},
-      open:this._propsOpen,inherited:inherited,multi:this._selSet().length,
+      open:this._propsOpen,yamlKeys:this._yamlKeys,inherited:inherited,multi:this._selSet().length,
+      // suggestions for plain text keys, grounded in the config or in Home Assistant
+      choices:function(key,schema){
+        const pair=function(l){return l.map(function(x){return[x,x];});};
+        if(key==='section'||(key==='sections'&&schema==='ovDock'))return pair(ids(w.sections));
+        if(key==='group')return pair(ids([].concat((room&&room.groups)||[],w.groups||[])));
+        if(key==='rooms'||key==='focus')return pair(ids(self._rooms()));
+        if(key==='area_match'){const a=(self.hass&&self.hass.areas)||{};return Object.keys(a).map(function(k){return[String(a[k].name||k),k];});}
+        if(key==='domain'){const d=[];Object.keys((self.hass&&self.hass.states)||{}).forEach(function(e){const x=e.split('.')[0];if(d.indexOf(x)<0)d.push(x);});return pair(d.sort());}
+        return null;
+      },
+      members:function(id){return self._members(id);},
+      select:function(type,id,roomIdx){
+        if(roomIdx>=0)self._setRoom(roomIdx,false,'outline');else if(self._rooms().length)self._setRoom(self.roomIdx,true,'outline');
+        self._select(type,id,'outline');
+      },
+      goGlobal:function(){self.sel=null;self.multi=[];self.cardSel=null;self._setRoom(self.roomIdx,true,'outline');},
+      sectionAct:function(act){self._sectionAct(tg.id,act);},
       set:function(k,v){self._propsSet(tg,function(it){if(v===undefined)delete it[k];else it[k]=v;},k);},
       setRest:function(keys,obj){
         self._propsSet(tg,function(it){keys.forEach(function(k){if(!(k in obj))delete it[k];});Object.keys(obj).forEach(function(k){it[k]=obj[k];});},'_rest');
@@ -2099,7 +2415,12 @@ class RocStudio{
       },
       rename:function(nid){self._propsRename(tg,nid);},
       rerender:function(){self._syncProps(true);},
-      openAll:function(){self._setTab('all');if(tg.kind!=='element'&&self._ed){const tab=self._ed.querySelector('[data-roctab="'+(tg.kind==='room'?'rooms':'image')+'"]');if(tab)tab.click();}},
+      focusNest:function(k){self._focusNest=k;},
+      openAll:function(){
+        self._setTab('all');
+        if(tg.kind==='element'||!self._ed)return;
+        const tab=self._ed.querySelector('[data-roctab="'+({room:'rooms',nav:'rooms',section:'sections'}[tg.kind]||'image')+'"]');if(tab)tab.click();
+      },
     };
   }
   // one change from the form: a copy of the config, the target's own object changed in place
@@ -2109,21 +2430,117 @@ class RocStudio{
     let it=null;
     if(tg.kind==='element'){const f=this._findItem(tg.type,tg.id,c);it=f&&f.item;}
     else if(tg.kind==='room')it=Array.isArray(c.rooms)?c.rooms[this.roomIdx]:null;
+    else if(tg.kind==='section')it=Array.isArray(c.sections)?c.sections[tg.idx]:null;
+    else if(tg.kind==='nav'){if(!c.nav||typeof c.nav!=='object')c.nav={};it=c.nav;}
     else it=c;
     if(!it||typeof it!=='object')return;
     mut(it);
-    this._commit(c,'props',(tg.kind==='element'?tg.type+':'+tg.id:tg.kind)+'.'+key);
+    if(tg.kind==='nav'&&!Object.keys(c.nav).length)delete c.nav; // an emptied nav: no `nav: {}` left behind
+    this._commit(c,'props',(tg.kind==='element'?tg.type+':'+tg.id:tg.kind+':'+(tg.id||''))+'.'+key);
   }
+  // rename an element (or a section): unique id; the selection follows; sections and groups take
+  // their references along (`section:` / `group:` keys, actions, the overview dock)
   _propsRename(tg,nid){
-    if(tg.kind!=='element')return;
     const c=JSON.parse(rsJ(this.work));
-    const f=this._findItem(tg.type,tg.id,c);if(!f)return;
-    const others=f.list.filter(function(x,i){return i!==f.idx;});
-    const id=rsUniqueId(others,RS_TYPES[tg.type].idp,nid);
-    f.item.id=id;
-    if(this.sel&&this.sel.type===tg.type&&this.sel.id===String(tg.id))this.sel={type:tg.type,id:String(id)};
+    let old,id,refKey=null;
+    if(tg.kind==='element'){
+      const f=this._findItem(tg.type,tg.id,c);if(!f)return;
+      old=String(f.item.id);
+      id=rsUniqueId(f.list.filter(function(x,i){return i!==f.idx;}),RS_TYPES[tg.type].idp,nid);
+      f.item.id=id;
+      if(tg.type==='group')refKey='group';
+      if(this.sel&&this.sel.type===tg.type&&this.sel.id===String(tg.id))this.sel={type:tg.type,id:String(id)};
+    }else if(tg.kind==='section'){
+      const l=c.sections;old=String(l[tg.idx].id);
+      id=rsUniqueId(l.filter(function(x,i){return i!==tg.idx;}),'section_',nid);
+      l[tg.idx].id=id;refKey='section';
+      this.cardSel={kind:'section',id:String(id)};
+    }else return;
+    let refs=0;
+    if(refKey&&old!==String(id))(function walk(o,parentKey,isSectionList){
+      if(!o||typeof o!=='object')return;
+      if(Array.isArray(o)){
+        o.forEach(function(x,i){if(refKey==='section'&&parentKey==='sections'&&!isSectionList&&x===old){o[i]=id;refs++;}else walk(x,null,false);});
+        return;
+      }
+      if(o[refKey]===old&&!(refKey==='group'&&o.id===id)){o[refKey]=id;refs++;}
+      Object.keys(o).forEach(function(k){walk(o[k],k,o===c&&k==='sections');});
+    })(c,null,false);
+    this._lastRefs=refs;
     this._commit(c,'props','id');
     this._syncProps(true);
+  }
+  // card-level things in the outline: Card settings, Navigation, Sections
+  selectCard(kind,id){
+    this.sel=null;this.multi=[];
+    if(this._card&&typeof this._card._rocMark==='function')try{this._card._rocMark([]);}catch(_){}
+    if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
+    this.cardSel={kind:kind,id:id==null?null:String(id)};
+    if(this.tab==='all'&&this._ed){const tab=this._ed.querySelector('[data-roctab="'+({nav:'rooms',section:'sections'}[kind]||'image')+'"]');if(tab)tab.click();}
+    if(this._narrow(700))this._app.classList.add('show-insp');
+    this._app.classList.remove('show-outline');
+    this._renderChrome();
+  }
+  addSection(kind){
+    const c=JSON.parse(rsJ(this.work));
+    if(!Array.isArray(c.sections))c.sections=[];
+    let def=null;
+    if(kind&&this._ed&&typeof this._ed._recipeDef==='function')try{def=this._ed._recipeDef(kind);}catch(_){def=null;}  // the editor's own recipes
+    const id=rsUniqueId(c.sections,'section_',kind&&def?kind:null);
+    c.sections.push(Object.assign({id:id},def||{title:this.t('t_section')}));
+    this._commit(c,'studio');
+    this.selectCard('section',id);
+  }
+  _sectionAct(id,act){
+    const c=JSON.parse(rsJ(this.work));
+    const l=Array.isArray(c.sections)?c.sections:[];
+    const i=l.findIndex(function(x){return x&&String(x.id)===String(id);});if(i<0)return;
+    if(act==='up'&&i>0)l.splice(i-1,0,l.splice(i,1)[0]);
+    else if(act==='down'&&i<l.length-1)l.splice(i+1,0,l.splice(i,1)[0]);
+    else if(act==='delete'){l.splice(i,1);if(!l.length)delete c.sections;this.cardSel=null;}
+    else return;
+    this._commit(c,'studio');
+    this._syncProps(true);
+  }
+  _renderCardOutline(){
+    const self=this,box=this._olCard;if(!box)return;
+    box.innerHTML='';
+    const cs=this.cardSel,rooms=this._rooms();
+    box.appendChild(rsEl('div',{class:'ol-h',text:this.t('card_h')}));
+    const row=function(kind,id,icon,label,vpath,extra){
+      const cur=!!(cs&&!self.sel&&cs.kind===kind&&String(cs.id)===String(id==null?null:id));
+      const b=rsEl('button',{class:'ol-item ol-card',type:'button','data-card':kind+(id!=null?':'+id:''),'data-vpath':vpath==null?null:vpath,'aria-current':String(cur),onclick:function(){self.selectCard(kind,id);}},
+        [rsIcon(icon),rsEl('span',{class:'nm',text:label})].concat(extra||[]));
+      box.appendChild(b);return b;
+    };
+    row('card',null,'mdi:cog-outline',this.t('card_settings'),null);
+    if(rooms.length)row('nav',null,'mdi:dots-horizontal-circle-outline',this.t('nav_form'),'nav');
+    const secs=Array.isArray(this.work.sections)?this.work.sections:[];
+    const sh=rsEl('div',{class:'ol-row ol-kindrow'});
+    sh.appendChild(rsEl('span',{class:'ol-item ol-kind ol-static'},[rsIcon('mdi:view-dashboard-outline'),rsEl('span',{text:this.t('sections_h')}),rsEl('span',{class:'n',text:secs.length?String(secs.length):''})]));
+    sh.appendChild(rsEl('button',{class:'ol-act',type:'button','data-act':'sec-add',title:this.t('sec_add'),'aria-label':this.t('sec_add'),onclick:function(){self._showAddSection();}},[rsIcon('mdi:plus')]));
+    box.appendChild(sh);
+    secs.forEach(function(sc,i){
+      if(!sc)return;
+      const n=self._members(sc.id).length;
+      const b=row('section',String(sc.id),sc.icon&&/^mdi:/.test(sc.icon)?sc.icon:'mdi:view-dashboard-outline',String(sc.title||sc.id),'sections['+i+']',[n?rsEl('span',{class:'sub',title:self.t('sec_members',{n:n}),text:String(n)}):null]);
+      b.classList.add('ol-el');
+    });
+    box.querySelectorAll('[data-vpath]').forEach(function(b){const lv=self._levelOf(b.getAttribute('data-vpath'));if(lv)b.appendChild(rsEl('span',{class:'vd '+lv,title:self.t(lv==='error'?'mark_err':'mark_warn')}));});
+  }
+  _showAddSection(){
+    const self=this;
+    const grid=rsEl('div',{class:'addgrid'});
+    let close=null;
+    // the editor's own recipe list (room-overlay-card-editor: _recipeDef)
+    const kinds=[['','mdi:plus',this.t('sec_blank')],['appliances','mdi:washing-machine','Appliances'],['cleaning','mdi:robot-vacuum','Cleaning'],['media','mdi:cast','Media'],
+      ['heating','mdi:radiator','Heating'],['covers','mdi:window-shutter','Covers'],['electricity','mdi:flash','Electricity'],['weather','mdi:weather-partly-cloudy','Weather']];
+    kinds.forEach(function(k){
+      let ok=!k[0];
+      if(k[0]&&self._ed&&typeof self._ed._recipeDef==='function')try{ok=!!self._ed._recipeDef(k[0]);}catch(_){ok=false;}
+      grid.appendChild(rsEl('button',{class:'btn addbtn',type:'button','data-recipe':k[0]||'blank',disabled:ok?null:true,title:ok?null:self.t('sec_needs'),onclick:function(){if(close)close();self.addSection(k[0]||null);}},[rsIcon(k[1]),rsEl('span',{text:k[2]})]));
+    });
+    close=this._panel(this.t('sec_add'),[this.t('sec_add_body'),grid],[{label:this.t('cancel'),id:'cancel'}]);
   }
 
   // ---------------------------------------------------------------- state
@@ -2218,7 +2635,7 @@ class RocStudio{
       rooms.forEach(function(r,i){
         const cur=!self.global&&i===self.roomIdx;
         const row=rsEl('div',{class:'ol-row'+(cur?' cur':'')});
-        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
+        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self.cardSel=null;self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
         rb.setAttribute('data-room',String(i));
         row.appendChild(rb);
         if(cur){
@@ -2282,7 +2699,14 @@ class RocStudio{
     const lcn=lc&&Array.isArray(lc.entities)?lc.entities.length:0;
     if(lcn&&(!q||'light controls lights'.indexOf(q)>=0)){
       shown+=1;
-      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal('lights');}},[rsIcon('mdi:tune-vertical'),rsEl('span',{text:self.t('k_lights')}),rsEl('span',{class:'n',text:String(lcn)})]));
+      // v6.45.0: light controls are part of the room (or Global) form in Properties
+      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button','data-act':'lights',onclick:function(){
+        if(self.tab!=='props'){self._reveal('lights');return;}
+        self.sel=null;self.multi=[];self.cardSel=null;self._propsOpen.add('lights');
+        if(!(rsRoom(self.work,self.roomIdx,self.global)||{}).light_controls&&self._rooms().length&&!self.global&&self.work.light_controls)self._setRoom(self.roomIdx,true,'outline');
+        self._reselectCanvas();self._renderChrome();self._syncProps(true);
+        const g=self._propsPane.querySelector('[data-sec="lights"]');if(g)try{g.scrollIntoView({block:'start'});}catch(_){}
+      }},[rsIcon('mdi:tune-vertical'),rsEl('span',{text:self.t('k_lights')}),rsEl('span',{class:'n',text:String(lcn)})]));
     }
     if(!shown)box.appendChild(rsEl('div',{class:'ol-empty',text:q?this.t('no_match'):this.t('no_elements')}));
     this._applyMarks(true);
@@ -2325,7 +2749,7 @@ class RocStudio{
       if(this._propsPane&&tgt&&this._propsPane.contains(tgt)&&/^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName||'')){try{tgt.blur();}catch(_){}return;}
       if(this._layers.length){this._layers[this._layers.length-1]();return;}
       if(this._placeType){this._cancelPlace();return;}
-      if(this.sel){this.deselect();return;}
+      if(this.sel||this.cardSel){this.deselect();return;}
       // a slide-over panel (narrow screens only — the classes do nothing on a wide one)
       if((this._app.classList.contains('show-outline')&&this._narrow(1100))||(this._app.classList.contains('show-insp')&&this._narrow(700))){this._app.classList.remove('show-outline','show-insp');return;}
       const card=this._card;

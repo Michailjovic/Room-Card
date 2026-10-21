@@ -212,6 +212,14 @@ test('v6.44.0: the Properties form with real Home Assistant data — entity pick
   console.log('props/icons',JSON.stringify(c));
   expect(c.names).toContain('mdi:sofa');expect(c.drawn).toBe(true);
   await shot(page,'studio-properties');
+  // v6.45.0: a section from the editor's recipe, a tile list row — HA's own icons draw in the list tools
+  await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;S.addSection('media');S._propsOpen.add('content');S._syncProps(true);});
+  await page.click(PF+' .pf-field[data-key="tiles"] [data-act="add-item"]');await page.waitForTimeout(400);
+  const t=await page.evaluate(()=>{const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;const row=S._propsPane.querySelector('.pf-field[data-key="tiles"] .pf-item');
+    const ic=row&&row.querySelector('[data-act="remove"] ha-icon');return{sec:S.work.sections&&S.work.sections[0].domain,tiles:S.work.sections[0].tiles,drawn:!!(ic&&ic.shadowRoot&&ic.shadowRoot.innerHTML.length)};});
+  console.log('props/section',JSON.stringify(t));
+  expect(t).toEqual({sec:'media_player',tiles:[{}],drawn:true});
+  await shot(page,'studio-section');
   await page.evaluate(()=>customElements.get('room-overlay-card')._rocStudio.Studio.current.close());   // nothing saved
 });
 test('v6.42.0: in HA\'s dashboard edit mode the card offers a Studio button (masonry, panel); sections views leave it to HA\'s editor',async({page})=>{

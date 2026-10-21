@@ -45,6 +45,8 @@ class RocStudio{
     this.tab=tab;
     this._propsOpen=new Set(['main','position']); // Properties sections kept open across selections
     this._propsSig='';this._propsKey='';this._propsSkip=false;
+    this.cardSel=null;          // v6.45.0: Card settings / Navigation / a section, shown in Properties
+    this._yamlKeys=new Set();   // sub-forms the user switched to YAML (by path)
   }
   t(k,v){return rocT((this.hass&&this.hass.language||'en').split('-')[0],k,v);}
 
@@ -133,9 +135,11 @@ class RocStudio{
     // outline
     this._outline=rsEl('nav',{class:'outline','aria-label':this.t('outline')});
     this._olRooms=rsEl('div');
+    this._olCard=rsEl('div',{class:'ol-cardbox'});
     this._olSearch=rsEl('input',{class:'ol-search',type:'search',placeholder:this.t('search_ph'),'aria-label':this.t('search_ph'),oninput:function(){self.search=self._olSearch.value;self._renderOutlineList();}});
     this._olList=rsEl('div');
     this._outline.appendChild(this._olRooms);
+    this._outline.appendChild(this._olCard);
     this._outline.appendChild(rsEl('div',{class:'ol-h',text:this.t('elements')}));
     this._outline.appendChild(this._olSearch);
     this._outline.appendChild(this._olList);
@@ -445,6 +449,7 @@ class RocStudio{
     if(!RS_TYPES[type])return;
     id=String(id);
     if(!this.sel){this._select(type,id,from);return;}
+    this.cardSel=null;
     if(this._isSel(type,id)){
       if(this.sel.type===type&&this.sel.id===id)this.sel=this.multi.shift()||null;
       else this.multi=this.multi.filter(function(x){return!(x.type===type&&x.id===id);});
@@ -459,7 +464,7 @@ class RocStudio{
   _select(type,id,from){
     if(!RS_TYPES[type])return;
     const f=this._findItem(type,id);
-    this.multi=[];
+    this.multi=[];this.cardSel=null;
     this.sel={type:type,id:String(id)};
     // an element the room inherits lives in the shared (Global) list — edit it there
     if(f&&f.inherited&&!this.global&&from!=='inspector'&&from!=='drag')this._setRoom(this.roomIdx,true,'select');
@@ -468,8 +473,8 @@ class RocStudio{
     this._renderOutlineList();this._renderSelBar();
   }
   deselect(){
-    if(!this.sel)return;
-    this.sel=null;this.multi=[];
+    if(!this.sel&&!this.cardSel)return;
+    this.sel=null;this.multi=[];this.cardSel=null;
     if(this._card&&typeof this._card._rocMark==='function')try{this._card._rocMark([]);}catch(_){}
     if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
     this._renderOutlineList();this._renderSelBar();
@@ -592,6 +597,7 @@ class RocStudio{
       (rsOwner(self.work,self.roomIdx,self.global,T.key).list||[]).forEach(function(it){if(it&&it.id!=null)all.push({type:type,id:String(it.id)});});
     });
     if(!all.length)return;
+    this.cardSel=null;
     this.sel=all[0];this.multi=all.slice(1);
     this._reselectCanvas();this._renderOutlineList();this._renderSelBar();
   }
@@ -777,6 +783,7 @@ class RocStudio{
   }
   _renderSelBar(){
     const self=this,b=this._selBar;if(!b)return;
+    this._renderCardOutline();
     this._syncProps();
     b.innerHTML='';
     if(this._placeType){
@@ -813,6 +820,12 @@ class RocStudio{
   _propsTarget(){
     const s=this.sel;
     if(s&&RS_TYPES[s.type]){const f=this._findItem(s.type,s.id);if(f)return{kind:'element',type:s.type,id:s.id,f:f};}
+    const cs=this.cardSel;
+    if(cs){
+      if(cs.kind==='section'){const l=Array.isArray(this.work.sections)?this.work.sections:[];const i=l.findIndex(function(x){return x&&String(x.id)===String(cs.id);});if(i>=0)return{kind:'section',id:String(cs.id),idx:i};}
+      else if(cs.kind==='nav'&&this._rooms().length)return{kind:'nav'};
+      else if(cs.kind==='card')return{kind:'card',settings:true};
+    }
     if(this._rooms().length&&!this.global)return{kind:'room'};
     return{kind:'card'};
   }
@@ -839,6 +852,7 @@ class RocStudio{
     };
     if(this._olList)this._olList.querySelectorAll('.ol-el[data-type]').forEach(function(b){const p=self._itemPath(b.getAttribute('data-type'),b.getAttribute('data-id'));dot(b,p?self._levelOf(p):'');});
     if(this._olRooms)this._olRooms.querySelectorAll('[data-room]').forEach(function(b){dot(b,self._levelOf('rooms['+b.getAttribute('data-room')+']'));});
+    if(this._olCard)this._olCard.querySelectorAll('[data-vpath]').forEach(function(b){dot(b,self._levelOf(b.getAttribute('data-vpath')));});
     if(outlineOnly)return;
     if(this._propsPane){const r=this._propsPane.firstChild;if(r&&r._rsRefresh)r._rsRefresh(this._findings||[]);}
     this._applyLayerCss();
@@ -865,11 +879,14 @@ class RocStudio{
     const pane=this._propsPane;if(!pane)return;
     if(this.tab!=='props'){this._propsSig='';return;}
     const tg=this._propsTarget();
-    const key=tg.kind+':'+(tg.type||'')+':'+(tg.id||'')+'@'+(this.global?'g':this.roomIdx);
+    const key=tg.kind+(tg.settings?'*':'')+':'+(tg.type||'')+':'+(tg.id||'')+'@'+(this.global?'g':this.roomIdx);
     let data;
+    const top=function(w){const o={};Object.keys(w).forEach(function(k){if(k!=='rooms')o[k]=w[k];});return rsJ(o);};
     if(tg.kind==='element')data=rsJ(tg.f.item)+(tg.f.inherited?'i':'');
-    else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx]);
-    else{const w=this.work,o={};RS_CARD_KEYS.forEach(function(k){o[k]=w[k];});data=rsJ(o);}
+    else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx])+top(this.work);   // + the shared values it may inherit
+    else if(tg.kind==='section')data=rsJ(this.work.sections[tg.idx])+'#'+tg.idx+'/'+this.work.sections.length+this._membersSig();
+    else if(tg.kind==='nav')data=rsJ(this.work.nav||null);
+    else data=top(this.work);
     const sig=key+'|'+data+'|'+this._selSet().length;
     if(!force&&sig===this._propsSig)return;
     if(!force&&this._propsSkip&&key===this._propsKey){this._propsSig=sig;this._propsSkip=false;return;}
@@ -879,28 +896,65 @@ class RocStudio{
     // the same target rebuilt (undo, a canvas drag): the focus goes back to the same field
     let fk=null;
     const ae=this._sr&&this._sr.activeElement;
-    if(same&&ae&&pane.contains(ae)&&!ae.closest('.rs-pick')){const f=ae.closest('.pf-field');if(f)fk=f.getAttribute('data-key');}
+    if(same&&ae&&pane.contains(ae)&&/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)&&!ae.closest('.rs-pick')){const f=ae.closest('.pf-field');if(f)fk=f.getAttribute('data-key');}
+    const fn=this._focusNest;this._focusNest=null;
     this._propsSig=sig;this._propsKey=key;
     pane.innerHTML='';
-    pane.appendChild(rsBuildProps(this._propsCtx(tg),tg));
+    const ctx=this._propsCtx(tg);
+    pane.appendChild(rsBuildProps(ctx,tg));
+    rsMarkNests(pane);
     pane.scrollTop=same?st:0;
-    if(fk){const f=pane.querySelector('.pf-field[data-key="'+fk+'"]');const el=f&&f.querySelector('input,select,textarea');if(el)try{el.focus({preventScroll:true});}catch(_){}}
+    if(fn){ // a list item just added: its first field
+      const d=[...pane.querySelectorAll('details[data-nest]')].find(function(x){return x.getAttribute('data-nest')===fn;});
+      const el=d&&d.querySelector('input:not([type="checkbox"]):not([type="color"]),select,textarea');
+      if(el){try{el.focus({preventScroll:true});d.scrollIntoView({block:'nearest'});}catch(_){}}
+    }else if(fk){const f=pane.querySelector('.pf-field[data-key="'+fk+'"]');const el=f&&f.querySelector('input,select,textarea');if(el)try{el.focus({preventScroll:true});}catch(_){}}
   }
+  // every element tagged into a section (`section: <id>`), in the shared lists and in each room
+  _members(secId){
+    const out=[],w=this.work,rooms=this._rooms();
+    const scan=function(o,room,roomName){RS_TYPE_ORDER.forEach(function(type){(Array.isArray(o[RS_TYPES[type].key])?o[RS_TYPES[type].key]:[]).forEach(function(it){if(it&&it.id!=null&&String(it.section)===String(secId))out.push({type:type,id:String(it.id),room:room,roomName:roomName});});});};
+    scan(w,-1,rooms.length?this.t('global'):'');
+    rooms.forEach(function(r,i){if(r)scan(r,i,String(r.name||r.id||''));});
+    return out;
+  }
+  _membersSig(){const self=this;return rsJ((this.work.sections||[]).map(function(s){return s&&self._members(s.id).length;}));}
   _propsCtx(tg){
-    const self=this;
-    const room=rsRoom(this.work,this.roomIdx,this.global);
+    const self=this,I=this.I,w=this.work;
+    const room=rsRoom(w,this.roomIdx,this.global);
     let item,path,inherited=false;
     if(tg.kind==='element'){item=tg.f.item;inherited=tg.f.inherited;path=this._itemPath(tg.type,tg.id);}
     else if(tg.kind==='room'){item=this._rooms()[this.roomIdx];path='rooms['+this.roomIdx+']';}
-    else{item=this.work;path='';}
+    else if(tg.kind==='section'){item=w.sections[tg.idx];path='sections['+tg.idx+']';}
+    else if(tg.kind==='nav'){item=w.nav&&typeof w.nav==='object'?w.nav:{};path='nav';}
+    else{item=w;path='';}
+    const ids=function(list){const o=[];(list||[]).forEach(function(x){if(x&&x.id!=null&&o.indexOf(String(x.id))<0)o.push(String(x.id));});return o;};
     return{
-      t:function(k,v){return self.t(k,v);},I:this.I,
+      t:function(k,v){return self.t(k,v);},I:I,
       get hass(){return self.hass;},
-      work:this.work,scope:room||this.work,item:item,path:path,global:this.global,
+      work:w,scope:room||w,item:item,path:path,global:this.global,
+      shared:tg.kind==='room'?w:null,
       findings:this._findings||this._validate(),
       domains:tg.kind==='element'?(RS_DOMAINS[tg.type]||null):null,
       labels:{z_index:'Z-index',hold_delay:'Hold delay (ms)'},
-      open:this._propsOpen,inherited:inherited,multi:this._selSet().length,
+      open:this._propsOpen,yamlKeys:this._yamlKeys,inherited:inherited,multi:this._selSet().length,
+      // suggestions for plain text keys, grounded in the config or in Home Assistant
+      choices:function(key,schema){
+        const pair=function(l){return l.map(function(x){return[x,x];});};
+        if(key==='section'||(key==='sections'&&schema==='ovDock'))return pair(ids(w.sections));
+        if(key==='group')return pair(ids([].concat((room&&room.groups)||[],w.groups||[])));
+        if(key==='rooms'||key==='focus')return pair(ids(self._rooms()));
+        if(key==='area_match'){const a=(self.hass&&self.hass.areas)||{};return Object.keys(a).map(function(k){return[String(a[k].name||k),k];});}
+        if(key==='domain'){const d=[];Object.keys((self.hass&&self.hass.states)||{}).forEach(function(e){const x=e.split('.')[0];if(d.indexOf(x)<0)d.push(x);});return pair(d.sort());}
+        return null;
+      },
+      members:function(id){return self._members(id);},
+      select:function(type,id,roomIdx){
+        if(roomIdx>=0)self._setRoom(roomIdx,false,'outline');else if(self._rooms().length)self._setRoom(self.roomIdx,true,'outline');
+        self._select(type,id,'outline');
+      },
+      goGlobal:function(){self.sel=null;self.multi=[];self.cardSel=null;self._setRoom(self.roomIdx,true,'outline');},
+      sectionAct:function(act){self._sectionAct(tg.id,act);},
       set:function(k,v){self._propsSet(tg,function(it){if(v===undefined)delete it[k];else it[k]=v;},k);},
       setRest:function(keys,obj){
         self._propsSet(tg,function(it){keys.forEach(function(k){if(!(k in obj))delete it[k];});Object.keys(obj).forEach(function(k){it[k]=obj[k];});},'_rest');
@@ -908,7 +962,12 @@ class RocStudio{
       },
       rename:function(nid){self._propsRename(tg,nid);},
       rerender:function(){self._syncProps(true);},
-      openAll:function(){self._setTab('all');if(tg.kind!=='element'&&self._ed){const tab=self._ed.querySelector('[data-roctab="'+(tg.kind==='room'?'rooms':'image')+'"]');if(tab)tab.click();}},
+      focusNest:function(k){self._focusNest=k;},
+      openAll:function(){
+        self._setTab('all');
+        if(tg.kind==='element'||!self._ed)return;
+        const tab=self._ed.querySelector('[data-roctab="'+({room:'rooms',nav:'rooms',section:'sections'}[tg.kind]||'image')+'"]');if(tab)tab.click();
+      },
     };
   }
   // one change from the form: a copy of the config, the target's own object changed in place
@@ -918,21 +977,117 @@ class RocStudio{
     let it=null;
     if(tg.kind==='element'){const f=this._findItem(tg.type,tg.id,c);it=f&&f.item;}
     else if(tg.kind==='room')it=Array.isArray(c.rooms)?c.rooms[this.roomIdx]:null;
+    else if(tg.kind==='section')it=Array.isArray(c.sections)?c.sections[tg.idx]:null;
+    else if(tg.kind==='nav'){if(!c.nav||typeof c.nav!=='object')c.nav={};it=c.nav;}
     else it=c;
     if(!it||typeof it!=='object')return;
     mut(it);
-    this._commit(c,'props',(tg.kind==='element'?tg.type+':'+tg.id:tg.kind)+'.'+key);
+    if(tg.kind==='nav'&&!Object.keys(c.nav).length)delete c.nav; // an emptied nav: no `nav: {}` left behind
+    this._commit(c,'props',(tg.kind==='element'?tg.type+':'+tg.id:tg.kind+':'+(tg.id||''))+'.'+key);
   }
+  // rename an element (or a section): unique id; the selection follows; sections and groups take
+  // their references along (`section:` / `group:` keys, actions, the overview dock)
   _propsRename(tg,nid){
-    if(tg.kind!=='element')return;
     const c=JSON.parse(rsJ(this.work));
-    const f=this._findItem(tg.type,tg.id,c);if(!f)return;
-    const others=f.list.filter(function(x,i){return i!==f.idx;});
-    const id=rsUniqueId(others,RS_TYPES[tg.type].idp,nid);
-    f.item.id=id;
-    if(this.sel&&this.sel.type===tg.type&&this.sel.id===String(tg.id))this.sel={type:tg.type,id:String(id)};
+    let old,id,refKey=null;
+    if(tg.kind==='element'){
+      const f=this._findItem(tg.type,tg.id,c);if(!f)return;
+      old=String(f.item.id);
+      id=rsUniqueId(f.list.filter(function(x,i){return i!==f.idx;}),RS_TYPES[tg.type].idp,nid);
+      f.item.id=id;
+      if(tg.type==='group')refKey='group';
+      if(this.sel&&this.sel.type===tg.type&&this.sel.id===String(tg.id))this.sel={type:tg.type,id:String(id)};
+    }else if(tg.kind==='section'){
+      const l=c.sections;old=String(l[tg.idx].id);
+      id=rsUniqueId(l.filter(function(x,i){return i!==tg.idx;}),'section_',nid);
+      l[tg.idx].id=id;refKey='section';
+      this.cardSel={kind:'section',id:String(id)};
+    }else return;
+    let refs=0;
+    if(refKey&&old!==String(id))(function walk(o,parentKey,isSectionList){
+      if(!o||typeof o!=='object')return;
+      if(Array.isArray(o)){
+        o.forEach(function(x,i){if(refKey==='section'&&parentKey==='sections'&&!isSectionList&&x===old){o[i]=id;refs++;}else walk(x,null,false);});
+        return;
+      }
+      if(o[refKey]===old&&!(refKey==='group'&&o.id===id)){o[refKey]=id;refs++;}
+      Object.keys(o).forEach(function(k){walk(o[k],k,o===c&&k==='sections');});
+    })(c,null,false);
+    this._lastRefs=refs;
     this._commit(c,'props','id');
     this._syncProps(true);
+  }
+  // card-level things in the outline: Card settings, Navigation, Sections
+  selectCard(kind,id){
+    this.sel=null;this.multi=[];
+    if(this._card&&typeof this._card._rocMark==='function')try{this._card._rocMark([]);}catch(_){}
+    if(this._card&&typeof this._card._rocSelect==='function'&&this.mode==='arrange')try{this._card._rocSelect(null);}catch(_){}
+    this.cardSel={kind:kind,id:id==null?null:String(id)};
+    if(this.tab==='all'&&this._ed){const tab=this._ed.querySelector('[data-roctab="'+({nav:'rooms',section:'sections'}[kind]||'image')+'"]');if(tab)tab.click();}
+    if(this._narrow(700))this._app.classList.add('show-insp');
+    this._app.classList.remove('show-outline');
+    this._renderChrome();
+  }
+  addSection(kind){
+    const c=JSON.parse(rsJ(this.work));
+    if(!Array.isArray(c.sections))c.sections=[];
+    let def=null;
+    if(kind&&this._ed&&typeof this._ed._recipeDef==='function')try{def=this._ed._recipeDef(kind);}catch(_){def=null;}  // the editor's own recipes
+    const id=rsUniqueId(c.sections,'section_',kind&&def?kind:null);
+    c.sections.push(Object.assign({id:id},def||{title:this.t('t_section')}));
+    this._commit(c,'studio');
+    this.selectCard('section',id);
+  }
+  _sectionAct(id,act){
+    const c=JSON.parse(rsJ(this.work));
+    const l=Array.isArray(c.sections)?c.sections:[];
+    const i=l.findIndex(function(x){return x&&String(x.id)===String(id);});if(i<0)return;
+    if(act==='up'&&i>0)l.splice(i-1,0,l.splice(i,1)[0]);
+    else if(act==='down'&&i<l.length-1)l.splice(i+1,0,l.splice(i,1)[0]);
+    else if(act==='delete'){l.splice(i,1);if(!l.length)delete c.sections;this.cardSel=null;}
+    else return;
+    this._commit(c,'studio');
+    this._syncProps(true);
+  }
+  _renderCardOutline(){
+    const self=this,box=this._olCard;if(!box)return;
+    box.innerHTML='';
+    const cs=this.cardSel,rooms=this._rooms();
+    box.appendChild(rsEl('div',{class:'ol-h',text:this.t('card_h')}));
+    const row=function(kind,id,icon,label,vpath,extra){
+      const cur=!!(cs&&!self.sel&&cs.kind===kind&&String(cs.id)===String(id==null?null:id));
+      const b=rsEl('button',{class:'ol-item ol-card',type:'button','data-card':kind+(id!=null?':'+id:''),'data-vpath':vpath==null?null:vpath,'aria-current':String(cur),onclick:function(){self.selectCard(kind,id);}},
+        [rsIcon(icon),rsEl('span',{class:'nm',text:label})].concat(extra||[]));
+      box.appendChild(b);return b;
+    };
+    row('card',null,'mdi:cog-outline',this.t('card_settings'),null);
+    if(rooms.length)row('nav',null,'mdi:dots-horizontal-circle-outline',this.t('nav_form'),'nav');
+    const secs=Array.isArray(this.work.sections)?this.work.sections:[];
+    const sh=rsEl('div',{class:'ol-row ol-kindrow'});
+    sh.appendChild(rsEl('span',{class:'ol-item ol-kind ol-static'},[rsIcon('mdi:view-dashboard-outline'),rsEl('span',{text:this.t('sections_h')}),rsEl('span',{class:'n',text:secs.length?String(secs.length):''})]));
+    sh.appendChild(rsEl('button',{class:'ol-act',type:'button','data-act':'sec-add',title:this.t('sec_add'),'aria-label':this.t('sec_add'),onclick:function(){self._showAddSection();}},[rsIcon('mdi:plus')]));
+    box.appendChild(sh);
+    secs.forEach(function(sc,i){
+      if(!sc)return;
+      const n=self._members(sc.id).length;
+      const b=row('section',String(sc.id),sc.icon&&/^mdi:/.test(sc.icon)?sc.icon:'mdi:view-dashboard-outline',String(sc.title||sc.id),'sections['+i+']',[n?rsEl('span',{class:'sub',title:self.t('sec_members',{n:n}),text:String(n)}):null]);
+      b.classList.add('ol-el');
+    });
+    box.querySelectorAll('[data-vpath]').forEach(function(b){const lv=self._levelOf(b.getAttribute('data-vpath'));if(lv)b.appendChild(rsEl('span',{class:'vd '+lv,title:self.t(lv==='error'?'mark_err':'mark_warn')}));});
+  }
+  _showAddSection(){
+    const self=this;
+    const grid=rsEl('div',{class:'addgrid'});
+    let close=null;
+    // the editor's own recipe list (room-overlay-card-editor: _recipeDef)
+    const kinds=[['','mdi:plus',this.t('sec_blank')],['appliances','mdi:washing-machine','Appliances'],['cleaning','mdi:robot-vacuum','Cleaning'],['media','mdi:cast','Media'],
+      ['heating','mdi:radiator','Heating'],['covers','mdi:window-shutter','Covers'],['electricity','mdi:flash','Electricity'],['weather','mdi:weather-partly-cloudy','Weather']];
+    kinds.forEach(function(k){
+      let ok=!k[0];
+      if(k[0]&&self._ed&&typeof self._ed._recipeDef==='function')try{ok=!!self._ed._recipeDef(k[0]);}catch(_){ok=false;}
+      grid.appendChild(rsEl('button',{class:'btn addbtn',type:'button','data-recipe':k[0]||'blank',disabled:ok?null:true,title:ok?null:self.t('sec_needs'),onclick:function(){if(close)close();self.addSection(k[0]||null);}},[rsIcon(k[1]),rsEl('span',{text:k[2]})]));
+    });
+    close=this._panel(this.t('sec_add'),[this.t('sec_add_body'),grid],[{label:this.t('cancel'),id:'cancel'}]);
   }
 
   // ---------------------------------------------------------------- state
@@ -1027,7 +1182,7 @@ class RocStudio{
       rooms.forEach(function(r,i){
         const cur=!self.global&&i===self.roomIdx;
         const row=rsEl('div',{class:'ol-row'+(cur?' cur':'')});
-        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
+        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self.cardSel=null;self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
         rb.setAttribute('data-room',String(i));
         row.appendChild(rb);
         if(cur){
@@ -1091,7 +1246,14 @@ class RocStudio{
     const lcn=lc&&Array.isArray(lc.entities)?lc.entities.length:0;
     if(lcn&&(!q||'light controls lights'.indexOf(q)>=0)){
       shown+=1;
-      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button',onclick:function(){self._reveal('lights');}},[rsIcon('mdi:tune-vertical'),rsEl('span',{text:self.t('k_lights')}),rsEl('span',{class:'n',text:String(lcn)})]));
+      // v6.45.0: light controls are part of the room (or Global) form in Properties
+      box.appendChild(rsEl('button',{class:'ol-item ol-kind',type:'button','data-act':'lights',onclick:function(){
+        if(self.tab!=='props'){self._reveal('lights');return;}
+        self.sel=null;self.multi=[];self.cardSel=null;self._propsOpen.add('lights');
+        if(!(rsRoom(self.work,self.roomIdx,self.global)||{}).light_controls&&self._rooms().length&&!self.global&&self.work.light_controls)self._setRoom(self.roomIdx,true,'outline');
+        self._reselectCanvas();self._renderChrome();self._syncProps(true);
+        const g=self._propsPane.querySelector('[data-sec="lights"]');if(g)try{g.scrollIntoView({block:'start'});}catch(_){}
+      }},[rsIcon('mdi:tune-vertical'),rsEl('span',{text:self.t('k_lights')}),rsEl('span',{class:'n',text:String(lcn)})]));
     }
     if(!shown)box.appendChild(rsEl('div',{class:'ol-empty',text:q?this.t('no_match'):this.t('no_elements')}));
     this._applyMarks(true);
@@ -1134,7 +1296,7 @@ class RocStudio{
       if(this._propsPane&&tgt&&this._propsPane.contains(tgt)&&/^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName||'')){try{tgt.blur();}catch(_){}return;}
       if(this._layers.length){this._layers[this._layers.length-1]();return;}
       if(this._placeType){this._cancelPlace();return;}
-      if(this.sel){this.deselect();return;}
+      if(this.sel||this.cardSel){this.deselect();return;}
       // a slide-over panel (narrow screens only — the classes do nothing on a wide one)
       if((this._app.classList.contains('show-outline')&&this._narrow(1100))||(this._app.classList.contains('show-insp')&&this._narrow(700))){this._app.classList.remove('show-outline','show-insp');return;}
       const card=this._card;
