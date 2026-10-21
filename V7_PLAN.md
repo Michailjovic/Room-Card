@@ -115,7 +115,7 @@ its own and field-tested before the next one starts.
 | **3** | **Canvas editing** (§5.6): select on canvas → inspector, drag/resize/rotate, snap guides (old E4), draw-to-create for every element type (E3), search/filter (E5), inline save errors (E6), multi-select, copy/paste of elements and whole rooms, keyboard shortcuts, touch gestures. Split in two releases: **3a** (selection, outline + search, add on the image, copy/paste/delete, snap guides, Edit mode retired) and **3b** (multi-select, align/distribute, layers, room copy). | L | 6.42.0–6.43.0 |
 | **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. Split in three releases: **4a** (the Properties form, pickers, action builder, pinned validation), **4b** (sub-forms and lists: sections/tiles, light controls, nav, overview, cover control; card-level forms) and **4c** (the new-card wizard). | XL | 6.44.0–6.46.0 |
 | **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. **Shipped with seven themes, the oblique projection and Phase 6's light / floor heating / temperature / humidity bindings** (author's decision 2026-10-21 — the themes cannot be judged without live state). | L | 6.47.0 |
-| **6** | **Bindings** (§6.4): ~~lights (colour + brightness glow), floor heating, temperature tint, humidity~~ (in 6.47.0), presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.48.0 |
+| **6** | **Bindings** (§6.4): ~~lights (colour + brightness glow), floor heating, temperature tint, humidity~~ (in 6.47.0), presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. **Shipped in 6.48.0** (overview signals opt-in). | M | 6.48.0 |
 | **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.49.0 |
 | **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
 | **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
@@ -287,6 +287,16 @@ Reference: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
 
 Cross-room signals (OVERVIEW_PLAN §9) are implemented once and shown on both the floorplan and the
 overview tiles.
+
+**As built in 6.48.0:** `floorplan.presence` (entity / list, default the card's `room_entity`) →
+a token per person in the room its state names (card room via `roomMatch`, else a plan room by
+name); a plan room's `media` (players → app / source on the label + a soft glow); `floorplan.items`
+(`type: marker | label`, `at` in plan metres, `entity`, `attribute`, `icon`, `name`, `show_state`,
+`prefix` / `suffix` / `decimals`, `active_state`, `color`, `size`, `text`, `tap_action` /
+`hold_action`), drawn as an HTML layer over the SVG so `ha-icon` works; `floorplan.layers`
+(`lights`, `heating`, `labels`, `presence`, `media`, `attention`, `vacuum`, `items`). Attention and
+the vacuum are badges on the room label. Temperature as a room tint stays the `thermal` theme's.
+Reference: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
 
 ### 6.5 Wall elements (Phase 7)
 
@@ -774,3 +784,31 @@ companion app (author), and the tablet run of the S5 probe.
   the robot and the photo background (Phase 8; the import already stores `origin_px` and
   `mm_per_px` for it), multi-floor UI (open question 4).
 
+### Phase 6 — v6.48.0
+
+- **Signals once, two views.** `src/core/62-signals.js` (card bundle): `rocSigCfg`,
+  `rocSigPersons`, `rocAnyvacIds` (AnyVac sensors by the contract: `schema_version` ≥ 3,
+  `home_frame`, `rooms`), `rocSigVacuums`, `rocRoomSignals(cAll, states, o)` → per card room
+  `{here, att, attIcon, vac}`, `rocSigEntities`. Attention = section tiles collected from a room
+  (`rocCollectSections`) that are in their `active_state`. Vacuum = `in_cleaning` +
+  `vacuum_room_name`, mapped by a plan room's `anyvac_room` ↔ the map room's `home_room_id`, else
+  by name (`roomMatch`).
+- **Floor plan:** the card passes `persons`, `anyvac()` (scanned once per render, the plan's
+  `source.anyvac` first), `attention()` and `roomMatch()` to the view; the view matches them to
+  plan rooms itself (by link, else by the plan room's name), so a plan-only room can show a person
+  or the robot. Person tokens jump into place when they appear and glide between rooms. Markers
+  and labels are an HTML layer (`.rfp-items`) over the SVG: pointer-events only on interactive
+  markers, so the studio's canvas edits through them.
+- **Overview:** `overview.signals` is opt-in; without it the markup, CSS and change detection are
+  identical to 6.47.0 (the compat tier compares them). With it: a ring (`::after`, above the photo)
+  on the presence room's tile, badges bottom-right (top-right on row tiles).
+- **Change detection** adds presence entities, the AnyVac sensors (+ `in_cleaning`,
+  `vacuum_room_name`), media players (+ `app_name`, `source`, `media_title`), marker entities
+  (+ their `attribute`) and the collected tiles' entities — only for layers / signals that are on.
+- **Studio:** a `marker` tool; markers are hit first in Select (20 px), dragged with snapping
+  (Alt = free), deleted with Delete, listed in the outline; Properties target `fpitem` (schema
+  `fpItem`). The import fills `media` from the room's own config (`media_player.*` it already
+  uses), else the area's players (up to 3). Entity pickers suggest `media_player` for `media` and
+  presence-like domains for `presence`.
+- **Not in this phase:** windows and blinds (Phase 7); the robot's live position, trail and
+  coverage, and the photo background (Phase 8); "clean this room" (Phase 7).

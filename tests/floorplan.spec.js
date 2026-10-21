@@ -139,6 +139,41 @@ test('studio: select, drag a corner, draw a room, place and delete a door, undo'
   expect(await page.evaluate(SG=>[eval(SG).fp.tool,!!document.querySelector('dialog.roc-studio')],SG)).toEqual(['select',true]);
 });
 
+test('markers and people (v6.48.0): a marker taps its light; studio places, drags, deletes a marker',async({page})=>{
+  await page.goto(base+'/?items=1');await plan(page);
+  const it=page.locator('room-overlay-card [data-rfp-item="0"]');
+  await expect(it).toBeVisible();
+  await expect(page.locator('room-overlay-card [data-rfp-item="1"]')).toHaveText(/^\d+[.,]\d°$/);
+  // the person token sits in the kitchen
+  const inKitchen=await page.evaluate(()=>{const c=window.__h.card,v=c._fpInst;const t=c.shadowRoot.querySelector('[data-rfp-person="0"]');const b=t.getBoundingClientRect(),r=v.roomRect(3),x=b.left+b.width/2,y=b.top+b.height/2;return t.getAttribute('opacity')==='1'&&x>r.left&&x<r.left+r.width&&y>r.top&&y<r.top+r.height;});
+  expect(inKitchen).toBe(true);
+  await page.evaluate(()=>{window.__calls.length=0;});
+  await it.click();
+  expect(await page.evaluate(()=>window.__calls.map(c=>c[1]+':'+(c[2]&&c[2].entity_id)))).toEqual(['toggle:light.hall']);
+  expect(await page.evaluate(()=>window.__h.card._roomIdx)).toBe(0);
+  // studio: the marker tool places one, select drags it, Delete removes it, Ctrl+Z brings it back
+  await openStudio(page);
+  expect(await page.evaluate(SG=>eval(SG)._olList.querySelectorAll('[data-fpitem]').length,SG)).toBe(2);
+  await page.evaluate(SG=>eval(SG)._fpTool('marker'),SG);
+  // Alt = no snapping (corners line up within 10 px otherwise)
+  await page.keyboard.down('Alt');
+  let q=await ptStudio(page,3,3);await page.mouse.click(q.x,q.y);
+  let f=await fpc(page);
+  expect(f.items.length).toBe(3);expect(f.items[2].type).toBe('marker');
+  expect(Math.abs(f.items[2].at[0]-3)<0.03&&Math.abs(f.items[2].at[1]-3)<0.03).toBe(true);
+  expect(await page.evaluate(SG=>[eval(SG).fp.item,eval(SG)._propsTarget().kind],SG)).toEqual([2,'fpitem']);
+  await page.waitForTimeout(400); // the Properties pane opened: the canvas may re-fit
+  q=await ptStudio(page,3,3);const q2=await ptStudio(page,3.5,3);
+  await page.mouse.move(q.x,q.y);await page.mouse.down();await page.mouse.move(q2.x,q2.y,{steps:6});await page.mouse.up();
+  await page.keyboard.up('Alt');
+  f=await fpc(page);
+  expect(Math.abs(f.items[2].at[0]-3.5)<0.05&&Math.abs(f.items[2].at[1]-3)<0.05).toBe(true);
+  await page.keyboard.press('Delete');
+  expect((await fpc(page)).items.length).toBe(2);
+  await page.keyboard.press('Control+z');
+  expect((await fpc(page)).items.length).toBe(3);
+});
+
 test('studio: import an empty floor plan from the AnyVac map',async({page})=>{
   await page.goto(base+'/?empty=1');
   await page.waitForFunction(()=>window.__h&&window.__h.card._fpInst);

@@ -2,8 +2,9 @@
 
 *Since v6.47.0.* A room in `rooms:` with a `floorplan:` block is a **page** that draws the home as
 a vector plan instead of a photo: floors, walls with door openings, the room names, and the live
-state of every room — lights, floor heating, temperature and humidity. It works like the overview
-page:
+state of every room — lights, floor heating, temperature and humidity. Since v6.48.0 it also shows
+what happens **across rooms** — who is where, what plays, the vacuum, running appliances — and any
+entity as a marker. It works like the overview page:
 
 - it takes the whole card; the room strip and the other regions are hidden;
 - in the other rooms' strip it shows as an icon;
@@ -11,10 +12,13 @@ page:
   shrinking back into it when you return to the plan);
 - **hold** a room → its lights toggle.
 
-> **AnyVac is needed for the import from the vacuum's map.** The fastest way to get the plan is
-> from a Roborock vacuum's map through **AnyVac**, a Home Assistant integration that publishes
-> the map as `sensor.<vacuum>_anyvac_map`. Without AnyVac the plan can still be drawn in the studio
-> or traced over a picture of your floor plan; everything else on this page works the same.
+> **AnyVac is needed for the import from the vacuum's map and for the vacuum on the plan.** The
+> fastest way to get the plan is from a Roborock vacuum's map through
+> **[AnyVac](https://github.com/Michailjovic/anyvac)**, a Home Assistant integration that publishes
+> the map as `sensor.<vacuum>_anyvac_map` (its frontend is
+> [anyvac-card](https://github.com/Michailjovic/anyvac-card)). Without AnyVac the plan can still be
+> drawn in the studio or traced over a picture of your floor plan; everything else on this page
+> works the same, only the vacuum badge is missing.
 
 The renderer is a separate file, `room-overlay-card-floorplan.js`. The card loads it from its own
 URL the first time a floor plan page is shown. HACS installs it with every release; for a manual
@@ -84,6 +88,45 @@ vacuum or AnyVac is gone.
 | `lights` | one or more `light.*` / `switch.*` | a glow in the room: colour from `rgb_color` (or the colour temperature), strength from the brightness; any light on = lit |
 | `climate` | a thermostat | the floor heating loop: glowing and flowing while `hvac_action: heating`, faint while idle, none when off; also the temperature / humidity if the room has no sensors |
 | `temperature`, `humidity` | sensors | the values on the room's label |
+| `media` *(6.48)* | one or more `media_player.*` | what plays (app, else source, else title) on the label, ▶ / ❚❚; the room glows softly while playing |
+
+## Across rooms
+
+*Since v6.48.0.* The plan shows the "relationships across rooms" a strip of photos cannot:
+
+- **Presence** — a round token with the person's initial in the room they are in. `presence:`
+  lists the entities (Bermuda area sensors, or any sensor / `person` / `device_tracker` whose
+  state names a room); without it the card's `room_entity` is used. The state is matched like
+  presence follow (room id, name, `area_match`); a plan-only room matches by its name. A person
+  who moves glides to the new room.
+- **Attention** — an orange badge with the count on a room whose collected **section tiles** are
+  in their `active_state` (the washing machine runs → the hall).
+- **Vacuum** — a blue robot badge on the room an AnyVac vacuum is cleaning (`in_cleaning`,
+  `vacuum_room_name`, matched to the plan room by its `anyvac_room`, else by name). All AnyVac map
+  sensors are watched; the plan's own `source.anyvac` first.
+
+The overview page can show the same signals on its tiles — opt-in with `overview.signals`
+([CONFIGURATION.md](CONFIGURATION.md#cross-room-signals-v6480)).
+
+## Markers and labels
+
+*Since v6.48.0.* `items:` puts any entity on the plan at a point (metres, like the polygons):
+
+- **`type: marker`** (default) — an icon chip (`icon`, else one for the entity's domain); lit
+  while the entity is on (or in `active_state`); `name` and `show_state: true` add a line of
+  text under it;
+- **`type: label`** — a text pill with the live value (`prefix`, `suffix`, `decimals`,
+  `attribute`), or a fixed `text`.
+
+Tap toggles a `light`, `switch`, `fan`, `input_boolean`, `cover` or `humidifier` and opens
+more-info for everything else (a lock or a valve is never toggled by a tap); hold opens more-info. `tap_action` / `hold_action` take any card action. `color`
+sets the lit colour, `size` the chip size (`34px`). In the studio the **Marker** tool places one.
+
+## Layers
+
+`layers:` switches parts of the plan off — `lights`, `heating`, `labels`, `presence`, `media`,
+`attention`, `vacuum`, `items` (all `true` by default). A layer that is off is neither drawn nor
+watched for changes.
 
 ## Reference
 
@@ -100,6 +143,8 @@ rooms:
       quality: auto                # auto | high | low
       wall: {height: 0.42}         # metres (projected views)
       temperature_range: [21, 24]  # thermal theme
+      presence: [sensor.michael_area, sensor.eva_area]   # default: the card's room_entity
+      layers: {vacuum: true, attention: true}           # every layer on by default
       overrides: {'floor.wood': '#6b4a33'}
       transition: zoom             # zoom | fade | none — plan ↔ room
       transition_duration: 450
@@ -112,11 +157,16 @@ rooms:
           climate: climate.versatile_living_room
           temperature: sensor.living_room_temperature
           humidity: sensor.living_room_humidity
+          media: media_player.living_room_tv
           tap_action: {action: more-info, entity: climate.versatile_living_room}   # optional
           hold_action: {action: toggle, entity: light.panel_living_room_1}       # optional
           anyvac_room: 7bUI4dOp7O1qnECi7UfFW3_16   # set by the import (matches it on re-import)
       openings:
         - {type: door, at: [5.98, 2.25], width: 0.8}
+      items:
+        - {entity: light.desk_lamp, at: [3.1, 1.2]}                       # marker
+        - {entity: sensor.co2, icon: mdi:molecule-co2, show_state: true, at: [1.0, 3.9]}
+        - {type: label, entity: sensor.balcony_temperature, suffix: '°', at: [2.5, 0.1]}
       source:                      # set by the import
         anyvac: sensor.kitchen_s8_maxv_ultra_anyvac_map
         frame: d4e87578-…
@@ -132,6 +182,6 @@ room's lights.
 
 ## Coming next
 
-Window and blind openings on the walls, presence, media and any entity as a marker on the plan,
-and the vacuum itself (live position, trail, cleaning coverage) and a calibrated photo-real render
-behind the vector layers — see [V7_PLAN.md](../V7_PLAN.md) §6.
+Window and blind openings on the walls, the vacuum itself (live position, trail, cleaning
+coverage) and a calibrated photo-real render behind the vector layers — see
+[V7_PLAN.md](../V7_PLAN.md) §6.

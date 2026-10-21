@@ -4,7 +4,7 @@
 // slide doors along walls. Geometry comes from AnyVac (import), a drawing, or a traced image.
 // Everything is plan metres in `floorplan.rooms[].polygon`; the renderer (room-overlay-card-
 // floorplan.js) draws it and lends its projection, so editing works in every projection.
-const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door']];
+const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['marker','mdi:map-marker-plus']];
 const RS_FP_ACCENT='#03a9f4';
 function rsFpR(v){return Math.round(v*100)/100;}
 function rsFpNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');}
@@ -67,6 +67,11 @@ function rsFpEntities(hass,cAll,room){
   });
   if(!out.temperature&&!(out.climate&&isFinite(Number((S[out.climate].attributes||{}).current_temperature)))){const t=inArea('sensor').filter(function(id){return dc(id)==='temperature';});if(t.length)out.temperature=t[0];}
   if(!out.humidity){const h=inArea('sensor').filter(function(id){return dc(id)==='humidity';});if(h.length)out.humidity=h[0];}
+  // v6.48.0: media players — the ones the room's own config uses, else the area's
+  const mp=[];
+  JSON.stringify(room||{}).replace(/media_player\.[a-z0-9_]+/g,function(m){if(S[m]&&mp.indexOf(m)<0)mp.push(m);return m;});
+  const media=(mp.length?mp:inArea('media_player')).slice(0,3);
+  if(media.length)out.media=media.length===1?media[0]:media;
   return out;
 }
 function rsFpPageRooms(cAll){return(Array.isArray(cAll&&cAll.rooms)?cAll.rooms:[]).map(function(r,i){return{r:r,i:i};}).filter(function(x){return x.r&&!x.r.overview&&!x.r.floorplan;});}
@@ -148,7 +153,7 @@ RocStudio.prototype._fpIdx=function(){
   const r=this._rooms()[this.roomIdx];
   return r&&r.floorplan&&!r.overview?this.roomIdx:-1;
 };
-RocStudio.prototype._fpState=function(){if(!this.fp)this.fp={tool:'select',sel:null,door:null,vtx:null,draft:null,room:-1};return this.fp;};
+RocStudio.prototype._fpState=function(){if(!this.fp)this.fp={tool:'select',sel:null,door:null,item:null,vtx:null,draft:null,room:-1};return this.fp;};
 RocStudio.prototype._fpCfg=function(w){
   const i=this._fpIdx();if(i<0)return{};
   const r=(w||this.work).rooms[i];return r&&typeof r.floorplan==='object'?r.floorplan:{};
@@ -178,15 +183,16 @@ RocStudio.prototype._fpActive=function(){return this.mode==='arrange'&&this._fpI
 // ---- selection, after config changes ----
 RocStudio.prototype._fpSync=function(){
   const st=this._fpState(),i=this._fpIdx();
-  if(i!==st.room){st.room=i;st.sel=null;st.door=null;st.vtx=null;st.draft=null;if(st.tool==='calib')st.tool='select';}
+  if(i!==st.room){st.room=i;st.sel=null;st.door=null;st.item=null;st.vtx=null;st.draft=null;if(st.tool==='calib')st.tool='select';}
   const fp=this._fpCfg();
   if(st.sel!=null&&!(Array.isArray(fp.rooms)&&fp.rooms[st.sel]))st.sel=null;
   if(st.door!=null&&!(Array.isArray(fp.openings)&&fp.openings[st.door]))st.door=null;
+  if(st.item!=null&&!(Array.isArray(fp.items)&&fp.items[st.item]))st.item=null;
   if(st.sel==null)st.vtx=null;
 };
 RocStudio.prototype._fpSelect=function(kind,idx){
   const st=this._fpState();
-  st.sel=kind==='room'?idx:null;st.door=kind==='door'?idx:null;st.vtx=null;
+  st.sel=kind==='room'?idx:null;st.door=kind==='door'?idx:null;st.item=kind==='item'?idx:null;st.vtx=null;
   this.sel=null;this.multi=[];this.cardSel=null;
   this._renderOutlineList();this._syncProps(true);this._fpDraw();this._fpChrome();
 };
@@ -216,7 +222,7 @@ RocStudio.prototype._fpChrome=function(){
   if(!on)return;
   const st=this._fpState();
   for(const k in this._fpToolBtns)this._fpToolBtns[k].setAttribute('aria-pressed',String(st.tool===k));
-  this._fpDelBtn.disabled=st.sel==null&&st.door==null;
+  this._fpDelBtn.disabled=st.sel==null&&st.door==null&&st.item==null;
   const fp=this._fpCfg();
   this._fpHint.textContent=this.t('fp_hint_'+st.tool,{n:Array.isArray(fp.rooms)?fp.rooms.length:0})+(st.tool==='select'&&!(Array.isArray(fp.rooms)&&fp.rooms.length)?' '+this.t('fp_hint_empty'):'');
 };
@@ -248,6 +254,16 @@ RocStudio.prototype._fpOutline=function(box){
         [rsEl('span',{class:'nm',text:self.t('fp_door_n',{n:k+1})}),rsEl('span',{class:'sub',text:Array.isArray(o&&o.at)?o.at.join(', ')+' m':''})]));
     });
   }
+  const its=Array.isArray(fp.items)?fp.items:[];
+  if(its.length){
+    box.appendChild(rsEl('div',{class:'ol-row ol-kindrow'},[rsEl('span',{class:'ol-item ol-kind'},[rsIcon('mdi:map-marker'),rsEl('span',{text:this.t('fp_items_h')}),rsEl('span',{class:'n',text:String(its.length)})])]));
+    its.forEach(function(it,k){
+      if(!it||typeof it!=='object')return;
+      const nm=it.name||it.text||it.entity||self.t(it.type==='label'?'fp_label_n':'fp_marker_n',{n:k+1});
+      box.appendChild(rsEl('button',{class:'ol-item ol-el',type:'button','data-fpitem':String(k),'aria-current':String(st.item===k),onclick:function(){self._fpSelect('item',k);}},
+        [rsEl('span',{class:'nm',text:String(nm)}),rsEl('span',{class:'sub',text:self.t(it.type==='label'?'fp_label':'fp_marker')})]));
+    });
+  }
   if(!prs.length)box.appendChild(rsEl('div',{class:'ol-empty',text:this.t('fp_ol_empty')}));
 };
 // ---- Properties: a plan room / a door ----
@@ -257,11 +273,12 @@ RocStudio.prototype._fpTarget=function(){
   const st=this._fpState(),fp=this._fpCfg();
   if(st.sel!=null&&Array.isArray(fp.rooms)&&fp.rooms[st.sel])return{kind:'fproom',id:String(st.sel),idx:st.sel,item:fp.rooms[st.sel],path:'rooms['+i+'].floorplan.rooms['+st.sel+']'};
   if(st.door!=null&&Array.isArray(fp.openings)&&fp.openings[st.door])return{kind:'fpdoor',id:String(st.door),idx:st.door,item:fp.openings[st.door],path:'rooms['+i+'].floorplan.openings['+st.door+']'};
+  if(st.item!=null&&Array.isArray(fp.items)&&fp.items[st.item])return{kind:'fpitem',id:String(st.item),idx:st.item,item:fp.items[st.item],path:'rooms['+i+'].floorplan.items['+st.item+']'};
   return null;
 };
 RocStudio.prototype._fpItem=function(c,tg){
   const i=this._fpIdx();const r=c.rooms&&c.rooms[i];const fp=r&&r.floorplan;if(!fp||typeof fp!=='object')return null;
-  return tg.kind==='fproom'?(fp.rooms||[])[tg.idx]:(fp.openings||[])[tg.idx];
+  return tg.kind==='fproom'?(fp.rooms||[])[tg.idx]:(tg.kind==='fpitem'?(fp.items||[])[tg.idx]:(fp.openings||[])[tg.idx]);
 };
 // ---- drawing the edit overlay (in the plan's own SVG, screen px) ----
 RocStudio.prototype._fpDraw=function(){
@@ -280,6 +297,11 @@ RocStudio.prototype._fpDraw=function(){
     const at=G.poly([o&&o.at])[0];if(!at)return;
     const q=v.toLocal(at[0],at[1],0),sel=st.door===k;
     s+='<rect x="'+rsFpR(q[0]-6)+'" y="'+rsFpR(q[1]-6)+'" width="12" height="12" rx="3" fill="'+(sel?RS_FP_ACCENT:'#fff')+'" stroke="#0b0e12" stroke-width="1.5" pointer-events="none"/>';
+  });
+  (Array.isArray(fp.items)?fp.items:[]).forEach(function(it,k){
+    const at=G.poly([it&&it.at])[0];if(!at)return;
+    const q=v.toLocal(at[0],at[1],0),sel=st.item===k;
+    s+='<circle cx="'+rsFpR(q[0])+'" cy="'+rsFpR(q[1])+'" r="21" fill="'+(sel?'rgba(3,169,244,.18)':'none')+'" stroke="'+(sel?RS_FP_ACCENT:'rgba(255,255,255,.7)')+'" stroke-width="'+(sel?2:1)+'"'+(sel?'':' stroke-dasharray="4 3"')+' pointer-events="none"/>';
   });
   if(st.sel!=null&&fp.rooms&&fp.rooms[st.sel]){
     const poly=G.poly(fp.rooms[st.sel].polygon);
@@ -380,7 +402,14 @@ RocStudio.prototype._fpDown=function(e){
     this._fpEdit(function(f){if(!Array.isArray(f.openings))f.openings=[];f.openings.push({type:'door',at:w.at,width:0.8});k=f.openings.length-1;});
     st.tool='select';self._fpSelect('door',k);return;
   }
-  // select tool
+  if(st.tool==='marker'){
+    const p=this._fpSnap(a.p,e),self=this;let k=-1;
+    this._fpEdit(function(f){if(!Array.isArray(f.items))f.items=[];f.items.push({type:'marker',at:p});k=f.items.length-1;});
+    st.tool='select';self._fpSelect('item',k);return;
+  }
+  // select tool: markers first (they sit on top), then corners of the selected room, doors, rooms
+  const its=Array.isArray(fp.items)?fp.items:[];
+  for(let k=its.length-1;k>=0;k--){const at=G.poly([its[k]&&its[k].at])[0];if(at&&near(at,20)){if(st.item!==k)this._fpSelect('item',k);this._fpDrag={kind:'item',k:k,start:a.p,orig:at};return;}}
   const rooms=Array.isArray(fp.rooms)?fp.rooms:[];
   if(st.sel!=null&&rooms[st.sel]){
     const poly=G.poly(rooms[st.sel].polygon);
@@ -403,7 +432,7 @@ RocStudio.prototype._fpDown=function(e){
       this._fpDrag={kind:'room',i:i,start:a.p,orig:poly};return;
     }
   }
-  if(st.sel!=null||st.door!=null)this._fpSelect(null,null);
+  if(st.sel!=null||st.door!=null||st.item!=null)this._fpSelect(null,null);
 };
 RocStudio.prototype._fpMove=function(e){
   const st=this._fpState(),d=this._fpDrag,a=this._fpAt(e);
@@ -430,6 +459,12 @@ RocStudio.prototype._fpMove=function(e){
     const w=this._fpWallAt(a.p,fp);if(!w)return;
     fp.openings[d.k].at=w.at;this._fpTmp=fp;d.moved=true;this._fpPreview();
   }
+  if(d.kind==='item'){
+    const dx=a.p[0]-d.start[0],dy=a.p[1]-d.start[1];
+    if(!d.moved&&Math.hypot(dx,dy)*(this._fpView.F.S||50)<4)return;
+    if(!fp.items||!fp.items[d.k])return;
+    fp.items[d.k].at=this._fpSnap([d.orig[0]+dx,d.orig[1]+dy],e);this._fpTmp=fp;d.moved=true;this._fpPreview();
+  }
 };
 RocStudio.prototype._fpUp=function(e){
   const st=this._fpState(),d=this._fpDrag;this._fpDrag=null;
@@ -442,7 +477,7 @@ RocStudio.prototype._fpUp=function(e){
   }
   const tmp=this._fpTmp;this._fpTmp=null;
   if(tmp&&d.moved){
-    this._fpEdit(function(f){f.rooms=tmp.rooms;if(tmp.openings)f.openings=tmp.openings;});
+    this._fpEdit(function(f){f.rooms=tmp.rooms;if(tmp.openings)f.openings=tmp.openings;if(tmp.items)f.items=tmp.items;});
   }else this._fpDraw();
 };
 RocStudio.prototype._fpPreview=function(){
@@ -476,6 +511,11 @@ RocStudio.prototype._fpDel=function(){
     this._fpEdit(function(f){f.rooms[i].polygon=G.poly(f.rooms[i].polygon);f.rooms[i].polygon.splice(v,1);});
     this._fpDraw();return true;
   }
+  if(st.item!=null&&fp.items&&fp.items[st.item]){
+    const k=st.item;st.item=null;
+    this._fpEdit(function(f){f.items.splice(k,1);if(!f.items.length)delete f.items;});
+    this._fpSelect(null,null);return true;
+  }
   if(st.door!=null&&fp.openings&&fp.openings[st.door]){
     const k=st.door;st.door=null;
     this._fpEdit(function(f){f.openings.splice(k,1);if(!f.openings.length)delete f.openings;});
@@ -500,7 +540,7 @@ RocStudio.prototype._fpEsc=function(){
   if(st.draft){st.draft=null;if(st.tool==='calib')st.tool='select';this._fpDraw();this._fpChrome();return true;}
   if(st.tool!=='select'){this._fpTool('select');return true;}
   if(st.vtx!=null){st.vtx=null;this._fpDraw();return true;}
-  if(st.sel!=null||st.door!=null){this._fpSelect(null,null);return true;}
+  if(st.sel!=null||st.door!=null||st.item!=null){this._fpSelect(null,null);return true;}
   return false;
 };
 // ---- add a floor plan page ----

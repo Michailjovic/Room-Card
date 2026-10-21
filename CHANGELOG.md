@@ -1,5 +1,41 @@
 # Changelog
 
+## [6.48.0] - unreleased
+
+### Relationships across rooms (V7_PLAN.md Phase 6, OVERVIEW_PLAN.md §9)
+
+- **The floor plan shows what happens across the home:**
+  - **presence:** a token for each person, in the room their presence sensor names (Bermuda area
+    sensors, `person` / `device_tracker` zones named like a room). `floorplan.presence` lists
+    them; by default it is the card's own `room_entity`. A person who moves glides to the new
+    room;
+  - **attention:** a room whose collected section tiles are running (the washing machine in the
+    hall) gets an orange badge with the count;
+  - **the vacuum:** while an AnyVac vacuum is cleaning, a blue robot badge sits on the room it is
+    in (`vacuum_room_name`, matched through the room's `anyvac_room`, else by name);
+  - **media:** a room's `media` players show what plays on its label (app or source) and the
+    room glows softly.
+- **Markers and labels on the plan** (`floorplan.items`): any entity as an icon chip (lit while
+  it is on, optional value), or a text label with a live value. Tap toggles a light, switch,
+  fan, input_boolean, cover or humidifier and opens more-info for the rest (never a lock); hold opens more-info; both can be
+  set with `tap_action` / `hold_action`.
+- **Layers:** `floorplan.layers` switches parts off (`lights`, `heating`, `labels`, `presence`,
+  `media`, `attention`, `vacuum`, `items`). A layer that is off is not drawn and not watched.
+- **The overview page can show the same signals** (opt-in, `overview.signals: true` or
+  `{presence, attention, vacuum}`): the tile of the room someone is in gets a ring, and
+  attention / vacuum badges sit in the tile's corner. Without `signals` the overview is
+  unchanged.
+- **Studio:**
+  - a **marker** tool places a marker where you click; markers are selected, dragged and deleted
+    on the canvas like doors, listed in the outline, and edited in Properties (entity, attribute,
+    icon, name, value format, actions, or the type `label`);
+  - the AnyVac import also fills in each room's `media` players (the ones the room's own config
+    uses, else the area's);
+  - the floor plan page's form has `presence` and `layers`.
+- The cross-room signals need nothing new from Home Assistant; the vacuum signal needs
+  **[AnyVac](https://github.com/Michailjovic/anyvac)** (schema 3, `in_cleaning`,
+  `vacuum_room_name`).
+
 ## [6.47.0] - unreleased
 
 ### The floor plan page (V7_PLAN.md Phase 5, with the first bindings of Phase 6)

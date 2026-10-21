@@ -236,6 +236,92 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     t('an empty plan says how to fill it',/No floor plan yet/.test(sr(e7).querySelector('svg').textContent));
     e7.remove();
   }
+  // ---- 3b. cross-room signals, media, markers, layers (v6.48.0) -----------------------------------
+  {
+    const c=clone(BASE);
+    c.sections=[{id:'appl',title:'Appliances'}];
+    c.rooms[2].icons=[{id:'washer',entity:'sensor.washer',icon:'mdi:washing-machine',section:'appl',tile:{active_state:'running'}}];
+    const fp=c.rooms[0].floorplan;
+    fp.presence=['sensor.michael_area','sensor.eva_area','sensor.nobody_area'];
+    fp.rooms[0].media='media_player.tv';
+    fp.rooms[3].anyvac_room='7bUI4dOp7O1qnECi7UfFW3_19';
+    fp.items=[{entity:'light.desk',at:[2,2]},{type:'label',entity:'sensor.hall_t',at:[8,3],suffix:'°'},{entity:'sensor.co2',icon:'mdi:molecule-co2',show_state:true,at:[1,1]},{type:'label',text:'Balcony',at:[3,0.2]}];
+    const st=states();
+    Object.assign(st,{'sensor.michael_area':{state:'kitchen',attributes:{friendly_name:'Michael area'}},'sensor.eva_area':{state:'Sleep',attributes:{friendly_name:'Eva'}},
+      'sensor.nobody_area':{state:'not_home',attributes:{}},'sensor.washer':{state:'running',attributes:{}},
+      'media_player.tv':{state:'playing',attributes:{app_name:'Netflix',media_title:'Film'}},'light.desk':{state:'on',attributes:{}},'sensor.co2':{state:'612.4',attributes:{unit_of_measurement:'ppm'}}});
+    const av=clone(DATA.anyvac);av.attributes.in_cleaning=true;av.attributes.vacuum_room_name='Kitchen';
+    st['sensor.s8_anyvac_map']=av;
+    const e9=mk(c,mkHass(st));await sleep(40);
+    const s9=sr(e9),v9=e9._fpInst;
+    const pt=i=>s9.querySelector('[data-rfp-person="'+i+'"]');
+    t('presence: a token per person, in the room its sensor names (by card room)',pt(0)&&pt(0).getAttribute('opacity')==='1'&&s9.querySelector('[data-rfp-pinit="0"]').textContent==='M');
+    t('presence: a state that names a plan room (not a card room) still places it',pt(1).getAttribute('opacity')==='1'&&e9._fpInst._signals().where[1].k===4);
+    t('presence: nowhere → hidden',pt(2).getAttribute('opacity')==='0');
+    const att=s9.querySelector('[data-rfp-att="1"]');
+    t('attention: the running washing machine marks the hall',att&&att.getAttribute('opacity')==='1'&&s9.querySelector('[data-rfp-attn="1"]').textContent==='1'&&s9.querySelector('[data-rfp-att="0"]').getAttribute('opacity')==='0');
+    t('vacuum: AnyVac cleaning the kitchen → the robot on the kitchen (anyvac_room)',s9.querySelector('[data-rfp-vac="3"]').getAttribute('opacity')==='1'&&s9.querySelector('[data-rfp-vac="1"]').getAttribute('opacity')==='0');
+    t('media: what plays is on the living room label, the room glows',/Netflix/.test(s9.querySelector('[data-rfp-media="0"]').textContent)&&s9.querySelector('[data-rfp-mglow="0"]').getAttribute('opacity')==='1');
+    const it=k=>s9.querySelector('[data-rfp-item="'+k+'"]');
+    t('items: markers and labels are drawn over the plan',s9.querySelectorAll('[data-rfp-item]').length===4&&it(0).querySelector('ha-icon').getAttribute('icon')==='mdi:lightbulb');
+    t('items: a light that is on lights its marker',it(0).classList.contains('is-on')&&!it(2).classList.contains('is-on'));
+    t('items: a label shows the state with its suffix; a marker with show_state its value + unit',it(1).textContent==='23.6°'&&it(2).textContent==='612 ppm');
+    t('items: a plain text label',it(3).textContent==='Balcony');
+    // change detection: presence, media, AnyVac and markers are watched
+    const rel=e9._relevantEntities;
+    t('change detection watches presence, media, the vacuum map, markers and the collected tiles',['sensor.michael_area','media_player.tv','sensor.s8_anyvac_map','light.desk','sensor.co2','sensor.washer'].every(x=>rel.includes(x))&&e9._relevantAttrSources.some(a=>a.entity==='sensor.s8_anyvac_map'&&a.attr==='vacuum_room_name'));
+    // updates move the tokens and badges, without a re-render
+    const st2=Object.assign({},st,{'sensor.michael_area':{state:'living_room',attributes:{friendly_name:'Michael area'}},'sensor.washer':{state:'idle',attributes:{}},'light.desk':{state:'off',attributes:{}}});
+    st2['sensor.s8_anyvac_map']=clone(DATA.anyvac);
+    e9.hass=mkHass(st2);await sleep(20);
+    t('update: the person moves, attention and the robot go away, the marker goes dark',e9._fpInst===v9&&v9._signals().where[0].k===0&&att.getAttribute('opacity')==='0'&&s9.querySelector('[data-rfp-vac="3"]').getAttribute('opacity')==='0'&&!it(0).classList.contains('is-on'));
+    // tap a marker: a light toggles; a sensor opens more-info; hold → more-info
+    const more=[];e9.addEventListener('hass-more-info',x=>more.push(x.detail.entityId));
+    calls.length=0;
+    ev(it(0),'pointerdown');ev(it(0),'pointerup');await sleep(20);
+    t('tap a light marker → toggle',calls.length===1&&calls[0][2].entity_id==='light.desk'&&e9._roomIdx===0);
+    ev(it(2),'pointerdown');ev(it(2),'pointerup');await sleep(20);
+    t('tap a sensor marker → more-info',more[0]==='sensor.co2');
+    ev(it(0),'pointerdown');await sleep(650);ev(it(0),'pointerup');await sleep(20);
+    t('hold a marker → more-info',more[1]==='light.desk'&&calls.length===1);
+    e9.remove();
+    // layers switch parts off
+    const c2=clone(c);c2.rooms[0].floorplan.layers={presence:false,items:false,attention:false,media:false,vacuum:false};
+    const e10=mk(c2,mkHass(st));await sleep(30);
+    const s10=sr(e10);
+    t('layers: presence, markers, attention, vacuum and media off',!s10.querySelector('[data-rfp-person]')&&!s10.querySelector('[data-rfp-item]')&&!s10.querySelector('[data-rfp-att]')&&!s10.querySelector('[data-rfp-vac]')&&!s10.querySelector('[data-rfp-mglow]'));
+    t('layers off → the vacuum map is not watched',!e10._relevantEntities.includes('sensor.s8_anyvac_map'));
+    e10.remove();
+    // presence defaults to the card's room_entity
+    const c3=clone(BASE);c3.room_entity='sensor.michael_area';c3.follow_mode='manual';
+    const e11=mk(c3,mkHass(st));await sleep(30);
+    t('presence defaults to the card\'s room_entity',sr(e11).querySelectorAll('[data-rfp-person]').length===1);
+    e11.remove();
+    // tiles theme keeps the badges in the tile corner
+    const c4=clone(c);c4.rooms[0].floorplan.theme='tiles';
+    const e12=mk(c4,mkHass(st));await sleep(30);
+    t('tiles theme: attention badge fixed in the tile',sr(e12).querySelector('[data-rfp-att="1"][data-rfp-fixed]').getAttribute('opacity')==='1');
+    e12.remove();
+    // ---- overview signals (opt-in) ----
+    const ov=clone(c);ov.rooms.unshift({id:'ov',name:'Overview',overview:{signals:true}});ov.room_entity='sensor.michael_area';ov.follow_mode='manual';
+    const e13=mk(ov,mkHass(st));await sleep(40);
+    const s13=sr(e13),tile=ri=>s13.querySelector('.roc-ovt[data-ovt="'+ri+'"]');
+    t('overview signals: CSS only when a page turns them on',/roc-ovt-sig/.test(s13.querySelector('style').textContent));
+    t('overview signals: the presence room\'s tile is ringed',tile(5).classList.contains('roc-ovt-here')&&!tile(2).classList.contains('roc-ovt-here'));
+    t('overview signals: attention and vacuum badges on their tiles',!!tile(3).querySelector('.roc-sig-att')&&!!tile(5).querySelector('.roc-sig-vac')&&!tile(2).querySelector('.roc-sig-b'));
+    const st3=Object.assign({},st2);
+    e13.hass=mkHass(st3);await sleep(20);
+    t('overview signals: they follow the states',tile(2).classList.contains('roc-ovt-here')&&!tile(5).classList.contains('roc-ovt-here')&&!tile(3).querySelector('.roc-sig-att')&&!tile(5).querySelector('.roc-sig-vac'));
+    e13.remove();
+    const ov2=clone(ov);ov2.rooms[0].overview={};
+    const e14=mk(ov2,mkHass(st));await sleep(40);
+    t('overview without signals: no badges, no ring, no CSS (unchanged)',!sr(e14).querySelector('.roc-ovt-sig')&&!sr(e14).querySelector('.roc-ovt-here')&&!/roc-ovt-sig/.test(sr(e14).querySelector('style').textContent));
+    e14.remove();
+    const ov3=clone(ov);ov3.rooms[0].overview={signals:{presence:false,vacuum:false}};
+    const e15=mk(ov3,mkHass(st));await sleep(40);
+    t('overview signals: presence / vacuum can be left out',!sr(e15).querySelector('.roc-ovt-here')&&!sr(e15).querySelector('.roc-sig-vac')&&!!sr(e15).querySelector('.roc-sig-att'));
+    e15.remove();
+  }
   // ---- the classic editor keeps the floor plan as it is ------------------------------------------
   {
     const ed=w.document.createElement('room-overlay-card-editor');

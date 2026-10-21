@@ -1751,6 +1751,31 @@ really needs (in 40 px steps), so a large tile is never an upscaled 480 px rende
 stacks the active overlay images on the photo; `off` is the photo with the room's filter. Row
 tiles default to `composite` — at ~90 px a full live room shows nothing more.
 
+### Cross-room signals (v6.48.0)
+
+Opt-in: `signals: true` in the `overview:` block shows what happens across the home on the tiles.
+
+```yaml
+overview:
+  signals: true                    # or pick:
+  # signals:
+  #   presence: [sensor.michael_area, sensor.eva_area]   # default: the card's room_entity
+  #   attention: true
+  #   vacuum: false
+```
+
+- **presence** — the tile of the room someone is in gets a ring. The entities are presence
+  sensors whose state names a room (Bermuda area sensors, the card's `room_entity`), matched like
+  presence follow; `false` turns it off.
+- **attention** — a badge with the count on a room whose collected section tiles are in their
+  `active_state` (the washing machine runs → a badge on the hall). The badge shows the first
+  tile's icon.
+- **vacuum** — a robot badge on the room an **[AnyVac](https://github.com/Michailjovic/anyvac)**
+  vacuum is cleaning (`in_cleaning`, `vacuum_room_name`).
+
+Without `signals` the overview is exactly as before. The floor plan page shows the same signals
+([FLOORPLAN.md](FLOORPLAN.md#across-rooms)).
+
 ### Phones
 
 On the portrait profile the page fills the screen height (like `layout.height: fill`; a
@@ -1777,7 +1802,8 @@ overview is shown and put back as it was.
 ## Floor plan page (v6.47.0)
 
 A room with a `floorplan:` block is a page that draws the home as a vector plan — rooms, walls,
-doors, each room's lights, floor heating, temperature and humidity — in one of seven themes. Tap a
+doors, each room's lights, floor heating, temperature and humidity, and (v6.48.0) who is where,
+what plays, the vacuum, running appliances and any entity as a marker — in one of seven themes. Tap a
 room to open it (zoom), hold it to toggle its lights. The plan is imported from a vacuum map with
 **AnyVac** or drawn / traced in Room Card Studio. Every key, the themes and the import:
 **[docs/FLOORPLAN.md](FLOORPLAN.md)**.
@@ -1794,8 +1820,12 @@ rooms:
           polygon: [[11.95,0.25],[15.85,0.25],[15.85,4.45],[11.95,4.45]]
           lights: light.bedroom
           climate: climate.bedroom
+          media: media_player.bedroom_tv
       openings:
         - {type: door, at: [11.9, 2.1]}
+      presence: [sensor.michael_area]
+      items:
+        - {entity: light.desk_lamp, at: [13.1, 1.2]}
 ```
 
 ## Theming (design tokens, v6.16.0)

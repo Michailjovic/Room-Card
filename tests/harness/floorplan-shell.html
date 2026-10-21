@@ -62,6 +62,8 @@ const plan={theme:q.get('theme')||'night',rooms:[
   {room:'bedroom',polygon:C.Bedroom,floor:'carpet',lights:'light.bed',climate:'climate.bed',humidity:'sensor.bedroom_h_humidity',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_20'}],
   openings:[{type:'door',at:[11.93,1.48],width:0.8},{type:'door',at:[8.65,2.3],width:0.8},{type:'door',at:[5.98,2.25],width:0.8},{type:'door',at:[7.03,2.8],width:0.8}]};
 const fp=q.get('empty')?{theme:'night'}:plan;
+// v6.48.0: markers, a label and a person on the plan (?items=1)
+if(q.get('items')){plan.items=[{entity:'light.hall',at:[7.3,2.0]},{type:'label',entity:'sensor.hall_h_temperature',at:[7.4,3.3],suffix:'°'}];plan.presence='sensor.michael_area';states['sensor.michael_area']={state:'kitchen',attributes:{friendly_name:'Michael'}};}
 const rooms=[{id:'plan',name:'Floor plan',icon:'mdi:floor-plan',floorplan:fp}].concat(
   [['living_room','Living room','Obývák','#a33',['light.living']],['hall','Hall','Chodba','#3a3',['light.hall']],['bathroom','Bathroom','Koupelna','#33a',['light.bath']],['kitchen','Kitchen','Kuchyň','#aa3',['light.kitchen']],['bedroom','Bedroom','Ložnice','#3aa',['light.bed']]]
   .map(([id,name,cz,c,ls])=>({id,name,overview_tile:{name:cz},area_match:[name],base_image:svg(c,name),light_controls:{entities:ls.map(e=>({entity:e}))}})));

@@ -408,6 +408,9 @@ edits the plan instead of elements, with a toolbar above it:
 - **Rectangle** / **Polygon** — draw a room (a polygon closes on its first corner, a double-click
   or Enter; Esc cancels).
 - **Door** — click a wall to place a door (0.8 m wide).
+- **Marker** (v6.48.0) — click where a marker goes, then pick its entity in Properties. Select
+  a marker to drag it (snapping like corners; Alt = free); Delete removes it. Set *type* to
+  `label` for a text with a live value.
 - **AnyVac** — import the rooms from an AnyVac vacuum map: pick the map sensor, check which card
   room each map room is (guessed from names and areas), choose clean-up, doors and entities, see
   the result before importing. Importing again keeps each room's own settings and replaces only
@@ -416,13 +419,15 @@ edits the plan instead of elements, with a toolbar above it:
   know to set its scale. The picture is shown in the studio only.
 - **Doors** — propose doors where two rooms touch (where the robot crossed, if the plan came from
   AnyVac).
-- **Delete** (or the Delete key) removes the selected corner, door or room. Undo works for every
+- **Delete** (or the Delete key) removes the selected corner, marker, door or room. Undo works for every
   step.
 
-The outline lists the plan's rooms and doors. Properties shows the selected room (name, the card
-room it opens, floor material, lights, thermostat, temperature and humidity sensors, tap / hold,
-the polygon as YAML), the selected door, or with nothing selected the page's settings (theme,
-`theme_by`, projection, rotation, quality, wall height, overrides, the traced image).
+The outline lists the plan's rooms, doors and markers. Properties shows the selected room (name,
+the card room it opens, floor material, lights, thermostat, temperature and humidity sensors,
+media players, tap / hold, the polygon as YAML), the selected door or marker, or with nothing
+selected the page's settings (theme, `theme_by`, projection, rotation, quality, wall height,
+overrides, the traced image, presence entities, layers). The AnyVac import also fills in each
+room's media players (the ones the room already uses, else the area's).
 
 ## Edit mode (legacy)
 

@@ -1,7 +1,7 @@
 # Overview page — Implementation Plan
 
 Status: **agreed 2026-10-19, shipped in v6.30.0** (the v6.26/v6.27 phases below were released
-together; §9 is still open). See *Implementation notes* at the end for where the code differs
+together; §9 shipped in v6.48.0 as `overview.signals`). See *Implementation notes* at the end for where the code differs
 from this text.
 
 This plan is written to be executed without the design conversation that produced it. Section 1
@@ -362,12 +362,17 @@ see project memory `verify-the-repo-copy`).
 |---|---|
 | **v6.26.0** | Overview room, five regions with collapse, region cards + `nav_cards`, dock from sections, **card tiles (A)** on both profiles, auto + custom chips, info line, portrait scroll, overview thumbnail in the strip, strip-mini suspension, full editor for all of it, tests. |
 | **v6.27.0** | **Zoom transition** tile ↔ room (§4a), **row tiles (B)**, native header **pills**, `background`, tile `focus` preview polish. |
-| **v6.28.0** | Cross-room signals on tiles (see §9). |
+| **v6.28.0** | Cross-room signals on tiles (see §9) — shipped in v6.48.0. |
 | — | Overview preset in `PRESETS.md` with a worked config once v6.27.0 is out. |
 
 ---
 
-## 9. Later — cross-room signals (v6.28.0, to be confirmed)
+## 9. Cross-room signals — implemented in v6.48.0
+
+*As built:* opt-in `overview.signals: true | {presence, attention, vacuum}`; presence comes from
+`presence:` (entity / list) or the card's `room_entity`; the vacuum signal reads AnyVac's map
+sensor (`in_cleaning`, `vacuum_room_name`) rather than the vacuum widget. The same signals are drawn
+on the floor plan page (V7_PLAN §6.4, Phase 6). The original proposal:
 
 These are the "relationships across rooms" that made a floorplan tempting (project_floorplan);
 the grid can carry them without one:

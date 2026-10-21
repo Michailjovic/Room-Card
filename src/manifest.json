@@ -11,6 +11,7 @@
         "core/40-rooms.js",
         "core/50-sections.js",
         "core/60-overview.js",
+        "core/62-signals.js",
         "core/65-floorplan.js",
         "core/70-format.js",
         "core/80-light-controls.js",

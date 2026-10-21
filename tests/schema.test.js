@@ -112,7 +112,9 @@ check('the card executes no action type missing from the schema',execActs.every(
 
 // ---- 5. code → schema coverage -------------------------------------------------------
 // Home Assistant / browser names the card reads off hass objects, not config keys.
-const HA_NAMES=new Set(['browser_id','browser_mod','color_temp','color_temp_kelvin','current_position','entity_picture','friendly_name','max_temp','min_temp','number_format','rgb_color','set_cover_position','supported_color_modes','turn_off','turn_on','unit_of_measurement','current_temperature','hvac_action','media_title','app_name','battery_level','is_admin']);
+const HA_NAMES=new Set(['browser_id','browser_mod','color_temp','color_temp_kelvin','current_position','entity_picture','friendly_name','max_temp','min_temp','number_format','rgb_color','set_cover_position','supported_color_modes','turn_off','turn_on','unit_of_measurement','current_temperature','hvac_action','media_title','app_name','battery_level','is_admin',
+  // AnyVac's map sensor attributes (the integration's contract, V7_PLAN §7a)
+  'home_frame','home_room_id','in_cleaning','schema_version','vacuum_room_name']);
 const cardCode=src.slice(0,src.indexOf('class RoomOverlayCardEditor'));
 const props=new Set([...cardCode.matchAll(/\.([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b/g)].map(m=>m[1]));
 const unknownProps=[...props].filter(p=>!known.has(p)&&!HA_NAMES.has(p)).sort();

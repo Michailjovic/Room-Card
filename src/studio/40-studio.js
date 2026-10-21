@@ -894,7 +894,7 @@ class RocStudio{
     else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx])+top(this.work);   // + the shared values it may inherit
     else if(tg.kind==='section')data=rsJ(this.work.sections[tg.idx])+'#'+tg.idx+'/'+this.work.sections.length+this._membersSig();
     else if(tg.kind==='nav')data=rsJ(this.work.nav||null);
-    else if(tg.kind==='fproom'||tg.kind==='fpdoor')data=rsJ(tg.item);
+    else if(tg.kind==='fproom'||tg.kind==='fpdoor'||tg.kind==='fpitem')data=rsJ(tg.item);
     else data=top(this.work);
     const sig=key+'|'+data+'|'+this._selSet().length;
     if(!force&&sig===this._propsSig)return;
@@ -936,7 +936,7 @@ class RocStudio{
     else if(tg.kind==='room'){item=this._rooms()[this.roomIdx];path='rooms['+this.roomIdx+']';}
     else if(tg.kind==='section'){item=w.sections[tg.idx];path='sections['+tg.idx+']';}
     else if(tg.kind==='nav'){item=w.nav&&typeof w.nav==='object'?w.nav:{};path='nav';}
-    else if(tg.kind==='fproom'||tg.kind==='fpdoor'){item=tg.item;path=tg.path;}
+    else if(tg.kind==='fproom'||tg.kind==='fpdoor'||tg.kind==='fpitem'){item=tg.item;path=tg.path;}
     else{item=w;path='';}
     const ids=function(list){const o=[];(list||[]).forEach(function(x){if(x&&x.id!=null&&o.indexOf(String(x.id))<0)o.push(String(x.id));});return o;};
     return{
@@ -990,7 +990,7 @@ class RocStudio{
     else if(tg.kind==='room')it=Array.isArray(c.rooms)?c.rooms[this.roomIdx]:null;
     else if(tg.kind==='section')it=Array.isArray(c.sections)?c.sections[tg.idx]:null;
     else if(tg.kind==='nav'){if(!c.nav||typeof c.nav!=='object')c.nav={};it=c.nav;}
-    else if(tg.kind==='fproom'||tg.kind==='fpdoor')it=this._fpItem(c,tg);
+    else if(tg.kind==='fproom'||tg.kind==='fpdoor'||tg.kind==='fpitem')it=this._fpItem(c,tg);
     else it=c;
     if(!it||typeof it!=='object')return;
     mut(it);

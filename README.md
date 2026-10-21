@@ -37,7 +37,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Camera & weather** | Live camera snapshot as the base layer; animated rain/snow overlay |
 | **Multi-room** | One card for the whole home — define rooms, swipe & presence-follow |
 | **Overview page** | Every room on one screen as a live tile with state chips, plus your header (ticker, pills), weather/calendar cards and a dock of section launchers; tap a tile and the room zooms open. Photo tiles or list rows on phones |
-| **Floor plan page** | Your home as a live vector plan — imported from the robot vacuum's map (AnyVac) or drawn in the studio; lit rooms glow, floor heating flows, temperature and humidity on every room; seven themes from a night cut-away to a blueprint; tap a room and it zooms open |
+| **Floor plan page** | Your home as a live vector plan — imported from the robot vacuum's map (AnyVac) or drawn in the studio; lit rooms glow, floor heating flows, temperature and humidity on every room; who is where, what plays, the vacuum and running appliances, any entity as a marker; seven themes from a night cut-away to a blueprint; tap a room and it zooms open |
 | **Auto navigation menu** | The room switcher (thumbnails / tabs / dots) is generated automatically from your rooms — you never build the menu by hand |
 | **Hold feedback** | A progress ring fills and turns green when a hold gesture registers |
 | **Tabbed GUI editor** | Build everything visually — drag, resize, reorder — without writing YAML |
@@ -140,14 +140,18 @@ In the editor: **Rooms & menu → + Overview**. Full reference:
 One more page that draws your home as a **plan**: floors, walls and doors, every room's lights
 (a glow in the room's colour), floor heating (the loop glows while the thermostat heats),
 temperature and humidity. Tap a room and it zooms open; hold it to switch its lights.
+Since v6.48.0 it also shows **across rooms** who is where, what plays, the room the vacuum is
+cleaning and running appliances, plus any entity as a **marker** — and the overview page can show
+the same signals on its tiles.
 
 - **From your robot vacuum:** in Room Card Studio, *Add a floor plan page* → **AnyVac** reads the
   room outlines from the vacuum's map, straightens the walls, links each room to your card's
   rooms, fills in their lights, thermostats and sensors and proposes the doors. This needs
-  **AnyVac** (a Home Assistant integration for Roborock
-  vacuums).
+  **[AnyVac](https://github.com/Michailjovic/anyvac)**, a Home Assistant integration for Roborock
+  vacuums (its own map card is [anyvac-card](https://github.com/Michailjovic/anyvac-card)).
 - **Without a vacuum:** draw the rooms (rectangles, polygons, doors) or trace over a picture of
   your floor plan.
+- **The vacuum on the plan** also needs AnyVac; presence, media, markers and appliances do not.
 - **Seven themes:** `night`, `clay`, `neon`, `blueprint`, `thermal`, `tiles`, `sketch` — per
   layout profile and dark / light mode if you like.
 
