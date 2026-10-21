@@ -11,6 +11,8 @@
 //   node tests/compat.test.js --ref v6.31.0      baseline = that git ref
 //   node tests/compat.test.js --base old.js      baseline = a file
 //   … [--cand path/to/room-overlay-card.js]      candidate (default: the repo's assembled file)
+//   … [--strip 'regex']   remove an EXPECTED change from both sides before comparing (repeatable),
+//                         e.g. a new editor button — the rest must still be identical
 'use strict';
 const fs=require('fs');
 const path=require('path');
@@ -74,7 +76,8 @@ async function snapshot(code,cfgs){
       el.remove();ed.remove();
     }
   }
-  return out.map(s=>s.replace(/v\d+\.\d+\.\d+/g,'vX'));
+  const strips=process.argv.map((a,i)=>a==='--strip'?new RegExp(process.argv[i+1],'g'):null).filter(Boolean);
+  return out.map(s=>{s=s.replace(/v\d+\.\d+\.\d+/g,'vX');for(const r of strips)s=s.replace(r,'');return s;});
 }
 
 (async()=>{

@@ -1,6 +1,119 @@
 # Changelog
 
-## [6.40.0] - unreleased
+## [6.41.0] - unreleased
+
+### Room Card Studio — the full-screen editor, first version (V7_PLAN.md Phase 2)
+
+Opt-in: the editor in HA's panel works exactly as before and gains one **Studio** button. A card
+that only shows on a dashboard does not download any of this.
+
+- **Where to open it:**
+  - the **Studio** button in the card editor's header;
+  - the **✎ Studio** button on the card itself while it is in *Edit mode*. This lets you edit the
+    card on the wall tablet without opening HA's editor.
+- **Layout.** The studio takes the whole screen, above HA's own dialog. It has a toolbar, an
+  outline (rooms and element counts per type), a canvas with the real card and live states, the
+  inspector, and a status bar. On a phone the outline and the inspector become sheets you open
+  from the toolbar.
+- **Inspector.** It is today's editor, hosted unchanged. Every tab and field works as in HA's
+  panel, only with room to breathe. Later phases replace its sections one at a time.
+- **Canvas device frames:**
+  - *Tablet* (1280 × 800), *Tablet portrait* (800 × 1280) and *Phone* (390 × 844) are each scaled
+    to fit;
+  - *Fit* uses the real size of the canvas.
+  The card picks its layout profile from the frame as it would from a screen. You can check the
+  portrait layout on a landscape PC.
+- **Canvas modes:**
+  - *Arrange* (Edit mode): drag and draw elements; taps do nothing.
+  - *Live*: the card exactly as on the dashboard.
+- **Room sync.** Switching rooms in the toolbar, the outline, the inspector or the card's own nav
+  strip keeps all of them on the same room. *Global* edits the shared defaults, as in the editor.
+- **Undo / redo** (toolbar, Ctrl+Z / Ctrl+Y). Covers field edits, canvas drags and restores. A
+  burst of typing in one field is one step.
+- **Unsaved-changes guard.**
+  - Escape or ✕ with changes asks first: save, discard or keep editing.
+  - Escape closes an open panel or section first.
+  - Leaving the page while dirty asks the browser to confirm.
+- **Saving** depends on where the studio was opened (V7_PLAN D3):
+  - **From HA's card editor:** *Apply & close* hands the config back through the editor's own
+    `config-changed`. HA's *Save* then stores it as always, and HA's own editor undo can revert the
+    whole studio session.
+  - **From the dashboard:** *Save* writes straight to the dashboard (`lovelace/config/save`). The
+    card is found **by object identity**, so two cards with the same `card_id` are no longer a
+    problem. Before writing, the studio re-reads the dashboard and refuses if that card was changed
+    elsewhere since the studio opened it (another tab or device). You can still overwrite on
+    purpose or copy the YAML.
+  - **Read-only (copy YAML):** non-admin users, YAML-mode or generated dashboards, and a card that
+    cannot be found in the dashboard.
+- **YAML view** of the whole card, with Copy.
+- **History.** The last 10 versions saved or applied from the studio are kept in this browser
+  (a convenience, not a backup). Restoring one is a normal, undoable change.
+- **Config check in the status bar.** It uses the schema registry from v6.40.0 and lists wrong
+  types, values outside the allowed list, unknown keys and missing ids, with their full path.
+- **Strings** go through a translation table (English now; Czech follows before 7.0.0).
+
+### How it ships
+
+- **Second file: `room-overlay-card-studio.js`** (~51 KB minified, ~16 KB gzipped), a second
+  release asset. HACS installs every release asset of a plugin, so HACS users get it
+  automatically.
+  - **Manual installs:** copy both files into the same folder.
+  - The card loads the studio with `import()` from its own URL, the first time someone opens it.
+    The original query (HACS' `?hacstag=`) is kept and `?v=<version>` is added, so a cached older
+    studio is never paired with a newer card.
+  - If the file is missing, the Studio button says so instead of failing silently.
+- **The card itself grew ~4 KB** (minified):
+  - the loader;
+  - the two buttons;
+  - an internal handle the studio uses (the studio never reaches into the card's scope);
+  - a viewport override for the canvas;
+  - a hook that sends canvas drags to the studio instead of the window event.
+- **No change for dashboards.** The compat harness renders all 18 reference configs with v6.40.0
+  and with this build at two viewports (176 snapshots): the card DOM is **identical**. The only
+  editor difference is the new Studio button.
+- While the studio is open, editors elsewhere on the page ignore Edit-mode position relays, so a
+  drag on the canvas can never leak into HA's dialog underneath.
+
+### Tests
+
+- `tests/studio.test.js` (jsdom, in `npm test` and against the minified files in `build:verify`),
+  62 checks:
+  - the loader URL;
+  - both save paths, including duplicate `card_id`, conflict, overwrite, non-admin, YAML mode and
+    a card outside a dashboard;
+  - undo/redo;
+  - canvas drags coming back without any render-only override;
+  - the Escape guard, room sync, frames and Live mode;
+  - the history list;
+  - an unrenderable config showing a message;
+  - a round-trip on every reference config: open → Apply without edits changes nothing, and the
+    hosted editor reads the config exactly like the editor on its own.
+- `tests/studio.spec.js` (Playwright, real Chromium, served over HTTP so the real `import()` path
+  runs):
+  - the lazy load from the card's URL;
+  - the modal top layer;
+  - frame geometry and scaling;
+  - a real mouse drag on a scaled canvas;
+  - Escape → guard → Discard;
+  - the editor path with Ctrl+S;
+  - the phone layout;
+  - a missing studio file.
+- `tests/ha/` against a real Home Assistant 2026.10.2:
+  - the studio loads from the dashboard resource URL;
+  - it sits above HA's card-editor dialog;
+  - *Apply* → HA's *Save* persists the edit;
+  - from an Edit-mode card on the dashboard it saves exactly that card (duplicate `card_id`), the
+    open dashboard updates, and a concurrent edit is refused.
+
+  The tier now blocks HA's service worker: in a fresh browser it finishes installing ~10 s after
+  the first load and reloads the page (`controllerchange` → `location.reload()`), which broke
+  longer tests at random.
+- `tests/compat.test.js --strip <regex>` removes an expected, documented change (here the Studio
+  button) from both sides before comparing. Everything else must still be identical.
+- `build.js` minifies both files, checks that both carry the `package.json` version, and checks
+  each for its registrations.
+
+## [6.40.0] - 2026-10-21
 
 ### v7 foundation (V7_PLAN.md Phase 1) — no change for dashboards
 

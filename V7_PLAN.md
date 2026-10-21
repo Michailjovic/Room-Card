@@ -461,3 +461,57 @@ companion app (author), and the tablet run of the S5 probe.
 - **CI:** `.github/workflows/test.yml` needs two additions (the workflow folder is edited by the
   author): the schema test in the jsdom job and a new `ha` job running `npm run test:ha` (Docker is
   available on `ubuntu-latest`). Snippet in the v6.40.0 release conversation.
+
+### Phase 2 — v6.41.0
+
+- **Two bundles, still plain script.** `src/manifest.json` lists `bundles`: the card (16 parts,
+  now including the loader `src/editor/90-studio-hook.js`) and the studio (`src/studio/*` plus
+  the schema registry). The studio bundle is one closure, so nothing leaks to `window`. The schema
+  is wrapped so that its UMD footer exports into the closure.
+- **Handshake in both directions, never shared scope.**
+  - The card publishes `RoomOverlayCard._rocInternals` (version, YAML, clone, migrate, profile,
+    cfgKey, studio URL).
+  - The studio registers `RoomOverlayCard._rocStudio`.
+  - The loader finds the card's own `<script src>` (fallback: resource timing), swaps the file
+    name, keeps the query (HACS' `?hacstag=`) and adds `?v=`.
+  - `clone` is a wrapper because the native `structuredClone` throws "Illegal invocation" when
+    called as a method. A real Chromium run caught this; jsdom has no `structuredClone`.
+- **Card hooks** (compat: card DOM identical to v6.40.0, the editor differs only by the Studio
+  button):
+  - `_rocRaw`: the object HA handed in, used for identity lookup;
+  - `_rocVp`: viewport override for the profile choice;
+  - `_rocSink` / `_rocRoomSink`: drags and room switches go to the studio instead of window
+    events;
+  - `_roc_studio`: a render-only marker that hides Save / profile flip.
+- **Editor hooks:**
+  - `_rocHosted` / `_rocHost`: hide Studio/undo/redo and the editor's own preview; undo/redo are
+    delegated to the studio; the URL hash is not written;
+  - `_rocStudioLoad(cfg)`: a forced re-render (its `setConfig` skips renders when only values
+    change);
+  - editors outside the studio ignore `roc-pos-update` / `roc-room-switch` while
+    `_rocStudioOpen` is set.
+- **Canvas config = working config + render-only overrides** (`_roc_studio`, Edit mode in
+  *Arrange*, no `url_sync`, `follow_mode: manual`, `layout.height` viewport/fill → container
+  when the frame is landscape). `_restore` removes all of them before a canvas change becomes a
+  commit.
+  - *Global* editing strips the previewed room's own keys, like the editor's preview.
+  - A v3 config is migrated once at open (in memory). Without that, every canvas push re-ran the
+    migration and logged it.
+- **Undo** is the studio's own snapshot stack, not the editor's. A typing burst (< 800 ms
+  between commits from the editor) is one step. §5.4 said "command stack": snapshots are enough
+  until canvas editing (Phase 3) needs finer granularity.
+- **Dashboard save (D3 b)** follows the S3 recipe: identity path → re-read → compare → replace →
+  `lovelace.saveConfig` (updates the open dashboard; WS save as the fallback). Read-only
+  fallbacks: non-admin, YAML mode, generated (strategy) dashboard, card not found.
+- **Default frame:** *Tablet* on a landscape screen, *Fit* on a portrait screen. With outline and
+  inspector beside it, the canvas column of a laptop is squarish, and *Fit* would show a desktop
+  layout as portrait.
+- **HA tier:** HA's service worker reloads the page once it finishes installing in a fresh browser
+  context (`controllerchange` → `location.reload()`, ~10 s in). Longer tests failed at random, so
+  the tier runs with `serviceWorkers: 'block'`.
+- **Not in Phase 2:** search (moves to Phase 3 with selection) and the Czech string table (before
+  7.0.0, §5.8).
+- **G2 gate** (author): the studio on the PC and the wall tablet. The companion-app check (S1)
+  happens on this build.
+- **Release workflow** (author-edited): it must upload `dist/room-overlay-card-studio.js` (+ map)
+  and verify it like the card.

@@ -28,7 +28,10 @@ async function main(){
   const cfg=path.join(work,'config');
   fs.mkdirSync(path.join(cfg,'www'),{recursive:true});
   fs.copyFileSync(path.join(__dirname,'ha-configuration.yaml'),path.join(cfg,'configuration.yaml'));
-  fs.copyFileSync(path.join(ROOT,'room-overlay-card.js'),path.join(cfg,'www','room-overlay-card.js'));
+  // the card AND the lazy-loaded studio, side by side as HACS installs them (ROC_CARD_DIR=dist
+  // runs the tier against the minified release assets)
+  const SRCDIR=process.env.ROC_CARD_DIR?path.resolve(ROOT,process.env.ROC_CARD_DIR):ROOT;
+  for(const f of ['room-overlay-card.js','room-overlay-card-studio.js'])fs.copyFileSync(path.join(SRCDIR,f),path.join(cfg,'www',f));
   try{sh('docker rm -f '+NAME);}catch(_){}
   console.log('starting '+IMAGE+' …');
   sh('docker run -d --name '+NAME+' -p '+PORT+':8123 -v "'+cfg+':/config" -e TZ=Europe/Prague '+IMAGE);

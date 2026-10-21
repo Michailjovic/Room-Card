@@ -3,7 +3,7 @@
 'use strict';
 const {defineConfig}=require('@playwright/test');
 module.exports=defineConfig({
-  testMatch:'tests/e2e.spec.js',
+  testMatch:['tests/e2e.spec.js','tests/studio.spec.js'],
   timeout:30000,
   retries:1,
   use:{

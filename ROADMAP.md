@@ -1,7 +1,7 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.31.0** (2026-10-20, v5.2.0/v5.3.0 and v6.26–v6.29 unused). Verified against Home
-Assistant 2026.6.
+Current release: **v6.40.0** (2026-10-21, v5.2.0/v5.3.0, v6.26–v6.29 and v6.32–v6.39 unused). Verified against Home
+Assistant 2026.10.2.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
 v3.1 – v5.1 feature run, and the editor GUI/UX revalidation (v5.9.0–v5.10.1) are
@@ -30,6 +30,13 @@ heating, windows with blinds, doors and any entity placed on it; v7.0.0 ships wi
 documentation set, an AI-readable spec (`docs/AI_SPEC.md` + `llms.txt`) and the HACS default
 submission. It absorbs the old v7.0.0 plan (AI README), the live floorplan (1b), the overview's
 cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the cockpit preset.
+
+| Phase | Release | Status |
+|---|---|---|
+| 0 — spikes | — | ✅ done (V7_PLAN §13) |
+| 1 — foundation (`src/`, schema, test tiers) | v6.40.0 | ✅ released |
+| 2 — Studio shell | v6.41.0 | 🔨 built, awaiting release + gate G2 (author's PC and tablet) |
+| 3 — canvas editing | v6.42.0 | next |
 
 ## Shipped history (condensed)
 
@@ -119,7 +126,8 @@ failure broke HACS installs.
 | **v6.25.1** | Fix: the new nav row / strip-card fields alone now enable Save; e2e suite updated to the v6.24.1 full-screen portrait panels |
 | **v6.30.0** | **Overview page** — `rooms[].overview`: every room as a live tile with state chips, optional header (pills, nav strip cards), left/right card columns and a section dock; regions collapse into the grid; photo tiles or rows on phones; zoom transition tile ↔ room; the live strip is parked, not re-mounted; full GUI. See [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) |
 | **v6.31.0** | Overview: grid order with ▲▼ in the GUI (`grid.rooms`, independent of the nav), optional room names (`grid.names`, `overview_tile.show_name`), fix: `fade` / zoom start under HA's Lit `ha-card`, fix: touchpad swipe left the view / skipped rooms |
-| **v6.40.0** *(unreleased)* | v7 Phase 1 — source split into `src/` + `tools/assemble.js`, config schema registry (`src/schema/`), schema / compat / HA-in-the-loop test tiers; no rendering change |
+| **v6.40.0** | v7 Phase 1 — source split into `src/` + `tools/assemble.js`, config schema registry (`src/schema/`), schema / compat / HA-in-the-loop test tiers; no rendering change |
+| **v6.41.0** *(unreleased)* | v7 Phase 2 — **Room Card Studio**: full-screen editor (lazy-loaded second file `room-overlay-card-studio.js`), live canvas in device frames, today's editor as the inspector, undo/redo, unsaved-changes guard, Apply to HA's editor or save straight to the dashboard (located by identity, conflict check), YAML view, history, schema check in the status bar |
 
 ### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
 

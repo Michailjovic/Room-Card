@@ -8,6 +8,9 @@ module.exports=defineConfig({
   timeout:90000,
   retries:0,
   workers:1,
-  use:{browserName:'chromium',viewport:{width:1400,height:900}},
+  // HA's service worker reloads the page (controllerchange → location.reload()) once it finishes
+  // installing in a fresh browser context — ~10 s after the first load, in the middle of a test.
+  // No test here is about the service worker, so it is blocked.
+  use:{browserName:'chromium',viewport:{width:1400,height:900},serviceWorkers:'block'},
   reporter:[['list']],
 });

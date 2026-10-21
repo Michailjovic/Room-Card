@@ -1,0 +1,79 @@
+// ---- Strings (V7_PLAN §5.8: EN first; CS is added before 7.0.0) ----------------------------
+// Every user-visible studio string goes through t(). Language comes from hass.language; a
+// language without a table (or a missing key) falls back to English.
+const ROC_STUDIO_STR={en:{
+  title:'Room Card Studio',
+  room:'Room',global:'Global (all rooms)',
+  frame_fit:'Fit',frame_landscape:'Tablet',frame_portrait:'Tablet portrait',frame_phone:'Phone',
+  frame_hint:'Preview size — the card picks its layout profile from this frame like it does from a screen',
+  mode_arrange:'Arrange',mode_arrange_hint:'Edit mode: drag elements on the canvas, tap/hold actions do nothing',
+  mode_live:'Live',mode_live_hint:'The card exactly as on the dashboard — taps run their real actions',
+  undo:'Undo (Ctrl+Z)',redo:'Redo (Ctrl+Y)',yaml:'YAML',history:'History',close:'Close (Esc)',
+  outline:'Outline',inspector:'Inspector',
+  apply:'Apply & close',apply_hint:'Hand the config back to Home Assistant\'s card editor — then press Save there',
+  save:'Save',save_hint:'Save this card to the dashboard (Ctrl+S)',
+  copy_yaml:'Copy YAML',
+  rooms:'Rooms',elements:'Elements',inherited:'shared',
+  k_overlays:'Overlay images',k_zones:'Zones',k_badges:'Badges',k_icons:'Icons',k_labels:'Labels',k_gauges:'Gauges',
+  k_glows:'Light glows',k_blinds:'Blinds',k_elements:'Embedded cards',k_groups:'Groups',k_vacuum_widgets:'Vacuum widgets',
+  k_lights:'Light controls',
+  valid_ok:'No problems',valid_err:'{e} errors',valid_warn:'{w} warnings',
+  valid_title:'Config check',valid_none:'The schema found nothing to report.',
+  dirty:'Unsaved changes',clean:'No unsaved changes',saved_at:'Saved {t}',applied:'Applied',
+  tgt_editor:'Returns to HA\'s card editor',tgt_dash:'Saves to dashboard “{d}” · {p}',tgt_yaml:'Read-only — copy the YAML ({r})',
+  r_admin:'not an administrator',r_yaml:'YAML-mode dashboard',r_strategy:'generated dashboard',r_notfound:'card not found in the dashboard',r_nows:'no connection to Home Assistant',
+  guard_title:'Unsaved changes',guard_body:'Close the studio and lose the changes made here?',
+  discard:'Discard changes',keep:'Keep editing',
+  conflict_title:'The card changed elsewhere',
+  conflict_body:'Someone (another tab or device) changed this card on the dashboard after the studio opened it. Saving now would overwrite that change.',
+  overwrite:'Overwrite anyway',cancel:'Cancel',
+  save_failed:'Save failed: {m}',saving:'Saving…',
+  yaml_title:'Card YAML',yaml_body:'The full card config as it is in the studio right now.',copied:'Copied',copy:'Copy',
+  hist_title:'Restore a previous version',hist_body:'The last 10 versions saved or applied from the studio in this browser (a convenience, not a backup).',
+  hist_empty:'Nothing saved from the studio in this browser yet.',restore:'Restore',
+  canvas_err:'The card cannot render this config: {m}',
+  ver_mismatch:'Studio v{s} with card v{c} — reload the page (browser cache)',
+}};
+function rocT(lang,key,vars){
+  const tb=ROC_STUDIO_STR[lang]||ROC_STUDIO_STR.en;
+  let s=tb[key];if(s==null)s=ROC_STUDIO_STR.en[key];if(s==null)s=key;
+  if(vars)s=s.replace(/\{(\w+)\}/g,function(m,k){return vars[k]!=null?String(vars[k]):m;});
+  return s;
+}
+
+// ---- Small DOM / data helpers --------------------------------------------------------------
+function rsEl(tag,attrs,kids){
+  const e=document.createElement(tag);
+  if(attrs)for(const k in attrs){
+    const v=attrs[k];if(v==null||v===false)continue;
+    if(k==='text')e.textContent=v;
+    else if(k==='html')e.innerHTML=v;
+    else if(k.startsWith('on'))e.addEventListener(k.slice(2),v);
+    else e.setAttribute(k,v===true?'':v);
+  }
+  (kids||[]).forEach(function(c){if(c!=null)e.appendChild(typeof c==='string'?document.createTextNode(c):c);});
+  return e;
+}
+function rsIcon(name){return rsEl('ha-icon',{icon:name});}
+// next node up the composed tree (crosses shadow-root boundaries)
+function rsUp(n){return n.parentNode||n.host||null;}
+function rsFindUp(start,pred){let n=start,g=0;while(n&&g++<300){if(n.nodeType===1&&pred(n))return n;n=rsUp(n);}return null;}
+function rsDeepFind(root,pred){
+  const q=[root];let g=0;
+  while(q.length&&g++<20000){const x=q.shift();if(!x)continue;if(x.nodeType===1&&pred(x))return x;if(x.shadowRoot)q.push(x.shadowRoot);const ch=x.children||[];for(let i=0;i<ch.length;i++)q.push(ch[i]);}
+  return null;
+}
+// path of `needle` inside `root` by object identity, e.g. ['views',7,'cards',0]
+function rsPathOf(root,needle){
+  let found=null;
+  (function walk(o,p){
+    if(found||!o||typeof o!=='object')return;
+    if(o===needle){found=p;return;}
+    for(const k of Object.keys(o))walk(o[k],p.concat(Array.isArray(o)?+k:k));
+  })(root,[]);
+  return found;
+}
+function rsAt(o,path){return path.reduce(function(a,k){return a==null?a:a[k];},o);}
+function rsJ(o){return JSON.stringify(o);}
+function rsTime(ms){const d=new Date(ms);const p=function(n){return String(n).padStart(2,'0');};return p(d.getHours())+':'+p(d.getMinutes());}
+function rsDate(ms){const d=new Date(ms);return d.toLocaleDateString()+' '+rsTime(ms);}

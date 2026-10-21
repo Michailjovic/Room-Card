@@ -18,7 +18,13 @@ jobs:
           node-version: 22
 
       - name: Syntax check
-        run: node --check room-overlay-card.js
+        run: node --check room-overlay-card.js && node --check room-overlay-card-studio.js
+
+      # v6.40.0: room-overlay-card.js is assembled from src/ (tools/assemble.js); v6.41.0 adds the
+      # second bundle room-overlay-card-studio.js. Fails when someone edited src/ without
+      # re-assembling, or edited an assembled root file directly.
+      - name: Assembled files match src/
+        run: node tools/assemble.js --check
 
       - name: Smoke tests (pure functions)
         run: node tests/smoke.test.js
@@ -40,17 +46,29 @@ jobs:
       - name: Overview tests (jsdom)
         run: node tests/overview.test.js
 
-      # The release asset is the MINIFIED bundle, so the minified bundle is what
-      # has to be green — not just the source. All three tiers accept a path
-      # argument for exactly this reason. Catches a terser setting that silently
-      # breaks the card (e.g. anyone ever enabling property mangling).
-      - name: Build + verify the minified bundle
+      # v6.40.0: config schema registry — validator, reference configs, documented
+      # examples and every key the card reads must be in src/schema/roc-schema.js.
+      - name: Schema tests (jsdom)
+        run: node tests/schema.test.js
+
+      # v6.41.0: Room Card Studio — loader URL, both save paths (HA editor / dashboard,
+      # duplicate card_id, conflict, read-only cases), undo/redo, canvas round-trip,
+      # Escape guard, and open → Apply unchanged on every reference config.
+      - name: Studio tests (jsdom)
+        run: node tests/studio.test.js
+
+      # The release assets are the MINIFIED bundles, so the minified bundles are what
+      # have to be green — not just the source. Every tier accepts a path argument for
+      # exactly this reason. Catches a terser setting that silently breaks the card
+      # (e.g. anyone ever enabling property mangling).
+      - name: Build + verify the minified bundles
         run: npm i --no-save terser && npm run build:verify
 
   e2e:
-    # Real-renderer geometry tier — headless Chromium measures PIXELS against
+    # Real-renderer tier — headless Chromium measures PIXELS against
     # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,
-    # anti-breathing). See V5_PLAN.md phase D.
+    # anti-breathing), and since v6.41.0 drives the studio over HTTP
+    # (tests/studio.spec.js: lazy import, modal, frames, real drag, phone layout).
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -64,8 +82,30 @@ jobs:
       - name: Install Playwright
         run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
 
-      - name: Geometry e2e
+      - name: Geometry + studio e2e
         run: npx playwright test
+
+  ha:
+    # v6.40.0: a real Home Assistant (Docker, pinned to the version the author runs)
+    # with the card AND the studio installed; Playwright drives the real frontend —
+    # the card inside HA's Lit ha-card, the editor dialog, dashboard save paths, and
+    # (v6.41.0) the real studio from HA's editor and from the dashboard.
+    # See tests/ha/run-ha.js and V7_PLAN.md §13–14.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        run: npm i --no-save @playwright/test && npx playwright install --with-deps chromium
+
+      - name: HA-in-the-loop tests
+        run: npm run test:ha
 
   hacs:
     runs-on: ubuntu-latest

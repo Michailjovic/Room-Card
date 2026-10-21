@@ -1,23 +1,39 @@
 {
-  "output": "room-overlay-card.js",
-  "parts": [
-    "core/00-base.js",
-    "core/10-layout.js",
-    "core/20-glow.js",
-    "core/21-transform.js",
-    "core/30-migrate.js",
-    "core/40-rooms.js",
-    "core/50-sections.js",
-    "core/60-overview.js",
-    "core/70-format.js",
-    "core/80-light-controls.js",
-    "core/85-nav-live-blinds.js",
-    "core/90-cover-badges-cards.js",
-    "card/room-overlay-card.js",
-    "editor/00-yaml-filters.js",
-    "editor/room-overlay-card-editor.js"
-  ],
-  "standalone": [
-    "schema/roc-schema.js"
+  "bundles": [
+    {
+      "output": "room-overlay-card.js",
+      "parts": [
+        "core/00-base.js",
+        "core/10-layout.js",
+        "core/20-glow.js",
+        "core/21-transform.js",
+        "core/30-migrate.js",
+        "core/40-rooms.js",
+        "core/50-sections.js",
+        "core/60-overview.js",
+        "core/70-format.js",
+        "core/80-light-controls.js",
+        "core/85-nav-live-blinds.js",
+        "core/90-cover-badges-cards.js",
+        "card/room-overlay-card.js",
+        "editor/00-yaml-filters.js",
+        "editor/room-overlay-card-editor.js",
+        "editor/90-studio-hook.js"
+      ]
+    },
+    {
+      "output": "room-overlay-card-studio.js",
+      "parts": [
+        "studio/00-head.js",
+        "studio/05-schema-pre.js",
+        "schema/roc-schema.js",
+        "studio/06-schema-post.js",
+        "studio/10-strings-util.js",
+        "studio/20-css.js",
+        "studio/30-targets.js",
+        "studio/40-studio.js",
+        "studio/90-register.js"
+      ]
+    }
   ]
 }

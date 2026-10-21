@@ -16,6 +16,7 @@ const DASH={views:[
   {path:'m',title:'Masonry',cards:[CARD({aspect_ratio:'16/9'}),CARD({aspect_ratio:'4/3'})]},
   {path:'s',title:'Sections',type:'sections',sections:[{type:'grid',cards:[CARD({aspect_ratio:'21/9'})]}]},
   {path:'k',title:'Stack',cards:[{type:'vertical-stack',cards:[{type:'markdown',content:'x'},CARD({aspect_ratio:'1/1'})]}]},
+  {path:'e',title:'Edit mode',cards:[CARD({aspect_ratio:'16/9'}),CARD({aspect_ratio:'4/3',test_mode:true})]},
 ]};
 // Locate THIS card instance in the dashboard config by object identity (hui-card.config is the
 // frozen object from lovelace.config) → returns a path like ['views',0,'cards',1].
@@ -110,4 +111,69 @@ test('editor opens in HA\'s dialog; a modal <dialog> on <body> stacks above it a
   console.log('studio',JSON.stringify(r));
   expect(r).toMatchObject({haModal:1,editorFound:true,studioModal:true,onTop:true,cardRendered:true});
   expect(r.hostedEditorInputs).toBeGreaterThan(10);
+});
+
+const DEEP=`function d(r,s){const q=[r],o=[];while(q.length){const x=q.shift();if(!x)continue;if(x.matches&&x.matches(s))o.push(x);if(x.shadowRoot)q.push(x.shadowRoot);for(const c of x.children||[])q.push(c);}return o}`;
+const STUDIO_UP=()=>{const C=customElements.get('room-overlay-card');const S=C&&C._rocStudio&&C._rocStudio.Studio.current;return !!(S&&S._card&&S._card._rendered&&S._ed);};
+const shot=async(page,name)=>{if(process.env.ROC_HA_SHOTS)await page.screenshot({path:require('path').join(process.env.ROC_HA_SHOTS,name+'.png')});};
+test('studio from HA\'s card editor: loads from the resource URL, sits above HA\'s dialog, Apply → HA\'s Save persists',async({page})=>{
+  const reqs=[];page.on('request',r=>{if(/room-overlay-card-studio\.js/.test(r.url()))reqs.push(r.url());});
+  await login(page,TOK);await page.goto(B+'/roc-test/m');await hass(page);
+  await page.waitForTimeout(2000);
+  expect(reqs.length).toBe(0);                                  // viewing never loads the studio
+  await page.evaluate(async D=>{eval(D);const root=d(document.body,'hui-root')[0];root.lovelace.setEditMode(true);await new Promise(r=>setTimeout(r,1500));
+    const opt=d(document.body,'hui-card-options')[0];[...opt.shadowRoot.querySelectorAll('ha-button,mwc-button,button')].find(b=>/Edit/.test(b.textContent)).click();
+    await new Promise(r=>setTimeout(r,3000));
+    d(document.body,'room-overlay-card-editor')[0].querySelector('#roc-studio').click();},DEEP);
+  await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
+  expect(reqs[0]).toMatch(/\/local\/room-overlay-card-studio\.js\?v=\d+\.\d+\.\d+$/);
+  await page.waitForTimeout(800);await shot(page,'studio-from-editor');
+  const r=await page.evaluate(async D=>{eval(D);
+    const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;
+    const cx=innerWidth/2,cy=innerHeight/2;let t=document.elementFromPoint(cx,cy);while(t&&t.shadowRoot){const n=t.shadowRoot.elementFromPoint(cx,cy);if(!n||n===t)break;t=n}
+    let onTop=false;for(let n=t;n;n=n.parentNode||n.host)if(n===S._dlg){onTop=true;break}
+    const icon=S._sr.querySelector('.bar ha-icon');
+    const wr=S._card.shadowRoot.querySelector('.wrap').getBoundingClientRect();
+    const out={kind:S.target.kind,modal:S._dlg.matches(':modal'),onTop,haDialogOpen:d(document.body,'dialog').filter(x=>x!==S._dlg&&x.open).length,
+      iconRendered:!!(icon&&icon.shadowRoot&&icon.shadowRoot.innerHTML.length),canvasW:Math.round(wr.width)};
+    S._ed._fire(Object.assign({},S._ed._config,{aspect_ratio:'2/1'}));   // an edit in the hosted editor
+    const before=d(document.body,'hui-dialog-edit-card')[0]._cardConfig;
+    out.haUntouched=before&&before.aspect_ratio==='16/9';
+    await S.save();                                                       // Apply & close
+    await new Promise(r=>setTimeout(r,800));
+    const dlg=d(document.body,'hui-dialog-edit-card')[0];
+    out.closed=!document.querySelector('dialog.roc-studio');
+    out.haGot=dlg._cardConfig&&dlg._cardConfig.aspect_ratio;
+    const save=d(dlg.shadowRoot,'ha-button,mwc-button,button').find(b=>/^\s*Save\s*$/.test(b.textContent));
+    save.click();await new Promise(r=>setTimeout(r,2500));
+    const lc=await document.querySelector('home-assistant').hass.callWS({type:'lovelace/config',url_path:'roc-test'});
+    out.saved=lc.views[0].cards[0].aspect_ratio;out.other=lc.views[0].cards[1].aspect_ratio; // cards[1] = 5/4 from the save test above
+    return out;},DEEP);
+  console.log('studio/editor',JSON.stringify(r));
+  expect(r).toMatchObject({kind:'editor',modal:true,onTop:true,haDialogOpen:1,iconRendered:true,haUntouched:true,closed:true,haGot:'2/1',saved:'2/1',other:'5/4'});
+  expect(r.canvasW).toBeGreaterThan(300);
+});
+test('studio from an Edit-mode card on the dashboard: saves exactly that card, the dashboard updates, a concurrent edit is refused',async({page})=>{
+  await login(page,TOK);await page.goto(B+'/roc-test/e');await hass(page);
+  await page.waitForFunction(D=>{eval(D);const c=d(document.body,'room-overlay-card');return c.length===2&&c.every(x=>x._rendered);},DEEP,{timeout:30000});
+  await page.evaluate(D=>{eval(D);d(document.body,'room-overlay-card')[1].shadowRoot.querySelector('.tm-studio').click();},DEEP);
+  await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
+  await page.waitForTimeout(800);await shot(page,'studio-from-dashboard');
+  const r=await page.evaluate(async D=>{eval(D);
+    const h=document.querySelector('home-assistant').hass;const get=()=>h.callWS({type:'lovelace/config',url_path:'roc-test'});
+    const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;
+    const out={kind:S.target.kind,path:S.target.path};
+    S._commit(Object.assign(JSON.parse(JSON.stringify(S.work)),{aspect_ratio:'3/2'}),'test');
+    out.ok1=await S.save();
+    await new Promise(r=>setTimeout(r,1500));
+    let lc=await get();out.c0=lc.views[3].cards[0].aspect_ratio;out.c1=lc.views[3].cards[1].aspect_ratio;out.tm=lc.views[3].cards[1].test_mode;
+    out.live=d(document.body,'room-overlay-card').filter(c=>!S._dlg.contains(c)&&!(S._sr&&S._sr.contains(c))).map(c=>c._config&&c._config.aspect_ratio);
+    const c2=JSON.parse(JSON.stringify(lc));c2.views[3].cards[1].aspect_ratio='5/4';await h.callWS({type:'lovelace/config/save',url_path:'roc-test',config:c2});
+    S._commit(Object.assign(JSON.parse(JSON.stringify(S.work)),{aspect_ratio:'9/9'}),'test');
+    out.ok2=await S.save();out.conflictShown=!!S._sr.querySelector('.layer [data-act="overwrite"]');
+    lc=await get();out.final=lc.views[3].cards[1].aspect_ratio;
+    S.close();return out;},DEEP);
+  console.log('studio/dashboard',JSON.stringify(r));
+  expect(r).toMatchObject({kind:'dashboard',path:['views',3,'cards',1],ok1:true,c0:'16/9',c1:'3/2',tm:true,ok2:false,conflictShown:true,final:'5/4'});
+  expect(r.live).toContain('3/2');
 });

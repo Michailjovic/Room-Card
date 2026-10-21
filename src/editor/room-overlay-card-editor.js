@@ -344,6 +344,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   // OWN preview card (which reads url_sync) follows the editor. Automates the
   // "scroll to restore #room=… then it loads" workaround. url_sync only.
   _writeEditHash(cfg){
+    if(this._rocHosted)return; // inside the studio the canvas is the preview — leave the dashboard URL alone
     try{
       const u=cfg&&cfg.url_sync;
       if(!u||typeof location==='undefined'||!Array.isArray(cfg.rooms)||!cfg.rooms.length)return;
@@ -504,8 +505,14 @@ class RoomOverlayCardEditor extends HTMLElement{
     }catch(_){}
   }
 
-  _undo(){if(this._histIdx>0)this._histGo(this._histIdx-1);}
-  _redo(){if(this._histIdx<this._hist.length-1)this._histGo(this._histIdx+1);}
+  _undo(){if(this._rocHost){this._rocHost.undo();return;}if(this._histIdx>0)this._histGo(this._histIdx-1);}
+  _redo(){if(this._rocHost){this._rocHost.redo();return;}if(this._histIdx<this._hist.length-1)this._histGo(this._histIdx+1);}
+  // Studio (v6.41.0): load a config the studio produced (undo/redo, a canvas drag) and re-render
+  // unconditionally — setConfig() skips the render when only values (not item counts) changed.
+  _rocStudioLoad(cfg){
+    this._config=rocMigrateLayout(cfg);
+    this._render();
+  }
   _histGo(i){
     this._histIdx=i;
     this._config=JSON.parse(this._hist[i]);
@@ -2950,16 +2957,19 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'<div style="display:flex;justify-content:space-between;align-items:center;padding:0 4px 8px;">'
       +'<span style="display:flex;align-items:baseline;gap:8px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span><span style="font-size:11px;color:var(--secondary-text-color);">v'+ROC_VERSION+'</span></span>'
       +'<span style="display:flex;gap:6px;align-items:center;">'
+      +(this._rocHosted?'':'<span id="roc-studio-msg" style="font-size:11px;color:var(--error-color);max-width:220px;"></span><button id="roc-studio" type="button" title="Open the full-screen Room Card Studio — the card on a large canvas next to this editor" style="padding:2px 8px;border-radius:4px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1;"><ha-icon icon="mdi:fullscreen" style="--mdc-icon-size:16px;"></ha-icon>Studio</button>')
       +'<button id="roc-adv-toggle" type="button" title="Show the raw YAML textareas (tap_action, conditions, etc.) on every element. Off = simpler, basic fields only." style="padding:2px 8px;border-radius:4px;border:1px solid '+(this._showAdv?'var(--primary-color)':'rgba(255,255,255,0.4)')+';background:'+(this._showAdv?'rgba(3,169,244,0.15)':'none')+';color:'+(this._showAdv?'var(--primary-color)':'var(--primary-text-color)')+';cursor:pointer;display:inline-flex;align-items:center;line-height:1;"><ha-icon icon="mdi:code-braces" style="--mdc-icon-size:16px;"></ha-icon></button>'
+      +(this._rocHosted?'':''
       +'<button id="roc-undo" title="Undo (Ctrl+Z)"'+(this._histIdx>0?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx>0?'':'opacity:0.4;cursor:default;')+'">&#8630;</button>'
       +'<button id="roc-redo" title="Redo (Ctrl+Y)"'+(this._histIdx<this._hist.length-1?'':' disabled')+' style="padding:2px 9px;border-radius:4px;border:1px solid rgba(255,255,255,0.4);background:none;color:var(--primary-text-color);cursor:pointer;font-size:14px;line-height:1.3;'+(this._histIdx<this._hist.length-1?'':'opacity:0.4;cursor:default;')+'">&#8631;</button>'
+      )
       +'</span></div>'
       +'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:0 4px 8px;">'
       +(hasRooms?'<span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--secondary-text-color);"><ha-icon icon="mdi:door" style="--mdc-icon-size:16px;"></ha-icon>Room <select id="room-select" style="padding:5px 8px;border-radius:6px;border:1px solid var(--divider-color);background:var(--card-background-color);color:var(--primary-text-color);cursor:pointer;font-size:13px;"><option value="global"'+(self._editGlobal?' selected':'')+'>🌐 Global (all rooms)</option>'+c.rooms.map(function(r,i){return '<option value="'+i+'"'+(i===self._editRoomIdx&&!self._editGlobal?' selected':'')+'>'+self._e(r.name||r.id||('room_'+(i+1)))+'</option>';}).join('')+'</select></span>':'')
       +'<label title="Puts the card into a safe interactive editing state: real tap/hold actions are suppressed, elements can be dragged directly, and an orientation-flip test button appears. Shows a live, draggable copy of the card right here below, and — since this is saved to your config — the same behaviour on your dashboard card too, until switched off." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="test_mode" type="checkbox"'+(c.test_mode?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:cursor-move" style="--mdc-icon-size:16px;"></ha-icon>Edit mode</label>'
       +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;color:var(--secondary-text-color);"><input id="haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:vibrate" style="--mdc-icon-size:16px;"></ha-icon>Haptics</label>'
       +'</div>'
-      +(c.test_mode?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
+      +(c.test_mode&&!this._rocHosted?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +((this._wasMigrated&&!_isEmpty)?'<div style="margin:0 4px 10px;padding:8px 12px;border:1px solid rgba(230,160,40,0.7);background:rgba(230,160,40,0.12);border-radius:8px;font-size:12px;line-height:1.5;">Config was <b>auto-migrated</b> from the v3 tier system to the v4 layout engine (in memory only). Review the <b>Layout</b> tab, then <button id="roc-mig-save" style="padding:3px 12px;border-radius:5px;background:var(--primary-color);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;">Save migrated config</button></div>':'')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
       +'</div>';
@@ -3073,6 +3083,14 @@ class RoomOverlayCardEditor extends HTMLElement{
       const st=ta.getAttribute('style')||'';
       if(st.indexOf('monospace')>=0&&!ta.hasAttribute('data-act-yaml')){const p=ta.parentElement;if(p)p.classList.add('roc-adv');}
     });
+    const studioBtn=this.querySelector('#roc-studio');
+    if(studioBtn)studioBtn.addEventListener('click',function(){
+      const msg=self.querySelector('#roc-studio-msg');if(msg)msg.textContent='';
+      studioBtn.disabled=true;
+      rocOpenStudio({from:'editor',editor:self,hass:self._hass})
+        .catch(function(err){const m=self.querySelector('#roc-studio-msg');if(m)m.textContent=(err&&err.message)||String(err);})
+        .then(function(){studioBtn.disabled=false;});
+    });
     const migBtn=this.querySelector('#roc-mig-save');
     if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;self._fire(self._collectConfig());self._render();});
     const advT=this.querySelector('#roc-adv-toggle');
@@ -3116,12 +3134,12 @@ class RoomOverlayCardEditor extends HTMLElement{
     this._paintToast();
     // Position updates from card drag/keyboard — relay through editor so HA saves correctly
     if(this._rocPosHandler){window.removeEventListener('roc-pos-update',this._rocPosHandler);this._rocPosHandler=null;}
-    if(c.test_mode){
+    if(c.test_mode&&!this._rocHosted){ // hosted in the studio: the studio feeds canvas changes in directly
       this._rocPosHandler=this._makeRocPosHandler();
       window.addEventListener('roc-pos-update',this._rocPosHandler);
     }
     if(this._rocRoomHandler){window.removeEventListener('roc-room-switch',this._rocRoomHandler);this._rocRoomHandler=null;}
-    if(c.test_mode){
+    if(c.test_mode&&!this._rocHosted){
       this._rocRoomHandler=this._makeRocRoomHandler();
       window.addEventListener('roc-room-switch',this._rocRoomHandler);
     }
@@ -3130,6 +3148,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   _makeRocPosHandler(){
     const self=this;
     return function(e){
+      if(RoomOverlayCard._rocStudioOpen)return; // the studio owns edits while it is open (its Apply comes back through _fire)
       const nc=e.detail&&e.detail.config;
       if(!nc)return;
       // Only accept updates from "our" card (two cards in test mode = cross-talk)
@@ -3167,6 +3186,7 @@ class RoomOverlayCardEditor extends HTMLElement{
   _makeRocRoomHandler(){
     const self=this;
     return function(e){
+      if(RoomOverlayCard._rocStudioOpen)return;
       const d=e.detail;
       if(!d||d.cfgKey!==cfgKey(self._config))return;
       if(!Array.isArray(self._config.rooms))return;

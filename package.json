@@ -1,6 +1,6 @@
 {
   "name": "room-overlay-card",
-  "version": "6.40.0",
+  "version": "6.41.0",
   "description": "Home Assistant Lovelace card for room visualization with image overlay layers, conditional transitions, clickable zones, sliders, gauges, weather effects and embedded HA cards.",
   "keywords": [
     "home-assistant",
@@ -12,15 +12,16 @@
   "scripts": {
     "assemble": "node tools/assemble.js",
     "assemble:check": "node tools/assemble.js --check",
-    "test": "node tools/assemble.js --check && node tests/smoke.test.js && node tests/render.test.js && node tests/lifecycle.test.js && node tests/design.test.js && node tests/overview.test.js && node tests/schema.test.js",
+    "test": "node tools/assemble.js --check && node tests/smoke.test.js && node tests/render.test.js && node tests/lifecycle.test.js && node tests/design.test.js && node tests/overview.test.js && node tests/schema.test.js && node tests/studio.test.js",
     "test:smoke": "node tests/smoke.test.js",
     "test:lifecycle": "node tests/lifecycle.test.js",
     "test:schema": "node tests/schema.test.js",
+    "test:studio": "node tests/studio.test.js",
     "test:compat": "node tests/compat.test.js",
     "test:e2e": "playwright test",
     "test:ha": "node tests/ha/run-ha.js",
     "build": "node tools/assemble.js --check && node build.js --check",
-    "build:verify": "node tools/assemble.js --check && node build.js --check && node tests/smoke.test.js dist/room-overlay-card.js && node tests/render.test.js dist/room-overlay-card.js && node tests/lifecycle.test.js dist/room-overlay-card.js && node tests/design.test.js dist/room-overlay-card.js && node tests/overview.test.js dist/room-overlay-card.js && node tests/schema.test.js dist/room-overlay-card.js"
+    "build:verify": "node tools/assemble.js --check && node build.js --check && node tests/smoke.test.js dist/room-overlay-card.js && node tests/render.test.js dist/room-overlay-card.js && node tests/lifecycle.test.js dist/room-overlay-card.js && node tests/design.test.js dist/room-overlay-card.js && node tests/overview.test.js dist/room-overlay-card.js && node tests/schema.test.js dist/room-overlay-card.js && node tests/studio.test.js dist/room-overlay-card.js dist/room-overlay-card-studio.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
