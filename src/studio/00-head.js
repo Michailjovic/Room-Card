@@ -41,7 +41,12 @@
  * (names, icons, pictures, aliases), pictures by URL, upload or camera, the areas' lights as light
  * controls and devices as icons, the editor's section recipes, nav / overview / presence. A fresh
  * card starts in it; on an existing card it adds rooms for the areas it does not have yet.
+ *
+ * Phase 5 (v6.47.0) — floor plan pages (55-floorplan.js): add a page, import its rooms from an
+ * AnyVac vacuum map (clean-up, links to the card's rooms, entities, doors), draw and edit rooms,
+ * corners and doors on the canvas in any projection, trace over an image; Properties for a plan
+ * room, a door and the page's theme settings.
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.46.0';
+const ROC_STUDIO_VERSION='6.47.0';

@@ -1774,6 +1774,30 @@ overview is shown and put back as it was.
 
 ---
 
+## Floor plan page (v6.47.0)
+
+A room with a `floorplan:` block is a page that draws the home as a vector plan — rooms, walls,
+doors, each room's lights, floor heating, temperature and humidity — in one of seven themes. Tap a
+room to open it (zoom), hold it to toggle its lights. The plan is imported from a vacuum map with
+**AnyVac** or drawn / traced in Room Card Studio. Every key, the themes and the import:
+**[docs/FLOORPLAN.md](FLOORPLAN.md)**.
+
+```yaml
+rooms:
+  - id: home
+    name: Floor plan
+    icon: mdi:floor-plan
+    floorplan:
+      theme: night
+      rooms:
+        - room: bedroom
+          polygon: [[11.95,0.25],[15.85,0.25],[15.85,4.45],[11.95,4.45]]
+          lights: light.bedroom
+          climate: climate.bedroom
+      openings:
+        - {type: door, at: [11.9, 2.1]}
+```
+
 ## Theming (design tokens, v6.16.0)
 
 Every floating element — chips, launcher icons, tile states, the panel badge — reads its colours

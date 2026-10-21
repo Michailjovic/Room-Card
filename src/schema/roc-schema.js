@@ -77,6 +77,7 @@ const S={
     id:{t:'str'},name:{t:'str'},icon:{t:'str'},area_match:{t:'list:str|str'},
     chips:{t:'list:navChip'},nav_hidden:{t:'bool'},nav_mini:{t:'bool'},
     overview:{t:'bool|obj:overview',since:'6.30.0'},overview_tile:{t:'obj:overviewTile',since:'6.30.0'},
+    floorplan:{t:'bool|obj:floorplan',since:'6.47.0'},
     weather_nav_mini:{t:'bool'},
     // ROOM_KEYS — also valid at the top level as defaults
     base_image:{t:'url',room:true},base_camera:{t:'entity',room:true},camera_refresh:{t:'num',d:10,room:true},
@@ -181,6 +182,23 @@ const S={
   overviewTile:{keys:{name:{t:'str'},hidden:{t:'bool'},focus:{t:'str'},chips:{t:'enum:auto|none|list:ovChip'},show_name:{t:'bool',since:'6.31.0'},
     tap_action:{t:'action'},hold_action:{t:'action'},double_tap_action:{t:'action'},hold_delay:{t:'num'}}},
   ovChip:{keys:{entity:{t:'entity'},icon:{t:'str'},active_state:{t:'any'},tap_action:{t:'action'},hold_action:{t:'action'}},scalar:'entity'},
+  // ---------------------------------------------------------------- floor plan page (v6.47.0, V7_PLAN §6)
+  floorplan:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
+    rotate:{t:'num|enum:auto',d:'auto'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
+    transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},
+    source:{t:'obj:fpSource'},trace:{t:'obj:fpTrace'},rooms:{t:'list:fpRoom'},openings:{t:'list:fpOpening'}}},
+  // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
+  fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
+    rotate:{t:'num|enum:auto',d:'auto'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
+    transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'}},hide:['rooms','openings','source']},
+  fpThemeBy:{keys:{portrait:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch'},landscape:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch'},dark:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch'},light:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch'}}},
+  fpWall:{keys:{height:{t:'num'}}},
+  fpSource:{keys:{anyvac:{t:'entity'},frame:{t:'str'},imported:{t:'str'},origin_px:{t:'list:num'},mm_per_px:{t:'num'}}},
+  fpTrace:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},opacity:{t:'num'}}},
+  fpRoom:{keys:{room:{t:'str'},name:{t:'str'},polygon:{t:'list:any'},floor:{t:'enum:wood|tile|carpet|concrete|none',d:'wood'},anyvac_room:{t:'str'},
+    lights:{t:'entity|list:fpLight'},climate:{t:'entity'},temperature:{t:'entity'},humidity:{t:'entity'},tap_action:{t:'action'},hold_action:{t:'action'}}},
+  fpLight:{keys:{entity:{t:'entity'}},scalar:'entity'},
+  fpOpening:{keys:{type:{t:'enum:door',d:'door'},at:{t:'list:num'},width:{t:'num',d:0.8}}},
 };
 
 // ---- validator ----------------------------------------------------------------

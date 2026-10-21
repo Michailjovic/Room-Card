@@ -1,6 +1,7 @@
 # Attaches the release assets to every published GitHub release (incl. pre-releases):
 #   room-overlay-card.js         the card (hacs.json "filename")
 #   room-overlay-card-studio.js  Room Card Studio, loaded on demand by the card (v6.41.0+)
+#   room-overlay-card-floorplan.js  the floor plan renderer, loaded on demand (v6.47.0+)
 #   + their source maps
 # HACS downloads the file named in hacs.json's "filename" from the RELEASE ASSETS of the
 # selected version — a release without it fails in HACS with "unknown error" — and for a
@@ -11,7 +12,8 @@
 # is not verifiably attached at the end, so a broken release is impossible to miss.
 #
 # Backfill: Actions → "Release" → Run workflow → enter an existing tag (e.g. v4.6.2).
-# Tags before v6.41.0 have no studio file; the workflow then uploads only the card.
+# Tags before v6.41.0 have no studio file and tags before v6.47.0 no floor plan file; the
+# workflow then uploads only what the tag has.
 name: Release
 
 on:
@@ -58,6 +60,9 @@ jobs:
           if [ -f dist/room-overlay-card-studio.js ]; then
             files="$files dist/room-overlay-card-studio.js dist/room-overlay-card-studio.js.map"
           fi
+          if [ -f dist/room-overlay-card-floorplan.js ]; then
+            files="$files dist/room-overlay-card-floorplan.js dist/room-overlay-card-floorplan.js.map"
+          fi
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "Uploading: $files"
 
@@ -89,6 +94,7 @@ jobs:
           VER="$(node -p "require('./package.json').version")"
           names="room-overlay-card.js"
           [ -f dist/room-overlay-card-studio.js ] && names="$names room-overlay-card-studio.js"
+          [ -f dist/room-overlay-card-floorplan.js ] && names="$names room-overlay-card-floorplan.js"
           rm -rf /tmp/verify && mkdir -p /tmp/verify
           for n in $names; do
             if ! gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx "$n"; then

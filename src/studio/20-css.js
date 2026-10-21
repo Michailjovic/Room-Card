@@ -1,5 +1,7 @@
 // ---- Styles (inside the studio's own shadow root; HA's theme variables inherit from <html>) ---
 const ROC_STUDIO_CSS=`
+:host(:focus){outline:none;}
+.fpbar{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:12px;}.fpbar[hidden]{display:none;}.fpbar .seg button{padding:4px 8px;}.fphint{font-size:12px;opacity:.75;max-width:420px;line-height:1.3;}.fphint.warn{color:#ffb35c;opacity:1;}.fpimp{display:grid;gap:8px;min-width:0;}.fpimp>*{min-width:0;}.fpimp-row{display:flex;align-items:center;gap:8px;}.fpimp-row>span{flex:0 0 130px;font-size:13px;}.fpimp-row .pf-in{flex:1 1 0;width:auto;min-width:0;}.fpimp-map{display:grid;gap:6px;max-height:34vh;overflow:auto;}.fpimp-opts{display:grid;gap:4px;font-size:13px;}.fpimp-opt{display:flex;gap:8px;align-items:center;}.fpimp-prev{min-height:40px;}
 :host{all:initial;display:block;position:fixed;inset:0;font-family:var(--paper-font-body1_-_font-family,Roboto,system-ui,sans-serif);font-size:14px;color:var(--primary-text-color,#e8eaed);
   --rs-bg:var(--primary-background-color,#111418);--rs-panel:var(--card-background-color,#1c1f24);--rs-sub:var(--secondary-background-color,#24282e);
   --rs-line:var(--divider-color,rgba(255,255,255,.12));--rs-acc:var(--primary-color,#03a9f4);--rs-txt2:var(--secondary-text-color,#9aa3ad);

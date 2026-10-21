@@ -2464,6 +2464,7 @@ class RoomOverlayCardEditor extends HTMLElement{
 
     let basicInner='<div style="display:grid;gap:8px;">';
     if(cR&&cR.overview&&!this._editGlobal)basicInner+='<div style="padding:10px 12px;border-radius:6px;background:var(--secondary-background-color);font-size:12px;line-height:1.5;">This room is an <b>overview page</b> — its photo and elements are not shown. Set it up in <b>Rooms &amp; menu → Overview page</b>.</div>';
+    else if(cR&&cR.floorplan&&!this._editGlobal)basicInner+='<div style="padding:10px 12px;border-radius:6px;background:var(--secondary-background-color);font-size:12px;line-height:1.5;">This room is a <b>floor plan page</b> (v6.47.0) — its photo and elements are not shown. Draw the plan, import it from an AnyVac vacuum map and pick a theme in <b>Room Card Studio</b> (the floor plan is edited there only; the YAML box keeps it as it is).</div>';
     const _bgMode=this._bgMode||(cR.base_camera?'camera':'image');
     basicInner+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;">';
     basicInner+='<div><label class="roc-l">Background</label><select id="bg-mode"'+this._inp('')+'>';

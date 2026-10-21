@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<!--
+  Floor plan harness (v6.47.0) for tests/floorplan.spec.js. Served over HTTP by the spec: the card
+  is loaded as a MODULE from /room-overlay-card.js, so the floor plan renderer is fetched by the
+  card's own loader (rocLoadFloorplan) from the card's URL, like the studio.
+  The plan is the author's flat (S8 MaxV Ultra map via AnyVac, cleaned); the AnyVac sensor state
+  carries the real outlines (floorplan-data.json) for the import tests.
+
+  ?theme=<name>   the floor plan theme (default night)
+  ?empty=1        the floor plan page has no rooms yet (import / drawing tests)
+  ?start=<id>     the room the card starts on (default: the floor plan page)
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<title>room-overlay-card — floor plan harness</title>
+<style>
+  html,body{margin:0;padding:0;background:#111;color:#eee;font-family:sans-serif;}
+  :root{--primary-color:#03a9f4;--card-background-color:#1c1f24;--primary-background-color:#111418;--secondary-background-color:#24282e;--divider-color:rgba(255,255,255,.12);--primary-text-color:#e8eaed;--secondary-text-color:#9aa3ad;}
+  #dash{width:1200px;margin:0;}
+</style>
+</head>
+<body>
+<div id="dash"></div>
+<script type="module" src="/room-overlay-card.js?hacstag=777"></script>
+<script type="module">
+await customElements.whenDefined('room-overlay-card');
+const q=new URLSearchParams(location.search);
+const data=await (await fetch('/floorplan-data.json')).json();
+const C=data.clean;
+const svg=(c,t)=>'data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900"><rect width="1600" height="900" fill="'+c+'"/><text x="80" y="200" font-size="140" fill="#fff">'+t+'</text></svg>');
+const states={
+  'light.living':{state:'on',attributes:{friendly_name:'Living light',brightness:230,rgb_color:[255,180,100]}},
+  'light.kitchen':{state:'on',attributes:{friendly_name:'Kitchen light',brightness:180,color_temp_kelvin:3000}},
+  'light.bath':{state:'on',attributes:{friendly_name:'Bath light',brightness:200,rgb_color:[190,225,255]}},
+  'light.bed':{state:'off',attributes:{friendly_name:'Bedroom light'}},'light.hall':{state:'off',attributes:{friendly_name:'Hall light'}},
+  'climate.living':{state:'heat',attributes:{friendly_name:'Living thermostat',hvac_modes:['heat','off'],hvac_action:'heating',current_temperature:23.1,current_humidity:53}},
+  'climate.kitchen':{state:'heat',attributes:{friendly_name:'Kitchen thermostat',hvac_modes:['heat','off'],hvac_action:'idle',current_temperature:22.6}},
+  'climate.bed':{state:'heat',attributes:{friendly_name:'Bedroom thermostat',hvac_modes:['heat','off'],hvac_action:'heating',current_temperature:22.7}},
+  'climate.dehum_bed':{state:'dry',attributes:{friendly_name:'Bedroom dehumidifier',hvac_modes:['dry','off']}},
+  'sensor.bedroom_h_humidity':{state:'54',attributes:{device_class:'humidity'}},'sensor.kitchen_h_humidity':{state:'57',attributes:{device_class:'humidity'}},
+  'sensor.bathroom_h_temperature':{state:'21.6',attributes:{device_class:'temperature'}},'sensor.bathroom_h_humidity':{state:'57',attributes:{device_class:'humidity'}},
+  'sensor.hall_h_temperature':{state:'23.6',attributes:{device_class:'temperature'}},'sensor.hall_h_humidity':{state:'52',attributes:{device_class:'humidity'}},
+  'sensor.living_room_h_humidity':{state:'53',attributes:{device_class:'humidity'}},
+  'sensor.kitchen_s8_anyvac_map':data.anyvac,
+};
+const areas={living_room:{area_id:'living_room',name:'Living Room',aliases:['Obývák']},hall:{area_id:'hall',name:'Hall',aliases:['Vchod']},bathroom:{area_id:'bathroom',name:'Bathroom',aliases:['Koupelna']},
+  kitchen:{area_id:'kitchen',name:'Kitchen',aliases:['Kuchyň']},bedroom:{area_id:'bedroom',name:'Bedroom',aliases:['Ložnice']}};
+const ent=(a)=>({area_id:a});
+const entities={'light.living':ent('living_room'),'light.kitchen':ent('kitchen'),'light.bath':ent('bathroom'),'light.bed':ent('bedroom'),'light.hall':ent('hall'),
+  'climate.living':ent('living_room'),'climate.kitchen':ent('kitchen'),'climate.bed':ent('bedroom'),'climate.dehum_bed':ent('bedroom'),
+  'sensor.bedroom_h_humidity':ent('bedroom'),'sensor.kitchen_h_humidity':ent('kitchen'),'sensor.bathroom_h_temperature':ent('bathroom'),'sensor.bathroom_h_humidity':ent('bathroom'),
+  'sensor.hall_h_temperature':ent('hall'),'sensor.hall_h_humidity':ent('hall'),'sensor.living_room_h_humidity':ent('living_room')};
+window.__calls=[];window.__more=[];
+const hass={states,areas,entities,devices:{},callService(d,s,dt,t){window.__calls.push([d,s,dt,t]);},language:'en',locale:{language:'en'},user:{name:'t',is_admin:true},themes:{darkMode:true}};
+document.addEventListener('hass-more-info',e=>window.__more.push(e.detail&&e.detail.entityId));
+const plan={theme:q.get('theme')||'night',rooms:[
+  {room:'living_room',polygon:C.Living,floor:'wood',lights:'light.living',climate:'climate.living',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_16'},
+  {room:'hall',polygon:C.Corridor,floor:'tile',lights:'light.hall',temperature:'sensor.hall_h_temperature',humidity:'sensor.hall_h_humidity',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_18'},
+  {room:'bathroom',polygon:C.Bathroom,floor:'tile',lights:'light.bath',temperature:'sensor.bathroom_h_temperature',humidity:'sensor.bathroom_h_humidity',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_17'},
+  {room:'kitchen',polygon:C.Kitchen,floor:'tile',lights:'light.kitchen',climate:'climate.kitchen',humidity:'sensor.kitchen_h_humidity',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_19'},
+  {room:'bedroom',polygon:C.Bedroom,floor:'carpet',lights:'light.bed',climate:'climate.bed',humidity:'sensor.bedroom_h_humidity',anyvac_room:'7bUI4dOp7O1qnECi7UfFW3_20'}],
+  openings:[{type:'door',at:[11.93,1.48],width:0.8},{type:'door',at:[8.65,2.3],width:0.8},{type:'door',at:[5.98,2.25],width:0.8},{type:'door',at:[7.03,2.8],width:0.8}]};
+const fp=q.get('empty')?{theme:'night'}:plan;
+const rooms=[{id:'plan',name:'Floor plan',icon:'mdi:floor-plan',floorplan:fp}].concat(
+  [['living_room','Living room','Obývák','#a33',['light.living']],['hall','Hall','Chodba','#3a3',['light.hall']],['bathroom','Bathroom','Koupelna','#33a',['light.bath']],['kitchen','Kitchen','Kuchyň','#aa3',['light.kitchen']],['bedroom','Bedroom','Ložnice','#3aa',['light.bed']]]
+  .map(([id,name,cz,c,ls])=>({id,name,overview_tile:{name:cz},area_match:[name],base_image:svg(c,name),light_controls:{entities:ls.map(e=>({entity:e}))}})));
+const cfg={type:'custom:room-overlay-card',card_id:'fp',layout:{height:'container',landscape:{rows:['auto','1fr'],place:{nav:{row:1},image:{row:2}}},portrait:{rows:['auto','1fr'],place:{nav:{row:1},image:{row:2}}}},nav:{style:'thumbnails',chips:[{entity:'sensor.{room}_h_humidity',suffix:'%'}]},rooms};
+const card=document.createElement('room-overlay-card');card.style.cssText='display:block;height:640px';
+if(q.get('start')){const i=rooms.findIndex(r=>r.id===q.get('start'));if(i>=0)card._roomIdx=i;}
+card.setConfig(JSON.parse(JSON.stringify(cfg)));card.hass=hass;
+document.getElementById('dash').appendChild(card);
+window.__h={card,hass,cfg,data};
+</script>
+</body>
+</html>

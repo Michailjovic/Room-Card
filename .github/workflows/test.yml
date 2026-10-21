@@ -18,7 +18,7 @@ jobs:
           node-version: 22
 
       - name: Syntax check
-        run: node --check room-overlay-card.js && node --check room-overlay-card-studio.js
+        run: node --check room-overlay-card.js && node --check room-overlay-card-studio.js && node --check room-overlay-card-floorplan.js
 
       # v6.40.0: room-overlay-card.js is assembled from src/ (tools/assemble.js); v6.41.0 adds the
       # second bundle room-overlay-card-studio.js. Fails when someone edited src/ without
@@ -57,6 +57,12 @@ jobs:
       - name: Studio tests (jsdom)
         run: node tests/studio.test.js
 
+      # v6.47.0: the floor plan page — geometry (map clean-up, doors, projections), themes, the
+      # page in the card (bindings, tap / hold, transitions), the classic editor round-trip and
+      # the AnyVac import.
+      - name: Floor plan tests (jsdom)
+        run: node tests/floorplan.test.js
+
       # The release assets are the MINIFIED bundles, so the minified bundles are what
       # have to be green — not just the source. Every tier accepts a path argument for
       # exactly this reason. Catches a terser setting that silently breaks the card
@@ -68,7 +74,8 @@ jobs:
     # Real-renderer tier — headless Chromium measures PIXELS against
     # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,
     # anti-breathing), and since v6.41.0 drives the studio over HTTP
-    # (tests/studio.spec.js: lazy import, modal, frames, real drag, phone layout).
+    # (tests/studio.spec.js: lazy import, modal, frames, real drag, phone layout), and since
+    # v6.47.0 the floor plan page (tests/floorplan.spec.js: lazy import, taps, zoom, studio editing).
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -83,7 +90,7 @@ jobs:
       - name: Install Playwright
         run: npm i --no-save @playwright/test@1.64.1 && npx playwright install --with-deps chromium
 
-      - name: Geometry + studio e2e
+      - name: Geometry + studio + floor plan e2e
         run: npx playwright test
 
   ha:

@@ -23,7 +23,8 @@
  * the shipped artifact, not just the source, is the thing under test.
  *
  * The studio is a second release asset (V7_PLAN D5): the card import()s it from its own URL the
- * first time someone opens the studio. Both files must carry the same version — the card warns
+ * first time someone opens the studio. v6.47.0 adds a third, the floor plan renderer, imported the
+ * first time a floor plan page is shown. All files must carry the same version — the card warns
  * about a mismatch, and this build refuses to produce one.
  *
  * Usage: node build.js [--check]
@@ -51,6 +52,10 @@ const TARGETS=[
     [out=>out.indexOf('room-overlay-card-editor')>=0,'editor element registration missing from the bundle'],
     [out=>/customElements\.define\(["']room-overlay-card["']/.test(out),'card element registration missing from the bundle'],
     [out=>out.indexOf('room-overlay-card-studio.js')>=0,'studio loader missing from the bundle'],
+    [out=>out.indexOf('room-overlay-card-floorplan.js')>=0,'floor plan loader missing from the bundle'],
+  ]},
+  {file:'room-overlay-card-floorplan.js',ver:/ROC_FP_VERSION\s*=\s*'([^']+)'/,min:15000,must:[
+    [out=>out.indexOf('_rocFloorplan')>=0,'floor plan registration missing from the bundle'],
   ]},
   {file:'room-overlay-card-studio.js',ver:/ROC_STUDIO_VERSION\s*=\s*'([^']+)'/,min:15000,must:[
     [out=>out.indexOf('_rocStudio')>=0,'studio registration missing from the bundle'],

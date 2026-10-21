@@ -11,6 +11,7 @@
         "core/40-rooms.js",
         "core/50-sections.js",
         "core/60-overview.js",
+        "core/65-floorplan.js",
         "core/70-format.js",
         "core/80-light-controls.js",
         "core/85-nav-live-blinds.js",
@@ -35,7 +36,18 @@
         "studio/45-props.js",
         "studio/40-studio.js",
         "studio/50-wizard.js",
+        "studio/55-floorplan.js",
         "studio/90-register.js"
+      ]
+    },
+    {
+      "output": "room-overlay-card-floorplan.js",
+      "parts": [
+        "floorplan/00-head.js",
+        "floorplan/10-geom.js",
+        "floorplan/20-themes.js",
+        "floorplan/30-view.js",
+        "floorplan/90-register.js"
       ]
     }
   ]

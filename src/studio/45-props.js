@@ -368,7 +368,7 @@ function rsObjForm(ctx,name,obj,onChange,o){
     const def=sch.keys[k];if(def.legacy&&cur[k]===undefined)return;
     grid.appendChild(rsKeyField(ctx,k,def,cur[k],function(v){set(k,v);},{depth:o.depth,rel:o.rel+'.'+k,item:cur,schema:name}));
   });
-  const other={};Object.keys(cur).forEach(function(k){if(!sch.keys[k])other[k]=cur[k];});
+  const other={};Object.keys(cur).forEach(function(k){if(!sch.keys[k]&&!(sch.hide&&sch.hide.indexOf(k)>=0))other[k]=cur[k];});
   if(Object.keys(other).length){
     const ob=rsFieldBox(ctx.t('other_keys'),'_other',true);
     ob.appendChild(rsYamlWidget(ctx,other,function(v){
@@ -447,7 +447,8 @@ function rsKeyField(ctx,key,def,value,onChange,o){
   const iconKey=key==='icon'&&simple==='str';
   const choices=ctx.choices?ctx.choices(key,o.schema):null;
   const inh=o.inherit;
-  const wo={dflt:def.d,domains:key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null),icon:iconKey,choices:choices,
+  const kd=RS_KEY_DOMAINS[(o.schema||'')+'.'+key];
+  const wo={dflt:def.d,domains:kd||(key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null)),icon:iconKey,choices:choices,
     ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):null};
   const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
   const canDeep=depth<RS_MAX_DEPTH;
@@ -520,6 +521,8 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       rename(id), rerender(), openAll(), goGlobal(), choices(key), select(type,id,roomIdx),
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
+// Entity pickers that suggest only the domains a key can use (schema.key)
+const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor']};
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;
@@ -542,6 +545,18 @@ function rsFormSpec(ctx,target){
     ['cards',['cards_above','cards_below']],
     ['room_tap',['tap_action']],
   ];
+  if(target.kind==='room'&&item.floorplan&&!item.overview){
+    // v6.47.0: a floor plan page — its own settings; the plan's rooms and doors are edited on the canvas
+    return{keys:Object.assign({},S.room.keys,{floorplan:{t:'bool|obj:fpPage'}}),title:String(item.name||item.id||''),icon:'mdi:floor-plan',type:ctx.t('fp_page'),rest:'room',groups:[['main',['id','name','icon']],['floorplan',['floorplan']],['room_nav',['nav_hidden']]]};
+  }
+  if(target.kind==='fproom'){
+    const lk=(ctx.work.rooms||[]).find(function(r){return r&&item.room!=null&&String(r.id)===String(item.room);});
+    return{keys:S.fpRoom.keys,schema:'fpRoom',title:String(item.name||(lk&&((lk.overview_tile&&lk.overview_tile.name)||lk.name))||item.room||('#'+(target.idx+1))),icon:'mdi:vector-square',type:ctx.t('t_fproom'),rest:'object',groups:[
+      ['main',['name','room','floor']],['fp_states',['lights','climate','temperature','humidity']],['fp_actions',['tap_action','hold_action']],['fp_geom',['polygon','anyvac_room']]]};
+  }
+  if(target.kind==='fpdoor'){
+    return{keys:S.fpOpening.keys,schema:'fpOpening',title:ctx.t('fp_door_n',{n:target.idx+1}),icon:'mdi:door',type:ctx.t('t_fpdoor'),rest:'object',groups:[['main',['width','at','type']]]};
+  }
   if(target.kind==='room'){
     return{keys:S.room.keys,title:String(item.name||item.id||''),icon:'mdi:door',type:ctx.t('room'),rest:'room',groups:[['main',RS_ROOM_KEYS],
       ['room_nav',['nav_hidden','nav_mini','weather_nav_mini','chips']],['overview',['overview','overview_tile']]].concat(roomGroups)};

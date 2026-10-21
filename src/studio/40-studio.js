@@ -250,6 +250,7 @@ class RocStudio{
     card._rocSink=function(nc){self._onCanvas(nc);};
     card._rocRoomSink=function(idx){self._onCanvasRoom(idx);};
     card._rocSelSink=function(type,id,o){self._onCanvasSel(type,id,o);};
+    card._rocFpSink=function(v){self._fpOnView(v);}; // v6.47.0: the floor plan page's renderer
     card._rocVp={w:1280,h:800};
     if(this._rooms().length)card._roomIdx=this.roomIdx;
     this._card=card;
@@ -332,6 +333,7 @@ class RocStudio{
   }
   _setMode(k){
     this.mode=k;
+    if(this.fp)this.fp.draft=null;
     for(const f in this._modeBtns)this._modeBtns[f].setAttribute('aria-pressed',String(f===k));
     this._pushCanvas(true);
   }
@@ -477,6 +479,7 @@ class RocStudio{
     this._renderOutlineList();this._renderSelBar();
   }
   deselect(){
+    if(this.fp&&(this.fp.sel!=null||this.fp.door!=null)){this._fpSelect(null,null);return;}
     if(!this.sel&&!this.cardSel)return;
     this.sel=null;this.multi=[];this.cardSel=null;
     if(this._card&&typeof this._card._rocMark==='function')try{this._card._rocMark([]);}catch(_){}
@@ -824,6 +827,7 @@ class RocStudio{
   _propsTarget(){
     const s=this.sel;
     if(s&&RS_TYPES[s.type]){const f=this._findItem(s.type,s.id);if(f)return{kind:'element',type:s.type,id:s.id,f:f};}
+    const fpt=this._fpTarget();if(fpt)return fpt; // v6.47.0: a room or door on the floor plan
     const cs=this.cardSel;
     if(cs){
       if(cs.kind==='section'){const l=Array.isArray(this.work.sections)?this.work.sections:[];const i=l.findIndex(function(x){return x&&String(x.id)===String(cs.id);});if(i>=0)return{kind:'section',id:String(cs.id),idx:i};}
@@ -890,6 +894,7 @@ class RocStudio{
     else if(tg.kind==='room')data=rsJ(this._rooms()[this.roomIdx])+top(this.work);   // + the shared values it may inherit
     else if(tg.kind==='section')data=rsJ(this.work.sections[tg.idx])+'#'+tg.idx+'/'+this.work.sections.length+this._membersSig();
     else if(tg.kind==='nav')data=rsJ(this.work.nav||null);
+    else if(tg.kind==='fproom'||tg.kind==='fpdoor')data=rsJ(tg.item);
     else data=top(this.work);
     const sig=key+'|'+data+'|'+this._selSet().length;
     if(!force&&sig===this._propsSig)return;
@@ -931,6 +936,7 @@ class RocStudio{
     else if(tg.kind==='room'){item=this._rooms()[this.roomIdx];path='rooms['+this.roomIdx+']';}
     else if(tg.kind==='section'){item=w.sections[tg.idx];path='sections['+tg.idx+']';}
     else if(tg.kind==='nav'){item=w.nav&&typeof w.nav==='object'?w.nav:{};path='nav';}
+    else if(tg.kind==='fproom'||tg.kind==='fpdoor'){item=tg.item;path=tg.path;}
     else{item=w;path='';}
     const ids=function(list){const o=[];(list||[]).forEach(function(x){if(x&&x.id!=null&&o.indexOf(String(x.id))<0)o.push(String(x.id));});return o;};
     return{
@@ -947,6 +953,7 @@ class RocStudio{
         const pair=function(l){return l.map(function(x){return[x,x];});};
         if(key==='section'||(key==='sections'&&schema==='ovDock'))return pair(ids(w.sections));
         if(key==='group')return pair(ids([].concat((room&&room.groups)||[],w.groups||[])));
+        if(key==='room'&&schema==='fpRoom')return rsFpPageRooms(w).map(function(x){return[String((x.r.overview_tile&&x.r.overview_tile.name)||x.r.name||x.r.id)+' ('+x.r.id+')',String(x.r.id)];});
         if(key==='rooms'||key==='focus')return pair(ids(self._rooms()));
         if(key==='area_match'){const a=(self.hass&&self.hass.areas)||{};return Object.keys(a).map(function(k){return[String(a[k].name||k),k];});}
         if(key==='domain'){const d=[];Object.keys((self.hass&&self.hass.states)||{}).forEach(function(e){const x=e.split('.')[0];if(d.indexOf(x)<0)d.push(x);});return pair(d.sort());}
@@ -983,6 +990,7 @@ class RocStudio{
     else if(tg.kind==='room')it=Array.isArray(c.rooms)?c.rooms[this.roomIdx]:null;
     else if(tg.kind==='section')it=Array.isArray(c.sections)?c.sections[tg.idx]:null;
     else if(tg.kind==='nav'){if(!c.nav||typeof c.nav!=='object')c.nav={};it=c.nav;}
+    else if(tg.kind==='fproom'||tg.kind==='fpdoor')it=this._fpItem(c,tg);
     else it=c;
     if(!it||typeof it!=='object')return;
     mut(it);
@@ -1186,7 +1194,7 @@ class RocStudio{
       rooms.forEach(function(r,i){
         const cur=!self.global&&i===self.roomIdx;
         const row=rsEl('div',{class:'ol-row'+(cur?' cur':'')});
-        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':'mdi:door',cur,function(){self.sel=null;self.multi=[];self.cardSel=null;self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
+        const rb=mk(String(r.name||r.id||('room '+(i+1))),r.overview?'mdi:view-dashboard-outline':(r.floorplan?'mdi:floor-plan':'mdi:door'),cur,function(){self.sel=null;self.multi=[];self.cardSel=null;self._setRoom(i,false,'outline');self._app.classList.remove('show-outline');});
         rb.setAttribute('data-room',String(i));
         row.appendChild(rb);
         if(cur){
@@ -1198,9 +1206,13 @@ class RocStudio{
       });
       const clip=this._clipboard();
       if(clip&&clip.room)ol.appendChild(rsEl('button',{class:'ol-item ol-paste',type:'button','data-act':'room-paste',onclick:function(){self.pasteRoom();}},[rsIcon('mdi:content-paste'),rsEl('span',{text:self.t('room_paste',{r:String(clip.room.name||clip.room.id||'')})})]));
+      ol.appendChild(rsEl('button',{class:'ol-item ol-paste',type:'button','data-act':'add-fp',title:self.t('fp_add'),onclick:function(){self.addFloorplan();}},[rsIcon('mdi:plus'),rsEl('span',{text:self.t('fp_add_btn')})]));
     }
     this._renderOutlineList();
     this._renderSelBar();
+    this._fpChrome(); // v6.47.0: the floor plan tools (only on a floor plan page)
+    this._addBtn.disabled=this._fpIdx()>=0; // a floor plan page has no elements to add — its toolbar draws rooms
+    this._fpDraw();
     // undo / redo
     this._undoBtn.disabled=!this.undoStack.length;
     this._redoBtn.disabled=!this.redoStack.length;
@@ -1223,6 +1235,7 @@ class RocStudio{
       const hay=[type,self.t('t_'+type),it.id,it.name,it.entity,it.icon,it.card&&it.card.entity,it.card&&it.card.type].filter(Boolean).join(' ').toLowerCase();
       return hay.indexOf(q)>=0;
     };
+    if(this._fpIdx()>=0){this._fpOutline(box);this._applyMarks(true);return;} // v6.47.0: a floor plan page lists its rooms and doors
     let shown=0;
     RS_TYPE_ORDER.forEach(function(type){
       const T=RS_TYPES[type];
@@ -1300,6 +1313,7 @@ class RocStudio{
       if(this._propsPane&&tgt&&this._propsPane.contains(tgt)&&/^(INPUT|TEXTAREA|SELECT)$/.test(tgt.tagName||'')){try{tgt.blur();}catch(_){}return;}
       if(this._layers.length){this._layers[this._layers.length-1]();return;}
       if(this._placeType){this._cancelPlace();return;}
+      if(this._fpEsc())return;
       if(this.sel||this.cardSel){this.deselect();return;}
       // a slide-over panel (narrow screens only — the classes do nothing on a wide one)
       if((this._app.classList.contains('show-outline')&&this._narrow(1100))||(this._app.classList.contains('show-insp')&&this._narrow(700))){this._app.classList.remove('show-outline','show-insp');return;}
@@ -1316,6 +1330,8 @@ class RocStudio{
       const kz=String(e.key||'').toLowerCase();
       if(kz==='z'||kz==='y'){e.preventDefault();e.stopPropagation();if(kz==='y'||e.shiftKey)this.redo();else this.undo();return;}
     }
+    if(!inField&&!this._layers.length&&(e.key==='Delete'||e.key==='Backspace')&&!this.sel&&!e.ctrlKey&&!e.metaKey&&this._fpDel()){e.preventDefault();e.stopPropagation();return;}
+    if(!inField&&!this._layers.length&&e.key==='Enter'&&this._fpEnter()){e.preventDefault();e.stopPropagation();return;}
     if(!inField&&!this._layers.length&&(e.key==='Delete'||e.key==='Backspace')&&this.sel&&!e.ctrlKey&&!e.metaKey){e.preventDefault();e.stopPropagation();this.deleteSel();return;}
     if(!(e.ctrlKey||e.metaKey)||e.altKey)return;
     const k=String(e.key||'').toLowerCase();
@@ -1339,7 +1355,11 @@ class RocStudio{
     (Array.isArray(body)?body:[body]).forEach(function(b){if(b!=null)pb.appendChild(typeof b==='string'?rsEl('p',{text:b}):b);});
     p.appendChild(pb);
     const pf=rsEl('div',{class:'pf'});
-    const close=function(){const i=self._layers.indexOf(close);if(i>=0)self._layers.splice(i,1);layer.remove();};
+    const close=function(){
+      const i=self._layers.indexOf(close);if(i>=0)self._layers.splice(i,1);layer.remove();
+      // v6.47.0: the focus was on a button of the panel — keep it inside the studio (Esc, Ctrl+Z, Delete)
+      try{if(!self._sr.activeElement){const h=self._sr.host;if(!h.hasAttribute('tabindex'))h.setAttribute('tabindex','-1');h.focus({preventScroll:true});}}catch(_){}
+    };
     (buttons||[]).forEach(function(b){
       const el=rsEl('button',{class:'btn'+(b.cls?' '+b.cls:''),type:'button','data-act':b.id||null,onclick:function(){if(b.keep)b.fn&&b.fn(el);else{close();b.fn&&b.fn();}}},[b.label]);
       pf.appendChild(el);

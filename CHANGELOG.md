@@ -1,5 +1,55 @@
 # Changelog
 
+## [6.47.0] - unreleased
+
+### The floor plan page (V7_PLAN.md Phase 5, with the first bindings of Phase 6)
+
+- **A new kind of page: the floor plan.** A room with a `floorplan:` block draws the home as a
+  vector plan: floors, walls with door openings, room labels. It behaves like the overview page:
+  - it hides the photo stage and the room strip, and shows as an icon in the strip of the other
+    rooms;
+  - tapping a room on the plan opens it with the **zoom transition**, and the room shrinks back
+    into its place on the plan on the way back;
+  - holding a room toggles its lights.
+- **Live state on the plan:**
+  - **lights**: a lit room glows (colour from `rgb_color` or the colour temperature, strength
+    from the brightness);
+  - **floor heating**: the loop in the floor glows and flows while the thermostat's
+    `hvac_action` is `heating`, and shows faintly while it is idle;
+  - **temperature and humidity** on the room's label, from its sensors or from the thermostat.
+- **Seven themes:** `night` (oblique cut-away, dark), `clay` (isometric model, light), `neon`
+  (isometric, glowing edges), `blueprint` (technical drawing with dimensions and m²), `thermal`
+  (rooms coloured by temperature), `tiles` (rooms as tiles with light and heating controls) and
+  `sketch` (hand-drawn).
+  - A theme is a set of tokens: `overrides` changes single ones (`'floor.wood': '#6b4a33'`).
+  - `theme_by` picks the theme per layout profile (`portrait` / `landscape`) and per Home
+    Assistant dark / light mode.
+  - `projection` (`top`, `oblique`, `iso`) overrides the theme's own. `rotate` turns the plan; by
+    default (`auto`) it turns a long flat upright on a phone.
+  - `quality: low` drops the SVG filters on a weak tablet.
+- **Where the plan comes from** (Room Card Studio, on the floor plan page):
+  - **Import from AnyVac:** reads the room outlines of an AnyVac map sensor (`sensor.<vacuum>
+    _anyvac_map`, schema 3). It cleans them up (furniture notches, 5 cm steps) into straight walls
+    and links each map room to a card room by name or area. It fills in the room's lights (its
+    light controls), its heating thermostat and its temperature / humidity sensors, and proposes
+    doors where the robot drove between rooms. A re-import keeps each room's settings and replaces
+    only its outline.
+  - **Draw:** rectangles, rooms corner by corner, drag rooms and corners (snapping to 5 cm and to
+    other corners), add a corner from the middle of a wall, place doors and slide them along the
+    wall, Delete, Undo.
+  - **Trace:** an uploaded floor plan image under the canvas, scaled by clicking two points of a
+    known distance. It is never shown on the dashboard.
+  - The Properties form edits the selected room (name, linked room, floor, entities, tap / hold)
+    or door, and the page's theme settings.
+- **Loaded only when used.** The renderer is a third file, `room-overlay-card-floorplan.js`
+  (~15 KB gzipped). The card imports it from its own URL the first time a floor plan page is
+  shown. HACS installs it with the release; a manual install must copy it next to the card.
+  Dashboards without a floor plan never download it, and configs without `floorplan:` render as
+  before.
+- The classic editor says when a room is a floor plan page and keeps the block as it is.
+- **The map import needs AnyVac** (a Home Assistant integration for Roborock vacuums, by the same
+  author). Without it the plan can still be drawn or traced by hand.
+
 ## [6.46.0] - unreleased
 
 ### Studio: the new-card wizard (V7_PLAN.md Phase 4c)

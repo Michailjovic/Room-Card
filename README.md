@@ -37,6 +37,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Camera & weather** | Live camera snapshot as the base layer; animated rain/snow overlay |
 | **Multi-room** | One card for the whole home — define rooms, swipe & presence-follow |
 | **Overview page** | Every room on one screen as a live tile with state chips, plus your header (ticker, pills), weather/calendar cards and a dock of section launchers; tap a tile and the room zooms open. Photo tiles or list rows on phones |
+| **Floor plan page** | Your home as a live vector plan — imported from the robot vacuum's map (AnyVac) or drawn in the studio; lit rooms glow, floor heating flows, temperature and humidity on every room; seven themes from a night cut-away to a blueprint; tap a room and it zooms open |
 | **Auto navigation menu** | The room switcher (thumbnails / tabs / dots) is generated automatically from your rooms — you never build the menu by hand |
 | **Hold feedback** | A progress ring fills and turns green when a hold gesture registers |
 | **Tabbed GUI editor** | Build everything visually — drag, resize, reorder — without writing YAML |
@@ -74,9 +75,9 @@ To install a specific version (for example to roll back), open the card in HACS 
 
 ### Manual
 
-1. Download `room-overlay-card.js` **and** `room-overlay-card-studio.js` from the [latest release](https://github.com/Michailjovic/Room-Card/releases/latest)
-2. Copy both to `/config/www/` (same folder; the studio file is loaded only when someone opens the studio)
-3. **Settings → Dashboards → ⋮ → Manage resources** → add `/local/room-overlay-card.js` (type: JavaScript module) — the studio file needs no resource of its own
+1. Download `room-overlay-card.js`, `room-overlay-card-studio.js` **and** `room-overlay-card-floorplan.js` from the [latest release](https://github.com/Michailjovic/Room-Card/releases/latest)
+2. Copy all three to `/config/www/` (same folder; the studio file is loaded only when someone opens the studio, the floor plan file only when a floor plan page is shown)
+3. **Settings → Dashboards → ⋮ → Manage resources** → add `/local/room-overlay-card.js` (type: JavaScript module) — the other two files need no resource of their own
 4. Hard-refresh
 
 ---
@@ -134,6 +135,45 @@ In the editor: **Rooms & menu → + Overview**. Full reference:
 
 ---
 
+## The floor plan page (v6.47.0)
+
+One more page that draws your home as a **plan**: floors, walls and doors, every room's lights
+(a glow in the room's colour), floor heating (the loop glows while the thermostat heats),
+temperature and humidity. Tap a room and it zooms open; hold it to switch its lights.
+
+- **From your robot vacuum:** in Room Card Studio, *Add a floor plan page* → **AnyVac** reads the
+  room outlines from the vacuum's map, straightens the walls, links each room to your card's
+  rooms, fills in their lights, thermostats and sensors and proposes the doors. This needs
+  **AnyVac** (a Home Assistant integration for Roborock
+  vacuums).
+- **Without a vacuum:** draw the rooms (rectangles, polygons, doors) or trace over a picture of
+  your floor plan.
+- **Seven themes:** `night`, `clay`, `neon`, `blueprint`, `thermal`, `tiles`, `sketch` — per
+  layout profile and dark / light mode if you like.
+
+```yaml
+rooms:
+  - id: home
+    name: Floor plan
+    icon: mdi:floor-plan
+    floorplan:
+      theme: night
+      theme_by: { portrait: tiles }
+      rooms:
+        - room: bedroom                       # a room of this card: tap opens it
+          polygon: [[11.95,0.25],[15.85,0.25],[15.85,4.45],[11.95,4.45]]   # metres
+          floor: carpet
+          lights: light.bedroom
+          climate: climate.bedroom            # floor heating
+          humidity: sensor.bedroom_humidity
+      openings:
+        - { type: door, at: [11.9, 2.1], width: 0.8 }
+```
+
+Full reference: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
+
+---
+
 ## Documentation
 
 This README is a landing page — the full reference lives here:
@@ -143,6 +183,7 @@ This README is a landing page — the full reference lives here:
 | **[docs/CONFIGURATION.md](docs/CONFIGURATION.md)** | Every YAML key: layout grids, filters, overlays, gauges, blinds & cover control, zones, badges, icons/labels, embedded cards, light controls, multi-room, the overview page, a complete example |
 | **[docs/EDITOR.md](docs/EDITOR.md)** | The full-screen Room Card Studio, the GUI editor tab by tab, the legacy Edit mode, and a summary of the editor UX rebuild that shipped in v5.9.0–v5.10.1 |
 | **[LAYOUT.md](LAYOUT.md)** | Layout-engine implementation spec, for the curious or the contributing |
+| **[docs/FLOORPLAN.md](docs/FLOORPLAN.md)** | The floor plan page: AnyVac import, drawing and tracing in the studio, themes, every `floorplan:` key |
 | **[PRESETS.md](PRESETS.md)** | Copy-paste recipes — day/night filters, weather moods, dimmer zones, door portals, presence multiroom, a whole-home overview page |
 
 ---
@@ -151,7 +192,7 @@ This README is a landing page — the full reference lives here:
 
 The source lives in `src/` as plain-JavaScript parts (no framework, no transpiling) that
 `npm run assemble` concatenates, in the order listed in `src/manifest.json`, into
-`room-overlay-card.js` and the lazy-loaded `room-overlay-card-studio.js`. The assembled files stay committed — they are what a manual/local install
+`room-overlay-card.js` and the lazy-loaded `room-overlay-card-studio.js` and `room-overlay-card-floorplan.js`. The assembled files stay committed — they are what a manual/local install
 loads and what every test tier runs against — and CI fails when it is out of date with `src/`.
 `npm run build` then produces the minified release asset (terser, property mangling off) that
 HACS installs.
@@ -161,14 +202,15 @@ src/core/     shared helpers: layout, glow, transform, migration, rooms, section
 src/card/     the card element (room-overlay-card)
 src/editor/   the GUI editor element (room-overlay-card-editor), its YAML helpers, the studio loader
 src/studio/   Room Card Studio → room-overlay-card-studio.js (second bundle, loaded on demand)
+src/floorplan/ the floor plan renderer → room-overlay-card-floorplan.js (third bundle, loaded on demand)
 src/schema/   the config schema registry — every key, its type and scope (bundled into the studio)
 tools/        assemble.js
 ```
 
 ```bash
-npm run assemble        # src/ → room-overlay-card.js + room-overlay-card-studio.js (run after every edit in src/)
-npm test                # assemble check + smoke, render, lifecycle, design, overview, schema, studio tiers (jsdom)
-npm run test:e2e        # Playwright: geometry regression + studio tests, real Chromium
+npm run assemble        # src/ → the three bundles (run after every edit in src/)
+npm test                # assemble check + smoke, render, lifecycle, design, overview, schema, floorplan, studio tiers (jsdom)
+npm run test:e2e        # Playwright: geometry regression, studio and floor plan tests, real Chromium
 npm run test:compat     # render every reference config with the last release and this build, compare
 npm run test:ha         # real Home Assistant in Docker: editor dialog, studio, dashboard save paths
 npm run build           # build the minified dist/ bundles

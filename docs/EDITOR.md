@@ -398,6 +398,32 @@ you if the second one is missing.
 
 ---
 
+**Floor plan pages** (v6.47.0). *Add a floor plan page* at the bottom of the Rooms list adds a
+page that draws the home as a plan ([docs/FLOORPLAN.md](FLOORPLAN.md)). On that page the canvas
+edits the plan instead of elements, with a toolbar above it:
+
+- **Select** — click a room to select it, drag it to move it; drag a corner; the dot in the middle
+  of a wall adds a corner; click a door to select it, drag it along its wall. Corners snap to
+  5 cm and to the x / y of other corners (walls line up); hold **Alt** for no snapping.
+- **Rectangle** / **Polygon** — draw a room (a polygon closes on its first corner, a double-click
+  or Enter; Esc cancels).
+- **Door** — click a wall to place a door (0.8 m wide).
+- **AnyVac** — import the rooms from an AnyVac vacuum map: pick the map sensor, check which card
+  room each map room is (guessed from names and areas), choose clean-up, doors and entities, see
+  the result before importing. Importing again keeps each room's own settings and replaces only
+  its outline. Requires the AnyVac integration.
+- **Image** — trace over a floor plan picture (URL or upload): click two points whose distance you
+  know to set its scale. The picture is shown in the studio only.
+- **Doors** — propose doors where two rooms touch (where the robot crossed, if the plan came from
+  AnyVac).
+- **Delete** (or the Delete key) removes the selected corner, door or room. Undo works for every
+  step.
+
+The outline lists the plan's rooms and doors. Properties shows the selected room (name, the card
+room it opens, floor material, lights, thermostat, temperature and humidity sensors, tap / hold,
+the polygon as YAML), the selected door, or with nothing selected the page's settings (theme,
+`theme_by`, projection, rotation, quality, wall height, overrides, the traced image).
+
 ## Edit mode (legacy)
 
 > **Since v6.42.0 the [Studio](#room-card-studio) replaces Edit mode.** It did its work by saving

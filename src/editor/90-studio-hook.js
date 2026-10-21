@@ -11,7 +11,9 @@ const ROC_STUDIO_FILE='room-overlay-card-studio.js';
 // URL of the studio file: the card's own script URL with the file name swapped, the original
 // query kept (HACS' ?hacstag= cache key) and ?v=<version> added so a stale cached studio from an
 // older release is never paired with a newer card.
-function rocStudioUrl(){
+function rocStudioUrl(){return rocAssetUrl(ROC_STUDIO_FILE);}
+// v6.47.0: the same for any sibling file (the floor plan renderer, room-overlay-card-floorplan.js).
+function rocAssetUrl(file){
   const re=/\/room-overlay-card(\.min)?\.js(\?|#|$)/;
   let src='';
   try{
@@ -25,7 +27,7 @@ function rocStudioUrl(){
   if(!src)return null;
   try{
     const u=new URL(src,location.href);
-    u.pathname=u.pathname.replace(/[^/]*$/,ROC_STUDIO_FILE);
+    u.pathname=u.pathname.replace(/[^/]*$/,file);
     u.hash='';
     u.searchParams.set('v',ROC_VERSION);
     return u.href;
@@ -69,4 +71,7 @@ RoomOverlayCard._rocInternals={
   stubImg:ROC_STUB_IMG,
   isStubImg:rocIsStubImg,
   isStubCfg:rocIsStubCfg,
+  // v6.47.0 — the floor plan page: the studio loads the renderer through the card
+  loadFloorplan:rocLoadFloorplan,
+  fpCfg:rocFpCfg,
 };

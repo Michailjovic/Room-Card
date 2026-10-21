@@ -18,6 +18,9 @@ const DASH={views:[
   {path:'k',title:'Stack',cards:[{type:'vertical-stack',cards:[{type:'markdown',content:'x'},CARD({aspect_ratio:'1/1'})]}]},
   {path:'e',title:'Edit mode',cards:[CARD({aspect_ratio:'16/9'}),CARD({aspect_ratio:'4/3',test_mode:true})]},
   {path:'p',title:'Panel',type:'panel',cards:[CARD({aspect_ratio:'21/9'})]},
+  {path:'f',title:'Floor plan',type:'panel',cards:[{type:'custom:room-overlay-card',card_id:'fp',aspect_ratio:'16/9',rooms:[
+    {id:'plan',name:'Plan',floorplan:{theme:'night',rooms:[{room:'a',polygon:[[0,0],[5,0],[5,4],[0,4]]},{room:'b',polygon:[[5.1,0],[9,0],[9,4],[5.1,4]]}],openings:[{type:'door',at:[5.05,2]}]}},
+    {id:'a',name:'A',base_image:'/local/none.png'},{id:'b',name:'B',base_image:'/local/none.png'}]}]},
 ]};
 // Locate THIS card instance in the dashboard config by object identity (hui-card.config is the
 // frozen object from lovelace.config) → returns a path like ['views',0,'cards',1].
@@ -42,6 +45,22 @@ test('the card renders with real geometry inside HA\'s Lit ha-card',async({page}
     return b&&b.width>100&&b.height>50?{w:Math.round(b.width),h:Math.round(b.height),ver:c.constructor.name}:false;},null,{timeout:30000});
   const v=await r.jsonValue();console.log('render',JSON.stringify(v));
   expect(v.w).toBeGreaterThan(100);
+});
+test('v6.47.0: a floor plan page loads its renderer from the resource URL and draws inside HA\'s ha-card; a tap opens the room',async({page})=>{
+  const reqs=[];page.on('request',r=>{if(r.url().includes('room-overlay-card-floorplan.js'))reqs.push(new URL(r.url()).pathname);});
+  await login(page,TOK);await page.goto(B+'/roc-test/f');await hass(page);
+  const r=await page.waitForFunction(()=>{function d(r,s){const q=[r],o=[];while(q.length){const x=q.shift();if(!x)continue;if(x.matches&&x.matches(s))o.push(x);if(x.shadowRoot)q.push(x.shadowRoot);for(const c of x.children||[])q.push(c);}return o}
+    const c=d(document.body,'room-overlay-card')[0];const v=c&&c._fpInst;if(!v||!(v.W>100))return false;
+    const b=v.svg.getBoundingClientRect();const k=v.roomForCardRoom(2);const rr=v.roomRect(k);
+    return{w:Math.round(b.width),hits:c.shadowRoot.querySelectorAll('[data-rfp-hit]').length,x:rr.left+rr.width/2,y:rr.top+rr.height/2};},null,{timeout:30000});
+  const v=await r.jsonValue();console.log('floorplan',JSON.stringify(v),reqs);
+  expect(v.w).toBeGreaterThan(300);expect(v.hits).toBe(2);
+  expect(reqs).toEqual(['/local/room-overlay-card-floorplan.js']);
+  // HA's launch screen fades out over the view for a moment after the first render ("removing")
+  await page.waitForFunction(([x,y])=>{let t=document.elementFromPoint(x,y);while(t&&t.shadowRoot){const n=t.shadowRoot.elementFromPoint(x,y);if(!n||n===t)break;t=n;}return!!(t&&t.getAttribute&&t.getAttribute('data-rfp-hit')!=null);},[v.x,v.y],{timeout:10000});
+  await page.mouse.click(v.x,v.y);
+  await page.waitForFunction(()=>{function d(r,s){const q=[r],o=[];while(q.length){const x=q.shift();if(!x)continue;if(x.matches&&x.matches(s))o.push(x);if(x.shadowRoot)q.push(x.shadowRoot);for(const c of x.children||[])q.push(c);}return o}
+    const c=d(document.body,'room-overlay-card')[0];return c&&c._roomIdx===2&&!c._fpActive;},null,{timeout:5000});
 });
 for(const [view,label,expectPath] of [['m','masonry #1',['views',0,'cards',0]],['s','sections',['views',1,'sections',0,'cards',0]],['k','nested stack',['views',2,'cards',0,'cards',1]]]){
   test('card is found in the dashboard config by object identity: '+label,async({page})=>{

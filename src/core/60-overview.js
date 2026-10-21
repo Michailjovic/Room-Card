@@ -19,10 +19,10 @@ function rocOvPV(v,prof,def){
   return v===undefined||v===null||v===''?def:v;
 }
 // Room indices shown in the grid: `grid.rooms` (ids, in that order) or every
-// room in config order. Overview pages and overview_tile.hidden are never tiles.
+// room in config order. Overview and floor plan pages and overview_tile.hidden are never tiles.
 function rocOvRooms(cAll,ov){
   const rooms=(cAll&&cAll.rooms)||[];
-  const ok=function(i){const r=rooms[i];return!!r&&!r.overview&&!(r.overview_tile&&r.overview_tile.hidden===true);};
+  const ok=function(i){const r=rooms[i];return!!r&&!r.overview&&!r.floorplan&&!(r.overview_tile&&r.overview_tile.hidden===true);};
   const g=(ov&&ov.grid)||{};
   const out=[];
   if(Array.isArray(g.rooms)){

@@ -114,8 +114,8 @@ its own and field-tested before the next one starts.
 | **2** | **Studio shell** (§5.3–5.5): full-screen workspace, live canvas (the card rendered directly), today's editor tabs hosted unchanged in a side panel, both save paths, undo/redo, unsaved-changes guard, *Open Studio* button in HA's editor and in card edit mode. Opt-in; HA editor untouched. | L | 6.41.0 |
 | **3** | **Canvas editing** (§5.6): select on canvas → inspector, drag/resize/rotate, snap guides (old E4), draw-to-create for every element type (E3), search/filter (E5), inline save errors (E6), multi-select, copy/paste of elements and whole rooms, keyboard shortcuts, touch gestures. Split in two releases: **3a** (selection, outline + search, add on the image, copy/paste/delete, snap guides, Edit mode retired) and **3b** (multi-select, align/distribute, layers, room copy). | L | 6.42.0–6.43.0 |
 | **4** | **Forms rebuilt** (§5.7) where the fight is biggest, on our own components (no HA Lit components inside our DOM): entity picker with friendly names and live state, action builder, sections/tiles, overview; **new-card wizard** (rooms from HA areas, images, recipes); validation messages pinned to the element on the canvas. Split in three releases: **4a** (the Properties form, pickers, action builder, pinned validation), **4b** (sub-forms and lists: sections/tiles, light controls, nav, overview, cover control; card-level forms) and **4c** (the new-card wizard). | XL | 6.44.0–6.46.0 |
-| **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. | L | 6.47.0 |
-| **6** | **Bindings** (§6.4): lights (colour + brightness glow), floor heating, temperature tint, humidity, presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.48.0 |
+| **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. **Shipped with seven themes, the oblique projection and Phase 6's light / floor heating / temperature / humidity bindings** (author's decision 2026-10-21 — the themes cannot be judged without live state). | L | 6.47.0 |
+| **6** | **Bindings** (§6.4): ~~lights (colour + brightness glow), floor heating, temperature tint, humidity~~ (in 6.47.0), presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. | M | 6.48.0 |
 | **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. | L | 6.49.0 |
 | **8** | **AnyVac live** (§6.6): robot position + heading, trail, coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
 | **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
@@ -240,6 +240,17 @@ rooms:
         - {type: marker, at: [3.1, 1.2], entity: media_player.…, icon: mdi:television}
       layers: {lights: true, heating: true, temperature: false, presence: true, vacuum: true}
 ```
+
+**As built in 6.47.0** (the block above was the proposal): `theme` (night | clay | neon |
+blueprint | thermal | tiles | sketch), `theme_by` {portrait, landscape, dark, light}, `projection`
+(auto | top | oblique | iso — auto = the theme's), `rotate` (degrees | auto), `quality`
+(auto | high | low), `wall.height`, `temperature_range`, `overrides` (theme tokens by dotted path),
+`transition` / `transition_duration`, `source` {anyvac, frame, imported, origin_px, mm_per_px},
+`trace` {image, x, y, scale, width_px, height_px, opacity}. Bindings are keys of each plan room
+instead of a separate `items:` list — `lights`, `climate`, `temperature`, `humidity`,
+`tap_action`, `hold_action` — next to `room`, `name`, `polygon`, `floor`, `anyvac_room`. `items:`
+stays free for Phase 6's markers placed at a point. `openings` holds doors only (windows: Phase 7).
+Reference: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
 
 ### 6.2 Rendering (Phase 5)
 
@@ -373,6 +384,9 @@ import source for the flat.
    `roborock`), issue templates, release notes for 7.0.0 (English), screenshots refreshed.
 7. **HACS default submission:** re-verify the `hacs/default` checklist, submit the PR.
 8. Cross-links with AnyVac's README (both directions).
+9. **Say clearly that the map import needs AnyVac** (author's request, 2026-10-21): the floor plan
+   guide, the README section and the studio's import button. Without AnyVac the plan is drawn or
+   traced by hand (D9). docs/FLOORPLAN.md already says so since 6.47.0; keep it in the rewrite.
 
 ---
 
@@ -706,3 +720,57 @@ companion app (author), and the tablet run of the S5 probe.
 - **Not in this phase:**
   - floorplan import (§6.3) is Phase 5;
   - "presets" beyond the section recipes wait for the PRESETS refresh (Phase 10).
+
+### Phase 5 — v6.47.0
+
+- **Third bundle.** `src/floorplan/` → `room-overlay-card-floorplan.js` (~15 KB gzipped). The card
+  imports it from its own URL (`rocAssetUrl`, shared with the studio loader) the first time a
+  floor plan page renders; afterwards the mount is synchronous, so the zoom transitions can
+  measure the plan at once. Registers `RoomOverlayCard._rocFloorplan = {version, mount, View,
+  themes, theme, themeName, geom}`. The release workflow uploads it with the other two.
+- **Page model = the overview's.** `rocFpCfg` / `rocFpAny` (`src/core/65-floorplan.js`); a room
+  that has both `overview` and `floorplan` is an overview. The page clears the room keys, takes
+  the image region only, parks the nav strip, is an icon thumbnail in the strip and is not an
+  overview tile. Switching: plan → room = the overview's `open` zoom with the room polygon's
+  screen box as the tile; room → plan = `close` into that box (only for a room linked on the
+  plan, only when the renderer is already loaded); plan ↔ overview = fade.
+- **Change detection:** the plan's lights (state, brightness, rgb_color, color_temp_kelvin),
+  thermostats (state, hvac_action, current_temperature, current_humidity) and sensors join the
+  card's relevant entities. The view keeps a per-room state signature and touches only the
+  nodes of rooms that changed.
+- **Renderer:** one SVG, viewBox = the host's px. Floors, light pools, heating loops and clip
+  paths in plan metres under one `matrix()`; wall faces (painter-sorted by depth along the
+  projection's view direction, front walls at 30 % height), labels, tiles and dimensions in
+  screen px. Glows are wide translucent strokes, not filters; filters only for sketch (rough,
+  paper) and clay (soft shadow), and none at `quality: low`. Heating flow is a CSS dash animation,
+  paused off screen (IntersectionObserver) and under reduced motion. Label chips are sized with
+  `getComputedTextLength()` (an estimate where there is no layout).
+- **Clean-up** (`rfpCleanOutline`): rasterise at 5 cm, closing 0.8 m, opening 0.2 m, largest
+  4-connected piece, boundary trace, jog removal up to 0.2 m. The author's map: Living 14 → 8,
+  Corridor 21 → 4, Bathroom 20 → 4, Kitchen 45 → 10 (the L stays), Bedroom 32 → 10, areas
+  within 12 %. AnyVac A1 (a broken outline) is handled: an outline under ¼ of its bbox falls back
+  to the bbox. **A1 looked fixed on the live sensor on 2026-10-21** (the Kitchen outline has
+  45 points again).
+- **Doors** (`rfpProposeDoors`): the longest pair of parallel facing walls ≤ 0.4 m apart with
+  ≥ 0.7 m overlap per room pair; the door goes to the median crossing of the robot's paths over
+  the line between the walls (A3 done on the Room Card side), clamped so it fits.
+- **Import** (`rsFpImport`, pure; the studio panel and the tests use it): origin = the top-left of
+  every outline, metres via `cell_mm / scale`; links guessed from normalised names (id, name,
+  overview tile name, `area_match`, the area's name and aliases) or AnyVac's `area_id` (A5);
+  entities: light controls → area lights (groups first, hidden / entity_category skipped);
+  thermostat = an area `climate` whose `hvac_modes` include `heat` (dehumidifiers are climates
+  too); temperature / humidity: the nav chips' `{room}` sensors, else the area's by
+  `device_class`. Re-import matches by `anyvac_room` and replaces only `polygon`.
+- **Studio:** `src/studio/55-floorplan.js` after the wizard. The card calls `_rocFpSink(view)`
+  after each plan render; the studio draws its overlay into the view's own `.rfp-edit` group and
+  uses the view's affine map (`toLocal` / `toPlan`), so editing works in every projection.
+  Drags preview by re-rendering the view with a temporary config and commit once on release.
+  The Properties form gets targets `fproom` / `fpdoor`; the page form uses the studio-only schema
+  `fpPage` (its `hide` list keeps rooms / openings / source out of the "other keys" box). The
+  canvas card's plan is not interactive in Arrange mode (the studio edits it), live in Live mode.
+- **Focus fix:** clicking the plan, or closing a panel, leaves the focus on the studio's host so
+  Delete / Esc / Enter / Ctrl+Z keep working.
+- **Not in this phase:** windows and blinds (Phase 7), presence / media / markers (Phase 6),
+  the robot and the photo background (Phase 8; the import already stores `origin_px` and
+  `mm_per_px` for it), multi-floor UI (open question 4).
+
