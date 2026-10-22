@@ -1,5 +1,7 @@
 # The floor plan page
 
+[← Back to README](../README.md) · [Room Card Studio](STUDIO.md#floor-plan-pages) · [Reference](REFERENCE.md#t-floorplan) · [Overview page](OVERVIEW.md) · [Troubleshooting](TROUBLESHOOTING.md#floor-plan-and-anyvac)
+
 *Since v6.47.0.* A room in `rooms:` with a `floorplan:` block is a **page** that draws the home as
 a vector plan instead of a photo: floors, walls with doors and windows, the room names, and the live
 state of every room — lights, floor heating, temperature and humidity. Since v6.48.0 it also shows
@@ -26,7 +28,7 @@ install copy it next to `room-overlay-card.js`. A dashboard without a floor plan
 
 ## Getting the plan
 
-Everything is done in **Room Card Studio** ([editor guide](EDITOR.md#room-card-studio)):
+Everything is done in **Room Card Studio** ([guide](STUDIO.md)):
 **Add a floor plan page** at the bottom of the Rooms list, then:
 
 1. **AnyVac** (toolbar above the canvas) — the import:
@@ -126,7 +128,7 @@ theme's colour for a material is `overrides: {'floor.vinyl': '#…'}`.
   slightly dimmed. A hand-drawn plan has no AnyVac source, so it shows only the badge.
 
 The overview page can show the same signals on its tiles — opt-in with `overview.signals`
-([CONFIGURATION.md](CONFIGURATION.md#cross-room-signals-v6480)).
+([CONFIGURATION.md](OVERVIEW.md#cross-room-signals-v6480)).
 
 ## Vacuums, cleaning, clean this room
 

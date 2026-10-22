@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting
+    url: https://github.com/Michailjovic/Room-Card/blob/master/docs/TROUBLESHOOTING.md
+    about: Updates that don't show, missing studio or floor plan file, saving, AnyVac.
+  - name: AnyVac (vacuum maps)
+    url: https://github.com/Michailjovic/anyvac
+    about: Problems with the vacuum map itself belong to the AnyVac integration.

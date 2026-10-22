@@ -2,7 +2,9 @@
 
 Copy-paste recipes for common looks. Combine freely — all snippets are plain
 config fragments for `custom:room-overlay-card` (put them at room level when
-using `rooms:`).
+using `rooms:`). Every key is in the [reference](docs/REFERENCE.md); pages:
+[cockpit](#cockpit-sections), [overview](#overview-page-v6300),
+[floor plan](#floor-plan-page-v6470).
 
 ---
 
@@ -148,7 +150,7 @@ rooms:
     ...
 ```
 
-## Floorplan mode (large plans)
+## Zoom into a large picture
 
 ```yaml
 zoom: true          # pinch 1–4×, double-tap reset, Ctrl+wheel
@@ -166,40 +168,33 @@ parallax:
 
 ---
 
-# Responsive & layout (v2.0.0)
+# Responsive & layout
 
-## One card, every screen — crop per device
+Two layout profiles, `portrait` and `landscape`, picked by the shape of the space the card gets.
+Guide: [Layout — two profiles](docs/CONFIGURATION.md#layout--two-profiles-on-a--grid). (The v3
+tier keys — `mobile:` / `tablet:` / `desktop:` / `ultrawide:`, `max_height`, `breakpoints` — are
+still migrated on load, but write the profile form.)
+
+## One card, every screen — crop per profile
 
 ```yaml
-# Full width on each device, image cropped top/bottom to a different shape.
+# Full width everywhere; a taller crop on phones.
 aspect_ratio:
-  mobile: 4/3
-  tablet: 16/10
-  desktop: 16/9
-  ultrawide: 21/9
+  portrait: 4/3
+  landscape: 16/9
 ```
 
-## Cap the image height on big screens
+## A wall tablet that never rotates the layout
 
 ```yaml
-# Stops the image growing huge on FHD/2K — caps height, centers, letterboxes sides.
-max_height:
-  desktop: 70vh
-  ultrawide: 80vh
+layout:
+  height: viewport
+  orientation:
+    by_browser: { kitchen_tablet: landscape }   # browser_mod browser id
+    default: auto
 ```
 
-## Custom tier thresholds
-
-```yaml
-# Each value is the exclusive upper bound (px); ultrawide is the rest.
-# Tip: turn on Test mode to read the live width + active tier on the card.
-breakpoints:
-  mobile: 600
-  tablet: 1280
-  desktop: 1920
-```
-
-## Nudge one element per tier
+## Nudge one element on phones
 
 ```yaml
 labels:
@@ -207,21 +202,20 @@ labels:
     top: 10%
     left: 80%
     font_size: 2%
-    mobile:    { top: 6%,  left: 70%, font_size: 4% }
-    ultrawide: { top: 12%, left: 85%, font_size: 1.5% }
+    portrait: { top: 6%, left: 70%, font_size: 4% }
 ```
 
-## Companion cards on mobile only
+## Companion cards on phones only
 
 ```yaml
-# Full HA cards stacked below the image, shown only on phones.
+# Full HA cards stacked below the image, shown only in the portrait profile.
 cards_below:
   - card: { type: thermostat, entity: climate.bedroom }
-    media: mobile
+    media: portrait
   - card:
       type: entities
       entities: [light.bedroom_ceiling, fan.bedroom]
-    media: mobile
+    media: portrait
 ```
 
 ## Hold feedback ring colour
@@ -412,3 +406,135 @@ Per room, choose which part of the photo the tile shows and what its round butto
         - entity: media_player.bedroom_tv
           icon: mdi:television
 ```
+
+---
+
+# Cockpit (sections)
+
+## A whole-house cockpit
+
+Pop-up panels of tiles, opened from launcher icons on the photo that show what is running inside.
+One section collects tiles tagged on elements in the rooms (the dishwasher where it stands in the
+kitchen photo), the others fill themselves from a domain. On an overview page, `dock: {}` puts one
+launcher per section under the room grid. Guide:
+[Sections & panels](docs/CONFIGURATION.md#sections--panels-cockpit-tiles).
+
+```yaml
+type: custom:room-overlay-card
+sections:
+  - id: appliances
+    title: Appliances
+    icon: mdi:washing-machine
+    placement: sheet-right
+    columns: 2
+  - id: heating
+    title: Heating
+    icon: mdi:radiator
+    source: auto
+    domain: climate
+  - id: blinds
+    title: Blinds
+    icon: mdi:blinds
+    source: auto
+    domain: cover
+    placement: sheet-bottom
+  - id: media
+    title: Media
+    icon: mdi:cast
+    source: auto
+    domain: media_player
+rooms:
+  - id: kitchen
+    name: Kitchen
+    base_image: /local/kitchen.webp
+    zones:
+      - id: dishwasher
+        top: 62%
+        left: 40%
+        width: 12%
+        height: 18%
+        section: appliances              # its tile appears in the Appliances panel
+        tile:
+          name: Dishwasher
+          entity: sensor.dishwasher_operation_state
+          icon: mdi:dishwasher
+          active_state: run                # "running" = this state
+          progress: sensor.dishwasher_program_progress
+    icons:
+      - id: launch_appliances
+        icon: mdi:washing-machine
+        chip: true
+        top: 6%
+        left: 88%
+        tap_action: { action: open-section, section: appliances }   # ring + badge while something runs
+      - id: launch_heating
+        icon: mdi:radiator
+        chip: true
+        top: 18%
+        left: 88%
+        tap_action: { action: open-section, section: heating }
+```
+
+---
+
+# Floor plan page (v6.47.0)
+
+## The home from the vacuum's map
+
+Add the page in Room Card Studio (*Add a floor plan page* → **AnyVac**) — the import writes the
+rooms, doors and the source for you; this is what to set around it. Without
+[AnyVac](https://github.com/Michailjovic/anyvac) draw or trace the rooms instead and leave out
+`vacuums:`. Guide: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
+
+```yaml
+rooms:
+  - id: home
+    name: Floor plan
+    icon: mdi:floor-plan
+    floorplan:
+      theme: night
+      theme_by: { portrait: tiles, light: clay }   # a lighter look on phones and light themes
+      rotate: { landscape: 0, portrait: 90 }       # long side along the screen
+      presence: [sensor.anna_area, sensor.tom_area]
+      vacuums:
+        - entity: sensor.downstairs_anyvac_map
+          color: "#03a9f4"
+      trail_mode: cleaning                          # the trail only while a vacuum cleans
+      layers: { cleaning: true }                    # "vacuumed 5 h · mopped 2 d" on each room
+      rooms:
+        - room: living_room
+          polygon: [[0,0.4],[5.35,0.4],[5.35,4.55],[0,4.55]]
+          floor: wood
+          lights: [light.living_ceiling, light.living_lamp]
+          climate: climate.living_floor
+          temperature: sensor.living_temperature
+          media: media_player.living_tv
+      openings:
+        - { type: door, at: [5.35, 2.2], width: 0.9, entity: binary_sensor.living_door }
+        - { type: window, at: [2.5, 0.4], width: 1.4, entity: binary_sensor.living_window,
+            cover: cover.living_blind, blind_type: roller }
+      items:
+        - { entity: switch.coffee_machine, icon: mdi:coffee-maker, at: [4.6, 1.0] }
+        - { type: label, entity: sensor.outdoor_temperature, suffix: "°", at: [2.5, 0.1] }
+```
+
+## A floor plan for one purpose
+
+A second plan page can show only what one screen needs — say a cleaning view by the front door:
+one vacuum, no presence, no media, the rooms' last-cleaned times and the clean buttons.
+
+```yaml
+rooms:
+  - id: cleaning
+    name: Cleaning
+    icon: mdi:robot-vacuum
+    floorplan:
+      theme: blueprint
+      vacuums: [sensor.downstairs_anyvac_map]
+      clean_mode: both
+      layers: { presence: false, media: false, lights: false, heating: false, attention: false, cleaning: true }
+      rooms:
+        - room: living_room
+          polygon: [[0,0.4],[5.35,0.4],[5.35,4.55],[0,4.55]]
+```
+

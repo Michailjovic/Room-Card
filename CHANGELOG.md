@@ -1,5 +1,35 @@
 # Changelog
 
+## [7.0.0-beta.2] - unreleased (pre-release)
+
+### Documentation for 7.0 (V7_PLAN.md Phase 10, first part)
+
+- **README** is a landing page: what the card is, install, the first room in two minutes, links.
+  The HACS badge and install steps no longer claim the default store (the submission is still
+  open): add the repository as a custom repository until then.
+- **New guides:** [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) (install → wizard → first
+  room → overview → floor plan), [docs/STUDIO.md](docs/STUDIO.md) (Room Card Studio, moved out of
+  EDITOR.md, which now describes only the tabbed form), [docs/OVERVIEW.md](docs/OVERVIEW.md)
+  (moved out of CONFIGURATION.md) and [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+- **[docs/REFERENCE.md](docs/REFERENCE.md):** every key the card understands — type, default,
+  since which version — generated from the config schema by `tools/gen-docs.js`
+  (`npm run docs`). Tests and CI fail when it is out of date.
+- **[docs/AI_SPEC.md](docs/AI_SPEC.md) and [`llms.txt`](llms.txt):** a spec for AI assistants
+  writing configs — the model, rules, recipes and the full key grammar (generated).
+- **PRESETS.md:** a whole-house cockpit, two floor plan pages (from the vacuum's map, and one for
+  a single purpose); the responsive presets use the portrait / landscape profiles instead of the
+  v3 tiers.
+- **GitHub issue forms** for bugs and ideas.
+
+### Fixes
+
+- **The studio's config check flagged two valid shapes as errors:** `brightness_model.source` as a
+  list of sources (what the editor itself writes; a source may also have a `condition`), and
+  `visible_conditions` as a single condition. The schema now matches what the card reads, so the
+  studio's Properties form edits `source` as a list.
+- Every YAML example in the docs is now validated by the schema tests (whole cards and
+  fragments); that found the two gaps above.
+
 ## [7.0.0-beta.1] - unreleased (pre-release)
 
 ### The studio is the editor (V7_PLAN.md Phase 9)
@@ -22,7 +52,7 @@
 - Where things moved in the UI: the five tabs → the studio (Properties forms, or the same tabs
   under *All settings*); the editor's **Studio** button → **Open Studio** in the launcher; the
   first-screen wizard → **Start with the wizard**; haptics → the launcher, or the card form in
-  the studio. The full table is in [docs/EDITOR.md](docs/EDITOR.md#the-launcher-70).
+  the studio. The full table is in [docs/STUDIO.md](docs/STUDIO.md#the-launcher).
 - This is a **pre-release**: in HACS, open the repository's ⋮ menu → *Redownload*, tick *Show beta
   versions* and pick `7.0.0-beta.1`.
   Please report anything that worked in 6.51 and does not now.

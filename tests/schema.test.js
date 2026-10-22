@@ -67,6 +67,13 @@ for(const f of refFiles){
 }
 check('at least 4 reference configs found',refCards>=4,'found '+refCards);
 
+// 7.0.0-beta.2: two shapes the card and its editor write were flagged as errors
+check('brightness_model.source is a list of sources (what the editor writes), with an optional condition',
+  L({type:'custom:room-overlay-card',brightness_model:{source:[{entity:'sensor.lux',min_input:0,max_input:800,condition:{entity:'sun.sun',state:'above_horizon'}},{entity:'sun.sun',attribute:'elevation'}],filter_gradient:[{value:0,filter:'brightness(0.3)'}]}}).filter(x=>x.level!=='info').length===0);
+check('…a single entity there is an error (the card iterates the list)',L({type:'custom:room-overlay-card',brightness_model:{source:'sensor.lux',filter_gradient:[]}},'error').length===1);
+check('visible_conditions takes one condition or a list, like visible',
+  L({type:'custom:room-overlay-card',gauges:[{id:'g',visible_conditions:{entity:'a.b',state:'on'}},{id:'h',visible_conditions:[{entity:'a.b',state:'on'}]}]}).filter(x=>x.level!=='info').length===0);
+
 // ---- 3. documented YAML examples ------------------------------------------------
 const known=new Set(Object.values(rocSchemaKeys()).flat());
 const enumVals=new Set();
@@ -75,11 +82,18 @@ const enumVals=new Set();
 // per-browser map — not card keys
 const NOT_CARD_CONTEXT=new Set(['card','cards','content','map','from','to','data','service_data','target','by_browser','by_user','style','card_mod']);
 const docMiss=[];
-for(const f of ['docs/CONFIGURATION.md','PRESETS.md','LAYOUT.md','README.md','docs/EDITOR.md']){
+// v7.0: every guide in docs/ (not the release notes / archive), the root docs, and llms.txt's targets
+const DOC_FILES=['PRESETS.md','LAYOUT.md','README.md'].concat(fs.readdirSync(path.join(ROOT,'docs')).filter(f=>/\.md$/.test(f)).map(f=>'docs/'+f));
+const docErr=[];let docCards=0;
+for(const f of DOC_FILES){
   const p=path.join(ROOT,f);if(!fs.existsSync(p))continue;
   const txt=fs.readFileSync(p,'utf8');
   for(const m of txt.matchAll(/```yaml\n([\s\S]*?)```/g)){
     let d;try{d=yamlLoad(m[1].replace(/…/g,''));}catch(_){continue;} // illustrative fragments with "…" placeholders
+    // a whole card config in the docs must validate without errors (v7.0: the AI spec's recipes, presets)
+    if(d&&typeof d==='object'&&!Array.isArray(d)&&d.type==='custom:room-overlay-card'&&!/…/.test(m[1])){docCards++;for(const x of rocValidate(d))if(x.level==='error')docErr.push(f+': '+x.path+' '+x.msg);}
+    // a fragment (rooms:, icons:, …) is validated as the card's keys
+    else if(d&&typeof d==='object'&&!Array.isArray(d)&&!d.type&&!/…/.test(m[1])&&Object.keys(d).every(k=>known.has(k))){docCards++;for(const x of rocValidate(Object.assign({type:'custom:room-overlay-card'},d)))if(x.level==='error')docErr.push(f+': '+x.path+' '+x.msg);}
     (function walk(o,foreign){
       if(Array.isArray(o)){o.forEach(x=>walk(x,foreign));return;}
       if(!o||typeof o!=='object')return;
@@ -93,6 +107,7 @@ for(const f of ['docs/CONFIGURATION.md','PRESETS.md','LAYOUT.md','README.md','do
   for(const m of txt.matchAll(/^\| *`([a-z_][a-z0-9_]*)`/gm))if(!known.has(m[1])&&!enumVals.has(m[1])&&!/^(unavailable|unknown)$/.test(m[1]))docMiss.push(f+' (table): '+m[1]);
 }
 check('every key in the documented examples is in the schema',docMiss.length===0,[...new Set(docMiss)].slice(0,15).join('\n     '));
+check('documented card configs and fragments validate without errors ('+docCards+' checked)',docCards>=20&&docErr.length===0,docErr.slice(0,15).join('\n     '));
 
 // ---- 4. the card's own key lists -------------------------------------------------
 const K=t=>new Set(Object.keys(ROC_SCHEMA[t].keys));

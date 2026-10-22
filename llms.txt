@@ -1,0 +1,24 @@
+# Room Overlay Card
+
+> A Home Assistant Lovelace custom card (`type: custom:room-overlay-card`) that turns room photos into live controls: elements placed in % on the photo (icons, labels, zones, sliders, gauges, blinds, light glows, overlays, embedded cards), filters that follow the lights and the sun, multi-room navigation, pop-up sections of tiles, an overview page and a floor plan page drawn from an AnyVac vacuum map. It is configured in YAML or built in its own full-screen editor, Room Card Studio.
+
+When writing a config for a user: never invent entity ids; every element needs a unique `id`; positions are `%` strings; check every key against the grammar in AI_SPEC.md (generated from the card's schema — a key not listed there is unknown to the card). Prefer pointing the user to Room Card Studio for positioning on the photo.
+
+## Docs
+
+- [AI spec](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/AI_SPEC.md): the model of the card, rules, task recipes and the complete key grammar
+- [Reference](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/REFERENCE.md): every key with its type, default and version, generated from the schema
+- [Configuration guide](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/CONFIGURATION.md): what each part does, with YAML examples
+- [Getting started](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/GETTING_STARTED.md): install, the wizard, a first room, step by step
+- [Room Card Studio](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/STUDIO.md): the editor
+- [Overview page](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/OVERVIEW.md): every room as a live tile
+- [Floor plan page](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/FLOORPLAN.md): the home as a vector plan, AnyVac import, vacuums
+- [Presets](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/PRESETS.md): copy-paste recipes
+- [Troubleshooting](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/docs/TROUBLESHOOTING.md): updates, missing files, saving, AnyVac
+
+## Optional
+
+- [Layout engine](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/LAYOUT.md): portrait / landscape profiles on a % grid
+- [Changelog](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/CHANGELOG.md): every release
+- [Config schema](https://raw.githubusercontent.com/Michailjovic/Room-Card/master/src/schema/roc-schema.js): the machine-readable source of the grammar
+- [AnyVac](https://github.com/Michailjovic/anyvac): the Home Assistant integration for Roborock vacuums the floor plan import needs

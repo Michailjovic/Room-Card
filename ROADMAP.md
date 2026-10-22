@@ -47,7 +47,8 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 8 — AnyVac live: vacuums from other frames (studio alignment), 3 s live position, last cleaned per room, "clean this room", photo background | v6.50.0 | ✅ committed |
 | colours per vacuum and for the mop trail (feedback) | v6.51.0 | ✅ committed |
 | 9 — the studio becomes the default editor: HA's editor = launcher (Open Studio / wizard, basics, YAML); the 6.x tabs behind *Classic editor* until 7.1; beta field test | 7.0.0-beta.1 | 🔨 built; field test (≥ 2 weeks, checklist V7_PLAN §14) |
-| 10 — documentation & launch | 7.0.0 | next |
+| 10a — docs during the beta: landing README, getting started, studio, overview, troubleshooting, generated reference, AI spec + llms.txt, presets, issue forms; two schema fixes | 7.0.0-beta.2 | 🔨 built |
+| 10b — live demo, screenshots / GIFs, archive of finished plans, repo topics, HACS default submission; 7.0.0 after the field test | 7.0.0 | next |
 
 ## Shipped history (condensed)
 

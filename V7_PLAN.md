@@ -932,5 +932,26 @@ companion app (author), and the tablet run of the S5 probe.
   - [ ] iOS Safari (if available) — the same.
   - [ ] Admin vs non-admin — non-admins see no ✎ Studio button and no editor.
   - [ ] No regression in the viewer (rooms, overview, floor plan, AnyVac live) over ≥ 2 weeks.
-- **Next:** further 7.0.0-beta.N for field-test findings; then Phase 10 (documentation & launch,
-  7.0.0) on the author's go (gate G4).
+- **Next:** further 7.0.0-beta.N for field-test findings; Phase 10's documentation is written
+  during the beta (7.0.0-beta.2 below); 7.0.0 itself on the author's go (gate G4).
+
+### Phase 10, first part — 7.0.0-beta.2 (documentation during the beta)
+
+- **Done:** README as a landing page (§9.1; HACS badge → *Custom* until the submission lands);
+  `docs/GETTING_STARTED.md`, `docs/STUDIO.md` (the studio part of EDITOR.md; EDITOR.md keeps the
+  tabbed form until 7.1), `docs/OVERVIEW.md` (out of CONFIGURATION), `docs/TROUBLESHOOTING.md`
+  (§9.2); PRESETS cockpit + two floor plan presets, responsive presets in the profile form (§9.3);
+  issue forms (§9.6); AnyVac READMEs link back (§9.8, in the AnyVac repos); the AnyVac requirement
+  stated in the README, Getting started, Studio and Troubleshooting (§9.9).
+- **Deviation from §9.2:** CONFIGURATION.md stays the hand-written guide; the generated part is
+  a separate `docs/REFERENCE.md` (every schema type as a table, linked to its guide section)
+  rather than a rewrite of CONFIGURATION.md. `docs/AI_SPEC.md` = hand-written model, rules and
+  recipes + a generated grammar block; root `llms.txt` points at both. Generator:
+  `tools/gen-docs.js` (`--check` in `npm test` and CI).
+- **Schema fixes found by validating every doc example:** `brightness_model.source` is a list of
+  `{entity, attribute, min_input, max_input, condition}` (was typed as one entity / object — the
+  studio flagged the editor's own output); `visible_conditions` takes one condition or a list.
+- **Still open:** live demo on GitHub Pages (§9.4), screenshots / GIFs refreshed for the studio,
+  overview and floor plan (§9.6), repo topics (GitHub settings), archive move of finished plans
+  (§9.5, needs file moves on the author's PC), ROADMAP rewrite for post-v7, HACS default
+  submission (§9.7).

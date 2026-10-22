@@ -1,0 +1,133 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Syntax check
+        run: node --check room-overlay-card.js && node --check room-overlay-card-studio.js && node --check room-overlay-card-floorplan.js
+
+      # v6.40.0: room-overlay-card.js is assembled from src/ (tools/assemble.js); v6.41.0 adds the
+      # second bundle room-overlay-card-studio.js. Fails when someone edited src/ without
+      # re-assembling, or edited an assembled root file directly.
+      - name: Assembled files match src/
+        run: node tools/assemble.js --check
+
+      # v7.0.0: docs/REFERENCE.md and the AI spec's grammar are generated from the config schema
+      # (tools/gen-docs.js). Fails when the schema changed without regenerating them.
+      - name: Generated docs match the schema
+        run: node tools/gen-docs.js --check
+
+      - name: Smoke tests (pure functions)
+        run: node tests/smoke.test.js
+
+      - name: Render tests (jsdom)
+        run: npm i --no-save jsdom && node tests/render.test.js
+
+      # Lifecycle tier: what happens when HA MOVES the card element (edit-mode
+      # toggle → disconnect + connect) and when config fields use their scalar
+      # shorthand. Polyfills IntersectionObserver/ResizeObserver, which jsdom
+      # lacks — see the header comment in tests/lifecycle.test.js.
+      - name: Lifecycle tests (jsdom)
+        run: node tests/lifecycle.test.js
+
+      # v6.16.0 design refresh: shared value formatter, tile states, section
+      # launcher status, nav chip/thumbnail styling + the analysis fixes.
+      - name: Design tests (jsdom)
+        run: node tests/design.test.js
+      - name: Overview tests (jsdom)
+        run: node tests/overview.test.js
+
+      # v6.40.0: config schema registry — validator, reference configs, documented
+      # examples and every key the card reads must be in src/schema/roc-schema.js.
+      - name: Schema tests (jsdom)
+        run: node tests/schema.test.js
+
+      # v6.41.0: Room Card Studio — loader URL, both save paths (HA editor / dashboard,
+      # duplicate card_id, conflict, read-only cases), undo/redo, canvas round-trip,
+      # Escape guard, and open → Apply unchanged on every reference config.
+      - name: Studio tests (jsdom)
+        run: node tests/studio.test.js
+
+      # v6.47.0: the floor plan page — geometry (map clean-up, doors, projections), themes, the
+      # page in the card (bindings, tap / hold, transitions), the classic editor round-trip and
+      # the AnyVac import.
+      - name: Floor plan tests (jsdom)
+        run: node tests/floorplan.test.js
+
+      # The release assets are the MINIFIED bundles, so the minified bundles are what
+      # have to be green — not just the source. Every tier accepts a path argument for
+      # exactly this reason. Catches a terser setting that silently breaks the card
+      # (e.g. anyone ever enabling property mangling).
+      - name: Build + verify the minified bundles
+        run: npm i --no-save terser && npm run build:verify
+
+  e2e:
+    # Real-renderer tier — headless Chromium measures PIXELS against
+    # tests/harness/ha-shell.html (viewport fill, letterbox, edit transitions,
+    # anti-breathing), and since v6.41.0 drives the studio over HTTP
+    # (tests/studio.spec.js: lazy import, modal, frames, real drag, phone layout), and since
+    # v6.47.0 the floor plan page (tests/floorplan.spec.js: lazy import, taps, zoom, studio editing).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # pinned (v6.44.0): the same Playwright / Chromium as package.json, so local runs and CI agree
+      - name: Install Playwright
+        run: npm i --no-save @playwright/test@1.64.1 && npx playwright install --with-deps chromium
+
+      - name: Geometry + studio + floor plan e2e
+        run: npx playwright test
+
+  ha:
+    # v6.40.0: a real Home Assistant (Docker, pinned to the version the author runs)
+    # with the card AND the studio installed; Playwright drives the real frontend —
+    # the card inside HA's Lit ha-card, the editor dialog, dashboard save paths, and
+    # (v6.41.0) the real studio from HA's editor and from the dashboard.
+    # See tests/ha/run-ha.js and V7_PLAN.md §13–14.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # pinned (v6.44.0): the same Playwright / Chromium as package.json, so local runs and CI agree
+      - name: Install Playwright
+        run: npm i --no-save @playwright/test@1.64.1 && npx playwright install --with-deps chromium
+
+      - name: HA-in-the-loop tests
+        run: npm run test:ha
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: plugin

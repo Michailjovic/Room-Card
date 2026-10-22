@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.0.0-beta.1';
+const ROC_STUDIO_VERSION='7.0.0-beta.2';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -77,7 +77,7 @@ const RocSchema=(function(module){
 const PROF_OVR={portrait:{t:'self'},landscape:{t:'self'},mobile:{t:'self',legacy:true},tablet:{t:'self',legacy:true},desktop:{t:'self',legacy:true},ultrawide:{t:'self',legacy:true}};
 // keys every positioned element shares
 const POS={id:{t:'str',req:true},top:{t:'len'},left:{t:'len'},bottom:{t:'len'},right:{t:'len'},width:{t:'len'},height:{t:'len'},z_index:{t:'num'}};
-const VIS={group:{t:'str'},visible:{t:'cond|list:cond'},visible_conditions:{t:'list:cond'},visible_template:{t:'tmpl'},fade:{t:'bool|str'},slide:{t:'bool|str'},nav_mini:{t:'bool'}};
+const VIS={group:{t:'str'},visible:{t:'cond|list:cond'},visible_conditions:{t:'cond|list:cond'},visible_template:{t:'tmpl'},fade:{t:'bool|str'},slide:{t:'bool|str'},nav_mini:{t:'bool'}};
 const ACTS={tap_action:{t:'action'},hold_action:{t:'action'},double_tap_action:{t:'action'},hold_delay:{t:'num'}};
 const COCKPIT={section:{t:'str'},tile:{t:'obj:tile'}};
 const COND_VAL={condition:{t:'cond'},value:{t:'any'}};
@@ -149,8 +149,8 @@ const S={
   baseImageCond:{keys:Object.assign({image:{t:'url'}},COND_VAL)},
   filterCond:{keys:{condition:{t:'cond'},filter:{t:'str'}}},
   weather:{keys:{entity:{t:'entity'},effect:{t:'enum:auto|rain|snow|fog|lightning'},opacity:{t:'num'},z_index:{t:'num'},angle:{t:'num|str'}}},
-  brightnessModel:{keys:{source:{t:'entity|obj:bmSource'},entity:{t:'entity'},attribute:{t:'str'},filter_gradient:{t:'list:bmStop'},min_input:{t:'num'},max_input:{t:'num'}}},
-  bmSource:{keys:{entity:{t:'entity'},attribute:{t:'str'},min_input:{t:'num'},max_input:{t:'num'}}},
+  brightnessModel:{keys:{source:{t:'list:bmSource'},filter_gradient:{t:'list:bmStop'}}}, // 7.0.0-beta.2: source is a list (the card reads the first that has a value)
+  bmSource:{keys:{entity:{t:'entity'},attribute:{t:'str'},min_input:{t:'num',d:0},max_input:{t:'num',d:100},condition:{t:'cond'}}},
   bmStop:{keys:{value:{t:'num'},filter:{t:'str'}}},
   companion:{keys:{card:{t:'card'},media:{t:'str'},height:{t:'len'},type:{t:'str'}},open:true},
   // ---------------------------------------------------------------- shared value objects
