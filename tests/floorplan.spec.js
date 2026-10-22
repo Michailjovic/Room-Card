@@ -214,11 +214,20 @@ test('v6.50.0: the clean button starts AnyVac; the studio aligns a vacuum from a
   expect(rows.map(r=>r.slice(0,3))).toEqual([['sensor.kitchen_s8_anyvac_map',true,false],['sensor.s7_maxv_anyvac_map',false,false]]);
   expect(rows[1][3]).toMatch(/aligned by 5 rooms, ± 0 m/);
   await page.evaluate(SG=>{const S=eval(SG);const i=S._app.querySelector('input[data-fpvac="sensor.s7_maxv_anyvac_map"]');i.checked=true;S._app.querySelector('[data-act="fp-vacs-ok"]').click();},SG);
+  // (the colours are set afterwards, below)
   const v=(await fpc(page)).vacuums;
   expect(v[0]).toBe('sensor.kitchen_s8_anyvac_map');
   expect([v[1].entity,v[1].transform.rotation,v[1].transform.x,v[1].transform.y,v[1].transform.rooms]).toEqual(['sensor.s7_maxv_anyvac_map',0,-3.75,-5.65,5]) // (−300, −452) px × 12.5 mm;
   // the canvas card now draws both robots
   expect(await page.evaluate(SG=>eval(SG)._card.shadowRoot.querySelectorAll('[data-rfp-robot]').length,SG)).toBe(2);
+  // v6.51.0: a colour per vacuum from the same panel
+  await page.evaluate(SG=>eval(SG)._fpVacuums(),SG);
+  await page.waitForFunction(SG=>!!eval(SG)._app.querySelector('input[data-fpvaccol]'),SG);
+  await page.evaluate(SG=>{const S=eval(SG);const i=S._app.querySelector('input[data-fpvaccol="sensor.kitchen_s8_anyvac_map:color"]');i.value='#e11d48';i.dispatchEvent(new Event('input'));S._app.querySelector('[data-act="fp-vacs-ok"]').click();},SG);
+  const v2=(await fpc(page)).vacuums;
+  expect(v2[0]).toEqual({entity:'sensor.kitchen_s8_anyvac_map',color:'#e11d48'});
+  expect(v2[1].transform.rooms).toBe(5);
+  expect(await page.evaluate(SG=>eval(SG)._card.shadowRoot.querySelector('[data-rfp-rhead="0"] circle').getAttribute('stroke'),SG)).toBe('#e11d48');
 });
 
 test('v6.50.0: a room\'s label is dragged in the studio (label_at)',async({page})=>{

@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='6.50.0';
+const ROC_STUDIO_VERSION='6.51.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -255,7 +255,7 @@ const S={
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
     background:{t:'obj:fpBackground'}},hide:['rooms','openings','source','items','vacuums']},
   // an AnyVac map on the plan; transform = its home frame → plan metres (another frame, set by the studio)
-  fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'}},scalar:'entity'},
+  fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'},color:{t:'color',since:'6.51.0'},mop_color:{t:'color',since:'6.51.0'},mop_opacity:{t:'num',since:'6.51.0'}},scalar:'entity'},
   fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'}}},
   // the photo background (D11): an image in plan metres
   fpBackground:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},rotation:{t:'num'},opacity:{t:'num'},
@@ -477,7 +477,7 @@ const ROC_STUDIO_STR={en:{
   fp_window_n:'Window {n}',
   fp_rot:'Turn the plan by 90° (for the layout profile shown: landscape or portrait)',fp_rot_l:'',fp_rot_p:'Turned for portrait',fp_rot_l2:'Turned for landscape',fp_flip:'Mirror the plan (none → horizontal → vertical → both)',fp_flip_l:'',
   fp_flip_none:'Mirror: none',fp_flip_horizontal:'Mirror: horizontal',fp_flip_vertical:'Mirror: vertical',fp_flip_both:'Mirror: both',
-  fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',
+  fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',fp_vac_color:'Colour of the vacuum (robot, dry line, badge)',fp_vac_mop:'Colour of its mop trail',
   fp_vacs_body:'Which AnyVac vacuums this plan shows (the robot, its trail, the badge). A vacuum mapped in another home frame is aligned to this plan by the rooms both maps share (same names in the Roborock app); the fit can be tuned in YAML (floorplan.vacuums[].transform). Automatic = every vacuum in the frame the plan was imported from.',
   fp_vac_same:'the plan\'s own frame',fp_vac_fit:'aligned by {n} rooms, ± {e} m',fp_vac_few:'cannot be aligned — fewer than 2 rooms with the same name',fp_vac_nosrc:'cannot be aligned — the plan was not imported from AnyVac',
   fp_bg:'Photo background',fp_bg_l:'Background',fp_bg_body:'An image under the plan (e.g. your render of the home). AnyVac snapshot: a picture of the vacuum map exactly in place — edit it outside (keep the canvas, or keep the PNG transparency for the markers) and use the edited file here. Fit by markers places an edited, cropped or resized snapshot by AnyVac\'s invisible markers.',
@@ -4260,15 +4260,28 @@ RocStudio.prototype._fpVacuums=function(){
       cb.checked=ok&&(cur?cur.indexOf(id)>=0:!!f.same);cb.disabled=!ok;
       const st=f.same?self.t('fp_vac_same'):(f.transform?self.t('fp_vac_fit',{n:f.transform.rooms,e:f.transform.rms}):self.t(f.err==='few'?'fp_vac_few':'fp_vac_nosrc'));
       const nm=String(((S[id]||{}).attributes||{}).friendly_name||id);
-      body.appendChild(rsEl('label',{class:'fpimp-opt'},[cb,rsEl('span',{text:nm}),rsEl('span',{class:'pf-sub',text:' — '+st})]));
-      rows.push({id:id,cb:cb,f:f,old:old});
+      // v6.51.0: its colours — the robot, its dry line and badge; the mop's band (empty = automatic)
+      const col=function(k,title){
+        const i=rsEl('input',{type:'color','data-fpvaccol':id+':'+k,title:self.t(title),'aria-label':self.t(title)+' — '+nm});
+        const v=old&&typeof old[k]==='string'&&/^#[0-9a-f]{6}$/i.test(old[k])?old[k]:'';
+        i.value=v||(k==='color'?'#03a9f4':'#7dd3fc');i._set=!!v;
+        i.addEventListener('input',function(){i._set=true;});
+        return i;
+      };
+      const cc=col('color','fp_vac_color'),mc=col('mop_color','fp_vac_mop');
+      body.appendChild(rsEl('div',{class:'fpimp-row'},[rsEl('label',{class:'fpimp-opt'},[cb,rsEl('span',{text:nm}),rsEl('span',{class:'pf-sub',text:' — '+st})]),cc,mc]));
+      rows.push({id:id,cb:cb,f:f,old:old,cc:cc,mc:mc});
     });
     self._panel(self.t('fp_vacs'),[body],[
       {label:self.t('ok'),cls:'primary',id:'fp-vacs-ok',fn:function(){
         const list=rows.filter(function(r){return r.cb.checked;}).map(function(r){
-          if(r.f.same)return r.id;
+          const e={entity:r.id};
           // a transform the author tuned by hand stays; a new one comes from the fit
-          return{entity:r.id,transform:r.old&&r.old.transform?r.old.transform:r.f.transform};
+          if(!r.f.same)e.transform=r.old&&r.old.transform?r.old.transform:r.f.transform;
+          if(r.cc._set)e.color=r.cc.value;
+          if(r.mc._set)e.mop_color=r.mc.value;
+          if(r.old&&r.old.mop_opacity!=null)e.mop_opacity=r.old.mop_opacity;
+          return Object.keys(e).length===1?r.id:e;
         });
         self._fpEdit(function(f){f.vacuums=list;});
       }},

@@ -145,6 +145,22 @@ The overview page can show the same signals on its tiles — opt-in with `overvi
       transform: {rotation: 0.4, x: -3.75, y: -5.65, rooms: 5, rms: 0.08}
   ```
 
+  **Colours** *(6.51)*: `color` (the robot, its dry line and the room badge), `mop_color` and
+  `mop_opacity` (the wet band) per vacuum, set in the Vacuums panel or in YAML. With several
+  vacuums each gets its own colour automatically (blue, amber, purple, green, … in list order); a
+  single vacuum uses the theme's `vac.robot`, `vac.dry`, `vac.wet`, `vac.wetOpacity` tokens
+  (`overrides: {'vac.wet': '#93c5fd'}`).
+
+  ```yaml
+  vacuums:
+    - entity: sensor.kitchen_s6_kitchen_anyvac_map
+      color: '#22c55e'
+    - entity: sensor.kitchen_s8_maxv_ultra_anyvac_map
+      color: '#03a9f4'
+      mop_color: '#bae6fd'
+      mop_opacity: 0.35
+  ```
+
   A vacuum left out is not drawn, gives no badge and is not watched. While a vacuum cleans, its
   position and trail come from AnyVac's 3-second `live` update. The last run's trail stays on the
   plan after it docks, like in AnyVac's card; AnyVac's shared dry / wet toggles apply,

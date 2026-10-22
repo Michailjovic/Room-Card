@@ -419,16 +419,29 @@ class RfpView{
       dry:segs('path_dry_home_px').concat(lv&&Array.isArray(lv.dry_home_px)?lv.dry_home_px:[]),
       wet:segs('path_wet_home_px').concat(lv&&Array.isArray(lv.wet_home_px)?lv.wet_home_px:[]),seq:lv?lv.seq:''};
   }
+  // Each vacuum's colours (v6.51.0): its own `color` / `mop_color` / `mop_opacity` from
+  // floorplan.vacuums, else — with more than one vacuum on the plan — one from the palette in list
+  // order, else the theme's (vac.* tokens). A colour set for a vacuum colours its robot, its dry
+  // line and (unless mop_color says otherwise) its mop band and its room badge.
+  _vacColors(id){
+    const VT=rfpVacT(this.T),all=this._anyvac(),i=all.indexOf(id),l=this._vacList()||[];
+    const e=l.find(function(x){return x.entity===id;})||{};
+    const ok=function(v){return typeof v==='string'&&/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i.test(v.trim())?v.trim():'';};
+    const own=ok(e.color)||(all.length>1&&i>=0?RFP_VAC_PALETTE[i%RFP_VAC_PALETTE.length]:'');
+    const mo=rfpNum(e.mop_opacity);
+    return{robot:own||VT.robot,dry:own||VT.dry,wet:ok(e.mop_color)||own||VT.wet,wetOpacity:mo>=0&&mo<=1?mo:VT.wetOpacity};
+  }
   _robotsSvg(T,F){
     if(!this.L.vacuum)return'';
     const ids=this._robots();if(!ids.length)return'';
-    const r=Math.max(7,F.S*0.17);let s='<g pointer-events="none">';
+    const r=Math.max(7,F.S*0.17),self=this;let s='<g pointer-events="none">';
     ids.forEach(function(id,i){
+      const c=rfpEsc(self._vacColors(id).robot);
       s+='<g class="rfp-robot" data-rfp-robot="'+i+'" opacity="0" style="transform:translate(-100px,-100px)">'
-        +'<circle class="rfp-ping" r="'+rfpN(r)+'" fill="none" stroke="#03a9f4" stroke-width="2" data-rfp-rping="'+i+'" opacity="0"/>'
-        +'<g data-rfp-rhead="'+i+'"><circle r="'+rfpN(r)+'" fill="#f4f6f8" stroke="#03a9f4" stroke-width="2"/>'
+        +'<circle class="rfp-ping" r="'+rfpN(r)+'" fill="none" stroke="'+c+'" stroke-width="2" data-rfp-rping="'+i+'" opacity="0"/>'
+        +'<g data-rfp-rhead="'+i+'"><circle r="'+rfpN(r)+'" fill="#f4f6f8" stroke="'+c+'" stroke-width="2.5"/>'
         +'<circle cx="'+rfpN(r*0.32)+'" r="'+rfpN(r*0.36)+'" fill="#cfd6de" stroke="rgba(0,0,0,.25)" stroke-width="1"/>'
-        +'<path d="M'+rfpN(r*0.72)+' 0L'+rfpN(r*0.38)+' '+rfpN(-r*0.3)+'V'+rfpN(r*0.3)+'Z" fill="#03a9f4"/></g></g>';
+        +'<path d="M'+rfpN(r*0.72)+' 0L'+rfpN(r*0.38)+' '+rfpN(-r*0.3)+'V'+rfpN(r*0.3)+'Z" fill="'+c+'"/></g></g>';
     });
     return s+'</g>';
   }
@@ -477,8 +490,9 @@ class RfpView{
           d+=(first?'M':'L')+rfpN(p[0])+' '+rfpN(p[1]);first=false;last=p;
         });
       });
-      if(d)h+=pt.kind==='wet'?'<path d="'+d+'" fill="none" stroke="#5eead4" stroke-opacity=".22" stroke-width="0.25" stroke-linecap="round" stroke-linejoin="round"/>'
-        :'<path d="'+d+'" fill="none" stroke="#8ecbff" stroke-opacity=".6" stroke-width="0.04" stroke-linecap="round" stroke-linejoin="round"/>';
+      const vc=self._vacColors(pt.id);
+      if(d)h+=pt.kind==='wet'?'<path data-rfp-wet="'+rfpEsc(pt.id)+'" d="'+d+'" fill="none" stroke="'+rfpEsc(vc.wet)+'" stroke-opacity="'+rfpN(vc.wetOpacity)+'" stroke-width="0.25" stroke-linecap="round" stroke-linejoin="round"/>'
+        :'<path data-rfp-dry="'+rfpEsc(pt.id)+'" d="'+d+'" fill="none" stroke="'+rfpEsc(vc.dry)+'" stroke-opacity=".75" stroke-width="0.04" stroke-linecap="round" stroke-linejoin="round"/>';
     });
     tg.innerHTML=h;
   }
@@ -860,7 +874,7 @@ class RfpView{
       if(k<0){const k2=self._avKey(a.vacuum_room_name);if(k2)k=M.rooms.findIndex(function(r){return String(r.cfg.anyvac_room||'')===k2;});}
       if(k<0)k=byName(a.vacuum_room_name);
       if(k<0)k=byCard(rm(a.vacuum_room_name));
-      if(k>=0)out.vac[k]=true;
+      if(k>=0&&!out.vac[k])out.vac[k]=self._vacColors(id).robot;
     });
     return out;
   }
@@ -870,7 +884,7 @@ class RfpView{
     const SG=this._signals();
     this.M.rooms.forEach(function(r,k){
       const st=self._roomState(r);
-      st.att=SG.att[k]||0;st.vac=!!SG.vac[k];
+      st.att=SG.att[k]||0;st.vac=!!SG.vac[k];st.vacC=typeof SG.vac[k]==='string'?SG.vac[k]:'';
       const sig=JSON.stringify(st);
       if(!force&&self._st[k]===sig)return;
       self._st[k]=sig;
@@ -904,7 +918,7 @@ class RfpView{
       // attention / vacuum badges
       set(N.att[k],function(el){el.setAttribute('opacity',st.att?'1':'0');});
       set(N.attn[k],function(el){el.textContent=st.att?String(st.att):'';});
-      set(N.vac[k],function(el){el.setAttribute('opacity',st.vac?'1':'0');});
+      set(N.vac[k],function(el){el.setAttribute('opacity',st.vac?'1':'0');const c=el.querySelector('circle');if(c&&st.vacC)c.setAttribute('fill',st.vacC);});
       // temperature map
       if(N.thermo[k]){
         const rg=self._range(),kk=isFinite(st.t)?(st.t-rg[0])/(rg[1]-rg[0]):NaN;

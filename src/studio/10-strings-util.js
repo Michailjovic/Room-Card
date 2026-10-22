@@ -116,7 +116,7 @@ const ROC_STUDIO_STR={en:{
   fp_window_n:'Window {n}',
   fp_rot:'Turn the plan by 90° (for the layout profile shown: landscape or portrait)',fp_rot_l:'',fp_rot_p:'Turned for portrait',fp_rot_l2:'Turned for landscape',fp_flip:'Mirror the plan (none → horizontal → vertical → both)',fp_flip_l:'',
   fp_flip_none:'Mirror: none',fp_flip_horizontal:'Mirror: horizontal',fp_flip_vertical:'Mirror: vertical',fp_flip_both:'Mirror: both',
-  fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',
+  fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',fp_vac_color:'Colour of the vacuum (robot, dry line, badge)',fp_vac_mop:'Colour of its mop trail',
   fp_vacs_body:'Which AnyVac vacuums this plan shows (the robot, its trail, the badge). A vacuum mapped in another home frame is aligned to this plan by the rooms both maps share (same names in the Roborock app); the fit can be tuned in YAML (floorplan.vacuums[].transform). Automatic = every vacuum in the frame the plan was imported from.',
   fp_vac_same:'the plan\'s own frame',fp_vac_fit:'aligned by {n} rooms, ± {e} m',fp_vac_few:'cannot be aligned — fewer than 2 rooms with the same name',fp_vac_nosrc:'cannot be aligned — the plan was not imported from AnyVac',
   fp_bg:'Photo background',fp_bg_l:'Background',fp_bg_body:'An image under the plan (e.g. your render of the home). AnyVac snapshot: a picture of the vacuum map exactly in place — edit it outside (keep the canvas, or keep the PNG transparency for the markers) and use the edited file here. Fit by markers places an edited, cropped or resized snapshot by AnyVac\'s invisible markers.',

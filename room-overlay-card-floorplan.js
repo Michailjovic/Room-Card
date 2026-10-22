@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='6.50.0';
+const ROC_FP_VERSION='6.51.0';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -456,6 +456,13 @@ function rfpFloorPattern(pid,mat,c){
   if(mat==='vinyl')return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="1.2" height="0.44"><rect width="1.2" height="0.44" fill="'+c+'"/><path d="M0 0.22H1.2M0 0.44H1.2M0.8 0V0.22M0.2 0.22V0.44" stroke="rgba(0,0,0,.12)" stroke-width="0.008"/><path d="M0.1 0.07H0.7M0.5 0.31H1.1" stroke="rgba(255,255,255,.04)" stroke-width="0.05"/></pattern>';
   return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="0.9" height="0.18"><rect width="0.9" height="0.18" fill="'+c+'"/><path d="M0 0.18H0.9M0.45 0V0.18" stroke="rgba(0,0,0,.28)" stroke-width="0.012"/><path d="M0 0.09H0.9" stroke="rgba(255,255,255,.05)" stroke-width="0.04"/></pattern>';
 }
+// Vacuum colours (v6.51.0): the robot, its dry line, the mop's wet band and how strong the band is.
+// Several vacuums on one plan get their own colours from RFP_VAC_PALETTE unless set per vacuum.
+const RFP_VAC_DEF={night:{robot:'#03a9f4',dry:'#8ecbff',wet:'#7dd3fc',wetOpacity:0.28},clay:{robot:'#0284c7',dry:'#0284c7',wet:'#0ea5e9',wetOpacity:0.2},
+  neon:{robot:'#00e5ff',dry:'#00e5ff',wet:'#00ffc6',wetOpacity:0.18},blueprint:{robot:'#9fd3ff',dry:'#e6f1ff',wet:'#9fd3ff',wetOpacity:0.25},
+  sketch:{robot:'#2563eb',dry:'#2563eb',wet:'#2a9d8f',wetOpacity:0.2}};
+const RFP_VAC_PALETTE=['#03a9f4','#f59e0b','#a855f7','#22c55e','#ef4444','#ec4899'];
+function rfpVacT(T){const d=RFP_VAC_DEF[T&&T.name]||RFP_VAC_DEF.night,v=(T&&T.vac)||{};return{robot:v.robot||d.robot,dry:v.dry||d.dry,wet:v.wet||d.wet,wetOpacity:rfpNum(v.wetOpacity)>=0?rfpNum(v.wetOpacity):d.wetOpacity};}
 // Door / window colours (v6.49.0): glass, glass of an open window, the blind, a door leaf.
 function rfpWinT(T){const w=(T&&T.win)||{};return{glass:w.glass||'#8fc7ff',open:w.open||'#5eead4',blind:w.blind||'#c9b79c',door:w.door||'#8a6a4f'};}
 // contact-sensor states that mean open (binary_sensor on; a cover-like or text sensor open)
@@ -903,16 +910,29 @@ class RfpView{
       dry:segs('path_dry_home_px').concat(lv&&Array.isArray(lv.dry_home_px)?lv.dry_home_px:[]),
       wet:segs('path_wet_home_px').concat(lv&&Array.isArray(lv.wet_home_px)?lv.wet_home_px:[]),seq:lv?lv.seq:''};
   }
+  // Each vacuum's colours (v6.51.0): its own `color` / `mop_color` / `mop_opacity` from
+  // floorplan.vacuums, else — with more than one vacuum on the plan — one from the palette in list
+  // order, else the theme's (vac.* tokens). A colour set for a vacuum colours its robot, its dry
+  // line and (unless mop_color says otherwise) its mop band and its room badge.
+  _vacColors(id){
+    const VT=rfpVacT(this.T),all=this._anyvac(),i=all.indexOf(id),l=this._vacList()||[];
+    const e=l.find(function(x){return x.entity===id;})||{};
+    const ok=function(v){return typeof v==='string'&&/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i.test(v.trim())?v.trim():'';};
+    const own=ok(e.color)||(all.length>1&&i>=0?RFP_VAC_PALETTE[i%RFP_VAC_PALETTE.length]:'');
+    const mo=rfpNum(e.mop_opacity);
+    return{robot:own||VT.robot,dry:own||VT.dry,wet:ok(e.mop_color)||own||VT.wet,wetOpacity:mo>=0&&mo<=1?mo:VT.wetOpacity};
+  }
   _robotsSvg(T,F){
     if(!this.L.vacuum)return'';
     const ids=this._robots();if(!ids.length)return'';
-    const r=Math.max(7,F.S*0.17);let s='<g pointer-events="none">';
+    const r=Math.max(7,F.S*0.17),self=this;let s='<g pointer-events="none">';
     ids.forEach(function(id,i){
+      const c=rfpEsc(self._vacColors(id).robot);
       s+='<g class="rfp-robot" data-rfp-robot="'+i+'" opacity="0" style="transform:translate(-100px,-100px)">'
-        +'<circle class="rfp-ping" r="'+rfpN(r)+'" fill="none" stroke="#03a9f4" stroke-width="2" data-rfp-rping="'+i+'" opacity="0"/>'
-        +'<g data-rfp-rhead="'+i+'"><circle r="'+rfpN(r)+'" fill="#f4f6f8" stroke="#03a9f4" stroke-width="2"/>'
+        +'<circle class="rfp-ping" r="'+rfpN(r)+'" fill="none" stroke="'+c+'" stroke-width="2" data-rfp-rping="'+i+'" opacity="0"/>'
+        +'<g data-rfp-rhead="'+i+'"><circle r="'+rfpN(r)+'" fill="#f4f6f8" stroke="'+c+'" stroke-width="2.5"/>'
         +'<circle cx="'+rfpN(r*0.32)+'" r="'+rfpN(r*0.36)+'" fill="#cfd6de" stroke="rgba(0,0,0,.25)" stroke-width="1"/>'
-        +'<path d="M'+rfpN(r*0.72)+' 0L'+rfpN(r*0.38)+' '+rfpN(-r*0.3)+'V'+rfpN(r*0.3)+'Z" fill="#03a9f4"/></g></g>';
+        +'<path d="M'+rfpN(r*0.72)+' 0L'+rfpN(r*0.38)+' '+rfpN(-r*0.3)+'V'+rfpN(r*0.3)+'Z" fill="'+c+'"/></g></g>';
     });
     return s+'</g>';
   }
@@ -961,8 +981,9 @@ class RfpView{
           d+=(first?'M':'L')+rfpN(p[0])+' '+rfpN(p[1]);first=false;last=p;
         });
       });
-      if(d)h+=pt.kind==='wet'?'<path d="'+d+'" fill="none" stroke="#5eead4" stroke-opacity=".22" stroke-width="0.25" stroke-linecap="round" stroke-linejoin="round"/>'
-        :'<path d="'+d+'" fill="none" stroke="#8ecbff" stroke-opacity=".6" stroke-width="0.04" stroke-linecap="round" stroke-linejoin="round"/>';
+      const vc=self._vacColors(pt.id);
+      if(d)h+=pt.kind==='wet'?'<path data-rfp-wet="'+rfpEsc(pt.id)+'" d="'+d+'" fill="none" stroke="'+rfpEsc(vc.wet)+'" stroke-opacity="'+rfpN(vc.wetOpacity)+'" stroke-width="0.25" stroke-linecap="round" stroke-linejoin="round"/>'
+        :'<path data-rfp-dry="'+rfpEsc(pt.id)+'" d="'+d+'" fill="none" stroke="'+rfpEsc(vc.dry)+'" stroke-opacity=".75" stroke-width="0.04" stroke-linecap="round" stroke-linejoin="round"/>';
     });
     tg.innerHTML=h;
   }
@@ -1344,7 +1365,7 @@ class RfpView{
       if(k<0){const k2=self._avKey(a.vacuum_room_name);if(k2)k=M.rooms.findIndex(function(r){return String(r.cfg.anyvac_room||'')===k2;});}
       if(k<0)k=byName(a.vacuum_room_name);
       if(k<0)k=byCard(rm(a.vacuum_room_name));
-      if(k>=0)out.vac[k]=true;
+      if(k>=0&&!out.vac[k])out.vac[k]=self._vacColors(id).robot;
     });
     return out;
   }
@@ -1354,7 +1375,7 @@ class RfpView{
     const SG=this._signals();
     this.M.rooms.forEach(function(r,k){
       const st=self._roomState(r);
-      st.att=SG.att[k]||0;st.vac=!!SG.vac[k];
+      st.att=SG.att[k]||0;st.vac=!!SG.vac[k];st.vacC=typeof SG.vac[k]==='string'?SG.vac[k]:'';
       const sig=JSON.stringify(st);
       if(!force&&self._st[k]===sig)return;
       self._st[k]=sig;
@@ -1388,7 +1409,7 @@ class RfpView{
       // attention / vacuum badges
       set(N.att[k],function(el){el.setAttribute('opacity',st.att?'1':'0');});
       set(N.attn[k],function(el){el.textContent=st.att?String(st.att):'';});
-      set(N.vac[k],function(el){el.setAttribute('opacity',st.vac?'1':'0');});
+      set(N.vac[k],function(el){el.setAttribute('opacity',st.vac?'1':'0');const c=el.querySelector('circle');if(c&&st.vacC)c.setAttribute('fill',st.vacC);});
       // temperature map
       if(N.thermo[k]){
         const rg=self._range(),kk=isFinite(st.t)?(st.t-rg[0])/(rg[1]-rg[0]):NaN;

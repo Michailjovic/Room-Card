@@ -44,7 +44,8 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 5 — floor plan page: geometry, AnyVac import, drawing / tracing in the studio, 7 themes (top / oblique / iso), room tap → zoom; + Phase 6's light / heating / temperature / humidity bindings | v6.47.0 | 🔨 built; gate G3 (the look on the author's tablet) next |
 | 6 — presence, media, markers and labels on the plan; cross-room signals on the plan and (opt-in) on overview tiles; layers | v6.48.0 | 🔨 built |
 | 7 — doors and windows on the walls: contact sensors, blinds by cover position, studio Window tool; + the live robot and its trail (from Phase 8), `mirror`, floor covering per room (`vinyl`, `floor_color`) | v6.49.0 | 🔨 built |
-| 8 — AnyVac live: vacuums from other frames (studio alignment), 3 s live position, last cleaned per room, "clean this room", photo background | v6.50.0 | 🔨 built |
+| 8 — AnyVac live: vacuums from other frames (studio alignment), 3 s live position, last cleaned per room, "clean this room", photo background | v6.50.0 | ✅ committed |
+| colours per vacuum and for the mop trail (feedback) | v6.51.0 | 🔨 built |
 
 ## Shipped history (condensed)
 

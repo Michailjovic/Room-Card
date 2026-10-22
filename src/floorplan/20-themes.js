@@ -56,6 +56,13 @@ function rfpFloorPattern(pid,mat,c){
   if(mat==='vinyl')return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="1.2" height="0.44"><rect width="1.2" height="0.44" fill="'+c+'"/><path d="M0 0.22H1.2M0 0.44H1.2M0.8 0V0.22M0.2 0.22V0.44" stroke="rgba(0,0,0,.12)" stroke-width="0.008"/><path d="M0.1 0.07H0.7M0.5 0.31H1.1" stroke="rgba(255,255,255,.04)" stroke-width="0.05"/></pattern>';
   return'<pattern id="'+pid+'" patternUnits="userSpaceOnUse" width="0.9" height="0.18"><rect width="0.9" height="0.18" fill="'+c+'"/><path d="M0 0.18H0.9M0.45 0V0.18" stroke="rgba(0,0,0,.28)" stroke-width="0.012"/><path d="M0 0.09H0.9" stroke="rgba(255,255,255,.05)" stroke-width="0.04"/></pattern>';
 }
+// Vacuum colours (v6.51.0): the robot, its dry line, the mop's wet band and how strong the band is.
+// Several vacuums on one plan get their own colours from RFP_VAC_PALETTE unless set per vacuum.
+const RFP_VAC_DEF={night:{robot:'#03a9f4',dry:'#8ecbff',wet:'#7dd3fc',wetOpacity:0.28},clay:{robot:'#0284c7',dry:'#0284c7',wet:'#0ea5e9',wetOpacity:0.2},
+  neon:{robot:'#00e5ff',dry:'#00e5ff',wet:'#00ffc6',wetOpacity:0.18},blueprint:{robot:'#9fd3ff',dry:'#e6f1ff',wet:'#9fd3ff',wetOpacity:0.25},
+  sketch:{robot:'#2563eb',dry:'#2563eb',wet:'#2a9d8f',wetOpacity:0.2}};
+const RFP_VAC_PALETTE=['#03a9f4','#f59e0b','#a855f7','#22c55e','#ef4444','#ec4899'];
+function rfpVacT(T){const d=RFP_VAC_DEF[T&&T.name]||RFP_VAC_DEF.night,v=(T&&T.vac)||{};return{robot:v.robot||d.robot,dry:v.dry||d.dry,wet:v.wet||d.wet,wetOpacity:rfpNum(v.wetOpacity)>=0?rfpNum(v.wetOpacity):d.wetOpacity};}
 // Door / window colours (v6.49.0): glass, glass of an open window, the blind, a door leaf.
 function rfpWinT(T){const w=(T&&T.win)||{};return{glass:w.glass||'#8fc7ff',open:w.open||'#5eead4',blind:w.blind||'#c9b79c',door:w.door||'#8a6a4f'};}
 // contact-sensor states that mean open (binary_sensor on; a cover-like or text sensor open)

@@ -199,7 +199,7 @@ const S={
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
     background:{t:'obj:fpBackground'}},hide:['rooms','openings','source','items','vacuums']},
   // an AnyVac map on the plan; transform = its home frame → plan metres (another frame, set by the studio)
-  fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'}},scalar:'entity'},
+  fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'},color:{t:'color',since:'6.51.0'},mop_color:{t:'color',since:'6.51.0'},mop_opacity:{t:'num',since:'6.51.0'}},scalar:'entity'},
   fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'}}},
   // the photo background (D11): an image in plan metres
   fpBackground:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},rotation:{t:'num'},opacity:{t:'num'},

@@ -412,7 +412,8 @@ edits the plan instead of elements, with a toolbar above it:
 - **Turn** / **Mirror** (v6.50.0) — turn the drawing by 90° (`rotate`) and flip it (`mirror`:
   none → horizontal → vertical → both).
 - **Vacuums** (v6.50.0) — which AnyVac vacuums the plan shows; a vacuum mapped in another home
-  frame is aligned by the rooms both maps share (the panel says how well it fits).
+  frame is aligned by the rooms both maps share (the panel says how well it fits). Since v6.51.0
+  each row has two colour pickers: the vacuum's colour and its mop trail's.
 - **Background** (v6.50.0) — a photo background: AnyVac snapshot (placed exactly), your edited
   copy of it, *Fit by markers*, or by hand in Properties.
 - **Window** (v6.49.0) — click a wall to place a window (1 m wide). It gets the room's unused window

@@ -515,6 +515,37 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
       &&![...sr(e3).querySelectorAll('polygon')].some(p=>/^url\(#.*-(wood|vinyl|tile|carpet|concrete)\)$/.test(p.getAttribute('fill')||'')));
     e3.remove();
   }
+  // ---- 3g. v6.51.0: vacuum colours ------------------------------------------------------------------
+  {
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;fp.theme='night';
+    fp.source={anyvac:'sensor.s8_anyvac_map',frame:'d4e8',origin_px:[800,752],mm_per_px:12.5};
+    const av=clone(DATA.anyvac);
+    Object.assign(av.attributes,{vacuum_position_home_px:{x:1200,y:900,a:0},in_cleaning:true,vacuum_room_name:'Kitchen',path_points:3,
+      path_wet_home_px:[[{x:900,y:800},{x:1000,y:800}]],path_dry_home_px:[[{x:900,y:820},{x:1000,y:820}]]});
+    const s7={state:'ok',attributes:{schema_version:3,home_frame:{id:'other',cell_mm:50,scale:4},rooms:[],vacuum_position_home_px:{x:100,y:200,a:0},in_cleaning:true,
+      path_wet_home_px:[[{x:100,y:200},{x:150,y:200}]],path_dry_home_px:[]}};
+    const st=Object.assign(states(),{'sensor.s8_anyvac_map':av,'sensor.s7_anyvac_map':s7});
+    fp.vacuums=['sensor.s8_anyvac_map',{entity:'sensor.s7_anyvac_map',transform:{rotation:0,x:1,y:1}}];
+    const e1=mk(c,mkHass(st));await sleep(40);const S1=sr(e1);
+    const ring=i=>S1.querySelector('[data-rfp-rhead="'+i+'"] circle').getAttribute('stroke');
+    t('colours: two vacuums get two palette colours (robot ring)',ring(0)==='#03a9f4'&&ring(1)==='#f59e0b');
+    t('colours: each trail in its vacuum\'s colour',S1.querySelector('[data-rfp-dry="sensor.s8_anyvac_map"]').getAttribute('stroke')==='#03a9f4'&&S1.querySelector('[data-rfp-wet="sensor.s7_anyvac_map"]').getAttribute('stroke')==='#f59e0b');
+    t('colours: the room badge in the cleaning vacuum\'s colour',S1.querySelector('[data-rfp-vac="3"] circle').getAttribute('fill')==='#03a9f4');
+    e1.remove();
+    const c2=clone(c);c2.rooms[0].floorplan.vacuums=[{entity:'sensor.s8_anyvac_map',color:'#e11d48',mop_color:'#facc15',mop_opacity:0.4}];
+    const e2=mk(c2,mkHass(st));await sleep(40);const S2=sr(e2);
+    const wet=S2.querySelector('[data-rfp-wet="sensor.s8_anyvac_map"]');
+    t('colours: color and mop_color / mop_opacity per vacuum',S2.querySelector('[data-rfp-rhead="0"] circle').getAttribute('stroke')==='#e11d48'&&S2.querySelector('[data-rfp-dry="sensor.s8_anyvac_map"]').getAttribute('stroke')==='#e11d48'&&wet.getAttribute('stroke')==='#facc15'&&wet.getAttribute('stroke-opacity')==='0.4');
+    e2.remove();
+    const c3=clone(c);c3.rooms[0].floorplan.vacuums=['sensor.s8_anyvac_map'];c3.rooms[0].floorplan.overrides={'vac.wet':'#ffffff','vac.wetOpacity':0.1};
+    const e3=mk(c3,mkHass(st));await sleep(40);const w3=sr(e3).querySelector('[data-rfp-wet="sensor.s8_anyvac_map"]');
+    t('colours: one vacuum → the theme\'s mop colour, overridable (vac.wet, vac.wetOpacity)',w3.getAttribute('stroke')==='#ffffff'&&w3.getAttribute('stroke-opacity')==='0.1');
+    e3.remove();
+    const c4=clone(c3);delete c4.rooms[0].floorplan.overrides;
+    const e4=mk(c4,mkHass(st));await sleep(40);
+    t('colours: the night theme\'s mop band is light blue (reads as water on wood)',sr(e4).querySelector('[data-rfp-wet="sensor.s8_anyvac_map"]').getAttribute('stroke')==='#7dd3fc');
+    e4.remove();
+  }
   // ---- the classic editor keeps the floor plan as it is ------------------------------------------
   {
     const ed=w.document.createElement('room-overlay-card-editor');

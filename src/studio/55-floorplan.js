@@ -795,15 +795,28 @@ RocStudio.prototype._fpVacuums=function(){
       cb.checked=ok&&(cur?cur.indexOf(id)>=0:!!f.same);cb.disabled=!ok;
       const st=f.same?self.t('fp_vac_same'):(f.transform?self.t('fp_vac_fit',{n:f.transform.rooms,e:f.transform.rms}):self.t(f.err==='few'?'fp_vac_few':'fp_vac_nosrc'));
       const nm=String(((S[id]||{}).attributes||{}).friendly_name||id);
-      body.appendChild(rsEl('label',{class:'fpimp-opt'},[cb,rsEl('span',{text:nm}),rsEl('span',{class:'pf-sub',text:' — '+st})]));
-      rows.push({id:id,cb:cb,f:f,old:old});
+      // v6.51.0: its colours — the robot, its dry line and badge; the mop's band (empty = automatic)
+      const col=function(k,title){
+        const i=rsEl('input',{type:'color','data-fpvaccol':id+':'+k,title:self.t(title),'aria-label':self.t(title)+' — '+nm});
+        const v=old&&typeof old[k]==='string'&&/^#[0-9a-f]{6}$/i.test(old[k])?old[k]:'';
+        i.value=v||(k==='color'?'#03a9f4':'#7dd3fc');i._set=!!v;
+        i.addEventListener('input',function(){i._set=true;});
+        return i;
+      };
+      const cc=col('color','fp_vac_color'),mc=col('mop_color','fp_vac_mop');
+      body.appendChild(rsEl('div',{class:'fpimp-row'},[rsEl('label',{class:'fpimp-opt'},[cb,rsEl('span',{text:nm}),rsEl('span',{class:'pf-sub',text:' — '+st})]),cc,mc]));
+      rows.push({id:id,cb:cb,f:f,old:old,cc:cc,mc:mc});
     });
     self._panel(self.t('fp_vacs'),[body],[
       {label:self.t('ok'),cls:'primary',id:'fp-vacs-ok',fn:function(){
         const list=rows.filter(function(r){return r.cb.checked;}).map(function(r){
-          if(r.f.same)return r.id;
+          const e={entity:r.id};
           // a transform the author tuned by hand stays; a new one comes from the fit
-          return{entity:r.id,transform:r.old&&r.old.transform?r.old.transform:r.f.transform};
+          if(!r.f.same)e.transform=r.old&&r.old.transform?r.old.transform:r.f.transform;
+          if(r.cc._set)e.color=r.cc.value;
+          if(r.mc._set)e.mop_color=r.mc.value;
+          if(r.old&&r.old.mop_opacity!=null)e.mop_opacity=r.old.mop_opacity;
+          return Object.keys(e).length===1?r.id:e;
         });
         self._fpEdit(function(f){f.vacuums=list;});
       }},

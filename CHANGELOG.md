@@ -1,5 +1,22 @@
 # Changelog
 
+## [6.51.0] - unreleased
+
+### Telling the vacuums apart
+
+- **A colour per vacuum** (`floorplan.vacuums[].color`). It colours the robot's ring and arrow,
+  its dry line and the room badge while it cleans. Set it in the studio's **Vacuums** panel (a
+  colour picker next to each vacuum) or in YAML.
+- **Several vacuums tell themselves apart by default.** With more than one vacuum on a plan, each
+  gets its own colour from a palette (blue, amber, purple, green, …) in the list's order. A single
+  vacuum keeps the theme's colour.
+- **The mop's band:** `mop_color` and `mop_opacity` per vacuum. The default band no longer takes
+  on the floor's colour: it was a teal that turned muddy on wood, and is now light blue in `night`.
+  Each theme has its own. The theme's defaults are tokens too:
+  `overrides: {'vac.wet': '#…', 'vac.wetOpacity': 0.3, 'vac.dry': '#…', 'vac.robot': '#…'}`.
+- Without a `color` the band follows the vacuum's colour when there are several, so each mop
+  trail shows whose it is.
+
 ## [6.50.0] - unreleased
 
 ### AnyVac live, and what the plan shows (V7_PLAN.md Phase 8)

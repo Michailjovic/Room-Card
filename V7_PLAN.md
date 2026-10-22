@@ -896,3 +896,14 @@ companion app (author), and the tablet run of the S5 probe.
   only during a run.
 - **Not done:** multi-floor (open question 4); openings in the `thermal` / `tiles` themes; the
   clean button in `tiles`.
+
+### After Phase 8 — v6.51.0 (author's feedback)
+
+- **Vacuum colours:** `_vacColors(id)` = per-vacuum `color` / `mop_color` / `mop_opacity` →
+  else the palette `RFP_VAC_PALETTE` by the vacuum's index in the plan's list when there is more
+  than one → else the theme's `vac.*` tokens (`RFP_VAC_DEF`, overridable). Used for the robot ring
+  and arrow, the dry line, the wet band and the room badge's fill.
+- The `night` wet band moved from teal `#5eead4` at .22 to `#7dd3fc` at .28 (the teal read as a
+  stain on wood).
+- **Next:** Phase 9 (the studio as the default editor, 7.0.0-beta) needs the author's go — it
+  changes what HA's own editor shows.
