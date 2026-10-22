@@ -72,7 +72,12 @@ if(q.get('openings')){plan.openings[2].entity='binary_sensor.lr_door';plan.openi
 if(q.get('robot')){const av=JSON.parse(JSON.stringify(data.anyvac));plan.source={anyvac:'sensor.kitchen_s8_anyvac_map',frame:String((av.attributes.home_frame||{}).id||''),origin_px:[800,752],mm_per_px:12.5};
   Object.assign(av.attributes,{vacuum_position_home_px:q.get('robot')==='2'?{x:1500,y:900,a:200}:{x:1577.9,y:1078.2,a:270},charger_home_px:{x:1578.1,y:1092.2,a:269},in_cleaning:q.get('robot')==='2',vacuum_room_name:'Kitchen',
     path_wet_home_px:q.get('robot')==='2'?[[{x:1577,y:1078},{x:1577,y:1000},{x:1450,y:1000},{x:1450,y:950},{x:1600,y:950},{x:1600,y:900},{x:1500,y:900}]]:[],path_dry_home_px:[]});
-  states['sensor.kitchen_s8_anyvac_map']=av;}
+  states['sensor.kitchen_s8_anyvac_map']=av;
+  // v6.50.0 (?clean=1): the cleaning layer, a second vacuum in another frame
+  if(q.get('clean')){plan.layers={cleaning:true};const t0=Date.now();av.attributes.rooms.forEach(r=>{r.last_dry=new Date(t0-5*3600e3).toISOString();r.last_wet=new Date(t0-2*86400e3).toISOString();});
+    const s7=JSON.parse(JSON.stringify(av));s7.attributes.home_frame={id:'other-frame',cell_mm:50,scale:4};s7.attributes.friendly_name='S7 MaxV AnyVac Map';s7.attributes.vacuum_position_home_px={x:300,y:400,a:90};s7.attributes.in_cleaning=false;
+    s7.attributes.rooms.forEach(r=>{if(r.outline_home_px)r.outline_home_px=r.outline_home_px.map(p=>[p[0]-500,p[1]-300]);if(r.bbox_home_px){const b=r.bbox_home_px;r.bbox_home_px={x0:b.x0-500,y0:b.y0-300,x1:b.x1-500,y1:b.y1-300};}});
+    states['sensor.s7_maxv_anyvac_map']=s7;}}
 // v6.48.0: markers, a label and a person on the plan (?items=1)
 if(q.get('items')){plan.items=[{entity:'light.hall',at:[7.3,2.0]},{type:'label',entity:'sensor.hall_h_temperature',at:[7.4,3.3],suffix:'°'}];plan.presence='sensor.michael_area';states['sensor.michael_area']={state:'kitchen',attributes:{friendly_name:'Michael'}};}
 const rooms=[{id:'plan',name:'Floor plan',icon:'mdi:floor-plan',floorplan:fp}].concat(

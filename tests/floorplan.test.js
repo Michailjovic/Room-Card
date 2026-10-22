@@ -403,7 +403,16 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     t('change detection: the robot\'s position and trail',['vacuum_position_home_px','path_wet_home_px'].every(x=>e1._relevantAttrSources.some(a=>a.entity==='sensor.s8_anyvac_map'&&a.attr===x)));
     const av2=clone(av);Object.assign(av2.attributes,{vacuum_position_home_px:{x:1300,y:900,a:90},in_cleaning:false});
     e1.hass=mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av2}));await sleep(20);
-    t('update: the robot moves and turns, docked → no ring, no trail, no re-render',e1._fpInst===v&&S1.querySelector('[data-rfp-rhead="0"]').getAttribute('transform')==='rotate(90)'&&S1.querySelector('[data-rfp-rping="0"]').getAttribute('opacity')==='0'&&!S1.querySelector('[data-rfp-trail] path')&&rb.getAttribute('opacity')==='0.85');
+    t('update: the robot moves and turns, docked → no ring; the last run\'s trail stays (like AnyVac); no re-render',e1._fpInst===v&&S1.querySelector('[data-rfp-rhead="0"]').getAttribute('transform')==='rotate(90)'&&S1.querySelector('[data-rfp-rping="0"]').getAttribute('opacity')==='0'&&!!S1.querySelector('[data-rfp-trail] path')&&rb.getAttribute('opacity')==='0.85');
+    const av2b=clone(av2);av2b.attributes.view_layers={dry:true,wet:false};
+    e1.hass=mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av2b}));await sleep(20);
+    t('trail: AnyVac\'s shared wet / dry toggles apply',!S1.querySelector('[data-rfp-trail] path'));
+    const cT=clone(c);cT.rooms[0].floorplan.trail_mode='cleaning';
+    const eT=mk(cT,mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av2})));await sleep(30);
+    t('trail_mode: cleaning — no trail once the vacuum is back',!sr(eT).querySelector('[data-rfp-trail] path'));
+    eT.hass=mkHass(st);await sleep(20);
+    t('trail_mode: cleaning — the trail while it cleans',!!sr(eT).querySelector('[data-rfp-trail] path'));
+    eT.remove();
     e1.remove();
     const c2=clone(c);c2.rooms[0].floorplan.source.frame='another-frame';
     const e2=mk(c2,mkHass(st));await sleep(30);
@@ -422,6 +431,11 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const F5=e5._fpInst.F,Pg=F.geom.P;
     t('mirror horizontal: the living room ends up on the right, the plan still fits',Pg(F5,1,1,0)[0]>Pg(F5,14,1,0)[0]&&Pg(F0,1,1,0)[0]<Pg(F0,14,1,0)[0]);
     const back=F.geom.inv(F5,...Pg(F5,3.2,1.7,0));
+    {const cr=clone(c5);delete cr.rooms[0].floorplan.mirror;cr.rooms[0].floorplan.rotate={landscape:0,portrait:90};const er=mk(cr,mkHass(st));await sleep(30);
+      const rl=er._fpInst.rot;er._fpInst.o.profile='portrait';er._fpInst.render();
+      t('rotate per layout profile: landscape 0°, portrait 90°',rl===0&&er._fpInst.rot===90);er.remove();}
+    {const cb=clone(c5);cb.rooms[0].floorplan.mirror='both';const eb=mk(cb,mkHass(st));await sleep(30);const Fb=eb._fpInst.F;
+      t('mirror both: left ↔ right and top ↔ bottom',Pg(Fb,1,1,0)[0]>Pg(Fb,14,1,0)[0]&&Pg(Fb,1,1,0)[1]>Pg(Fb,1,4,0)[1]);eb.remove();}
     t('mirror: screen → plan still inverts (the studio edits a mirrored plan)',Math.abs(back[0]-3.2)<1e-6&&Math.abs(back[1]-1.7)<1e-6);
     e5.remove();
   }
@@ -441,6 +455,64 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const c3=clone(c);c3.rooms[0].floorplan.rooms[3].floor_color='red;stroke:url(x)';
     const e3=mk(c3);await sleep(30);
     t('floor_color: anything that is not a colour is ignored',!sr(e3).querySelector('pattern[id$="-f3"]'));
+    e3.remove();
+  }
+  // ---- 3f. v6.50.0: vacuums from other frames, cleaning layer, background ----------------------------
+  {
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;fp.theme='blueprint';
+    fp.source={anyvac:'sensor.s8_anyvac_map',frame:'d4e8',origin_px:[800,752],mm_per_px:12.5};
+    fp.rooms[3].anyvac_room='7bUI4dOp7O1qnECi7UfFW3_19';
+    fp.vacuums=['sensor.s8_anyvac_map',{entity:'sensor.s7_anyvac_map',transform:{rotation:90,x:1,y:2}}];
+    fp.layers={cleaning:true};
+    const av=clone(DATA.anyvac);
+    const now=Date.now(),iso=ms=>new Date(now-ms).toISOString();
+    av.attributes.rooms.forEach(r=>{if(r.name==='Kitchen'){r.last_dry=iso(2*3600e3);r.last_wet=iso(3*86400e3);}});
+    Object.assign(av.attributes,{vacuum_position_home_px:{x:1200,y:900,a:0},in_cleaning:false,path_points:100});
+    const s7={state:'ok',attributes:{schema_version:3,home_frame:{id:'other',cell_mm:50,scale:4},rooms:[],vacuum_position_home_px:{x:100,y:200,a:0},in_cleaning:false}};
+    const s6={state:'ok',attributes:{schema_version:3,home_frame:{id:'d4e8',cell_mm:50,scale:4},rooms:[],vacuum_position_home_px:{x:900,y:800,a:0}}};
+    const st=Object.assign(states(),{'sensor.s8_anyvac_map':av,'sensor.s7_anyvac_map':s7,'sensor.s6_anyvac_map':s6});
+    w.confirm=()=>true;
+    const e1=mk(c,mkHass(st));await sleep(40);
+    const S1=sr(e1),v=e1._fpInst;
+    t('vacuums: only the listed ones (s6 shares the frame but is not listed)',S1.querySelectorAll('[data-rfp-robot]').length===2&&v._robots().join()==='sensor.s8_anyvac_map,sensor.s7_anyvac_map');
+    const r1=S1.querySelector('[data-rfp-robot="1"]'),m=/translate\(([-\d.]+)px, *([-\d.]+)px\)/.exec(r1.style.transform),want=F.geom.P(v.F,-1.5,3.25,0.03);
+    t('vacuums: another frame through its transform (rotation + shift), heading turned with it',Math.abs(+m[1]-want[0])<0.05&&Math.abs(+m[2]-want[1])<0.05&&S1.querySelector('[data-rfp-rhead="1"]').getAttribute('transform')==='rotate(90)');
+    const cl=S1.querySelector('[data-rfp-clean="3"]');
+    t('cleaning layer: when the room was last vacuumed / mopped',!!cl&&cl.textContent==='vacuumed 2 h · mopped 3 d'&&!S1.querySelector('[data-rfp-clean="0"]'));
+    const btn=S1.querySelector('[data-rfp-cleanbtn="3"]');
+    t('cleaning layer: a clean button next to the label',!!btn&&btn.style.left!=='-100px');
+    calls.length=0;ev(btn,'pointerdown');ev(btn,'pointerup');await sleep(20);
+    t('clean button → anyvac.clean with the room\'s name on the map (after a confirmation)',calls.length===1&&calls[0][0]==='anyvac'&&calls[0][1]==='clean'&&JSON.stringify(calls[0][2])==='{"rooms":["Kitchen"],"mode":"dry"}'&&e1._roomIdx===0);
+    // AnyVac's live update while cleaning: position and progress
+    const av2=clone(av);av2.attributes.in_cleaning=true;av2.attributes.live={base_points:100,seq:4,pos_home_px:{x:1300,y:900,a:0},dry_home_px:[],wet_home_px:[[{x:1300,y:900},{x:1320,y:900}]]};
+    av2.attributes.rooms.forEach(r=>{if(r.name==='Kitchen')r.progress_pct=45;});
+    e1.hass=mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av2}));await sleep(20);
+    const r0=S1.querySelector('[data-rfp-robot="0"]'),m0=/translate\(([-\d.]+)px/.exec(r0.style.transform);
+    t('live: the 3-second position wins while it belongs to the snapshot',Math.abs(+m0[1]-F.geom.P(v.F,6.25,1.85,0.03)[0])<0.05&&cl.textContent==='cleaning 45 %'&&!!S1.querySelector('[data-rfp-trail] path'));
+    const av3=clone(av2);av3.attributes.live.base_points=99;
+    e1.hass=mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av3}));await sleep(20);
+    t('live: a stale live update (another snapshot) is ignored',Math.abs(+/translate\(([-\d.]+)px/.exec(r0.style.transform)[1]-F.geom.P(v.F,5,1.85,0.03)[0])<0.05);
+    t('change detection: AnyVac live and rooms',['live','rooms'].every(x=>e1._relevantAttrSources.some(a=>a.entity==='sensor.s8_anyvac_map'&&a.attr===x))&&!e1._relevantEntities.includes('sensor.s6_anyvac_map'));
+    e1.remove();
+    // attention only from the listed sections
+    const c2=clone(BASE);c2.sections=[{id:'appl'},{id:'other'}];
+    c2.rooms[2].icons=[{id:'washer',entity:'sensor.washer',icon:'mdi:washing-machine',section:'appl',tile:{active_state:'running'}},{id:'tv',entity:'sensor.tv',section:'other',tile:{active_state:'on'}}];
+    c2.rooms[0].floorplan.attention_sections=['other'];
+    const e2=mk(c2,mkHass(Object.assign(states(),{'sensor.washer':{state:'running',attributes:{}},'sensor.tv':{state:'on',attributes:{}}})));await sleep(30);
+    t('attention_sections: only the listed sections count',sr(e2).querySelector('[data-rfp-attn="1"]').textContent==='1');
+    e2.remove();
+    // a label moved by hand (label_at)
+    const c4=clone(BASE);c4.rooms[0].floorplan.theme='blueprint';c4.rooms[0].floorplan.rooms[0].label_at=[2,3];
+    const e4=mk(c4);await sleep(30);
+    const lg=sr(e4).querySelector('[data-rfp-label="0"]'),want4=F.geom.P(e4._fpInst.F,2,3,0),m4=/translate\(([-\d.]+),([-\d.]+)\)/.exec(lg.getAttribute('transform'));
+    t('label_at: the label sits where it was dragged',!!m4&&Math.abs(+m4[1]-want4[0])<0.02&&Math.abs(+m4[2]-want4[1])<0.02);
+    e4.remove();
+    // the photo background
+    const c3=clone(BASE);c3.rooms[0].floorplan.background={image:'/local/x.png',x:1,y:2,scale:0.01,width_px:500,height_px:300,rotation:5,opacity:0.8};
+    const e3=mk(c3);await sleep(30);
+    const im=sr(e3).querySelector('image[data-rfp-bg]');
+    t('background: the image in plan metres, turned, under the plan; the floors give way to it',!!im&&im.getAttribute('width')==='5'&&im.getAttribute('height')==='3'&&im.getAttribute('transform')==='rotate(5 1 2)'
+      &&![...sr(e3).querySelectorAll('polygon')].some(p=>/^url\(#.*-(wood|vinyl|tile|carpet|concrete)\)$/.test(p.getAttribute('fill')||'')));
     e3.remove();
   }
   // ---- the classic editor keeps the floor plan as it is ------------------------------------------
@@ -512,6 +584,27 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const prevW=clone(fp);prevW.openings.push({type:'window',at:[2,0.4],cover:'cover.x'});
     const reW=ST.fpImport(G,hass,card,'sensor.s8_anyvac_map',DATA.anyvac,{},prevW);
     t('re-import with doors: windows stay',reW.openings.filter(o=>o.type==='window').length===1&&reW.openings.filter(o=>o.type!=='window').length===4);
+  }
+  // v6.50.0: aligning another vacuum's frame by the rooms both maps share; the background's place
+  {
+    const src={anyvac:'sensor.s8_anyvac_map',frame:'d4e8',origin_px:[800,752],mm_per_px:12.5};
+    const rot=p=>[-p[1]+3000,p[0]+500]; // the other map: turned 90° and shifted (home px)
+    const other=clone(DATA.anyvac);other.attributes.home_frame={id:'zz',cell_mm:50,scale:4};
+    other.attributes.rooms.forEach(r=>{if(r.outline_home_px)r.outline_home_px=r.outline_home_px.map(rot);if(r.bbox_home_px){const b=r.bbox_home_px,a=rot([b.x0,b.y0]),c=rot([b.x1,b.y1]);r.bbox_home_px={x0:Math.min(a[0],c[0]),y0:Math.min(a[1],c[1]),x1:Math.max(a[0],c[0]),y1:Math.max(a[1],c[1])};}});
+    const hz={states:{'sensor.s8_anyvac_map':DATA.anyvac,'sensor.zz_anyvac_map':other}};
+    const fit=ST.fpVacuumFit(G,hz,{source:src},'sensor.zz_anyvac_map');
+    const T0=fit.transform,th=T0.rotation*Math.PI/180,k=0.0125;
+    const map=p=>{const q=[p[0]*k,p[1]*k];return[Math.cos(th)*q[0]-Math.sin(th)*q[1]+T0.x,Math.sin(th)*q[0]+Math.cos(th)*q[1]+T0.y];};
+    const back=map(rot([1600,1000]));
+    t('vacuum fit: another frame (turned 90°) is found by its 5 rooms, ± 0',T0.rooms===5&&T0.rms<0.02&&Math.abs(Math.abs(T0.rotation)-90)<0.5&&Math.abs(back[0]-10)<0.05&&Math.abs(back[1]-3.1)<0.05);
+    t('vacuum fit: the plan\'s own frame needs none; a hand-drawn plan cannot align',ST.fpVacuumFit(G,hz,{source:src},'sensor.s8_anyvac_map').same===true&&ST.fpVacuumFit(G,hz,{},'sensor.zz_anyvac_map').err==='nosource');
+    const one=clone(other);one.attributes.rooms=one.attributes.rooms.slice(0,1);
+    t('vacuum fit: one shared room is not enough',ST.fpVacuumFit(G,{states:{'sensor.s8_anyvac_map':DATA.anyvac,'sensor.zz_anyvac_map':one}},{source:src},'sensor.zz_anyvac_map').err==='few');
+    const bg=ST.fpSnapshotBg({source:src},{path:'/local/anyvac/room_card_plan.png?t=1',frame_id:'d4e8',crop:{x0:780,y0:732,x1:2100,y1:1150},fiducials:[{id:'tl'}]});
+    t('snapshot: the crop box in home px is the background\'s place in metres',bg.x===-0.25&&bg.y===-0.25&&bg.scale===0.0125&&bg.width_px===1320&&bg.height_px===418&&bg.fiducials.length===1&&bg.frame==='d4e8');
+    const an=[{home_px:{x:800,y:752},floor_pct:{x:10,y:10}},{home_px:{x:1600,y:752},floor_pct:{x:90,y:10}},{home_px:{x:800,y:1152},floor_pct:{x:10,y:90}}];
+    const af=ST.fpAnchorFit({source:src},an,1000,500);
+    t('markers: anchors → scale, rotation and place of the edited image',Math.abs(af.scale-0.0125)<1e-9&&Math.abs(af.rotation)<0.01&&Math.abs(af.x+1.25)<0.01&&Math.abs(af.y+0.625)<0.01);
   }
   console.log(fails?'\n'+fails+' FAILED':'\nall floor plan tests passed');
   process.exit(fails?1:0);

@@ -143,7 +143,10 @@ temperature and humidity. Tap a room and it zooms open; hold it to switch its li
 Since v6.48.0 it also shows **across rooms** who is where, what plays, the room the vacuum is
 cleaning and running appliances, plus any entity as a **marker** — and the overview page can show
 the same signals on its tiles. Since v6.49.0 windows sit on the walls: open ones light up, blinds
-come down by their position, doors with a contact sensor swing open.
+come down by their position, doors with a contact sensor swing open. Since v6.50.0 every vacuum
+can be on the plan live (the studio aligns maps from other frames), the rooms say when they were
+last vacuumed and mopped, a button starts cleaning a room, and your own render can lie under the
+plan as a photo background.
 
 - **From your robot vacuum:** in Room Card Studio, *Add a floor plan page* → **AnyVac** reads the
   room outlines from the vacuum's map, straightens the walls, links each room to your card's

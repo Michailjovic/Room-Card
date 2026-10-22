@@ -80,9 +80,11 @@ vacuum or AnyVac is gone.
   view puts a long flat on a diagonal — `oblique` keeps it horizontal.
 - `rotate`: degrees, or `auto` (default) — a quarter turn when that makes the plan clearly bigger,
   e.g. a long flat on an upright phone.
-- `mirror` *(6.49)*: `horizontal` or `vertical` flips the drawing, for a vacuum map that shows the
+- `mirror` *(6.49; `both` 6.50)*: `horizontal`, `vertical` or `both` flips the drawing, for a vacuum map that shows the
   home mirrored. Only the drawing flips: the stored coordinates stay the vacuum's, so a re-import,
   the robot and editing in the studio keep working. Combine it with `rotate` (90 / 180 / 270).
+  `rotate` can differ per layout profile — `rotate: {landscape: 0, portrait: 90}`. The studio's
+  toolbar has a *turn by 90°* button (for the profile the canvas shows) and a *mirror* button.
 - `quality: low` draws without SVG filters (paper, rough lines, soft shadow) for a weak tablet;
   animations stop when the plan is off screen and with *reduce motion*.
 
@@ -125,6 +127,65 @@ theme's colour for a material is `overrides: {'floor.vinyl': '#…'}`.
 
 The overview page can show the same signals on its tiles — opt-in with `overview.signals`
 ([CONFIGURATION.md](CONFIGURATION.md#cross-room-signals-v6480)).
+
+## Vacuums, cleaning, clean this room
+
+*Since v6.50.0.*
+
+- **`vacuums`** — which AnyVac maps this plan shows. Without it, every vacuum in the home frame
+  the plan was imported from. AnyVac keeps each vacuum in its own frame unless it registers one
+  into another. A vacuum from another frame needs a `transform` (its home px × its mm per px →
+  turned by `rotation`° → shifted by `x`, `y` metres). The studio's **Vacuums** panel finds it from
+  the rooms both maps share (same names in the Roborock app) and says how well it fits.
+
+  ```yaml
+  vacuums:
+    - sensor.kitchen_s8_maxv_ultra_anyvac_map          # the plan's own frame
+    - entity: sensor.s7_maxv_anyvac_map
+      transform: {rotation: 0.4, x: -3.75, y: -5.65, rooms: 5, rms: 0.08}
+  ```
+
+  A vacuum left out is not drawn, gives no badge and is not watched. While a vacuum cleans, its
+  position and trail come from AnyVac's 3-second `live` update. The last run's trail stays on the
+  plan after it docks, like in AnyVac's card; AnyVac's shared dry / wet toggles apply,
+  `trail_mode: cleaning` shows it only during a run, and `layers: {trail: false}` hides it.
+- **Layer `cleaning`** (off by default, `layers: {cleaning: true}`) — on each room imported from
+  AnyVac the label says when it was last vacuumed and mopped ("vacuumed 5 h · mopped 2 d"), and
+  "cleaning 45 %" while it is being cleaned. A **vacuum button** next to the label starts
+  `anyvac.clean` for that room after a confirmation; AnyVac's planner picks the vacuums.
+  `clean_mode`: `dry` (default), `wet` or `both`.
+- **`attention_sections`** — the section ids whose running tiles mark a room (default: all).
+
+## Photo background
+
+*Since v6.50.0.* `background` puts your own image under the plan — for example a photo-real render
+of the home made from the vacuum map:
+
+```yaml
+background:
+  image: /local/anyvac/room_card_plan.png
+  x: -0.25          # its top-left in plan metres
+  y: -0.25
+  scale: 0.0125     # metres per image pixel
+  width_px: 1320
+  height_px: 418
+  rotation: 0       # degrees, around the top-left
+  opacity: 1
+  floors: false     # true: draw the vector floors over it
+```
+
+The studio's **Background** panel:
+
+- **AnyVac snapshot** — AnyVac draws the vacuum map of the plan's home frame (with invisible
+  markers in its border) and the image is placed exactly under the plan;
+- edit that file outside (e.g. turn it into a render) and **Use this image**: an image of the same
+  canvas keeps its place;
+- **Fit by markers** — if you cropped or resized it, AnyVac finds its markers (they survive only
+  in a PNG that keeps its transparency) and the image is placed by them;
+- or type `x`, `y`, `scale`, `rotation` in the page's Properties.
+
+While the background is shown the vector floors are not drawn, so the image shows through; lights,
+heating, walls, labels and everything else stay on top.
 
 ## Markers and labels
 
@@ -179,13 +240,16 @@ rooms:
       theme: night                 # night | clay | neon | blueprint | thermal | tiles | sketch
       theme_by: {portrait: tiles}  # portrait / landscape / dark / light → theme
       projection: auto             # auto | top | oblique | iso
-      rotate: auto                 # auto | degrees
-      mirror: none                 # none | horizontal | vertical
+      rotate: auto                 # auto | degrees, or per profile: {landscape: 0, portrait: 90}
+      mirror: none                 # none | horizontal | vertical | both
       quality: auto                # auto | high | low
       wall: {height: 0.42}         # metres (projected views)
       temperature_range: [21, 24]  # thermal theme
       presence: [sensor.michael_area, sensor.eva_area]   # default: the card's room_entity
-      layers: {vacuum: true, attention: true}           # every layer on by default
+      layers: {vacuum: true, attention: true, cleaning: false}   # all on by default, but cleaning
+      vacuums: [sensor.kitchen_s8_maxv_ultra_anyvac_map]       # default: every vacuum in the plan's frame
+      attention_sections: [appliances]                         # default: every section
+      clean_mode: dry                                          # dry | wet | both — the clean button
       overrides: {'floor.wood': '#6b4a33'}
       transition: zoom             # zoom | fade | none — plan ↔ room
       transition_duration: 450
@@ -195,6 +259,7 @@ rooms:
           polygon: [[0,0.4],[5.35,0.4],[5.35,1.7],[5.95,1.7],[5.95,3.45],[5.35,3.45],[5.35,4.55],[0,4.55]]
           floor: vinyl             # wood | vinyl | tile | carpet | concrete | none
           floor_color: '#7a5a43'   # this room's own floor colour (optional)
+          label_at: [2.4, 3.1]     # where the label sits (dragged in the studio); default: automatic
           lights: [light.panel_living_room_1, light.panel_living_room_2]
           climate: climate.versatile_living_room
           temperature: sensor.living_room_temperature
@@ -226,6 +291,5 @@ room's lights.
 
 ## Coming next
 
-Cleaning coverage and "last cleaned" per room, a "clean this room" action through AnyVac, and a
-calibrated photo-real render behind the vector layers — see
+Multi-floor homes (a frame / floor picker), openings in the `thermal` and `tiles` themes — see
 [V7_PLAN.md](../V7_PLAN.md) §6.

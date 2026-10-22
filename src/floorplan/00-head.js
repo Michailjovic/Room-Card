@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='6.49.0';
+const ROC_FP_VERSION='6.50.0';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -30,7 +30,9 @@ function rfpN(v){return Math.round(v*100)/100;}
 function rfpNum(v){if(v===null||v===undefined||v==='')return NaN;const n=typeof v==='number'?v:parseFloat(v);return isFinite(n)?n:NaN;}
 // Strings the plan itself draws (labels, empty state). The studio has its own table.
 const RFP_STR={
-  en:{empty:'No floor plan yet',empty2:'Open the Studio to import it from AnyVac or draw it',heating:'heating',light:'Light',heat:'Heating',on:'on',off:'off',idle:'idle',none:'—'},
-  cs:{empty:'Půdorys zatím není',empty2:'Otevři Studio a naimportuj ho z AnyVac nebo ho nakresli',heating:'topí',light:'Světlo',heat:'Topení',on:'zap.',off:'vyp.',idle:'stojí',none:'—'},
+  en:{empty:'No floor plan yet',empty2:'Open the Studio to import it from AnyVac or draw it',heating:'heating',light:'Light',heat:'Heating',on:'on',off:'off',idle:'idle',none:'—',
+    vac:'vacuumed',mop:'mopped',cleaning:'cleaning',min:'{n} min',hr:'{n} h',day:'{n} d',clean:'Clean {room}',clean_q:'Start cleaning {room}?'},
+  cs:{empty:'Půdorys zatím není',empty2:'Otevři Studio a naimportuj ho z AnyVac nebo ho nakresli',heating:'topí',light:'Světlo',heat:'Topení',on:'zap.',off:'vyp.',idle:'stojí',none:'—',
+    vac:'vysáto',mop:'vytřeno',cleaning:'uklízí',min:'{n} min',hr:'{n} h',day:'{n} d',clean:'Uklidit: {room}',clean_q:'Spustit úklid: {room}?'},
 };
 function rfpT(lang,k){const t=RFP_STR[lang]||RFP_STR.en;return t[k]!==undefined?t[k]:RFP_STR.en[k];}

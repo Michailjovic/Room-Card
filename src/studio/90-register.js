@@ -6,7 +6,8 @@ function rocStudioRegister(){
   if(!C||!C._rocInternals){console.warn('[room-overlay-card] studio: room-overlay-card.js is too old or not loaded — the studio needs v'+ROC_STUDIO_VERSION);return;}
   C._rocStudio={version:ROC_STUDIO_VERSION,open:function(opts){return RocStudio.open(opts);},Studio:RocStudio,schema:RocSchema,
     wizBuild:rsWizBuild,wizAreas:rsWizAreas,wizUpload:rsUploadImage, // the wizard's pure parts, for the test tiers
-    fpImport:rsFpImport,fpEntities:rsFpEntities,fpAutoLink:rsFpAutoLink,fpSensors:rsFpSensors,fpOpeningGuess:rsFpOpeningGuess,fpMergeDoors:rsFpMergeDoors}; // v6.47.0 floor plan import (+ v6.49.0 openings)
+    fpImport:rsFpImport,fpEntities:rsFpEntities,fpAutoLink:rsFpAutoLink,fpSensors:rsFpSensors,fpOpeningGuess:rsFpOpeningGuess,fpMergeDoors:rsFpMergeDoors,
+    fpVacuumFit:rsFpVacuumFit,fpSnapshotBg:rsFpSnapshotBg,fpAnchorFit:rsFpAnchorFit}; // v6.47.0 floor plan import (+ v6.49.0 openings)
 }
 if(customElements.get('room-overlay-card'))rocStudioRegister();
 else customElements.whenDefined('room-overlay-card').then(rocStudioRegister);

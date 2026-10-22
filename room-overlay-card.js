@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='6.49.0';
+const ROC_VERSION='6.50.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -3067,7 +3067,7 @@ class RoomOverlayCard extends HTMLElement{
           // v6.48.0 cross-room signals: who is where, attention per card room, AnyVac vacuums
           persons:rocSigPersons(def.presence,self._roomEntityId()),
           anyvac:function(){return self._sigAnyvac(def);},
-          attention:function(){return rocRoomSignals(cAll,(self._hass&&self._hass.states)||{},{sections:self._getSections(cAll),presence:false,vacuum:false});},
+          attention:function(){return rocRoomSignals(cAll,(self._hass&&self._hass.states)||{},{sections:self._fpSections(def,cAll),presence:false,vacuum:false});},
           roomMatch:function(v){return roomMatch(cAll,v);},
           onRender:function(v){if(typeof self._rocFpSink==='function')try{self._rocFpSink(v);}catch(_){}}});
       }catch(e){console.warn('[room-overlay-card] floor plan:',e);host.innerHTML='<div class="roc-fp-msg">'+escA(e&&e.message||String(e))+'</div>';}
@@ -3085,7 +3085,15 @@ class RoomOverlayCard extends HTMLElement{
       this._sigAvGen=this._renderGen;this._sigAv=rocAnyvacIds(st);
     }
     const src=def&&def.source&&def.source.anyvac?String(def.source.anyvac):'';
-    return src&&this._sigAv.indexOf(src)>0?[src].concat(this._sigAv.filter(function(x){return x!==src;})):this._sigAv;
+    let l=src&&this._sigAv.indexOf(src)>0?[src].concat(this._sigAv.filter(function(x){return x!==src;})):this._sigAv;
+    // v6.50.0: the plan's own list of vacuums (floorplan.vacuums) — the view filters by it too
+    if(def&&Array.isArray(def.vacuums)){const want=def.vacuums.map(function(x){return x&&typeof x==='object'?x.entity:x;});l=l.filter(function(id){return want.indexOf(id)>=0;});}
+    return l;
+  }
+  // The sections whose running tiles mark a room on the plan (floorplan.attention_sections, v6.50.0)
+  _fpSections(def,cAll){
+    const all=this._getSections(cAll),only=def&&Array.isArray(def.attention_sections)?def.attention_sections.map(String):null;
+    return only?all.filter(function(x){return x&&x.def&&only.indexOf(String(x.def.id))>=0;}):all;
   }
   // Stops the old view's observers. Its SVG stays where it is: a zoom out of the plan freezes the
   // old page on screen while the room grows over it.
@@ -4712,8 +4720,8 @@ navSelf._navChipInto(chipCont,chCfg,r);
       (Array.isArray(_fpDef.items)?_fpDef.items:[]).forEach(function(it){if(it&&it.entity){_ex.ids.add(String(it.entity));if(it.attribute)_ex.attrs.add(it.entity+' '+it.attribute);}});
       const _L=_fpDef.layers&&typeof _fpDef.layers==='object'?_fpDef.layers:{};
       const _so={persons:_L.presence===false?[]:rocSigPersons(_fpDef.presence,this._roomEntityId()),anyvac:_L.vacuum===false?[]:this._sigAnyvac(_fpDef)};
-      rocSigEntities(_so,_L.attention===false?[]:this._getSections(cAll)).forEach(function(id){_ex.ids.add(id);});
-      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0)
+      rocSigEntities(_so,_L.attention===false?[]:this._fpSections(_fpDef,cAll)).forEach(function(id){_ex.ids.add(id);});
+      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px','live','rooms','view_layers'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0)
     }
     if(this._ovSig){
       const _sc=this._ovSig.cfg;

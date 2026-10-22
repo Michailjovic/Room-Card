@@ -402,12 +402,19 @@ you if the second one is missing.
 page that draws the home as a plan ([docs/FLOORPLAN.md](FLOORPLAN.md)). On that page the canvas
 edits the plan instead of elements, with a toolbar above it:
 
-- **Select** — click a room to select it, drag it to move it; drag a corner; the dot in the middle
+- **Select** — click a room to select it, drag it to move it; drag a room's **label** to move
+  just the label (v6.50.0, `label_at`); drag a corner; the dot in the middle
   of a wall adds a corner; click a door to select it, drag it along its wall. Corners snap to
   5 cm and to the x / y of other corners (walls line up); hold **Alt** for no snapping.
 - **Rectangle** / **Polygon** — draw a room (a polygon closes on its first corner, a double-click
   or Enter; Esc cancels).
 - **Door** — click a wall to place a door (0.8 m wide).
+- **Turn** / **Mirror** (v6.50.0) — turn the drawing by 90° (`rotate`) and flip it (`mirror`:
+  none → horizontal → vertical → both).
+- **Vacuums** (v6.50.0) — which AnyVac vacuums the plan shows; a vacuum mapped in another home
+  frame is aligned by the rooms both maps share (the panel says how well it fits).
+- **Background** (v6.50.0) — a photo background: AnyVac snapshot (placed exactly), your edited
+  copy of it, *Fit by markers*, or by hand in Properties.
 - **Window** (v6.49.0) — click a wall to place a window (1 m wide). It gets the room's unused window
   sensor and blind from the Home Assistant area; check them in Properties (type, width, sensor,
   blind, blind type, invert; doors also mirror / outward).

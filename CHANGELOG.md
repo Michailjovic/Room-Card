@@ -1,5 +1,49 @@
 # Changelog
 
+## [6.50.0] - unreleased
+
+### AnyVac live, and what the plan shows (V7_PLAN.md Phase 8)
+
+- **Choose the vacuums** (`floorplan.vacuums`). Without it the plan shows every vacuum in the
+  home frame it was imported from, as before. With it, only the listed ones: robot, trail, the
+  room badge and what the card watches.
+- **Vacuums mapped in other home frames.** AnyVac gives each vacuum its own frame unless it
+  registers one into another, so before only the import's vacuum showed. The studio's **Vacuums**
+  panel lists every AnyVac map. It aligns a vacuum from another frame by the rooms both maps share
+  (same names in the Roborock app) and shows how well they fit (e.g. "aligned by 5 rooms, ± 0.08 m").
+  The result is stored as `transform: {rotation, x, y}` and can be tuned by hand.
+- **The trail stays**, as in AnyVac's own card: the last run's path (dry line, wet mop band)
+  stays on the plan after the vacuum docks, until the next run replaces it. AnyVac's shared
+  dry / wet toggles (`view_layers`) apply; layer `trail` turns it off, and `trail_mode: cleaning`
+  shows it only while a vacuum is cleaning.
+- **Live position every 3 s.** While a vacuum cleans, its position and trail come from AnyVac's
+  `live` update (when it belongs to the map snapshot shown), not only the 30-second map.
+- **When was each room cleaned** (layer `cleaning`, off by default): each AnyVac room's label
+  says "vacuumed 5 h · mopped 2 d", and "cleaning 45 %" while it is being cleaned.
+- **Clean this room:** with the `cleaning` layer on, a vacuum button next to each AnyVac room's
+  label starts `anyvac.clean` for that room after a confirmation. AnyVac's planner picks the
+  vacuums. `clean_mode`: `dry` (default), `wet`, `both`.
+- **Attention from chosen sections** (`attention_sections`): only those sections' running tiles
+  mark a room.
+- **Photo background** (`background`): your own image under the plan, in plan metres
+  (`x`, `y`, `scale`, `rotation`, `opacity`). The vector floors make way for it
+  (`floors: true` keeps them). Studio **Background** panel:
+  - **AnyVac snapshot** places a picture of the vacuum map exactly under the plan, with
+    invisible markers;
+  - edit it outside: an image of the same canvas keeps its place;
+  - **Fit by markers** places an edited, cropped or resized copy by AnyVac's markers;
+  - or set `x`, `y`, `scale`, `rotation` by hand.
+- **Room labels can be moved:** drag a label in the studio (Alt = no 5 cm snapping); it is stored
+  as the room's `label_at` (plan metres), and the badges, people and the clean button follow it.
+  Delete `label_at` in Properties → Geometry to put it back.
+- **`rotate` per layout profile:** `rotate: {landscape: 0, portrait: 90}` (each degrees or
+  `auto`; a plain number still applies to both).
+- **`mirror: both`** (left ↔ right and top ↔ bottom), and two toolbar buttons in the studio:
+  - **turn by 90°** for the profile the canvas shows (Tablet = landscape, Tablet portrait / Phone
+    = portrait), starting from what is shown (`auto` included);
+  - **mirror** (none → horizontal → vertical → both).
+- The studio's AnyVac import button now has an import icon; the vacuum icon is the Vacuums panel.
+
 ## [6.49.0] - unreleased
 
 ### Doors and windows on the floor plan (V7_PLAN.md Phase 7)

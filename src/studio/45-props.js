@@ -522,7 +522,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover']};
+const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;
@@ -552,7 +552,7 @@ function rsFormSpec(ctx,target){
   if(target.kind==='fproom'){
     const lk=(ctx.work.rooms||[]).find(function(r){return r&&item.room!=null&&String(r.id)===String(item.room);});
     return{keys:S.fpRoom.keys,schema:'fpRoom',title:String(item.name||(lk&&((lk.overview_tile&&lk.overview_tile.name)||lk.name))||item.room||('#'+(target.idx+1))),icon:'mdi:vector-square',type:ctx.t('t_fproom'),rest:'object',groups:[
-      ['main',['name','room','floor','floor_color']],['fp_states',['lights','climate','temperature','humidity','media']],['fp_actions',['tap_action','hold_action']],['fp_geom',['polygon','anyvac_room']]]};
+      ['main',['name','room','floor','floor_color']],['fp_states',['lights','climate','temperature','humidity','media']],['fp_actions',['tap_action','hold_action']],['fp_geom',['label_at','polygon','anyvac_room']]]};
   }
   if(target.kind==='fpitem'){
     const lab=item.type==='label';

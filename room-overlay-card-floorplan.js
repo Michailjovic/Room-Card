@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='6.49.0';
+const ROC_FP_VERSION='6.50.0';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -30,8 +30,10 @@ function rfpN(v){return Math.round(v*100)/100;}
 function rfpNum(v){if(v===null||v===undefined||v==='')return NaN;const n=typeof v==='number'?v:parseFloat(v);return isFinite(n)?n:NaN;}
 // Strings the plan itself draws (labels, empty state). The studio has its own table.
 const RFP_STR={
-  en:{empty:'No floor plan yet',empty2:'Open the Studio to import it from AnyVac or draw it',heating:'heating',light:'Light',heat:'Heating',on:'on',off:'off',idle:'idle',none:'—'},
-  cs:{empty:'Půdorys zatím není',empty2:'Otevři Studio a naimportuj ho z AnyVac nebo ho nakresli',heating:'topí',light:'Světlo',heat:'Topení',on:'zap.',off:'vyp.',idle:'stojí',none:'—'},
+  en:{empty:'No floor plan yet',empty2:'Open the Studio to import it from AnyVac or draw it',heating:'heating',light:'Light',heat:'Heating',on:'on',off:'off',idle:'idle',none:'—',
+    vac:'vacuumed',mop:'mopped',cleaning:'cleaning',min:'{n} min',hr:'{n} h',day:'{n} d',clean:'Clean {room}',clean_q:'Start cleaning {room}?'},
+  cs:{empty:'Půdorys zatím není',empty2:'Otevři Studio a naimportuj ho z AnyVac nebo ho nakresli',heating:'topí',light:'Světlo',heat:'Topení',on:'zap.',off:'vyp.',idle:'stojí',none:'—',
+    vac:'vysáto',mop:'vytřeno',cleaning:'uklízí',min:'{n} min',hr:'{n} h',day:'{n} d',clean:'Uklidit: {room}',clean_q:'Spustit úklid: {room}?'},
 };
 function rfpT(lang,k){const t=RFP_STR[lang]||RFP_STR.en;return t[k]!==undefined?t[k]:RFP_STR.en[k];}
 // ----- Geometry (pure) -------------------------------------------------------------------------
@@ -142,12 +144,12 @@ const RFP_PROJ={
 function rfpMul(a,b){return[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3]];}
 // The affine map for a plan: projection × rotation, scaled and centred into W×H minus padding.
 // pts: every floor point; zTop: wall height (raised corners count for the fit).
-// mirror (v6.49.0): 'horizontal' flips x, 'vertical' flips y — before the rotation, so the plan's
+// mirror (v6.49.0): 'horizontal' flips x, 'vertical' flips y, 'both' (v6.50.0) both — before the rotation, so the plan's
 // own coordinates (and everything stored in them) stay as the vacuum mapped them.
 function rfpFit(pts,proj,rotDeg,W,H,pad,zTop,mirror){
   const P=RFP_PROJ[proj]||RFP_PROJ.top;
   const r=(rfpNum(rotDeg)||0)*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
-  const mr=mirror==='horizontal'?[-1,0,0,1]:(mirror==='vertical'?[1,0,0,-1]:[1,0,0,1]);
+  const mr=mirror==='horizontal'?[-1,0,0,1]:(mirror==='vertical'?[1,0,0,-1]:(mirror==='both'?[-1,0,0,-1]:[1,0,0,1]));
   const m=rfpMul(P.m,rfpMul([c,s,-s,c],mr));
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
   for(const q of pts){
@@ -536,6 +538,7 @@ class RfpView{
   }
   destroy(){
     if(this._ro)this._ro.disconnect();if(this._io)this._io.disconnect();
+    clearInterval(this._ageT);
     clearTimeout(this._holdT);this._dead=true;
     // the SVG stays: the card may be showing it frozen under a zoom transition
   }
@@ -567,7 +570,9 @@ class RfpView{
       const fc=typeof r.floor_color==='string'&&/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|[a-z]+)$/i.test(r.floor_color.trim())?r.floor_color.trim():'';
       rooms.push({i:i,cfg:r,poly:poly,name:String(name),link:link,floor:RFP_FLOORS.indexOf(r.floor)>=0?r.floor:'wood',floorColor:fc,media:list(r.media),
         lights:list(r.lights),climate:r.climate?String(r.climate):'',temp:r.temperature?String(r.temperature):'',hum:r.humidity?String(r.humidity):'',
-        pole:rfpPole(poly),bbox:rfpBBox(poly),area:Math.abs(rfpArea(poly))});
+        pole:rfpPole(poly),bbox:rfpBBox(poly),area:Math.abs(rfpArea(poly)),
+        // where the label sits (v6.50.0: label_at, dragged in the studio), else the pole of inaccessibility
+        lab:rfpPoly([r.label_at])[0]||rfpPole(poly)});
     });
     // doors and (v6.49.0) windows: k = the index in floorplan.openings; u runs along the wall from the
     // hinge, n points into the room the opening belongs to (mirror / outward flip them)
@@ -594,7 +599,8 @@ class RfpView{
   // Which layers are drawn (floorplan.layers; all on by default)
   _layers(){
     const l=this.o.cfg&&this.o.cfg.layers&&typeof this.o.cfg.layers==='object'?this.o.cfg.layers:{};
-    const o={};['lights','heating','labels','presence','media','attention','vacuum','items','openings'].forEach(function(k){o[k]=l[k]!==false;});
+    const o={};['lights','heating','labels','presence','media','attention','vacuum','items','openings','trail'].forEach(function(k){o[k]=l[k]!==false;});
+    o.cleaning=l.cleaning===true; // v6.50.0: last cleaned + the clean button, opt-in
     return o;
   }
   // ---- static render ----
@@ -623,8 +629,10 @@ class RfpView{
     // rotate: a number of degrees, or auto (default) — a quarter turn when it makes the plan clearly
     // bigger, e.g. a long flat on a phone held upright
     const padB=T.mode==='thermal'?{l:pad,r:pad,t:pad,b:pad+44}:(T.dims?{l:pad+10,r:pad+36,t:pad+34,b:pad+10}:pad);
-    let rot=rfpNum(fp.rotate);
-    const mir=fp.mirror==='horizontal'||fp.mirror==='vertical'?fp.mirror:'';
+    // rotate: degrees | auto, or (v6.50.0) per layout profile {landscape, portrait}
+    const rv=fp.rotate&&typeof fp.rotate==='object'&&!Array.isArray(fp.rotate)?fp.rotate[this.o.profile||'landscape']:fp.rotate;
+    let rot=rfpNum(rv);
+    const mir=['horizontal','vertical','both'].indexOf(fp.mirror)>=0?fp.mirror:'';
     if(!isFinite(rot)&&all.length){const s0=rfpFit(all,proj,0,W,H,padB,wallH,mir).S,s9=rfpFit(all,proj,90,W,H,padB,wallH,mir).S;rot=s9>s0*1.25?90:0;}
     this.rot=isFinite(rot)?rot:0;
     const F=this.F=rfpFit(all.length?all:[[0,0],[10,5]],proj,this.rot,W,H,T.mode==='thermal'?{l:pad,r:pad,t:pad,b:pad+44}:(T.dims?{l:pad+10,r:pad+36,t:pad+34,b:pad+10}:pad),wallH,mir);
@@ -635,6 +643,9 @@ class RfpView{
     let s='<style>'+RFP_CSS+'</style><defs>'+this._defs(T,M,F)+'</defs>';
     s+=T.bg2?'<rect width="'+W+'" height="'+H+'" fill="url(#'+id+'-bg)"/>':'<rect width="'+W+'" height="'+H+'" fill="'+T.bg+'"/>';
     if(trace)s+=this._traceSvg(trace,mat);
+    const bgi=fp.background&&typeof fp.background==='object'&&fp.background.image?fp.background:null;
+    this.bgOn=!!bgi;this.bgFloors=!!(bgi&&bgi.floors);
+    if(bgi)s+=this._bgSvg(bgi,mat);
     if(!M.rooms.length){
       const font=RFP_FONT[(T.label&&T.label.font)||'sans'];
       s+='<text x="'+W/2+'" y="'+(H/2-6)+'" text-anchor="middle" font-family="'+rfpEsc(font)+'" font-size="'+Math.max(14,fs*1.1)+'" font-weight="600" fill="'+T.label.c+'">'+rfpEsc(rfpT(lang,'empty'))+'</text>'
@@ -660,6 +671,8 @@ class RfpView{
   }
   _afterRender(){
     this.edit=this.svg.querySelector('.rfp-edit');
+    clearInterval(this._ageT);this._ageT=null;
+    if(this.L&&this.L.cleaning&&this.M&&this.M.rooms.some(function(r){return r.cfg.anyvac_room;})){const self=this;this._ageT=setInterval(function(){if(!self._dead)self._apply(false);},60000);}
     this._collect();
     this._apply(true);
     if(typeof this.o.onRender==='function')try{this.o.onRender(this);}catch(e){console.warn('[room-overlay-card] floorplan onRender',e);}
@@ -673,6 +686,14 @@ class RfpView{
     const b=this._traceBox(t);if(!b)return'';
     const op=rfpNum(t.opacity);
     return'<g transform="'+mat+'" opacity="'+(op>=0&&op<=1?op:0.5)+'" pointer-events="none"><image href="'+rfpEsc(t.image)+'" x="'+b[0]+'" y="'+b[1]+'" width="'+rfpN(b[2]-b[0])+'" height="'+rfpN(b[3]-b[1])+'" preserveAspectRatio="none"/></g>';
+  }
+  // The photo background (v6.50.0, D11): an image placed in plan metres — top-left at x, y, scale
+  // metres per image pixel, turned by rotation° around its top-left — under the vector layers.
+  _bgSvg(b,mat){
+    const sc=rfpNum(b.scale),w=rfpNum(b.width_px),h=rfpNum(b.height_px);
+    if(!(sc>0&&w>0&&h>0))return'';
+    const x=rfpNum(b.x)||0,y=rfpNum(b.y)||0,r=rfpNum(b.rotation)||0,op=rfpNum(b.opacity);
+    return'<g transform="'+mat+'" opacity="'+(op>=0&&op<=1?op:1)+'" pointer-events="none"><image data-rfp-bg href="'+rfpEsc(b.image)+'" x="'+rfpN(x)+'" y="'+rfpN(y)+'" width="'+(+(w*sc).toFixed(4))+'" height="'+(+(h*sc).toFixed(4))+'" preserveAspectRatio="none"'+(r?' transform="rotate('+rfpN(r)+' '+rfpN(x)+' '+rfpN(y)+')"':'')+'/></g>';
   }
   _defs(T,M,F){
     const id=this.uid,fl=T.floor||{};let d='';
@@ -722,12 +743,13 @@ class RfpView{
       else if(T.floorStyle==='flat')fill=r.floorColor||(T.floor&&(T.floor[mat0]||T.floor.wood))||'#111';
       else if(T.floorStyle==='outline'){stroke=T.line;}
       else if(T.floorStyle==='sketch')fill='rgba(255,255,255,.35)';
+      if(self.bgOn&&!self.bgFloors){fill='none';if(stroke==='none')stroke='rgba(255,255,255,.25)';}
       s+='<polygon points="'+rfpPts(r.poly)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="0.03"/>';
       s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._heatSvg(T,r,k)+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
     });
     s+='</g></g>';
     // the vacuum's trail while it cleans (v6.49.0), in plan metres
-    if(this.L.vacuum&&this._robots().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
+    if(this.L.vacuum&&this.L.trail&&this._robots().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
     // walls
     const walls=[];M.rooms.forEach(function(r){rfpWallSegs(r.poly,M.openings).forEach(function(w){walls.push(w);});});
     if(proj==='top'){
@@ -831,21 +853,55 @@ class RfpView{
     this._og[k]={hinge:w.a,shut:w.b,open:[w.a[0]+o.n[0]*o.width,w.a[1]+o.n[1]*o.width],z:hh};
     return'<polygon class="rfp-ease" data-rfp-leaf="'+k+'" data-rfp-lk="quad" points="" fill="'+WT.door+'" stroke="'+(wl.top||'#888')+'" stroke-width="1"/>';
   }
-  // ---- the vacuum on the plan (v6.49.0, V7_PLAN §6.6 pulled forward) ----
-  // AnyVac map sensors in the frame the plan was imported from: their home-frame pixels become plan
-  // metres through source.origin_px / mm_per_px. A hand-drawn plan has no source → no robot.
+  // ---- the vacuum on the plan (v6.49.0, V7_PLAN §6.6) ----
+  // AnyVac map sensors on this plan: floorplan.vacuums (v6.50.0) when set, else every map the card
+  // found. A vacuum is drawn when it has a transform into the plan (another home frame, aligned in
+  // the studio) or shares the plan's own frame (source.frame) — home px → metres via origin_px.
+  _vacList(){
+    const v=this.o.cfg&&this.o.cfg.vacuums;
+    if(!Array.isArray(v))return null;
+    return v.map(function(x){return x&&typeof x==='object'?x:{entity:x};}).filter(function(x){return typeof x.entity==='string'&&x.entity;});
+  }
   _robots(){
     const fp=this.o.cfg||{},src=fp.source&&typeof fp.source==='object'?fp.source:null;
-    if(!src||!Array.isArray(src.origin_px)||!(rfpNum(src.mm_per_px)>0))return[];
-    const S=(this.o.hass&&this.o.hass.states)||{},fr=src.frame?String(src.frame):'';
+    const S=(this.o.hass&&this.o.hass.states)||{},fr=src&&src.frame?String(src.frame):'',self=this;
+    const srcOk=!!(src&&Array.isArray(src.origin_px)&&rfpNum(src.mm_per_px)>0);
     return this._anyvac().filter(function(id){
       const a=S[id]&&S[id].attributes;if(!a||!a.vacuum_position_home_px)return false;
-      return!fr||!a.home_frame||String(a.home_frame.id||'')===fr;
+      if(self._vacT(id))return true;
+      return srcOk&&(!fr||!a.home_frame||String(a.home_frame.id||'')===fr);
     });
   }
-  _toPlan(p){
-    const src=this.o.cfg.source,k=rfpNum(src.mm_per_px)/1000,x=rfpNum(p&&p.x),y=rfpNum(p&&p.y);
-    return isFinite(x)&&isFinite(y)?[(x-rfpNum(src.origin_px[0]))*k,(y-rfpNum(src.origin_px[1]))*k]:null;
+  // a vacuum's own transform into the plan: {rotation (deg), x, y (m)} from floorplan.vacuums
+  _vacT(id){
+    const l=this._vacList();if(!l)return null;
+    const e=l.find(function(x){return x.entity===id;});
+    const t=e&&e.transform&&typeof e.transform==='object'?e.transform:null;
+    return t&&isFinite(rfpNum(t.x))&&isFinite(rfpNum(t.y))?{r:(rfpNum(t.rotation)||0)*Math.PI/180,x:rfpNum(t.x),y:rfpNum(t.y)}:null;
+  }
+  // home px of vacuum `id` → plan metres
+  _toPlan(p,id){
+    const x=rfpNum(p&&p.x),y=rfpNum(p&&p.y);if(!(isFinite(x)&&isFinite(y)))return null;
+    const t=id?this._vacT(id):null;
+    if(t){
+      const S=(this.o.hass&&this.o.hass.states)||{},hf=(S[id]&&S[id].attributes&&S[id].attributes.home_frame)||{};
+      const k=(rfpNum(hf.cell_mm)>0&&rfpNum(hf.scale)>0?rfpNum(hf.cell_mm)/rfpNum(hf.scale):12.5)/1000;
+      const qx=x*k,qy=y*k,c=Math.cos(t.r),s=Math.sin(t.r);
+      return[c*qx-s*qy+t.x,s*qx+c*qy+t.y];
+    }
+    const src=this.o.cfg.source;if(!src||!Array.isArray(src.origin_px))return null;
+    const k=rfpNum(src.mm_per_px)/1000;
+    return[(x-rfpNum(src.origin_px[0]))*k,(y-rfpNum(src.origin_px[1]))*k];
+  }
+  // where the vacuum is and its trail: AnyVac's 3 s live update when it belongs to the snapshot
+  // shown (live.base_points == path_points, AnyVac docs/48), else the snapshot
+  _vacState(id){
+    const S=(this.o.hass&&this.o.hass.states)||{},a=(S[id]&&S[id].attributes)||{};
+    const lv=a.live&&typeof a.live==='object'&&rfpNum(a.live.base_points)===rfpNum(a.path_points)?a.live:null;
+    const segs=function(k){return Array.isArray(a[k])?a[k]:[];};
+    return{a:a,pos:(lv&&lv.pos_home_px)||a.vacuum_position_home_px,
+      dry:segs('path_dry_home_px').concat(lv&&Array.isArray(lv.dry_home_px)?lv.dry_home_px:[]),
+      wet:segs('path_wet_home_px').concat(lv&&Array.isArray(lv.wet_home_px)?lv.wet_home_px:[]),seq:lv?lv.seq:''};
   }
   _robotsSvg(T,F){
     if(!this.L.vacuum)return'';
@@ -862,20 +918,21 @@ class RfpView{
   }
   _applyRobots(){
     const N=this._nodes,F=this.F,self=this;if(!N||!N.robot||!Object.keys(N.robot).length)return;
-    const S=(this.o.hass&&this.o.hass.states)||{},ids=this._robots();
+    const ids=this._robots();
     const P=function(p){return rfpP(F,p[0],p[1],0.03);};
+    const vs={};
     ids.forEach(function(id,i){
       const el=(N.robot[i]||[])[0];if(!el)return;
-      const a=S[id].attributes,p=self._toPlan(a.vacuum_position_home_px);
+      const v=vs[id]=self._vacState(id),p=self._toPlan(v.pos,id);
       if(!p){el.setAttribute('opacity','0');return;}
-      const q=P(p),ang=rfpNum(a.vacuum_position_home_px.a);
-      let deg=0;
-      if(isFinite(ang)){const t=ang*Math.PI/180,q2=P([p[0]+Math.cos(t)*0.3,p[1]+Math.sin(t)*0.3]);deg=Math.atan2(q2[1]-q[1],q2[0]-q[0])*180/Math.PI;}
+      const q=P(p),t=self._vacT(id);
+      let ang=rfpNum(v.pos&&v.pos.a),deg=0;
+      if(isFinite(ang)){if(t)ang+=t.r*180/Math.PI;const tt=ang*Math.PI/180,q2=P([p[0]+Math.cos(tt)*0.3,p[1]+Math.sin(tt)*0.3]);deg=Math.atan2(q2[1]-q[1],q2[0]-q[0])*180/Math.PI;}
       const tr='translate('+rfpN(q[0])+'px,'+rfpN(q[1])+'px)';
       if(el.getAttribute('opacity')==='0'){el.style.transition='none';el.style.transform=tr;try{el.getBoundingClientRect();}catch(_){}el.style.transition='';}
       else el.style.transform=tr;
       (N.rhead[i]||[]).forEach(function(h){h.setAttribute('transform','rotate('+rfpN(deg)+')');});
-      const busy=!!a.in_cleaning;
+      const busy=!!v.a.in_cleaning;
       (N.rping[i]||[]).forEach(function(c){c.setAttribute('opacity',busy?'1':'0');c.style.display=busy?'':'none';}); // the ping animates opacity: hide it outright
       el.setAttribute('opacity',busy?'1':'0.85');
     });
@@ -883,11 +940,12 @@ class RfpView{
     const tg=this.svg.querySelector('[data-rfp-trail]');if(!tg)return;
     let sig='';const parts=[];
     ids.forEach(function(id){
-      const a=S[id].attributes;if(!a.in_cleaning)return;
-      [['path_wet_home_px','wet'],['path_dry_home_px','dry']].forEach(function(x){
-        const segs=Array.isArray(a[x[0]])?a[x[0]]:[];
-        let n=0;segs.forEach(function(sg){n+=Array.isArray(sg)?sg.length:0;});
-        sig+=id+x[1]+n+';';parts.push({kind:x[1],segs:segs});
+      // the last run stays on the plan, like in AnyVac's own card; its shared dry / wet toggles apply
+      const v=vs[id]||self._vacState(id),vl=v.a.view_layers&&typeof v.a.view_layers==='object'?v.a.view_layers:{};
+      if(self.o.cfg&&self.o.cfg.trail_mode==='cleaning'&&!v.a.in_cleaning)return; // only while it cleans
+      [['wet',vl.wet===false?[]:v.wet],['dry',vl.dry===false?[]:v.dry]].forEach(function(x){
+        let n=0;x[1].forEach(function(sg){n+=Array.isArray(sg)?sg.length:0;});
+        sig+=id+x[0]+n+'/'+v.seq+';';parts.push({kind:x[0],segs:x[1],id:id});
       });
     });
     if(sig===this._trailSig)return;
@@ -898,7 +956,7 @@ class RfpView{
       pt.segs.forEach(function(sg){
         if(!Array.isArray(sg))return;let last=null,first=true;
         sg.forEach(function(v){
-          const p=self._toPlan(Array.isArray(v)?{x:v[0],y:v[1]}:v);if(!p)return;
+          const p=self._toPlan(Array.isArray(v)?{x:v[0],y:v[1]}:v,pt.id);if(!p)return;
           if(last&&Math.hypot(p[0]-last[0],p[1]-last[1])<0.05)return;
           d+=(first?'M':'L')+rfpN(p[0])+' '+rfpN(p[1]);first=false;last=p;
         });
@@ -907,6 +965,24 @@ class RfpView{
         :'<path d="'+d+'" fill="none" stroke="#8ecbff" stroke-opacity=".6" stroke-width="0.04" stroke-linecap="round" stroke-linejoin="round"/>';
     });
     tg.innerHTML=h;
+  }
+  // the source map's room key for a room name (rooms of other vacuums carry their own keys)
+  _avKey(name){
+    const src=this.o.cfg&&this.o.cfg.source,S=(this.o.hass&&this.o.hass.states)||{};
+    const a=src&&src.anyvac&&S[src.anyvac]&&S[src.anyvac].attributes;
+    const r=a&&Array.isArray(a.rooms)?a.rooms.find(function(x){return x&&x.name===name;}):null;
+    return r&&r.home_room_id?String(r.home_room_id):'';
+  }
+  // the AnyVac room record of a plan room (last cleaned, progress, coverage), from the plan's map
+  _avRoom(r){
+    const key=r&&r.cfg&&r.cfg.anyvac_room;if(!key)return null;
+    const S=(this.o.hass&&this.o.hass.states)||{},src=this.o.cfg&&this.o.cfg.source;
+    const ids=(src&&src.anyvac?[src.anyvac]:[]).concat(this._anyvac());
+    for(const id of ids){
+      const a=S[id]&&S[id].attributes;const x=a&&Array.isArray(a.rooms)?a.rooms.find(function(q){return q&&String(q.home_room_id||'')===String(key);}):null;
+      if(x)return x;
+    }
+    return null;
   }
   // Tap targets over the openings that have something to show or do (screen px, over the rooms)
   _openingHits(M,F,wallH){
@@ -1003,7 +1079,7 @@ class RfpView{
   _labels(T,M,F){
     const L=T.label,font=rfpEsc(RFP_FONT[L.font]||RFP_FONT.sans),fs=this.fs,self=this;let s='<g pointer-events="none">';
     M.rooms.forEach(function(r,k){
-      const p=rfpP(F,r.pole[0],r.pole[1],0);
+      const p=rfpP(F,r.lab[0],r.lab[1],0);
       const pw=self._projW(r,F);
       const compact=r.area<3.5||pw<Math.max(r.name.length*fs*0.62+24,fs*7);
       r.compact=compact;
@@ -1013,6 +1089,8 @@ class RfpView{
       else s+='<text data-rfp-name="'+k+'" y="'+rfpN(-fs*0.15)+'" text-anchor="middle" font-family="'+font+'" font-size="'+rfpN(fs)+'" font-weight="600" fill="'+L.c+'">'+rfpEsc(r.name)+'</text>'
         +'<text data-rfp-val="'+k+'" y="'+rfpN(fs*0.95)+'" text-anchor="middle" font-family="'+font+'" font-size="'+rfpN(fs*0.78)+'" fill="'+L.sub+'"></text>';
       if(!compact&&r.media.length&&self.L.media)s+='<text data-rfp-media="'+k+'" y="'+rfpN(fs*2.05)+'" text-anchor="middle" font-family="'+font+'" font-size="'+rfpN(fs*0.72)+'" fill="'+(T.mediaColor||'#8ecbff')+'"></text>';
+      if(!compact&&self.L.cleaning&&r.cfg.anyvac_room)s+='<text data-rfp-clean="'+k+'" y="'+rfpN(fs*2.05)+'" text-anchor="middle" font-family="'+font+'" font-size="'+rfpN(fs*0.7)+'" fill="'+L.sub+'"></text>';
+      r.lp=p;
       if(T.dims)s+='<text y="'+rfpN(fs*(r.media.length&&!compact?3.1:2.25))+'" text-anchor="middle" font-family="'+font+'" font-size="'+rfpN(fs*0.7)+'" fill="'+L.sub+'">'+(Math.round(r.area*10)/10).toLocaleString(self._lang())+' m²</text>';
       s+=self._badgesSvg(k,fs);
       s+='</g>';
@@ -1041,16 +1119,17 @@ class RfpView{
     return s+'</g>';
   }
   _persons(){const p=this.o.persons;const l=typeof p==='function'?p():p;return Array.isArray(l)?l.filter(function(x){return typeof x==='string'&&x;}):[];}
-  _anyvac(){const p=this.o.anyvac;const l=typeof p==='function'?p():p;return Array.isArray(l)?l:[];}
+  _anyvac(){const p=this.o.anyvac;let l=typeof p==='function'?p():p;l=Array.isArray(l)?l:[];const v=this._vacList();return v?v.map(function(x){return x.entity;}).filter(function(id){return l.indexOf(id)>=0;}):l;}
   // ---- markers and labels (HTML) ----
   _itemsHtml(T,M,F){
     const box=this.items;
-    if(!this.L.items||!M.items.length){box.innerHTML='';return;}
-    const inter=!!this.o.interactive,self=this;
+    const cleanRooms=this.L.cleaning&&T.mode==='plan'?M.rooms.filter(function(r){return r.cfg.anyvac_room&&!r.compact;}):[];
+    if((!this.L.items||!M.items.length)&&!cleanRooms.length){box.innerHTML='';return;}
+    const inter=!!this.o.interactive,self=this,lang=this._lang();
     const chip=T.label.chip&&T.label.chip!=='none'?T.label.chip:(T.dark?'rgba(10,12,15,.72)':'rgba(255,255,255,.9)');
     box.style.cssText='--rfp-ibg:'+chip+';--rfp-ink:'+T.label.c+';--rfp-on:'+(T.lightColor||'#ffb35c')+';--rfp-font:'+RFP_FONT[T.label.font==='hand'?'hand':(T.label.font||'sans')]+';';
     let h='<style>'+RFP_ITEM_CSS+'</style>';
-    M.items.forEach(function(it){
+    (this.L.items?M.items:[]).forEach(function(it){
       const p=rfpP(F,it.at[0],it.at[1],0),c=it.cfg;
       const sz=c.size?' --rfp-isz:'+rfpEsc(c.size)+';':'';
       const on=c.color?' --rfp-on:'+rfpEsc(c.color)+';':'';
@@ -1058,6 +1137,11 @@ class RfpView{
       if(it.type==='marker')h+='<div class="rfp-it-ic"><ha-icon icon="'+rfpEsc(c.icon||self._defIcon(it.entity))+'"></ha-icon></div>'+(c.show_state||c.name?'<div class="rfp-it-tx" data-rfp-itx></div>':'');
       else h+='<div class="rfp-it-tx" data-rfp-itx></div>';
       h+='</div>';
+    });
+    // "clean this room" (v6.50.0): next to the label, placed by _apply once the label is measured
+    cleanRooms.forEach(function(r){
+      const t=rfpT(lang,'clean').replace('{room}',r.name);
+      h+='<div class="rfp-it rfp-cleanb'+(inter?' on-tap':'')+'" data-rfp-cleanbtn="'+r.i+'" style="left:-100px;top:-100px;--rfp-isz:28px;" title="'+rfpEsc(t)+'"'+(inter?' role="button" tabindex="0" aria-label="'+rfpEsc(t)+'"':'')+'><div class="rfp-it-ic"><ha-icon icon="mdi:robot-vacuum"></ha-icon></div></div>';
     });
     box.innerHTML=h;
   }
@@ -1112,7 +1196,7 @@ class RfpView{
     s+='</g><g pointer-events="none">';
     const fs=this.fs;
     M.rooms.forEach(function(r,k){
-      const p=rfpP(F,r.pole[0],r.pole[1],0),pw=self._projW(r,F);
+      const p=rfpP(F,r.lab[0],r.lab[1],0),pw=self._projW(r,F);
       const big=Math.max(16,Math.min(48,Math.min(pw*0.28,(r.compact=r.area<3.5)?26:48)));
       s+='<g data-rfp-label="'+k+'" transform="translate('+rfpN(p[0])+','+rfpN(p[1])+')" font-family="'+rfpEsc(RFP_FONT.sans)+'">'
         +'<text data-rfp-tn="'+k+'" y="'+rfpN(-big*0.72)+'" text-anchor="middle" font-size="'+rfpN(Math.max(10,fs*0.8))+'" font-weight="600" letter-spacing="0.08em" fill="#fff">'+rfpEsc(r.name.toUpperCase())+'</text>'
@@ -1183,7 +1267,7 @@ class RfpView{
       person:by(q('[data-rfp-person]'),'data-rfp-person'),
       glass:by(q('[data-rfp-glass]'),'data-rfp-glass'),pane:by(q('[data-rfp-pane]'),'data-rfp-pane'),blind:by(q('[data-rfp-blind]'),'data-rfp-blind'),
       leaf:by(q('[data-rfp-leaf]'),'data-rfp-leaf'),arc:by(q('[data-rfp-arc]'),'data-rfp-arc'),
-      robot:by(q('[data-rfp-robot]'),'data-rfp-robot'),rhead:by(q('[data-rfp-rhead]'),'data-rfp-rhead'),rping:by(q('[data-rfp-rping]'),'data-rfp-rping'),pinit:by(q('[data-rfp-pinit]'),'data-rfp-pinit'),
+      robot:by(q('[data-rfp-robot]'),'data-rfp-robot'),clean:by(q('[data-rfp-clean]'),'data-rfp-clean'),rhead:by(q('[data-rfp-rhead]'),'data-rfp-rhead'),rping:by(q('[data-rfp-rping]'),'data-rfp-rping'),pinit:by(q('[data-rfp-pinit]'),'data-rfp-pinit'),
       item:[].slice.call(this.items.querySelectorAll('[data-rfp-item]')),
     };
   }
@@ -1213,6 +1297,17 @@ class RfpView{
     }
     const ts=r.temp&&S[r.temp];if(ts&&isFinite(rfpNum(ts.state)))st.t=rfpNum(ts.state);
     const hs=r.hum&&S[r.hum];if(hs&&isFinite(rfpNum(hs.state)))st.h=rfpNum(hs.state);
+    st.clean='';
+    if(this.L&&this.L.cleaning&&r.cfg.anyvac_room){
+      const x=this._avRoom(r);
+      if(x){
+        const lang=this._lang(),self=this;
+        const age=function(t){const ms=Date.now()-Date.parse(t);if(!isFinite(ms)||ms<0)return'';const m=Math.round(ms/60000);
+          return m<60?rfpT(lang,'min').replace('{n}',Math.max(1,m)):(m<2880?rfpT(lang,'hr').replace('{n}',Math.round(m/60)):rfpT(lang,'day').replace('{n}',Math.round(m/1440)));};
+        if(isFinite(rfpNum(x.progress_pct)))st.clean=rfpT(lang,'cleaning')+' '+self._fmt(rfpNum(x.progress_pct),0)+' %';
+        else st.clean=[x.last_dry?rfpT(lang,'vac')+' '+age(x.last_dry):'',x.last_wet?rfpT(lang,'mop')+' '+age(x.last_wet):''].filter(function(v){return v&&!/ $/.test(v);}).join(' · ');
+      }
+    }
     st.media='';st.play=false;
     for(const e of r.media){
       const o=S[e];if(!o||RFP_MEDIA_ON.indexOf(o.state)<0)continue;
@@ -1226,7 +1321,7 @@ class RfpView{
   // Cross-room signals for the plan's rooms: who is where, attention and vacuum (per card room from
   // the card, opts.attention()), matched to plan rooms by their link, else by the room's name.
   _signals(){
-    const M=this.M,S=(this.o.hass&&this.o.hass.states)||{},L=this.L;
+    const self=this,M=this.M,S=(this.o.hass&&this.o.hass.states)||{},L=this.L;
     const norm=function(v){return String(v==null?'':v).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'');};
     const byName=function(v){const n=norm(v);if(!n)return-1;for(let k=0;k<M.rooms.length;k++){const r=M.rooms[k];if(norm(r.name)===n||norm(r.cfg.room)===n)return k;}return-1;};
     const byCard=function(ci){if(ci==null||ci<0)return-1;for(let k=0;k<M.rooms.length;k++)if(M.rooms[k].link===ci)return k;return-1;};
@@ -1246,6 +1341,7 @@ class RfpView{
       const vr=(a.rooms||[]).find(function(x){return x&&x.name===a.vacuum_room_name;});
       let k=-1;
       if(vr&&vr.home_room_id)k=M.rooms.findIndex(function(r){return String(r.cfg.anyvac_room||'')===String(vr.home_room_id);});
+      if(k<0){const k2=self._avKey(a.vacuum_room_name);if(k2)k=M.rooms.findIndex(function(r){return String(r.cfg.anyvac_room||'')===k2;});}
       if(k<0)k=byName(a.vacuum_room_name);
       if(k<0)k=byCard(rm(a.vacuum_room_name));
       if(k>=0)out.vac[k]=true;
@@ -1273,14 +1369,18 @@ class RfpView{
       // media
       set(N.mglow[k],function(el){el.setAttribute('opacity',st.play?'1':(st.media?'0.45':'0'));});
       set(N.media[k],function(el){el.textContent=st.media?(st.play?'▶ ':'❚❚ ')+st.media:'';});
+      set(N.clean[k],function(el){el.textContent=st.clean;el.setAttribute('y',rfpN(self.fs*(N.media[k]&&st.media?2.95:2.05)));});
       // labels (a playing room gets ▶ on a compact label)
       set(N.val[k],function(el){el.textContent=r.compact&&T.mode==='plan'?((val?'  '+val:'')+(st.media&&!N.media[k]?'  ▶':'')):val;});
       // label box: measured when the browser lays the text out; estimated otherwise (hidden, jsdom)
       if(N.label[k]&&T.mode==='plan'){
         const fs=self.fs,g=N.label[k][0];let tw=0;
         [].forEach.call(g.querySelectorAll('text'),function(t){try{tw=Math.max(tw,t.getComputedTextLength());}catch(_){}});
-        if(!(tw>0)){const nameW=r.name.length*fs*(r.compact?0.5:0.58),valW=val.length*fs*(r.compact?0.46:0.47);tw=Math.max(nameW+(r.compact?valW:0),r.compact?0:valW,(st.media.length+2)*fs*0.4);}
-        const w=tw+(r.compact?20:28),h=r.compact?fs*1.55:fs*(N.media[k]&&st.media?3.75:2.75),y0=r.compact?-h/2:-fs*1.45;
+        if(!(tw>0)){const nameW=r.name.length*fs*(r.compact?0.5:0.58),valW=val.length*fs*(r.compact?0.46:0.47);tw=Math.max(nameW+(r.compact?valW:0),r.compact?0:valW,(st.media.length+2)*fs*0.4,st.clean.length*fs*0.4);}
+        const w=tw+(r.compact?20:28),h=r.compact?fs*1.55:fs*(2.75+(N.media[k]&&st.media?1:0)+(N.clean[k]&&st.clean?0.95:0)),y0=r.compact?-h/2:-fs*1.45;
+        // the clean button sits at the label's right edge
+        const cb=self.items.querySelector('[data-rfp-cleanbtn="'+r.i+'"]');
+        if(cb&&r.lp){cb.style.left=rfpN(r.lp[0]+w/2+18)+'px';cb.style.top=rfpN(r.lp[1]+y0+h/2)+'px';}
         set(N.chip[k],function(el){el.setAttribute('x',rfpN(-w/2));el.setAttribute('y',rfpN(y0));el.setAttribute('width',rfpN(w));el.setAttribute('height',rfpN(h));});
         set(N.att[k],function(el){if(!el.hasAttribute('data-rfp-fixed'))el.setAttribute('transform','translate('+rfpN(w/2)+','+rfpN(y0)+')');});
         set(N.vac[k],function(el){if(!el.hasAttribute('data-rfp-fixed'))el.setAttribute('transform','translate('+rfpN(-w/2)+','+rfpN(y0)+')');});
@@ -1332,7 +1432,7 @@ class RfpView{
       const r=M.rooms[w.k],g=groups[w.k],j=g.indexOf(i);
       let p;
       if(r.tile)p=[r.tile[0]+r.tile[2]-18-j*fs*1.8,r.tile[1]+r.tile[3]-18];
-      else{const q=rfpP(F,r.pole[0],r.pole[1],0);p=[q[0]+(j-(g.length-1)/2)*fs*1.8,q[1]-fs*(r.compact?1.9:2.75)];}
+      else{const q=rfpP(F,r.lab[0],r.lab[1],0);p=[q[0]+(j-(g.length-1)/2)*fs*1.8,q[1]-fs*(r.compact?1.9:2.75)];}
       const tr='translate('+rfpN(p[0])+'px,'+rfpN(p[1])+'px)';
       if(el.getAttribute('opacity')==='0'){
         // appearing: jump into place, then fade in (moving between rooms glides)
@@ -1358,7 +1458,7 @@ class RfpView{
     const target=function(e){
       let n=e.target,g=0;
       while(n&&n!==sv&&g++<8){
-        if(n.getAttribute){const c=n.getAttribute('data-rfp-ctl');if(c)return{ctl:c};const it=n.getAttribute('data-rfp-item');if(it!=null)return{item:+it};const op=n.getAttribute('data-rfp-open');if(op!=null)return{open:+op};const h=n.getAttribute('data-rfp-hit');if(h!=null)return{room:+h};}
+        if(n.getAttribute){const c=n.getAttribute('data-rfp-ctl');if(c)return{ctl:c};const it=n.getAttribute('data-rfp-item');if(it!=null)return{item:+it};const op=n.getAttribute('data-rfp-open');if(op!=null)return{open:+op};const cl=n.getAttribute('data-rfp-cleanbtn');if(cl!=null)return{clean:+cl};const h=n.getAttribute('data-rfp-hit');if(h!=null)return{room:+h};}
         n=n.parentNode;
       }
       return null;
@@ -1377,7 +1477,7 @@ class RfpView{
       clearTimeout(self._holdT);
       if(!down||!self.o.interactive)return;
       const d=down;down=null;if(d.held)return;
-      const t=target(e);if(!t||t.room!==d.t.room||t.ctl!==d.t.ctl||t.item!==d.t.item||t.open!==d.t.open)return;
+      const t=target(e);if(!t||t.room!==d.t.room||t.ctl!==d.t.ctl||t.item!==d.t.item||t.open!==d.t.open||t.clean!==d.t.clean)return;
       self._act(t,'tap',e);
     });
   }
@@ -1403,6 +1503,13 @@ class RfpView{
       const c=it.cfg,d=it.entity.split('.')[0];
       if(kind==='tap')a=c.tap_action||(it.entity?(RFP_TOGGLE.indexOf(d)>=0?{action:'toggle',entity:it.entity}:{action:'more-info',entity:it.entity}):null);
       else a=c.hold_action||(it.entity?{action:'more-info',entity:it.entity}:null);
+    }else if(t.clean!=null){
+      // "clean this room": AnyVac's planner with the room's name on the map (confirmed first)
+      if(kind!=='tap')return;
+      const r=M.rooms.find(function(x){return x.i===t.clean;});const x=r&&this._avRoom(r);if(!x||!x.name)return;
+      const md=this.o.cfg&&this.o.cfg.clean_mode;
+      a={action:'perform-action',perform_action:'anyvac.clean',data:{rooms:[String(x.name)],mode:['dry','wet','both'].indexOf(md)>=0?md:'dry'},
+        confirmation:{text:rfpT(this._lang(),'clean_q').replace('{room}',r.name)}};
     }else if(t.open!=null){
       const o=M.openings.find(function(x){return x.k===t.open;});if(!o)return;
       const c=o.cfg,mi=function(e){return e?{action:'more-info',entity:e}:null;};

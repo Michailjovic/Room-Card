@@ -117,7 +117,7 @@ its own and field-tested before the next one starts.
 | **5** | **Floorplan core** (§6.1–6.3): `floorplan:` page, geometry model, top + iso renderers, walls/floors/doors, room tap → zoom into the room, AnyVac import, manual drawing and image tracing in the studio. **Shipped with seven themes, the oblique projection and Phase 6's light / floor heating / temperature / humidity bindings** (author's decision 2026-10-21 — the themes cannot be judged without live state). | L | 6.47.0 |
 | **6** | **Bindings** (§6.4): ~~lights (colour + brightness glow), floor heating, temperature tint, humidity~~ (in 6.47.0), presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. **Shipped in 6.48.0** (overview signals opt-in). | M | 6.48.0 |
 | **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. **Shipped in 6.49.0** (vector blinds instead of the card's HTML renderers; "clean this room" moved to Phase 8). | L | 6.49.0 |
-| **8** | **AnyVac live** (§6.6): ~~robot position + heading, trail~~ (in 6.49.0), coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
+| **8** | **AnyVac live** (§6.6): ~~robot position + heading, trail~~ (in 6.49.0), **shipped in 6.50.0** (frame picker = the per-plan vacuum list; multi-floor stays open): coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
 | **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
 | **10** | **Documentation & launch** (§9): README, guides, generated reference, AI spec + `llms.txt`, PRESETS refresh incl. cockpit + floorplan presets, screenshots/GIFs, live demo, repo cleanup, HACS default submission. | L | **7.0.0** |
 
@@ -858,3 +858,41 @@ companion app (author), and the tablet run of the S5 probe.
   CSS colour is accepted (it goes into an attribute).
 - **Not in this phase:** "clean this room", coverage and last-cleaned layers, the photo
   background (Phase 8); openings in the `thermal` / `tiles` themes.
+
+### Phase 8 — v6.50.0
+
+- **The author's system (2026-10-22):** every vacuum is the `reference` of its own home frame
+  (S8 `d4e87578…`, S7 `2fc1db05…`, S6 `502efd04…`; `bunker_s7` is `aligned` into the S6 frame),
+  so a plan imported from the S8 drew only the S8. Fallback for A6 / multi-vacuum registration:
+  `rsFpVacuumFit` (pure, studio) pairs rooms by their Roborock name, takes area centroids of the
+  raw outlines (the A1 bbox guard included) — the source map's in plan metres, the other map's in
+  its own metres — and fits a rigid transform (2D Kabsch, no scale: both are millimetres).
+  Stored as `floorplan.vacuums[].transform {rotation, x, y, rooms, rms}`, never recomputed
+  live. Heading is turned by the same rotation. A vacuum not in the list is neither drawn nor
+  watched (the card's `_sigAnyvac` and the view's `_anyvac` both filter).
+- **Live (AnyVac docs/48):** `live` = `{base_points, seq, pos_home_px, dry_home_px, wet_home_px,
+  …}` every 3 s while cleaning; used only when `live.base_points == path_points`, segments
+  appended to the snapshot's. The card watches `live` and `rooms` too.
+- **Cleaning layer:** per-room `last_dry`, `last_wet`, `progress_pct` from the sensor's `rooms[]`
+  (by `home_room_id` = `anyvac_room`); ages re-render once a minute. The clean button is an HTML
+  chip in the items layer, placed at the measured label's right edge; tap →
+  `perform-action anyvac.clean {rooms: [Roborock name], mode}` with the card's `confirmation`
+  (verified against the user's AnyVac service schema).
+- **Background:** `background {image, x, y, scale, width_px, height_px, rotation, opacity, floors,
+  fiducials, frame}`. Snapshot: `anyvac.snapshot_map_as_floorplan {frame: home, frame_id,
+  fiducials: true}` via `call_service` with `return_response`; its `crop` box (home px, the PNG is
+  1 home px per pixel) gives the place. *Fit by markers:* `anyvac.detect_floorplan_fiducials
+  {path, fiducials}` → `home_anchors [{home_px, floor_pct}]` → least-squares similarity from image
+  px to plan metres (`rsFpAnchorFit`). The floors are not drawn under a background unless
+  `floors: true`.
+- **Author's feedback during the phase:** the plan he uses is imported from the **S6** map (frame
+  `502efd04…`), into which AnyVac also aligned `bunker_s7` — that was the "phantom vacuum" in the
+  living room, and the S8 (another frame) showed only as a badge. Fixed by the per-plan vacuum list
+  and the studio alignment. The trail now stays after a run (like AnyVac's card), honouring
+  AnyVac's shared `view_layers`; layer `trail`. Room labels are draggable in the studio
+  (`label_at`, used for the label, badges, people and the clean button; the light pool keeps the
+  room's pole). `mirror: both`; studio toolbar *turn 90°* (from the shown rotation, `auto` included)
+  and *mirror* (cycles none → horizontal → vertical → both). `trail_mode: cleaning` shows the trail
+  only during a run.
+- **Not done:** multi-floor (open question 4); openings in the `thermal` / `tiles` themes; the
+  clean button in `tiles`.
