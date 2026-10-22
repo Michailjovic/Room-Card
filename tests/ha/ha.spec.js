@@ -112,7 +112,7 @@ test('a non-admin user can read but not save the dashboard',async({page,request}
   console.log('viewer',JSON.stringify(r));
   expect(r.admin).toBe(false);expect(r.save).not.toBe('save ok');
 });
-test('editor opens in HA\'s dialog; a modal <dialog> on <body> stacks above it and hosts the card + editor',async({page})=>{
+test('editor opens in HA\'s dialog (v7: on the launcher); a modal <dialog> on <body> stacks above it and hosts the card + editor',async({page})=>{
   await login(page,TOK);await page.goto(B+'/roc-test/m');await hass(page);
   await page.waitForTimeout(2000);
   const r=await page.evaluate(async()=>{function d(r,s){const q=[r],o=[];while(q.length){const x=q.shift();if(!x)continue;if(x.matches&&x.matches(s))o.push(x);if(x.shadowRoot)q.push(x.shadowRoot);for(const c of x.children||[])q.push(c);}return o}
@@ -122,14 +122,14 @@ test('editor opens in HA\'s dialog; a modal <dialog> on <body> stacks above it a
     const haModal=d(document.body,'dialog').filter(x=>x.open&&x.matches(':modal')).length;
     const ed=d(document.body,'room-overlay-card-editor')[0];
     const s=document.createElement('dialog');s.style.cssText='width:100vw;height:100vh;max-width:none;max-height:none;margin:0;border:0;padding:0';document.body.appendChild(s);s.showModal();
-    const host=document.createElement('room-overlay-card-editor');host.hass=document.querySelector('home-assistant').hass;host.setConfig(JSON.parse(JSON.stringify(ed._config)));s.appendChild(host);
+    const host=document.createElement('room-overlay-card-editor');host._rocHosted=true;host.hass=document.querySelector('home-assistant').hass;host.setConfig(JSON.parse(JSON.stringify(ed._config)));s.appendChild(host);
     const card=document.createElement('room-overlay-card');card.setConfig(JSON.parse(JSON.stringify(ed._config)));card.hass=host.hass;s.appendChild(card);
     await new Promise(r=>setTimeout(r,1500));
     const cx=innerWidth/2,cy=innerHeight/2;let t=document.elementFromPoint(cx,cy);while(t&&t.shadowRoot){const n=t.shadowRoot.elementFromPoint(cx,cy);if(!n||n===t)break;t=n}
     let onTop=false;for(let n=t;n;n=n.parentNode||n.host)if(n===s){onTop=true;break}
-    return {haModal,editorFound:!!ed,studioModal:s.matches(':modal'),onTop,cardRendered:card._rendered,hostedEditorInputs:host.querySelectorAll('input').length};});
+    return {haModal,editorFound:!!ed,launcher:!!(ed&&ed.querySelector('.roc-launch #roc-studio'))&&!ed.querySelector('[data-roctab]'),studioModal:s.matches(':modal'),onTop,cardRendered:card._rendered,hostedEditorInputs:host.querySelectorAll('input').length};});
   console.log('studio',JSON.stringify(r));
-  expect(r).toMatchObject({haModal:1,editorFound:true,studioModal:true,onTop:true,cardRendered:true});
+  expect(r).toMatchObject({haModal:1,editorFound:true,launcher:true,studioModal:true,onTop:true,cardRendered:true});
   expect(r.hostedEditorInputs).toBeGreaterThan(10);
 });
 
@@ -147,9 +147,11 @@ test('studio from HA\'s card editor: loads from the resource URL, sits above HA\
     // HA puts its editor preview in edit mode too — the dashboard-only Studio button must not show there
     const pv=d(d(document.body,'hui-dialog-edit-card')[0].shadowRoot,'room-overlay-card');
     window.__pvChip=pv.length&&pv.every(c=>c.editMode===true)?pv.some(c=>!!c.shadowRoot.querySelector('.roc-studio-chip')):'no preview in edit mode';
-    d(document.body,'room-overlay-card-editor')[0].querySelector('#roc-studio').click();},DEEP);
+  },DEEP);
+  await shot(page,'editor-launcher');                           // v7: HA's dialog shows the launcher
+  await page.evaluate(D=>{eval(D);d(document.body,'room-overlay-card-editor')[0].querySelector('#roc-studio').click();},DEEP);
   await page.waitForFunction(STUDIO_UP,null,{timeout:20000});
-  expect(reqs[0]).toMatch(/\/local\/room-overlay-card-studio\.js\?v=\d+\.\d+\.\d+$/);
+  expect(reqs[0]).toMatch(/\/local\/room-overlay-card-studio\.js\?v=\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/);
   await page.waitForTimeout(800);await shot(page,'studio-from-editor');
   const r=await page.evaluate(async D=>{eval(D);
     const S=customElements.get('room-overlay-card')._rocStudio.Studio.current;

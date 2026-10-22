@@ -45,7 +45,9 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 6 — presence, media, markers and labels on the plan; cross-room signals on the plan and (opt-in) on overview tiles; layers | v6.48.0 | 🔨 built |
 | 7 — doors and windows on the walls: contact sensors, blinds by cover position, studio Window tool; + the live robot and its trail (from Phase 8), `mirror`, floor covering per room (`vinyl`, `floor_color`) | v6.49.0 | 🔨 built |
 | 8 — AnyVac live: vacuums from other frames (studio alignment), 3 s live position, last cleaned per room, "clean this room", photo background | v6.50.0 | ✅ committed |
-| colours per vacuum and for the mop trail (feedback) | v6.51.0 | 🔨 built |
+| colours per vacuum and for the mop trail (feedback) | v6.51.0 | ✅ committed |
+| 9 — the studio becomes the default editor: HA's editor = launcher (Open Studio / wizard, basics, YAML); the 6.x tabs behind *Classic editor* until 7.1; beta field test | 7.0.0-beta.1 | 🔨 built; field test (≥ 2 weeks, checklist V7_PLAN §14) |
+| 10 — documentation & launch | 7.0.0 | next |
 
 ## Shipped history (condensed)
 

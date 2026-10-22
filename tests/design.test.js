@@ -23,6 +23,7 @@ w.requestIdleCallback=f=>setTimeout(f,0);
 w.loadCardHelpers=undefined;
 const warns=[];w.console.warn=function(m){warns.push(String(m));};
 w.eval(code);
+{const _E=w.customElements.get('room-overlay-card-editor');if(_E)_E.rocDefaultView='classic';} // v7: the classic tabs are tested here; the launcher has its own tests
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 let fails=0;const t=(n,c,info)=>{console.log((c?'PASS ':'FAIL ')+n+(!c&&info!==undefined?'   → '+JSON.stringify(info):''));if(!c)fails++;};
 const LY={portrait:{rows:[100],place:{image:{row:1}}},landscape:{rows:[100],place:{image:{row:1}}}};

@@ -46,6 +46,7 @@ w.IntersectionObserver=class{
 };
 w.ResizeObserver=class{constructor(cb){this.cb=cb;}observe(){}unobserve(){}disconnect(){}};
 w.eval(code);
+{const _E=w.customElements.get('room-overlay-card-editor');if(_E)_E.rocDefaultView='classic';} // v7: the classic tabs are tested here; the launcher has its own tests
 
 let fails=0;
 const t=(n,c)=>{console.log((c?'PASS ':'FAIL ')+n);if(!c)fails++;};

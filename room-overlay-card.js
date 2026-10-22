@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='6.51.0';
+const ROC_VERSION='7.0.0-beta.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -9064,8 +9064,70 @@ class RoomOverlayCardEditor extends HTMLElement{
     });
   }
 
+  // ---- v7.0.0 (V7_PLAN.md Phase 9): the studio is the editor --------------------------------
+  // HA's card-editor dialog shows a launcher: open the studio (or the wizard on a new card), a few
+  // basics and where the YAML is. The tabbed editor of 6.x is still there behind "Classic editor"
+  // (remembered per browser) until 7.1. Inside the studio (hosted) the classic forms stay as they are.
+  _isClassic(){
+    if(this._rocHosted)return true;
+    if(this._classic!=null)return!!this._classic;
+    if(this.constructor.rocDefaultView==='classic')return true; // the test tiers
+    try{return window.localStorage.getItem('roc-editor-classic')==='1';}catch(_){return false;}
+  }
+  _setClassic(on){
+    this._classic=!!on;
+    try{window.localStorage.setItem('roc-editor-classic',on?'1':'0');}catch(_){}
+    this._render();
+  }
+  _renderLauncher(){
+    const c=this._config,self=this,e=function(s){return self._e(String(s==null?'':s));};
+    const rooms=Array.isArray(c.rooms)?c.rooms:[];
+    const pages=rooms.filter(function(r){return r&&(r.overview||r.floorplan);});
+    const nRooms=rooms.length-pages.length,nOv=rooms.filter(function(r){return r&&r.overview;}).length,nFp=rooms.filter(function(r){return r&&r.floorplan&&!r.overview;}).length;
+    const nSec=Array.isArray(c.sections)?c.sections.length:0;
+    const empty=!rooms.length&&rocIsStubImg(c.base_image)&&!c.base_camera&&!['zones','icons','labels','badges','gauges','blinds','elements','overlays','vacuum_widgets'].some(function(k){return Array.isArray(c[k])&&c[k].length;});
+    const sum=empty?'A new card — nothing configured yet.':[rooms.length?nRooms+' room'+(nRooms===1?'':'s'):'one room (no rooms list)',nOv?'overview page':'',nFp?nFp+' floor plan page'+(nFp===1?'':'s'):'',nSec?nSec+' section'+(nSec===1?'':'s'):''].filter(Boolean).join(' · ');
+    const btn=function(id,icon,label,primary){return'<button id="'+id+'" type="button" style="padding:'+(primary?'10px 18px':'8px 14px')+';border-radius:8px;border:'+(primary?'none':'1px solid var(--primary-color)')+';background:'+(primary?'var(--primary-color)':'none')+';color:'+(primary?'var(--text-primary-color,#fff)':'var(--primary-color)')+';cursor:pointer;font-size:'+(primary?'14px':'13px')+';font-weight:600;display:inline-flex;align-items:center;gap:8px;"><ha-icon icon="'+icon+'" style="--mdc-icon-size:'+(primary?'20px':'18px')+';"></ha-icon>'+label+'</button>';};
+    this.innerHTML='<div class="roc-ed roc-launch" style="padding:8px;">'
+      +'<div style="display:flex;align-items:baseline;gap:8px;padding:0 4px 10px;"><span style="font-weight:600;font-size:13px;">Room Overlay Card</span><span style="font-size:11px;color:var(--secondary-text-color);">v'+e(ROC_VERSION)+'</span></div>'
+      +'<div style="margin:0 4px 12px;padding:16px;border:1px solid var(--divider-color);border-radius:12px;background:var(--secondary-background-color,rgba(127,127,127,.08));">'
+        +'<div style="font-size:15px;font-weight:600;margin-bottom:6px;">Room Card Studio</div>'
+        +'<div style="font-size:13px;line-height:1.5;color:var(--secondary-text-color);margin-bottom:12px;">This card is edited in the Studio: the card on a large canvas, drag and drop, a form for every setting, undo, the overview and floor plan pages. Changes come back here and are saved with the dashboard as usual.</div>'
+        +'<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">'
+          +(empty?btn('roc-wizard','mdi:auto-fix','Start with the wizard',true)+btn('roc-studio','mdi:fullscreen','Open Studio',false)
+                 :btn('roc-studio','mdi:fullscreen','Open Studio',true)+btn('roc-wizard','mdi:auto-fix','Wizard',false))
+        +'</div>'
+        +'<div id="roc-studio-msg" style="font-size:12px;color:var(--error-color);margin-top:8px;"></div>'
+        +'<div data-roc-summary style="font-size:12px;color:var(--secondary-text-color);margin-top:10px;">'+e(sum)+'</div>'
+      +'</div>'
+      +'<div style="margin:0 4px 12px;display:flex;flex-direction:column;gap:8px;">'
+        +'<label title="Vibrates on tap/hold actions, and on the moment a hold registers (mobile browsers that support it)." style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input id="roc-l-haptic" type="checkbox"'+(c.haptic!==false?' checked':'')+' style="width:16px;height:16px;cursor:pointer;"><ha-icon icon="mdi:vibrate" style="--mdc-icon-size:16px;"></ha-icon>Haptic feedback</label>'
+        +(c.test_mode?'<label style="display:inline-flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input id="roc-l-tm" type="checkbox" checked style="width:16px;height:16px;cursor:pointer;">Edit mode (legacy, saved in the card — switch it off)</label>':'')
+        +'<div style="font-size:12px;color:var(--secondary-text-color);line-height:1.5;"><ha-icon icon="mdi:code-braces" style="--mdc-icon-size:15px;vertical-align:-3px;"></ha-icon> YAML: <b>Show code editor</b> in this dialog — or <b>YAML</b> in the Studio.</div>'
+      +'</div>'
+      +'<div style="margin:0 4px;padding-top:10px;border-top:1px solid var(--divider-color);display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--secondary-text-color);">'
+        +'<button id="roc-classic" type="button" style="padding:4px 10px;border-radius:6px;border:1px solid var(--divider-color);background:none;color:var(--primary-text-color);cursor:pointer;font-size:12px;">Classic editor</button>'
+        +'<span>The tabbed editor of 6.x, for one more release (removed in 7.1).</span>'
+      +'</div>'
+      +'</div>';
+    const open=function(wiz){
+      const m=self.querySelector('#roc-studio-msg');if(m)m.textContent='';
+      const b=self.querySelector(wiz?'#roc-wizard':'#roc-studio');if(b)b.disabled=true;
+      rocOpenStudio(Object.assign({from:'editor',editor:self,hass:self._hass},wiz?{wizard:true}:{}))
+        .catch(function(err){const mm=self.querySelector('#roc-studio-msg');if(mm)mm.textContent=(err&&err.message)||String(err);})
+        .then(function(){if(b)b.disabled=false;});
+    };
+    const sb=this.querySelector('#roc-studio');if(sb)sb.addEventListener('click',function(){open(false);});
+    const wb=this.querySelector('#roc-wizard');if(wb)wb.addEventListener('click',function(){open(true);});
+    const hp=this.querySelector('#roc-l-haptic');
+    if(hp)hp.addEventListener('change',function(){const nc=Object.assign({},self._config);if(hp.checked)delete nc.haptic;else nc.haptic=false;self._config=nc;self._fire(nc);});
+    const tm=this.querySelector('#roc-l-tm');
+    if(tm)tm.addEventListener('change',function(){const nc=Object.assign({},self._config);if(!tm.checked)delete nc.test_mode;self._config=nc;self._fire(nc);self._renderLauncher();});
+    const cl=this.querySelector('#roc-classic');if(cl)cl.addEventListener('click',function(){self._setClassic(true);});
+  }
   _render(){
     if(!this._config)return;
+    if(!this._isClassic()){this._renderLauncher();return;}
     this._actOrig={};
     this._hintsDone=false;
     const c=this._config;
@@ -9612,6 +9674,7 @@ class RoomOverlayCardEditor extends HTMLElement{
       +'</div>'
       +(c.test_mode&&!this._rocHosted?'<div id="roc-prev-host" style="margin:0 4px 10px;border:1px solid var(--divider-color);border-radius:8px;overflow:hidden;"></div>':'')
       +((this._wasMigrated&&!_isEmpty)?'<div style="margin:0 4px 10px;padding:8px 12px;border:1px solid rgba(230,160,40,0.7);background:rgba(230,160,40,0.12);border-radius:8px;font-size:12px;line-height:1.5;">Config was <b>auto-migrated</b> from the v3 tier system to the v4 layout engine (in memory only). Review the <b>Layout</b> tab, then <button id="roc-mig-save" style="padding:3px 12px;border-radius:5px;background:var(--primary-color);color:#fff;border:none;cursor:pointer;font-size:12px;font-weight:600;">Save migrated config</button></div>':'')
+      +(this._rocHosted?'':'<div style="margin:0 4px 10px;padding:7px 10px;border:1px solid var(--divider-color);border-radius:8px;font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;color:var(--secondary-text-color);"><span>Classic editor — removed in 7.1; the Studio edits everything.</span><button id="roc-launcher" type="button" style="padding:3px 10px;border-radius:6px;border:1px solid var(--primary-color);background:none;color:var(--primary-color);cursor:pointer;font-size:12px;">Back to the Studio launcher</button></div>')
       +(_isEmpty?_onboardHtml:_tabbedHtml)
       +'</div>';
 
@@ -9740,6 +9803,7 @@ class RoomOverlayCardEditor extends HTMLElement{
         .catch(function(err){const m=self.querySelector('#roc-studio-msg');if(m)m.textContent=(err&&err.message)||String(err);})
         .then(function(){studioBtn.disabled=false;});
     });
+    const lnBtn=this.querySelector('#roc-launcher');if(lnBtn)lnBtn.addEventListener('click',function(){self._setClassic(false);});
     const migBtn=this.querySelector('#roc-mig-save');
     if(migBtn)migBtn.addEventListener('click',function(){self._wasMigrated=false;self._fire(self._collectConfig());self._render();});
     const advT=this.querySelector('#roc-adv-toggle');

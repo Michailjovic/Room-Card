@@ -17,6 +17,7 @@ w.innerWidth=1920;w.innerHeight=1080;
 w.requestIdleCallback=f=>setTimeout(f,0);
 w.loadCardHelpers=undefined;
 w.eval(code);
+{const _E=w.customElements.get('room-overlay-card-editor');if(_E)_E.rocDefaultView='classic';} // v7: the classic tabs are tested here; the launcher has its own tests
 let fails=0;const t=(n,c)=>{console.log((c?'PASS ':'FAIL ')+n);if(!c)fails++;};
 
 const mkCard=(cfg)=>{const el=w.document.createElement('room-overlay-card');el.setConfig(cfg);el.hass={states:{},callService(){},user:{name:'x'}};w.document.body.appendChild(el);return el;};

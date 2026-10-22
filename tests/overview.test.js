@@ -16,6 +16,7 @@ w.innerWidth=1920;w.innerHeight=1080;
 w.requestIdleCallback=f=>setTimeout(f,0);
 w.loadCardHelpers=undefined;
 w.eval(code);
+{const _E=w.customElements.get('room-overlay-card-editor');if(_E)_E.rocDefaultView='classic';} // v7: the classic tabs are tested here; the launcher has its own tests
 let fails=0;const t=(n,c)=>{console.log((c?'PASS ':'FAIL ')+n);if(!c)fails++;};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const clone=o=>JSON.parse(JSON.stringify(o));

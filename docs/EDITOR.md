@@ -2,24 +2,60 @@
 
 [← Back to README](../README.md) · See also: [Configuration reference](CONFIGURATION.md) · [Preset gallery](../PRESETS.md)
 
-The whole card can be built without writing YAML: add it, set a background, and everything else
-happens by dragging on the image and filling in tabbed panels. This page walks through the
-editor as it exists today, then summarizes the UX rebuild that got it here.
+The whole card can be built without writing YAML: add it, open **Room Card Studio**, and everything
+else happens by dragging on the image and filling in forms. Since **7.0** the studio is the editor:
+Home Assistant's own card editor shows a short launcher (see [below](#the-launcher-70)). This page
+walks through the launcher, the tabbed form the studio hosts (*All settings*, and the *Classic
+editor* until 7.1), the studio itself, and summarizes the UX rebuild that got it here.
 
 ---
 
 ## Getting started
 
 1. **Add the card** to a dashboard — *Add card → Custom: Room Overlay Card*.
-2. The editor opens on a single step: **set a background image** (a room photo or floor-plan,
-   e.g. `/local/bedroom.webp`) or a live camera. The rest of the editor appears once one is set —
-   a narrow, unambiguous first step with no premature choices.
-3. Press **Studio** in the header. The card opens full-screen on a live canvas with this editor
-   beside it ([Room Card Studio](#room-card-studio)).
+2. HA's editor shows the [launcher](#the-launcher-70). On a new card press **Start with the
+   wizard**: it builds the card from Home Assistant's areas ([The wizard](#room-card-studio)).
+   (Opening the studio on the placeholder card starts the wizard too.)
+3. Otherwise press **Open Studio** in HA's editor. The card opens full-screen on a live canvas
+   with a form for whatever is selected ([Room Card Studio](#room-card-studio)).
 4. **Add** an icon, label, zone, gauge, light glow, blind or embedded card and click (or drag a
-   box) where it belongs on the image. Click any element to select it: its panel opens on the
+   box) where it belongs on the image. Click any element to select it: its form opens on the
    right.
 5. **Apply & close**, then Save. You never had to touch YAML.
+
+## The launcher (7.0)
+
+Home Assistant's card editor (the dialog opened by *Edit* on the card) no longer holds the whole
+editor. It shows:
+
+- **Open Studio** — the primary button; on a card with nothing configured yet, **Start with the
+  wizard** comes first instead. A one-line summary says what the card holds (rooms, the overview
+  page, floor plan pages, sections).
+- **Basics:** *Haptic feedback* (`haptic`), and *Edit mode (legacy)* only on a card that still has
+  `test_mode: true`, so it can be switched off.
+- **YAML:** Home Assistant's own *Show code editor* at the bottom of the dialog, or **YAML** in the
+  studio's toolbar.
+- **Classic editor** — the tabbed editor of 6.x, unchanged, for one more release. The choice is
+  remembered in this browser; the banner on top of it (**Back to the Studio launcher**) switches back.
+  **It is removed in 7.1**: everything it does is in the studio (its *All settings* tab hosts the
+  same form today).
+
+Nothing changes in the card's configuration — 6.x YAML is 7.0 YAML. Only where things are in the
+UI moved:
+
+| In 6.x (HA's editor) | In 7.0 |
+|---|---|
+| The five tabs | The studio: Properties forms per element, the card / nav / section forms; the same tabs under *All settings* |
+| The **Studio** button in the header | **Open Studio** in the launcher; **✎ Studio** on the dashboard is unchanged |
+| The wizard on the first screen | **Start with the wizard** (launcher), **Wizard** (studio toolbar) |
+| Haptics in the header | The launcher's *Haptic feedback*; also the card form in the studio |
+| Rooms & menu, + Overview | The same tab under *All settings*; rooms from HA areas with **Wizard**; **Add a floor plan page** in the studio |
+| YAML of one element | Select it in the studio → *Advanced (YAML)* in its form, or *Edit as YAML* on a field |
+
+## The tabbed form (All settings · Classic editor)
+
+What follows describes the tabbed form: the studio's *All settings* tab, and HA's dialog when
+**Classic editor** is chosen.
 
 ![Image tab — background, filters, live preview](../screenshots/editor-image-tab.png)
 
@@ -34,8 +70,8 @@ mock-up.*
 
 - **Room picker** — when the card is multi-room, switches which room the *Image* and *Elements*
   tabs edit.
-- **Studio** — opens this editor full-screen next to a large live canvas, see
-  [Room Card Studio](#room-card-studio).
+- **Studio** — (Classic editor only) opens the studio, see [Room Card Studio](#room-card-studio).
+  The banner above the header (**Back to the Studio launcher**) returns to the 7.0 launcher.
 - **Haptics** — feedback on actions (companion app) and hold-gesture registration.
 - **Edit mode (legacy)** — only on a card that still has `test_mode: true`, so it can be switched
   off; see [below](#edit-mode-legacy).
@@ -223,14 +259,15 @@ the v7 editor in the making ([`V7_PLAN.md`](../V7_PLAN.md) §5).
 
 **Opening it**
 
-- the **Studio** button in the editor header;
+- **Open Studio** in Home Assistant's card editor (the launcher, 7.0); in the Classic editor, the
+  **Studio** button in its header;
 - on the dashboard: switch Home Assistant's dashboard to edit mode (the pencil) and press
   **✎ Studio** on the card. It saves straight to the dashboard — handy on a wall tablet. (In a
   *sections* view HA covers each card with its own click-to-edit layer: click the card, then
   **Studio** in the editor.) The button appears for administrators only.
 
 **The wizard** (v6.46.0). A new card — the placeholder the card picker adds — opens the studio in
-a wizard; so does **Start with the wizard** on the editor's first screen, and **Wizard** in the
+a wizard; so does **Start with the wizard** in the launcher (or the Classic editor's first screen), and **Wizard** in the
 studio's toolbar works at any time. It takes five steps:
 
 1. **Rooms:** one per Home Assistant area (by floor), with the area's name, icon, picture and

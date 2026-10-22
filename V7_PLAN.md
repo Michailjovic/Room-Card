@@ -118,7 +118,7 @@ its own and field-tested before the next one starts.
 | **6** | **Bindings** (§6.4): ~~lights (colour + brightness glow), floor heating, temperature tint, humidity~~ (in 6.47.0), presence, media, generic entity markers, labels; **cross-room signals** (OVERVIEW_PLAN §9 — presence ring, attention badge, vacuum room) on both the floorplan and overview tiles. **Shipped in 6.48.0** (overview signals opt-in). | M | 6.48.0 |
 | **7** | **Wall elements** (§6.5): windows (contact), blinds (cover position; roller/venetian/day_night renderers reused), doors (contact, swing), all snapped to walls and drawn on wall faces in iso. **Shipped in 6.49.0** (vector blinds instead of the card's HTML renderers; "clean this room" moved to Phase 8). | L | 6.49.0 |
 | **8** | **AnyVac live** (§6.6): ~~robot position + heading, trail~~ (in 6.49.0), **shipped in 6.50.0** (frame picker = the per-plan vacuum list; multi-floor stays open): coverage/last-cleaned layer, optional "clean this room" quick action, frame/floor picker, calibrated photo background (fiducials / `home_anchors`). | M | 6.50.0 |
-| **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. | M | 7.0.0-beta.N |
+| **9** | **Studio becomes the default editor** (§8): HA editor reduced to launcher + basics + YAML; beta pre-releases (HACS "show beta"), ≥ 2 weeks field test on desktop, wall tablet and phone with no regression. **7.0.0-beta.1 built** (launcher; Classic editor until 7.1). | M | 7.0.0-beta.N |
 | **10** | **Documentation & launch** (§9): README, guides, generated reference, AI spec + `llms.txt`, PRESETS refresh incl. cockpit + floorplan presets, screenshots/GIFs, live demo, repo cleanup, HACS default submission. | L | **7.0.0** |
 
 Sizes are relative (S < M < L < XL), not calendar estimates; the editor phases (2–4) are the
@@ -377,6 +377,7 @@ import source for the flat.
 - Beta channel via GitHub pre-releases (HACS "Show beta versions").
 - Field-test checklist: desktop Chrome, wall tablet (kiosk), Android companion app, iOS Safari
   (if available); sections view and masonry; admin and non-admin user.
+- **Status:** 7.0.0-beta.1 built — notes and the checklist in §14 (Phase 9).
 
 ---
 
@@ -905,5 +906,31 @@ companion app (author), and the tablet run of the S5 probe.
   and arrow, the dry line, the wet band and the room badge's fill.
 - The `night` wet band moved from teal `#5eead4` at .22 to `#7dd3fc` at .28 (the teal read as a
   stain on wood).
-- **Next:** Phase 9 (the studio as the default editor, 7.0.0-beta) needs the author's go — it
-  changes what HA's own editor shows.
+- Phase 9 got the author's go on 2026-10-22.
+
+### Phase 9 — 7.0.0-beta.1
+
+- **The launcher** (`_renderLauncher()` in the editor element): *Open Studio* (primary) or, on an
+  empty card (placeholder image, no rooms, no elements), *Start with the wizard* first; a summary
+  (rooms without the overview / floor plan pages, the overview page, floor plan pages, sections);
+  basics — *Haptic feedback* (`haptic: false` when off) and the legacy *Edit mode* switch while
+  `test_mode` is on; a YAML hint (HA's *Show code editor*, the studio's YAML); *Classic editor*.
+- **Which view:** `_isClassic()` — a hosted editor (inside the studio) is always the classic form;
+  else the per-instance choice; else the class static `rocDefaultView === 'classic'` (set by the
+  jsdom / compat tiers that test the tabs); else `localStorage['roc-editor-classic'] === '1'`
+  (the user's choice, per browser). The Classic editor carries a banner with *Back to the
+  Studio launcher*. Both go away in 7.1 with the tabs.
+- Nothing in the config changes; compat vs 6.51.0 is identical with the classic flag on, apart
+  from the Classic editor's banner (`--strip` it).
+- Version strings may carry a pre-release suffix now (`7.0.0-beta.1`): the compat and HA-tier
+  version regexes accept `-…`; `build.js` compares strings, unaffected.
+- **Field-test checklist (gate before 7.0.0):**
+  - [ ] Desktop Chrome — launcher in HA's dialog (masonry and sections views), Open Studio, wizard
+        on a new card, Classic editor and back, *Show code editor*.
+  - [ ] Wall tablet (kiosk) — ✎ Studio on the dashboard, save straight to the dashboard.
+  - [ ] Android companion app — launcher, studio full-screen, touch drags, Apply.
+  - [ ] iOS Safari (if available) — the same.
+  - [ ] Admin vs non-admin — non-admins see no ✎ Studio button and no editor.
+  - [ ] No regression in the viewer (rooms, overview, floor plan, AnyVac live) over ≥ 2 weeks.
+- **Next:** further 7.0.0-beta.N for field-test findings; then Phase 10 (documentation & launch,
+  7.0.0) on the author's go (gate G4).

@@ -6,7 +6,7 @@
 
 A Home Assistant Lovelace card for **room visualization**. Take a photo of your room and bring it to life: dim it with the lights, place clickable controls on the furniture, show live sensor values, animate the blinds, and embed any other HA card on top of it.
 
-**One card adapts to every screen** — you design two layout profiles (portrait / landscape) on a % grid of the viewport and every device picks the right one by its shape. Everything is configurable from a full tabbed GUI editor; you can build a whole card by dragging elements onto the image, no YAML required.
+**One card adapts to every screen** — you design two layout profiles (portrait / landscape) on a % grid of the viewport and every device picks the right one by its shape. Everything is configurable in Room Card Studio, a full-screen editor with the live card on a canvas; you can build a whole card by dragging elements onto the image, no YAML required.
 
 ![Room Overlay Card – hero screenshot](screenshots/hero.png)
 
@@ -40,7 +40,7 @@ A Home Assistant Lovelace card for **room visualization**. Take a photo of your 
 | **Floor plan page** | Your home as a live vector plan — imported from the robot vacuum's map (AnyVac) or drawn in the studio; lit rooms glow, floor heating flows, temperature and humidity on every room; open windows, blinds and doors, who is where, what plays, the vacuum and running appliances, any entity as a marker; seven themes from a night cut-away to a blueprint; tap a room and it zooms open |
 | **Auto navigation menu** | The room switcher (thumbnails / tabs / dots) is generated automatically from your rooms — you never build the menu by hand |
 | **Hold feedback** | A progress ring fills and turns green when a hold gesture registers |
-| **Tabbed GUI editor** | Build everything visually — drag, resize, reorder — without writing YAML |
+| **Room Card Studio** | The editor: the card full-screen on a live canvas — drag, resize, draw, a form for every element, undo, a wizard from your HA areas — without writing YAML |
 
 ---
 
@@ -85,9 +85,10 @@ To install a specific version (for example to roll back), open the card in HACS 
 ## Quick start (no YAML)
 
 1. **Add the card** to a dashboard — *Add card → Custom: Room Overlay Card*.
-2. The editor opens on a single step. Press **Start with the wizard**: it builds the card from Home Assistant's areas — one room each, with the area's name, icon and picture, its lights as light controls, sections from recipes and the room strip. (Or **set a background image** yourself, e.g. `/local/bedroom.webp`.)
-3. Press **Studio** in the editor header: the card opens full-screen on a live canvas, with a
-   form for whatever you select next to it (the full editor is one tab away, *All settings*).
+2. Home Assistant's card editor shows the launcher. Press **Start with the wizard**: it builds the card from Home Assistant's areas — one room each, with the area's name, icon and picture, its lights as light controls, sections from recipes and the room strip.
+3. Press **Open Studio**: the card opens full-screen on a live canvas, with a form for whatever
+   you select next to it (the full tabbed form is one tab away, *All settings*). Since 7.0 the
+   studio is the editor; the 6.x tabbed editor stays behind **Classic editor** until 7.1.
 4. **Add** an icon, label, zone, gauge, light glow, blind or embedded card and click (or drag a
    box) on the image where it belongs. Click any element to select it: its form opens on the
    right — pick the entity and icon from lists, build its tap action — and you can drag it,

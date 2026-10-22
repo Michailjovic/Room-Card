@@ -34,7 +34,9 @@ const candCode=fs.readFileSync(arg('--cand')||path.join(ROOT,'room-overlay-card.
 function load(code){
   const dom=new JSDOM('<html><body></body></html>',{pretendToBeVisual:true,runScripts:'outside-only'});
   const w=dom.window;w.innerWidth=1920;w.innerHeight=1080;w.requestIdleCallback=f=>setTimeout(f,0);w.loadCardHelpers=undefined;
-  w.eval(code+'\n;window.__rocYaml=rocJsYaml;');return w;
+  w.eval(code+'\n;window.__rocYaml=rocJsYaml;');
+  {const _E=w.customElements.get('room-overlay-card-editor');if(_E)_E.rocDefaultView='classic';} // v7: the classic tabs are tested here; the launcher has its own tests
+  return w;
 }
 
 // ---- configs: every room-overlay-card in the reference YAML files + synthetic nav variants
@@ -79,7 +81,7 @@ async function snapshot(code,cfgs){
     }
   }
   const strips=process.argv.map((a,i)=>a==='--strip'?new RegExp(process.argv[i+1],'g'):null).filter(Boolean);
-  return out.map(s=>{s=s.replace(/v\d+\.\d+\.\d+/g,'vX');for(const r of strips)s=s.replace(r,'');return s;});
+  return out.map(s=>{s=s.replace(/v\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?/g,'vX');for(const r of strips)s=s.replace(r,'');return s;});
 }
 
 (async()=>{

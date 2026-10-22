@@ -1,5 +1,32 @@
 # Changelog
 
+## [7.0.0-beta.1] - unreleased (pre-release)
+
+### The studio is the editor (V7_PLAN.md Phase 9)
+
+- **Home Assistant's card editor is now a launcher.** It shows **Open Studio**, a one-line summary
+  of the card (rooms, overview page, floor plan pages, sections), the basics (*Haptic feedback*,
+  and the legacy *Edit mode* switch while a card still has `test_mode: true`) and where the YAML
+  is (HA's *Show code editor*, or **YAML** in the studio). On a card with nothing configured yet,
+  **Start with the wizard** comes first.
+- **Classic editor:** the tabbed editor of 6.x is one click away, unchanged, for this release
+  line. The choice is remembered in the browser; a banner (**Back to the Studio launcher**) switches
+  back. **It will be removed in 7.1** — everything it does is in the studio, whose *All settings*
+  tab hosts the same form.
+- Inside the studio nothing changes: the hosted form is the same as before.
+
+### Migration
+
+- **Nothing to change in your configuration.** Every 6.x config works as it is; no key was
+  renamed or removed.
+- Where things moved in the UI: the five tabs → the studio (Properties forms, or the same tabs
+  under *All settings*); the editor's **Studio** button → **Open Studio** in the launcher; the
+  first-screen wizard → **Start with the wizard**; haptics → the launcher, or the card form in
+  the studio. The full table is in [docs/EDITOR.md](docs/EDITOR.md#the-launcher-70).
+- This is a **pre-release**: in HACS, open the repository's ⋮ menu → *Redownload*, tick *Show beta
+  versions* and pick `7.0.0-beta.1`.
+  Please report anything that worked in 6.51 and does not now.
+
 ## [6.51.0] - unreleased
 
 ### Telling the vacuums apart

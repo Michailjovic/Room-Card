@@ -39,6 +39,7 @@ if(!DP.showModal)DP.showModal=function(){this.setAttribute('open','');};
 if(!DP.close)DP.close=function(){this.removeAttribute('open');};
 w.eval(fs.readFileSync(cardFile,'utf8')+'\n;window.__rocY=rocJsYaml;');
 w.eval(fs.readFileSync(studioFile,'utf8'));
+{const _E=w.customElements.get('room-overlay-card-editor');if(_E)_E.rocDefaultView='classic';} // v7: the classic tabs are tested here; the launcher has its own tests
 const d=w.document;
 const C=w.customElements.get('room-overlay-card');
 const J=o=>JSON.stringify(o);
@@ -751,6 +752,48 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   const upHass={fetchWithAuth:(u,o)=>{upCall={u,method:o.method,file:o.body.get('file')};return Promise.resolve({ok:true,json:()=>Promise.resolve({id:'abc123'})});}};
   const upUrl=await SW.wizUpload(upHass,new w.File(['x'],'room.png',{type:'image/png'}));
   check('upload posts the file to /api/image/upload and returns its served URL',upUrl==='/api/image/serve/abc123/original'&&upCall.u==='/api/image/upload'&&upCall.method==='POST'&&upCall.file&&upCall.file.name==='room.png');
+
+  // ---- v7.0 — the launcher: HA's card editor opens on Studio + basics, the tabs move behind "Classic editor" ----
+  {
+    const EC=w.customElements.get('room-overlay-card-editor');const prevDV=EC.rocDefaultView;delete EC.rocDefaultView;
+    try{w.localStorage.removeItem('roc-editor-classic');}catch(_){}
+    const L1=d.createElement('room-overlay-card-editor');L1.setConfig(Object.assign(multi(),{sections:[{entity:'light.lr'}]}));L1.hass=hass;d.body.appendChild(L1);await wait(20);
+    const lf=[];L1.addEventListener('config-changed',x=>lf.push(x.detail.config));
+    check('v7 launcher: the HA editor opens on the launcher, not the tabs',!!L1.querySelector('.roc-launch')&&!L1.querySelector('[data-roctab]'));
+    check('…Open Studio is the primary button on a configured card, the wizard is secondary',!!L1.querySelector('#roc-studio')&&!!L1.querySelector('#roc-wizard')&&L1.querySelector('.roc-launch button').id==='roc-studio');
+    const sum1=(L1.querySelector('[data-roc-summary]')||{}).textContent||'';
+    check('…the summary counts rooms and sections',sum1==='2 rooms · 1 section',sum1);
+    check('…the legacy edit-mode switch shows only while test_mode is on',!!L1.querySelector('#roc-l-tm'));
+    const hp=L1.querySelector('#roc-l-haptic');hp.checked=false;hp.dispatchEvent(new w.Event('change'));
+    check('…unticking Haptic feedback fires config-changed with haptic: false',lf.length===1&&lf[0].haptic===false&&lf[0].rooms.length===2,J(lf));
+    hp.checked=true;hp.dispatchEvent(new w.Event('change'));
+    check('…ticking it again removes the key',lf.length===2&&!('haptic' in lf[1]));
+    const tm=L1.querySelector('#roc-l-tm');tm.checked=false;tm.dispatchEvent(new w.Event('change'));
+    check('…switching edit mode off drops test_mode and the switch goes away',lf.length===3&&!('test_mode' in lf[2])&&!L1.querySelector('#roc-l-tm'));
+    L1.querySelector('#roc-studio').click();await wait(120);
+    check('…Open Studio opens the studio for this editor',dialogs().length===1&&dialogs()[0].hasAttribute('open'));
+    const SLi=await C._rocStudio.open({from:'editor',editor:L1,hass});SLi._setTab('all');await wait(60);
+    check('…inside the studio the hosted editor stays the classic form (no launcher there)',!!SLi._ed&&!SLi._ed.querySelector('.roc-launch')&&SLi._ed.querySelectorAll('input,select,textarea').length>10);
+    SLi.requestClose();if(layerBtn(SLi,'discard'))layerBtn(SLi,'discard').click();await wait(40);
+    check('…closing the studio leaves the launcher in place',!!L1.querySelector('.roc-launch')&&dialogs().length===0);
+    L1.querySelector('#roc-classic').click();await wait(20);
+    check('Classic editor: the tabs come back with a banner pointing back to the launcher',!!L1.querySelector('[data-roctab]')&&!!L1.querySelector('#roc-launcher')&&!L1.querySelector('.roc-launch'));
+    check('…the choice is remembered per browser',w.localStorage.getItem('roc-editor-classic')==='1');
+    const L2=d.createElement('room-overlay-card-editor');L2.setConfig(multi());L2.hass=hass;d.body.appendChild(L2);await wait(20);
+    check('…a new editor in the same browser opens classic',!!L2.querySelector('[data-roctab]')&&!L2.querySelector('.roc-launch'));
+    L1.querySelector('#roc-launcher').click();await wait(20);
+    check('…"Back to the launcher" switches back and forgets the choice',!!L1.querySelector('.roc-launch')&&w.localStorage.getItem('roc-editor-classic')==='0');
+    L2.remove();
+    const L3=d.createElement('room-overlay-card-editor');L3.setConfig({type:'custom:room-overlay-card',base_image:'/local/room.webp'});L3.hass=hass;d.body.appendChild(L3);await wait(20);
+    check('a new, empty card: the wizard is the primary button and the summary says so',L3.querySelector('.roc-launch button').id==='roc-wizard'&&/nothing configured yet/.test(L3.querySelector('[data-roc-summary]').textContent)&&!L3.querySelector('#roc-l-tm'));
+    const L4=d.createElement('room-overlay-card-editor');L4._rocHosted=true;L4.setConfig(multi());L4.hass=hass;d.body.appendChild(L4);await wait(20);
+    check('a hosted editor is always classic',!L4.querySelector('.roc-launch')&&!!L4.querySelector('[data-roctab]'));
+    const L5=d.createElement('room-overlay-card-editor');L5.setConfig(Object.assign(multi(),{rooms:[{id:'o',overview:true},{id:'f',floorplan:{rooms:[]}},{id:'a',name:'A',base_image:IMG}]}));L5.hass=hass;d.body.appendChild(L5);await wait(20);
+    const sum5=L5.querySelector('[data-roc-summary]').textContent;
+    check('…the summary counts the overview and floor plan pages apart from the rooms',sum5==='1 room · overview page · 1 floor plan page',sum5);
+    [L1,L3,L4,L5].forEach(x=>x.remove());
+    EC.rocDefaultView=prevDV;try{w.localStorage.removeItem('roc-editor-classic');}catch(_){}
+  }
 
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);
