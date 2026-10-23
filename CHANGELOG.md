@@ -1,5 +1,25 @@
 # Changelog
 
+## [7.0.0-beta.3] - unreleased (pre-release)
+
+### Floor plan: vacuums (the author's feedback)
+
+- **Every robot keeps its own colour.** The robots were drawn in the order of the vacuums found when
+  the plan was drawn. A map sensor that loaded later (after a restart of Home Assistant or AnyVac)
+  was never added, and could shift the order, so a robot could take the colour of the one before
+  it. The vacuums listed in `floorplan.vacuums` are now watched whether they are loaded yet or
+  not, and the robots are redrawn whenever the list of vacuums on the plan changes.
+- **The mop band keeps its colour on wood.** At 28 % over a brown floor every colour turned into
+  a brown stain. The band now lies on an underlay in the theme's background colour that mutes the
+  floor under it, and is stronger (night 45 %). New tokens `vac.under` and `vac.underOpacity`
+  (0 turns the underlay off). A band's colour you set yourself (`mop_color`, `mop_opacity`)
+  is kept.
+- **Small rooms show when they were cleaned too.** Rooms with a one-line label (a hall, a bathroom)
+  had no "vacuumed … · mopped …" line and no clean button; now the line sits under the label.
+- A trail is redrawn when its vacuum's colour changes.
+- The studio's **Vacuums** panel shows each vacuum's current colour in its colour pickers (the
+  automatic one from the palette, until you set one) instead of always blue.
+
 ## [7.0.0-beta.2] - unreleased (pre-release)
 
 ### Documentation for 7.0 (V7_PLAN.md Phase 10, first part)

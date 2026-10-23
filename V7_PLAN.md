@@ -955,3 +955,20 @@ companion app (author), and the tablet run of the S5 probe.
   overview and floor plan (§9.6), repo topics (GitHub settings), archive move of finished plans
   (§9.5, needs file moves on the author's PC), ROADMAP rewrite for post-v7, HACS default
   submission (§9.7).
+
+### 7.0.0-beta.3 — field-test findings (floor plan vacuums)
+
+- **Robot identity:** robot nodes were numbered by `_robots()` at render; `_sigAnyvac` cached the
+  found map sensors per render, so a sensor that loaded later was never drawn and could shift the
+  numbering (a robot in another vacuum's colour). Now a plan with `floorplan.vacuums` watches the
+  listed sensors as they are, and `_applyRobots` redraws the robots group (`data-rfp-robots`)
+  whenever the list differs from the one drawn (`_robotIdsR`). The trail signature includes the
+  colours.
+- **Mop band colour:** a band at .28 over wood lost its hue. An underlay in the theme's `bg`
+  (`vac.under`, `vac.underOpacity` default .55) is drawn under all bands first; default band
+  opacity raised (night .45, others .35–.4).
+- **Compact labels** get the cleaning line (and the clean button) too; the chip grows by a line.
+- **Studio Vacuums panel:** the colour pickers start from the effective colour (palette / theme).
+- The author's "S7 and S8 swapped": checked against AnyVac — the sensors' duid / dock types match
+  their names, the rigid room fits are right (IoU .85 / .89 vs .50 mirrored), and the robots sit
+  where each robot's own map puts them; waiting for the author's physical check.

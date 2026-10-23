@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.0.0-beta.2';
+const ROC_STUDIO_VERSION='7.0.0-beta.3';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -4264,7 +4264,9 @@ RocStudio.prototype._fpVacuums=function(){
       const col=function(k,title){
         const i=rsEl('input',{type:'color','data-fpvaccol':id+':'+k,title:self.t(title),'aria-label':self.t(title)+' — '+nm});
         const v=old&&typeof old[k]==='string'&&/^#[0-9a-f]{6}$/i.test(old[k])?old[k]:'';
-        i.value=v||(k==='color'?'#03a9f4':'#7dd3fc');i._set=!!v;
+        // 7.0.0-beta.3: unset → the colour the plan shows now (palette by list order, or the theme's)
+        let shown='';try{const vc=self._fpView&&typeof self._fpView._vacColors==='function'?self._fpView._vacColors(id):null;shown=vc?(k==='color'?vc.robot:vc.wet):'';}catch(_){}
+        i.value=v||(/^#[0-9a-f]{6}$/i.test(shown)?shown:(k==='color'?'#03a9f4':'#7dd3fc'));i._set=!!v;
         i.addEventListener('input',function(){i._set=true;});
         return i;
       };

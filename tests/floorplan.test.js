@@ -545,7 +545,36 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const c4=clone(c3);delete c4.rooms[0].floorplan.overrides;
     const e4=mk(c4,mkHass(st));await sleep(40);
     t('colours: the night theme\'s mop band is light blue (reads as water on wood)',sr(e4).querySelector('[data-rfp-wet="sensor.s8_anyvac_map"]').getAttribute('stroke')==='#7dd3fc');
+    // 7.0.0-beta.3: the band lies on an underlay in the theme's background, drawn first
+    const tg4=sr(e4).querySelector('[data-rfp-trail]'),u4=tg4.querySelector('[data-rfp-wetu="sensor.s8_anyvac_map"]'),b4=tg4.querySelector('[data-rfp-wet="sensor.s8_anyvac_map"]');
+    t('colours: the mop band keeps its hue — an underlay in the theme background under it, the band stronger',!!u4&&u4.getAttribute('stroke')==='#0b0e12'&&u4.getAttribute('stroke-opacity')==='0.55'
+      &&b4.getAttribute('stroke-opacity')==='0.45'&&[...tg4.children].indexOf(u4)<[...tg4.children].indexOf(b4));
     e4.remove();
+    // 7.0.0-beta.3: a vacuum whose map sensor shows up after the plan was drawn keeps its own colour
+    const stA=Object.assign({},st);delete stA['sensor.s8_anyvac_map'];
+    const e5=mk(c,mkHass(stA));await sleep(40);const S5=sr(e5),v5=e5._fpInst;
+    t('robots: drawn for the vacuums there are (s8 not loaded yet)',S5.querySelectorAll('[data-rfp-robot]').length===1);
+    e5.hass=mkHass(st);await sleep(30);
+    const ring5=i=>S5.querySelector('[data-rfp-rhead="'+i+'"] circle').getAttribute('stroke');
+    t('robots: a vacuum that appears later is added and every robot keeps its own colour (was: the colour of the robot before it)',e5._fpInst===v5&&S5.querySelectorAll('[data-rfp-robot]').length===2
+      &&v5._robots().every((id,i)=>ring5(i)===v5._vacColors(id).robot)&&ring5(1)==='#f59e0b');
+    const r5=S5.querySelector('[data-rfp-robot="0"]'),m5=/translate\(([-\d.]+)px, *([-\d.]+)px\)/.exec(r5.style.transform),want5=F.geom.P(v5.F,...v5._toPlan({x:1200,y:900},'sensor.s8_anyvac_map'),0.03);
+    t('robots: …and sits where its own map says',!!m5&&Math.abs(+m5[1]-want5[0])<0.05&&Math.abs(+m5[2]-want5[1])<0.05);
+    e5.remove();
+    // 7.0.0-beta.3: a small room (compact label) shows when it was cleaned too, and gets a clean button
+    const c6=clone(c);c6.rooms[0].floorplan.layers={cleaning:true};
+    const e6a=mk(c6,mkHass(st));await sleep(40);
+    const kc=e6a._fpInst.M.rooms.findIndex(r=>r.compact);e6a.remove();
+    if(kc<0)t('compact room present in the test plan',false);
+    else{
+      c6.rooms[0].floorplan.rooms[kc].anyvac_room='7bUI4dOp7O1qnECi7UfFW3_19';
+      const av6=clone(av);av6.attributes.rooms.forEach(r=>{if(r.name==='Kitchen'){r.last_dry=new Date(Date.now()-2*3600e3).toISOString();r.last_wet=new Date(Date.now()-3*86400e3).toISOString();}});
+      const e6=mk(c6,mkHass(Object.assign({},st,{'sensor.s8_anyvac_map':av6})));await sleep(40);
+      const cl6=sr(e6).querySelector('[data-rfp-clean="'+kc+'"]'),ch6=sr(e6).querySelector('[data-rfp-chip="'+kc+'"]');
+      t('cleaning layer: a compact label gets the "vacuumed … · mopped …" line under it, its chip grows',!!cl6&&/vacuumed 2 h/.test(cl6.textContent)&&+ch6.getAttribute('height')>e6._fpInst.fs*2.2);
+      t('cleaning layer: …and a clean button',!!sr(e6).querySelector('[data-rfp-cleanbtn]'));
+      e6.remove();
+    }
   }
   // ---- the classic editor keeps the floor plan as it is ------------------------------------------
   {

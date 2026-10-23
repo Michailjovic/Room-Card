@@ -1435,8 +1435,10 @@ class RoomOverlayCard extends HTMLElement{
     }
     const src=def&&def.source&&def.source.anyvac?String(def.source.anyvac):'';
     let l=src&&this._sigAv.indexOf(src)>0?[src].concat(this._sigAv.filter(function(x){return x!==src;})):this._sigAv;
-    // v6.50.0: the plan's own list of vacuums (floorplan.vacuums) — the view filters by it too
-    if(def&&Array.isArray(def.vacuums)){const want=def.vacuums.map(function(x){return x&&typeof x==='object'?x.entity:x;});l=l.filter(function(id){return want.indexOf(id)>=0;});}
+    // v6.50.0: the plan's own list of vacuums (floorplan.vacuums) — the view filters by it too.
+    // 7.0.0-beta.3: the listed ones as they are, not only those found at the last render — a map
+    // sensor that loads later (after a restart of HA or AnyVac) is watched and drawn, too.
+    if(def&&Array.isArray(def.vacuums)){const want=def.vacuums.map(function(x){return x&&typeof x==='object'?x.entity:x;}).filter(function(x,i,a){return typeof x==='string'&&x&&a.indexOf(x)===i;});return want;}
     return l;
   }
   // The sections whose running tiles mark a room on the plan (floorplan.attention_sections, v6.50.0)

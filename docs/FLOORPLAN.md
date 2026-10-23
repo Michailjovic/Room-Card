@@ -151,7 +151,10 @@ The overview page can show the same signals on its tiles — opt-in with `overvi
   `mop_opacity` (the wet band) per vacuum, set in the Vacuums panel or in YAML. With several
   vacuums each gets its own colour automatically (blue, amber, purple, green, … in list order); a
   single vacuum uses the theme's `vac.robot`, `vac.dry`, `vac.wet`, `vac.wetOpacity` tokens
-  (`overrides: {'vac.wet': '#93c5fd'}`).
+  (`overrides: {'vac.wet': '#93c5fd'}`). *(7.0.0-beta.3)* The wet band lies on an underlay in the
+  theme's background colour that mutes the floor under it, so a band keeps its own colour on wood
+  or tiles; tune it with `vac.under` and `vac.underOpacity` (0 turns it off, default 0.55). Pick
+  colours that stand out from the floors: a dark red or brown disappears on wood.
 
   ```yaml
   vacuums:
@@ -168,7 +171,8 @@ The overview page can show the same signals on its tiles — opt-in with `overvi
   plan after it docks, like in AnyVac's card; AnyVac's shared dry / wet toggles apply,
   `trail_mode: cleaning` shows it only during a run, and `layers: {trail: false}` hides it.
 - **Layer `cleaning`** (off by default, `layers: {cleaning: true}`) — on each room imported from
-  AnyVac the label says when it was last vacuumed and mopped ("vacuumed 5 h · mopped 2 d"), and
+  AnyVac (small rooms with a one-line label too, since 7.0.0-beta.3) the label says when it was
+  last vacuumed and mopped ("vacuumed 5 h · mopped 2 d"), and
   "cleaning 45 %" while it is being cleaned. A **vacuum button** next to the label starts
   `anyvac.clean` for that room after a confirmation; AnyVac's planner picks the vacuums.
   `clean_mode`: `dry` (default), `wet` or `both`.

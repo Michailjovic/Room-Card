@@ -58,11 +58,15 @@ function rfpFloorPattern(pid,mat,c){
 }
 // Vacuum colours (v6.51.0): the robot, its dry line, the mop's wet band and how strong the band is.
 // Several vacuums on one plan get their own colours from RFP_VAC_PALETTE unless set per vacuum.
-const RFP_VAC_DEF={night:{robot:'#03a9f4',dry:'#8ecbff',wet:'#7dd3fc',wetOpacity:0.28},clay:{robot:'#0284c7',dry:'#0284c7',wet:'#0ea5e9',wetOpacity:0.2},
-  neon:{robot:'#00e5ff',dry:'#00e5ff',wet:'#00ffc6',wetOpacity:0.18},blueprint:{robot:'#9fd3ff',dry:'#e6f1ff',wet:'#9fd3ff',wetOpacity:0.25},
-  sketch:{robot:'#2563eb',dry:'#2563eb',wet:'#2a9d8f',wetOpacity:0.2}};
+// 7.0.0-beta.3: the band lies on an underlay in the theme's background colour (`under`,
+// `underOpacity`) that mutes the floor beneath it, so the band keeps its own hue on wood or tile
+// instead of turning into a floor-coloured stain; the band itself is stronger for that.
+const RFP_VAC_DEF={night:{robot:'#03a9f4',dry:'#8ecbff',wet:'#7dd3fc',wetOpacity:0.45},clay:{robot:'#0284c7',dry:'#0284c7',wet:'#0ea5e9',wetOpacity:0.35},
+  neon:{robot:'#00e5ff',dry:'#00e5ff',wet:'#00ffc6',wetOpacity:0.35},blueprint:{robot:'#9fd3ff',dry:'#e6f1ff',wet:'#9fd3ff',wetOpacity:0.4},
+  sketch:{robot:'#2563eb',dry:'#2563eb',wet:'#2a9d8f',wetOpacity:0.35}};
 const RFP_VAC_PALETTE=['#03a9f4','#f59e0b','#a855f7','#22c55e','#ef4444','#ec4899'];
-function rfpVacT(T){const d=RFP_VAC_DEF[T&&T.name]||RFP_VAC_DEF.night,v=(T&&T.vac)||{};return{robot:v.robot||d.robot,dry:v.dry||d.dry,wet:v.wet||d.wet,wetOpacity:rfpNum(v.wetOpacity)>=0?rfpNum(v.wetOpacity):d.wetOpacity};}
+function rfpVacT(T){const d=RFP_VAC_DEF[T&&T.name]||RFP_VAC_DEF.night,v=(T&&T.vac)||{},uo=rfpNum(v.underOpacity);return{robot:v.robot||d.robot,dry:v.dry||d.dry,wet:v.wet||d.wet,wetOpacity:rfpNum(v.wetOpacity)>=0?rfpNum(v.wetOpacity):d.wetOpacity,
+  under:v.under||(T&&T.bg)||'#0b0e12',underOpacity:uo>=0&&uo<=1?uo:0.55};}
 // Door / window colours (v6.49.0): glass, glass of an open window, the blind, a door leaf.
 function rfpWinT(T){const w=(T&&T.win)||{};return{glass:w.glass||'#8fc7ff',open:w.open||'#5eead4',blind:w.blind||'#c9b79c',door:w.door||'#8a6a4f'};}
 // contact-sensor states that mean open (binary_sensor on; a cover-like or text sensor open)
