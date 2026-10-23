@@ -1,0 +1,21 @@
+name: Feature request
+description: An idea for the card, the studio, the overview or the floor plan
+labels: [enhancement]
+body:
+  - type: textarea
+    id: want
+    attributes:
+      label: What would you like to do?
+      description: Describe the result you want on your dashboard, not only the setting.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: How do you do it today?
+      description: A workaround, another card, or not at all.
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, sketches, YAML.

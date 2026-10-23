@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in the card, the studio or a page does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Before you start: hard-refresh the browser and check
+        [Troubleshooting](https://github.com/Michailjovic/Room-Card/blob/master/docs/TROUBLESHOOTING.md) —
+        most "it didn't update" problems are the browser cache.
+  - type: input
+    id: version
+    attributes:
+      label: Card version
+      description: Shown next to the card's name in Home Assistant's card editor (e.g. v7.0.0).
+      placeholder: v7.0.0
+    validations:
+      required: true
+  - type: input
+    id: ha
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.10.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - The card on the dashboard
+        - Room Card Studio
+        - Home Assistant's card editor (launcher / Classic editor)
+        - Overview page
+        - Floor plan page
+        - Floor plan — AnyVac import or vacuums
+        - Something else
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device and browser
+      multiple: true
+      options:
+        - Desktop browser
+        - Wall tablet / kiosk
+        - Android companion app
+        - iOS companion app
+        - Mobile browser
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce help a lot. Screenshots welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: yaml
+    attributes:
+      label: Card YAML
+      description: The card's config (in the studio, YAML → Copy). Remove anything private.
+      render: yaml
+  - type: textarea
+    id: console
+    attributes:
+      label: Browser console
+      description: Lines starting with [room-overlay-card], or errors (F12 → Console).
+      render: text

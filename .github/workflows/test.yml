@@ -26,6 +26,11 @@ jobs:
       - name: Assembled files match src/
         run: node tools/assemble.js --check
 
+      # v7.0.0: docs/REFERENCE.md and the AI spec's grammar are generated from the config schema
+      # (tools/gen-docs.js). Fails when the schema changed without regenerating them.
+      - name: Generated docs match the schema
+        run: node tools/gen-docs.js --check
+
       - name: Smoke tests (pure functions)
         run: node tests/smoke.test.js
 
