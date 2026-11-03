@@ -217,6 +217,7 @@ RocStudio.prototype._fpOnView=function(v){
   if(this.C&&this.C._rocFloorplan)this.G=this.C._rocFloorplan.geom;
   if(v.svg!==this._fpSvg){this._fpSvg=v.svg;this._fpBind(v.svg);}
   this._fpDraw();
+  this._fpRotSync(); // the device frame (layout profile) may have changed
 };
 RocStudio.prototype._fpActive=function(){return this.mode==='arrange'&&this._fpIdx()>=0&&!!this._fpView&&!!this.G;};
 // ---- selection, after config changes ----
@@ -253,7 +254,8 @@ RocStudio.prototype._fpChrome=function(){
     act('mdi:import','fp_import',function(){self._fpImport();});
     act('mdi:robot-vacuum','fp_vacs',function(){self._fpVacuums();});
     act('mdi:image','fp_bg',function(){self._fpBackground();});
-    act('mdi:rotate-right','fp_rot',function(){self._fpTurn();});
+    const rotB=act('mdi:rotate-right','fp_rot',function(){self._fpRotPop(!self._fpRotEl||self._fpRotEl.hidden);});
+    rotB.setAttribute('aria-haspopup','true');this._fpRotBtn=rotB;
     act('mdi:flip-horizontal','fp_flip',function(){self._fpFlip();});
     act('mdi:image-outline','fp_trace',function(){self._fpTrace();});
     act('mdi:door-open','fp_doors',function(){self._fpAutoDoors();});
@@ -262,7 +264,8 @@ RocStudio.prototype._fpChrome=function(){
     this._fpBar=bar;this._cvInfo.appendChild(bar);
   }
   this._fpBar.hidden=!on||this.mode!=='arrange';
-  if(!on)return;
+  if(!on){if(this._fpRotEl)this._fpRotEl.hidden=true;return;}
+  this._fpRotSync();
   const st=this._fpState();
   for(const k in this._fpToolBtns)this._fpToolBtns[k].setAttribute('aria-pressed',String(st.tool===k));
   this._fpDelBtn.disabled=st.sel==null&&st.door==null&&st.item==null;
@@ -772,6 +775,56 @@ RocStudio.prototype._fpTurn=function(){
     f.rotate=nr;
   });
   this._fpFlash(prof==='portrait'?'fp_rot_p':'fp_rot_l2');
+};
+// Free rotation (7.0.0-beta.4): a slider under the toolbar turns the plan by any angle for the
+// layout profile the canvas shows (switch the device frame to set the other one). Dragging
+// previews, letting go commits one undo step; ±90° and Auto sit next to it.
+RocStudio.prototype._fpRotProf=function(){const v=this._fpView;return(v&&v.o&&v.o.profile)==='portrait'?'portrait':'landscape';};
+RocStudio.prototype._fpRotSet=function(val,commit){
+  const prof=this._fpRotProf(),other=prof==='portrait'?'landscape':'portrait';
+  const upd=function(f){
+    const r=f.rotate,o=r&&typeof r==='object'&&!Array.isArray(r)?r:{portrait:r==null?'auto':r,landscape:r==null?'auto':r};
+    const nr={};nr[prof]=val;nr[other]=o[other]!=null?o[other]:'auto';
+    if(nr.portrait==='auto'&&nr.landscape==='auto')delete f.rotate;else f.rotate=nr;
+  };
+  if(!commit){
+    const tmp=JSON.parse(rsJ(this._fpCfg()));upd(tmp);this._fpTmp=tmp;this._fpPreview();this._fpTmp=null;return;
+  }
+  this._fpEdit(function(f){upd(f);},'props','fp-rotate');
+};
+RocStudio.prototype._fpRotPop=function(show){
+  const self=this;
+  if(!this._fpRotEl){
+    const box=rsEl('span',{class:'fprot',role:'group','aria-label':this.t('fp_rot')});
+    const lab=rsEl('span',{class:'fprot-p'});
+    const rng=rsEl('input',{type:'range',min:'0',max:'359',step:'1','aria-label':this.t('fp_rot_angle')});
+    const num=rsEl('input',{type:'number',min:'0',max:'359',step:'1',class:'fprot-n','aria-label':this.t('fp_rot_angle')});
+    // near a multiple of 15° the slider snaps to it (0, 45, 90… are what people want most)
+    const snap=function(v){v=((Math.round(+v)%360)+360)%360;const q=Math.round(v/15)*15;return(Math.abs(q-v)<=2?q:v)%360;};
+    rng.addEventListener('input',function(){const v=snap(rng.value);num.value=v;self._fpRotSet(v,false);});
+    rng.addEventListener('change',function(){self._fpRotSet(snap(rng.value),true);});
+    num.addEventListener('change',function(){const v=snap(num.value||0);num.value=v;rng.value=v;self._fpRotSet(v,true);});
+    const step=function(d){const cur=self._fpView&&isFinite(self._fpView.rot)?self._fpView.rot:0;self._fpRotSet(((Math.round(cur)+d)%360+360)%360,true);};
+    box.appendChild(lab);box.appendChild(rng);box.appendChild(num);box.appendChild(rsEl('span',{text:'°'}));
+    box.appendChild(rsEl('button',{type:'button',class:'btn sm',title:this.t('fp_rot_m90'),'aria-label':this.t('fp_rot_m90'),onclick:function(){step(-90);}},[rsIcon('mdi:rotate-left')]));
+    box.appendChild(rsEl('button',{type:'button',class:'btn sm',title:this.t('fp_rot_p90'),'aria-label':this.t('fp_rot_p90'),onclick:function(){step(90);}},[rsIcon('mdi:rotate-right')]));
+    box.appendChild(rsEl('button',{type:'button',class:'btn sm','data-act':'fp-rot-auto',title:this.t('fp_rot_auto_t'),onclick:function(){self._fpRotSet('auto',true);}},[this.t('fp_rot_auto')]));
+    this._fpRotEl=box;this._fpRotLab=lab;this._fpRotRng=rng;this._fpRotNum=num;
+    box.hidden=true;
+    this._fpBar.parentNode.insertBefore(box,this._fpBar.nextSibling);
+  }
+  this._fpRotEl.hidden=!show;
+  if(this._fpRotBtn)this._fpRotBtn.setAttribute('aria-expanded',String(!!show));
+  this._fpRotSync();
+};
+RocStudio.prototype._fpRotSync=function(){
+  if(!this._fpRotEl||this._fpRotEl.hidden)return;
+  const prof=this._fpRotProf(),r=this._fpCfg().rotate;
+  const own=r&&typeof r==='object'&&!Array.isArray(r)?r[prof]:r;
+  const cur=this._fpView&&isFinite(this._fpView.rot)?Math.round(this._fpView.rot):0;
+  this._fpRotLab.textContent=this.t(prof==='portrait'?'fp_rot_for_p':'fp_rot_for_l')+(own==null||own==='auto'?' · '+this.t('fp_rot_auto'):'');
+  if(document.activeElement!==this._fpRotNum&&(!this._sr||this._sr.activeElement!==this._fpRotNum))this._fpRotNum.value=cur;
+  this._fpRotRng.value=cur;
 };
 RocStudio.prototype._fpFlip=function(){
   const seq=['none','horizontal','vertical','both'],cur=this._fpCfg().mirror,i=seq.indexOf(cur);

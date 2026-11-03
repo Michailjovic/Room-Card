@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.0.0-beta.3';
+const ROC_VERSION='7.0.0-beta.4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -134,8 +134,45 @@ async function rocHqResize(bmp,W,H){
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   const cx=cv.getContext('2d');cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,W,H);
   if(src!==bmp&&src.close)try{src.close();}catch(_){}
-  const blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
+  // WebP (7.0.0-beta.4): a PNG of a photo is 3–5x bigger in memory and the overlays keep their
+  // alpha in WebP too; PNG only where the browser cannot encode WebP
+  let blob=await new Promise(function(res){try{cv.toBlob(res,'image/webp',0.92);}catch(_){res(null);}});
+  if(!blob||blob.type!=='image/webp')blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
   return blob?URL.createObjectURL(blob):null;
+}
+// Two sizes per image at most: a third (a window being resized) frees the oldest blob.
+const ROC_HQ_SIZES=new Map(); // url → [key, …] oldest first
+function rocHqKeep(url,key){
+  const l=ROC_HQ_SIZES.get(url)||[];l.push(key);
+  while(l.length>2){const old=l.shift(),u=ROC_HQ.get(old);ROC_HQ.delete(old);if(u)try{URL.revokeObjectURL(u);}catch(_){}}
+  ROC_HQ_SIZES.set(url,l);
+}
+// One job per (url, size): fetch + decode ONCE — the natural size is learned from the same
+// bitmap that is resampled (7.0.0-beta.4: the first sight of an image used to download and
+// decode it a second time just to read its size).
+function rocHqJob(url,devW,devH,key){
+  ROC_HQ_Q.push(async function(){
+    let bmp=null,k=key;
+    try{
+      const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
+      bmp=await createImageBitmap(await r.blob());
+      const nat={w:bmp.width,h:bmp.height};ROC_HQ_NAT.set(url,nat);
+      const W=rocHqTarget(nat,devW,devH);
+      if(W){
+        k=url+'|'+W;
+        if(!ROC_HQ.get(k)){
+          const u=await rocHqResize(bmp,W,Math.max(1,Math.round(nat.h*W/nat.w)));
+          if(u){ROC_HQ.set(k,u);rocHqKeep(url,k);}else ROC_HQ_NAT.set(url,false);
+        }
+      }
+    }catch(_){ROC_HQ_NAT.set(url,false);}
+    finally{
+      if(bmp&&bmp.close)try{bmp.close();}catch(_){}
+      if(key&&key!==k&&ROC_HQ.get(key)===null)ROC_HQ.delete(key);
+      rocHqFire(key||('n|'+url));if(k&&k!==key)rocHqFire(k);
+    }
+  });
+  rocHqPump();
 }
 // devW/devH: device-pixel size of the box the image covers. Returns the HQ
 // blob URL when it is ready; otherwise the original URL, queues the work and
@@ -151,33 +188,12 @@ function rocHqUrl(url,devW,devH,onReady){
     const key=url+'|'+W,got=ROC_HQ.get(key);
     if(got)return got;
     rocHqWait(key,onReady);
-    if(got===undefined){
-      ROC_HQ.set(key,null);
-      ROC_HQ_Q.push(async function(){
-        let bmp=null;
-        try{
-          const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
-          bmp=await createImageBitmap(await r.blob());
-          const u=await rocHqResize(bmp,W,Math.max(1,Math.round(nat.h*W/nat.w)));
-          if(u)ROC_HQ.set(key,u);else ROC_HQ_NAT.set(url,false);
-        }catch(_){ROC_HQ_NAT.set(url,false);}
-        finally{if(bmp&&bmp.close)try{bmp.close();}catch(_){} rocHqFire(key);}
-      });
-      rocHqPump();
-    }
+    if(got===undefined){ROC_HQ.set(key,null);rocHqJob(url,devW,devH,key);}
     return url;
   }
-  // First sight of this URL: learn its natural size (one decode), then ask again.
+  // First sight: one job learns the size and makes the copy for this box in the same pass.
   ROC_HQ_NAT.set(url,null);rocHqWait('n|'+url,onReady);
-  ROC_HQ_Q.push(async function(){
-    try{
-      const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
-      const bmp=await createImageBitmap(await r.blob());
-      ROC_HQ_NAT.set(url,{w:bmp.width,h:bmp.height});if(bmp.close)bmp.close();
-    }catch(_){ROC_HQ_NAT.set(url,false);}
-    finally{rocHqFire('n|'+url);}
-  });
-  rocHqPump();
+  rocHqJob(url,devW,devH,null);
   return url;
 }
 // Parse an aspect ratio: number, numeric string, or "W/H" → ratio (w/h) or null
@@ -205,6 +221,39 @@ function rocDupId(baseId,arr){
 // nav.live mini and every room switch re-runs setConfig on the same config,
 // which used to repeat the same line dozens of times (v6.16.0).
 const ROC_WARNED=new Set();
+// Lists written as a single object (7.0.0-beta.4). `gauges: {id: g, …}` or
+// `brightness_model: {source: {entity: …}}` is an easy YAML slip; it used to throw inside the
+// render and leave an empty card. Wrapped into a one-item list instead (with one warning), on a
+// copy — the config object Home Assistant handed in is never touched.
+const ROC_LIST_KEYS=['overlays','zones','badges','icons','labels','gauges','vacuum_widgets','glows','blinds','elements','groups','filter_conditions','base_image_conditions','cards_above','cards_below','chips'];
+function rocNormLists(cfg){
+  if(!cfg||typeof cfg!=='object')return cfg;
+  let out=cfg;
+  const fix=function(holder,key,where){
+    const v=holder[key];
+    if(v&&typeof v==='object'&&!Array.isArray(v)){
+      rocWarnOnce('[room-overlay-card] '+where+key+' should be a list — read as a list of one item');
+      return[v];
+    }
+    return null;
+  };
+  const room=function(r,where){
+    let rr=r;
+    for(const k of ROC_LIST_KEYS){const f=fix(rr,k,where);if(f){if(rr===r)rr=Object.assign({},r);rr[k]=f;}}
+    const bm=rr.brightness_model;
+    if(bm&&typeof bm==='object'){const f=fix(bm,'source',where+'brightness_model.');if(f){if(rr===r)rr=Object.assign({},r);rr.brightness_model=Object.assign({},bm,{source:f});}}
+    return rr;
+  };
+  out=room(cfg,'');
+  if(Array.isArray(out.rooms)){
+    let changed=false;const rs=out.rooms.map(function(r,i){if(!r||typeof r!=='object')return r;const n=room(r,'rooms['+i+'].');if(n!==r)changed=true;return n;});
+    if(changed){if(out===cfg)out=Object.assign({},cfg);out.rooms=rs;}
+  }else if(out.rooms&&typeof out.rooms==='object'){
+    rocWarnOnce('[room-overlay-card] rooms should be a list — read as a list of one room');
+    if(out===cfg)out=Object.assign({},cfg);out.rooms=[room(out.rooms,'rooms[0].')];
+  }
+  return out;
+}
 function rocWarnOnce(msg){if(ROC_WARNED.has(msg))return;ROC_WARNED.add(msg);try{console.warn(msg);}catch(_){}}
 function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
 // lock_aspect: size a fixed-design-aspect stage to COVER the (per-tier) box,

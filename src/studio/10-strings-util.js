@@ -114,7 +114,7 @@ const ROC_STUDIO_STR={en:{
   fp_hint_rect:'Drag a rectangle on the plan.',fp_hint_poly:'Click the corners; click the first one (or double-click) to close the room. Esc cancels.',
   fp_hint_door:'Click a wall to place a door.',fp_hint_marker:'Click where the marker goes, then pick its entity in Properties.',fp_hint_window:'Click a wall to place a window.',
   fp_window_n:'Window {n}',
-  fp_rot:'Turn the plan by 90° (for the layout profile shown: landscape or portrait)',fp_rot_l:'',fp_rot_p:'Turned for portrait',fp_rot_l2:'Turned for landscape',fp_flip:'Mirror the plan (none → horizontal → vertical → both)',fp_flip_l:'',
+  fp_rot:'Turn the plan (for the layout profile shown: landscape or portrait)',fp_rot_l:'',fp_rot_angle:'Angle',fp_rot_m90:'Turn 90° left',fp_rot_p90:'Turn 90° right',fp_rot_auto:'Auto',fp_rot_auto_t:'Auto: a quarter turn when it makes the plan clearly bigger',fp_rot_for_l:'Landscape',fp_rot_for_p:'Portrait',fp_rot_p:'Turned for portrait',fp_rot_l2:'Turned for landscape',fp_flip:'Mirror the plan (none → horizontal → vertical → both)',fp_flip_l:'',
   fp_flip_none:'Mirror: none',fp_flip_horizontal:'Mirror: horizontal',fp_flip_vertical:'Mirror: vertical',fp_flip_both:'Mirror: both',
   fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',fp_vac_color:'Colour of the vacuum (robot, dry line, badge)',fp_vac_mop:'Colour of its mop trail',
   fp_vacs_body:'Which AnyVac vacuums this plan shows (the robot, its trail, the badge). A vacuum mapped in another home frame is aligned to this plan by the rooms both maps share (same names in the Roborock app); the fit can be tuned in YAML (floorplan.vacuums[].transform). Automatic = every vacuum in the frame the plan was imported from.',
@@ -177,6 +177,16 @@ function rsPathOf(root,needle){
     for(const k of Object.keys(o))walk(o[k],p.concat(Array.isArray(o)?+k:k));
   })(root,[]);
   return found;
+}
+// every path inside `root` whose object satisfies pred (cards found by content, 7.0.0-beta.4)
+function rsPathsWhere(root,pred){
+  const out=[];
+  (function walk(o,p){
+    if(!o||typeof o!=='object')return;
+    if(!Array.isArray(o)&&pred(o))out.push(p);
+    for(const k of Object.keys(o))walk(o[k],p.concat(Array.isArray(o)?+k:k));
+  })(root,[]);
+  return out;
 }
 function rsAt(o,path){return path.reduce(function(a,k){return a==null?a:a[k];},o);}
 function rsJ(o){return JSON.stringify(o);}

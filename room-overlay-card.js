@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.0.0-beta.3';
+const ROC_VERSION='7.0.0-beta.4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -134,8 +134,45 @@ async function rocHqResize(bmp,W,H){
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   const cx=cv.getContext('2d');cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality='high';cx.drawImage(src,0,0,W,H);
   if(src!==bmp&&src.close)try{src.close();}catch(_){}
-  const blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
+  // WebP (7.0.0-beta.4): a PNG of a photo is 3–5x bigger in memory and the overlays keep their
+  // alpha in WebP too; PNG only where the browser cannot encode WebP
+  let blob=await new Promise(function(res){try{cv.toBlob(res,'image/webp',0.92);}catch(_){res(null);}});
+  if(!blob||blob.type!=='image/webp')blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
   return blob?URL.createObjectURL(blob):null;
+}
+// Two sizes per image at most: a third (a window being resized) frees the oldest blob.
+const ROC_HQ_SIZES=new Map(); // url → [key, …] oldest first
+function rocHqKeep(url,key){
+  const l=ROC_HQ_SIZES.get(url)||[];l.push(key);
+  while(l.length>2){const old=l.shift(),u=ROC_HQ.get(old);ROC_HQ.delete(old);if(u)try{URL.revokeObjectURL(u);}catch(_){}}
+  ROC_HQ_SIZES.set(url,l);
+}
+// One job per (url, size): fetch + decode ONCE — the natural size is learned from the same
+// bitmap that is resampled (7.0.0-beta.4: the first sight of an image used to download and
+// decode it a second time just to read its size).
+function rocHqJob(url,devW,devH,key){
+  ROC_HQ_Q.push(async function(){
+    let bmp=null,k=key;
+    try{
+      const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
+      bmp=await createImageBitmap(await r.blob());
+      const nat={w:bmp.width,h:bmp.height};ROC_HQ_NAT.set(url,nat);
+      const W=rocHqTarget(nat,devW,devH);
+      if(W){
+        k=url+'|'+W;
+        if(!ROC_HQ.get(k)){
+          const u=await rocHqResize(bmp,W,Math.max(1,Math.round(nat.h*W/nat.w)));
+          if(u){ROC_HQ.set(k,u);rocHqKeep(url,k);}else ROC_HQ_NAT.set(url,false);
+        }
+      }
+    }catch(_){ROC_HQ_NAT.set(url,false);}
+    finally{
+      if(bmp&&bmp.close)try{bmp.close();}catch(_){}
+      if(key&&key!==k&&ROC_HQ.get(key)===null)ROC_HQ.delete(key);
+      rocHqFire(key||('n|'+url));if(k&&k!==key)rocHqFire(k);
+    }
+  });
+  rocHqPump();
 }
 // devW/devH: device-pixel size of the box the image covers. Returns the HQ
 // blob URL when it is ready; otherwise the original URL, queues the work and
@@ -151,33 +188,12 @@ function rocHqUrl(url,devW,devH,onReady){
     const key=url+'|'+W,got=ROC_HQ.get(key);
     if(got)return got;
     rocHqWait(key,onReady);
-    if(got===undefined){
-      ROC_HQ.set(key,null);
-      ROC_HQ_Q.push(async function(){
-        let bmp=null;
-        try{
-          const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
-          bmp=await createImageBitmap(await r.blob());
-          const u=await rocHqResize(bmp,W,Math.max(1,Math.round(nat.h*W/nat.w)));
-          if(u)ROC_HQ.set(key,u);else ROC_HQ_NAT.set(url,false);
-        }catch(_){ROC_HQ_NAT.set(url,false);}
-        finally{if(bmp&&bmp.close)try{bmp.close();}catch(_){} rocHqFire(key);}
-      });
-      rocHqPump();
-    }
+    if(got===undefined){ROC_HQ.set(key,null);rocHqJob(url,devW,devH,key);}
     return url;
   }
-  // First sight of this URL: learn its natural size (one decode), then ask again.
+  // First sight: one job learns the size and makes the copy for this box in the same pass.
   ROC_HQ_NAT.set(url,null);rocHqWait('n|'+url,onReady);
-  ROC_HQ_Q.push(async function(){
-    try{
-      const r=await fetch(url,{credentials:'same-origin'});if(!r.ok)throw 0;
-      const bmp=await createImageBitmap(await r.blob());
-      ROC_HQ_NAT.set(url,{w:bmp.width,h:bmp.height});if(bmp.close)bmp.close();
-    }catch(_){ROC_HQ_NAT.set(url,false);}
-    finally{rocHqFire('n|'+url);}
-  });
-  rocHqPump();
+  rocHqJob(url,devW,devH,null);
   return url;
 }
 // Parse an aspect ratio: number, numeric string, or "W/H" → ratio (w/h) or null
@@ -205,6 +221,39 @@ function rocDupId(baseId,arr){
 // nav.live mini and every room switch re-runs setConfig on the same config,
 // which used to repeat the same line dozens of times (v6.16.0).
 const ROC_WARNED=new Set();
+// Lists written as a single object (7.0.0-beta.4). `gauges: {id: g, …}` or
+// `brightness_model: {source: {entity: …}}` is an easy YAML slip; it used to throw inside the
+// render and leave an empty card. Wrapped into a one-item list instead (with one warning), on a
+// copy — the config object Home Assistant handed in is never touched.
+const ROC_LIST_KEYS=['overlays','zones','badges','icons','labels','gauges','vacuum_widgets','glows','blinds','elements','groups','filter_conditions','base_image_conditions','cards_above','cards_below','chips'];
+function rocNormLists(cfg){
+  if(!cfg||typeof cfg!=='object')return cfg;
+  let out=cfg;
+  const fix=function(holder,key,where){
+    const v=holder[key];
+    if(v&&typeof v==='object'&&!Array.isArray(v)){
+      rocWarnOnce('[room-overlay-card] '+where+key+' should be a list — read as a list of one item');
+      return[v];
+    }
+    return null;
+  };
+  const room=function(r,where){
+    let rr=r;
+    for(const k of ROC_LIST_KEYS){const f=fix(rr,k,where);if(f){if(rr===r)rr=Object.assign({},r);rr[k]=f;}}
+    const bm=rr.brightness_model;
+    if(bm&&typeof bm==='object'){const f=fix(bm,'source',where+'brightness_model.');if(f){if(rr===r)rr=Object.assign({},r);rr.brightness_model=Object.assign({},bm,{source:f});}}
+    return rr;
+  };
+  out=room(cfg,'');
+  if(Array.isArray(out.rooms)){
+    let changed=false;const rs=out.rooms.map(function(r,i){if(!r||typeof r!=='object')return r;const n=room(r,'rooms['+i+'].');if(n!==r)changed=true;return n;});
+    if(changed){if(out===cfg)out=Object.assign({},cfg);out.rooms=rs;}
+  }else if(out.rooms&&typeof out.rooms==='object'){
+    rocWarnOnce('[room-overlay-card] rooms should be a list — read as a list of one room');
+    if(out===cfg)out=Object.assign({},cfg);out.rooms=[room(out.rooms,'rooms[0].')];
+  }
+  return out;
+}
 function rocWarnOnce(msg){if(ROC_WARNED.has(msg))return;ROC_WARNED.add(msg);try{console.warn(msg);}catch(_){}}
 function setSt(el,prop,val){if(el&&el.style[prop]!==val)el.style[prop]=val;}
 // lock_aspect: size a fixed-design-aspect stage to COVER the (per-tier) box,
@@ -250,8 +299,6 @@ function relTime(ts,lang){
 // device type: ratio < threshold → portrait, else landscape. See LAYOUT.md.
 const ROC_PROFILES=['portrait','landscape'];
 const ROC_LEGACY_TIERS=['mobile','tablet','desktop','ultrawide'];
-// Regions a layout profile can place on its % grid
-const ROC_REGIONS=['nav','cards_above','image','lights','cards_below','cover'];
 function rocBrowserId(){try{return window.browser_mod?.browserID||window.browser_mod?.browser_id||'';}catch(_){return'';}}
 // Active profile: layout.orientation force ('portrait'|'landscape'), per-device
 // map {by_browser:{<browser_mod id>:profile},default:...}, or 'auto' by ratio.
@@ -854,7 +901,11 @@ function rocOvLive(cAll,ov,style){
   if(style==='row')return(nl==='full'||nl==='custom'||nl==='composite')?'composite':nl;
   return nl;
 }
-const ROC_OV_TOGGLE=['light','switch','fan','input_boolean','cover','siren','humidifier'];
+// One tap toggles these. Never a siren, lock or valve; a cover only when it is a window covering —
+// a garage door or gate (also `cover`) gets more-info (7.0.0-beta.4). The floor plan uses the same
+// rule (RFP_TOGGLE / RFP_COVER_SAFE).
+const ROC_OV_TOGGLE=['light','switch','fan','input_boolean','cover','humidifier'];
+const ROC_COVER_SAFE=['blind','shade','curtain','shutter','awning'];
 const ROC_OV_OFF=['off','closed','idle','standby','unavailable','unknown','docked','paused','none',''];
 function rocOvChipActive(ch,states){
   const ents=ch.entities||[];
@@ -877,6 +928,7 @@ function rocOvMediaIds(o,out){
 }
 function rocOvChipDefaultTap(id){
   const dom=String(id).split('.')[0];
+  if(dom==='cover')return{condition:{entity:id,attribute:'device_class',state:ROC_COVER_SAFE},then:{action:'toggle',entity:id},else:{action:'more-info',entity:id}};
   return ROC_OV_TOGGLE.indexOf(dom)>=0?{action:'toggle',entity:id}:{action:'more-info',entity:id};
 }
 // State chips of one room tile. `overview_tile.chips`: omitted / 'auto' →
@@ -1210,6 +1262,13 @@ function evalCond(c,s){
     if(isNaN(nv)||isNaN(cv))r=false;
     else switch(c.operator){case'<':r=nv<cv;break;case'>':r=nv>cv;break;case'<=':r=nv<=cv;break;case'>=':r=nv>=cv;break;case'==':r=nv===cv;break;case'!=':r=nv!==cv;break;default:r=false;}
   }
+  // Home Assistant's numeric_state form (7.0.0-beta.4): above / below, either or both. Before, a
+  // condition written that way matched no test at all and was therefore always true.
+  else if(c.above!=null||c.below!=null){
+    const ab=c.above!=null?parseFloat(c.above):NaN,be=c.below!=null?parseFloat(c.below):NaN;
+    if(isNaN(nv))r=false;
+    else{if(c.above!=null&&!(nv>ab))r=false;if(c.below!=null&&!(nv<be))r=false;}
+  }
   if(r&&c.and)r=evalCond(c.and,s);
   if(!r&&c.or)r=evalCond(c.or,s);
   return r;
@@ -1508,6 +1567,15 @@ function blindToGaugeConfig(b){
     top:b.top,left:b.left,width:b.width,height:b.height,z_index:z,
     orientation:'top',background:b.background||'transparent',border_radius:b.border_radius||'0'};
   if(b.attribute!==undefined)base.attribute=b.attribute;
+  else if(/^cover\./.test(String(b.entity||''))){
+    // 7.0.0-beta.4: a cover without `attribute` drew nothing (its state open/closed is no number).
+    // It reads current_position in Home Assistant's direction (100 = open) — the editors' default
+    // pair min 0 / max 100 counts as unset here — and falls back to open / closed for a cover
+    // that reports no position.
+    base.attribute='current_position';base._cover=true;
+    const dflt=(b.min==null||b.min===0)&&(b.max==null||b.max===100);
+    if(dflt){base.min=100;base.max=0;}
+  }
   if(b.top_offset!==undefined)base.top_offset=b.top_offset;
   if(b.transition!==undefined)base.transition=b.transition;
   if(b.visible!==undefined)base.visible=b.visible;
@@ -1685,10 +1753,12 @@ class RoomOverlayCard extends HTMLElement{
 
   setConfig(cfg){
     this._rocRaw=cfg; // the exact object HA handed in — the studio finds it in lovelace.config by identity
-    cfg=rocMigrateLayout(cfg);
+    cfg=rocNormLists(rocMigrateLayout(cfg));
     const hasRooms=Array.isArray(cfg.rooms)&&cfg.rooms.length;
-    if(!cfg.base_image&&!cfg.base_camera&&!(hasRooms&&cfg.rooms.some(function(r){return r.base_image||r.base_camera;})))
-      throw new Error('[room-overlay-card] base_image (or base_camera) is required — directly or in rooms[]');
+    // a room needs a picture — or is a page of its own: an overview or a floor plan (7.0.0-beta.4:
+    // a card made only of such pages was refused)
+    if(!cfg.base_image&&!cfg.base_camera&&!(hasRooms&&cfg.rooms.some(function(r){return r&&(r.base_image||r.base_camera||r.overview||r.floorplan);})))
+      throw new Error('[room-overlay-card] base_image (or base_camera) is required — directly or in rooms[] (or a room that is an overview / floor plan page)');
     const j=JSON.stringify(cfg);
     if(this._rendered&&this._cfgJson===j)return; // identical config — skip full rebuild
     this._cfgJson=j;
@@ -1860,7 +1930,9 @@ class RoomOverlayCard extends HTMLElement{
     (cfg.gauges||[]).forEach(function(g){add(g.entity,g.attribute);if(g.alert_conditions?.attribute)add(g.alert_conditions.entity,g.alert_conditions.attribute);});
     (cfg.labels||[]).forEach(function(l){add(l.entity,l.attribute);});
     (cfg.icons||[]).forEach(function(ico){add(ico.entity,ico.attribute);});
-    (cfg.blinds||[]).forEach(function(bl){add(bl.entity,bl.attribute);});
+    // a cover's position moves without its state changing (many covers never report opening /
+    // closing): the blind and its cover control follow current_position itself (7.0.0-beta.4)
+    (cfg.blinds||[]).forEach(function(bl){add(bl.entity,bl.attribute);if(/^cover\./.test(String(bl.entity||''))&&bl.attribute!=='current_position')add(bl.entity,'current_position');});
     // Glow strength/colour come from brightness + colour attributes, not the
     // on/off state alone — without these, dimming or re-colouring an already-on
     // light never re-triggers _update() (only a state flip, or a forced
@@ -1871,8 +1943,11 @@ class RoomOverlayCard extends HTMLElement{
 
   getCardSize(){return 4;}
 
-  _addZoneListeners(el,tapAction,holdAction,doubleTapAction,holdDelay){
+  // defEntity (7.0.0-beta.4): the element's own entity — `toggle` / `more-info` without one act on
+  // it, like Home Assistant's own cards (they used to do nothing).
+  _addZoneListeners(el,tapAction,holdAction,doubleTapAction,holdDelay,defEntity){
     const delay=holdDelay??500;
+    const _x=this._exec.bind(this),run=function(a,e){_x(a,e,defEntity);};
     let holdTimer=null,showTimer=null,held=false,tapTimer=null,lastTapTime=0,ring=null;
     // Scroll-vs-tap: touchmove already cancels the hold timer, but a finger
     // that started a page scroll on top of a tappable element still fired
@@ -1914,23 +1989,24 @@ class RoomOverlayCard extends HTMLElement{
     };
     const onTap=function(e){
       if(el._rocSlid){el._rocSlid=false;return;} // slider drag just ended — swallow the tap
-      if(held){if(holdAction)self._exec(holdAction,e);held=false;return;}
+      if(held){if(holdAction)run(holdAction,e);held=false;return;}
       if(doubleTapAction){
         const now=Date.now();
         if(now-lastTapTime<350){ // double tap works even without tap_action
           if(tapTimer){clearTimeout(tapTimer);tapTimer=null;}
           lastTapTime=0;
-          self._exec(doubleTapAction,e);
+          run(doubleTapAction,e);
         }else{
           lastTapTime=now;
-          if(tapAction)tapTimer=setTimeout(function(){tapTimer=null;self._exec(tapAction,e);},350);
+          if(tapAction)tapTimer=setTimeout(function(){tapTimer=null;run(tapAction,e);},350);
         }
       }else{
-        if(tapAction)self._exec(tapAction,e);
+        if(tapAction)run(tapAction,e);
       }
     };
     el.addEventListener('keydown',function(e){
-      if(e.key==='Enter'||e.key===' '){if(tapAction)self._exec(tapAction,e);else{e.preventDefault();}}
+      // keyboard: the tap action, else (an element with only hold / double tap) that one (7.0.0-beta.4)
+      if(e.key==='Enter'||e.key===' '){const ka=tapAction||holdAction||doubleTapAction;if(ka)run(ka,e);else{e.preventDefault();}}
     });
     el.addEventListener('touchstart',press,{passive:true});
     el.addEventListener('touchend',function(e){
@@ -2580,7 +2656,6 @@ class RoomOverlayCard extends HTMLElement{
       const st=td.entity?s[td.entity]:undefined;
       const known=!td.entity||!!st;
       tileEl.classList.toggle('unavailable',!known);
-      const stateStr=st?st.state:'';
       const isActive=rocTileActive(td,st);
       if(isActive)activeCount++;
       tileEl.classList.toggle('is-active',isActive);
@@ -2785,7 +2860,7 @@ class RoomOverlayCard extends HTMLElement{
   // Overview markup for the active profile. Returns {html, meta}; meta drives
   // _ovWire() (mounting, listeners) and the dock's synthetic launcher icons.
   _ovBuild(cAll,ov,prof){
-    const self=this,hass=this._hass;
+    const hass=this._hass;
     const P=function(v,d){return rocOvPV(v,prof,d);};
     const g=ov.grid||{};
     const style=P(g.style,'card')==='row'?'row':'card';
@@ -2944,7 +3019,7 @@ class RoomOverlayCard extends HTMLElement{
     meta.pills.forEach(function(p){
       const el=sr.querySelector('[data-ovp="'+p.i+'"]');if(!el)return;
       self._ovPills.push({el:el,valEl:el.querySelector('[data-ovp-v]'),def:p.def});
-      if(p.tap||p.hold||p.def.double_tap_action)self._addZoneListeners(el,p.tap,p.hold,p.def.double_tap_action,p.def.hold_delay);
+      if(p.tap||p.hold||p.def.double_tap_action)self._addZoneListeners(el,p.tap,p.hold,p.def.double_tap_action,p.def.hold_delay,p.def.entity);
     });
     const ovRoom=cAll.rooms[this._roomIdx]||{};
     const ov=rocOvCfg(cAll,this._roomIdx)||{};
@@ -2961,7 +3036,7 @@ class RoomOverlayCard extends HTMLElement{
       t.chips.forEach(function(ch,k){
         const b=el.querySelector('[data-ovchip="'+t.ri+':'+k+'"]');if(!b)return;
         rec.chips.push({el:b,def:ch});
-        if(ch.tap_action||ch.hold_action)self._addZoneListeners(b,ch.tap_action,ch.hold_action,null,null);
+        if(ch.tap_action||ch.hold_action)self._addZoneListeners(b,ch.tap_action,ch.hold_action,null,null,(ch.entities||[])[0]);
       });
       const info=sr.querySelector('[data-ovt-info="'+t.ri+'"]');
       if(info)(r.chips||navCfg.chips||[]).slice(0,3).forEach(function(chCfg){if(chCfg)self._navChipInto(info,chCfg,r);});
@@ -3369,7 +3444,23 @@ class RoomOverlayCard extends HTMLElement{
     }
   }
 
+  // A config the renderer cannot handle used to leave an empty card (the exception escaped
+  // `set hass`, visible only in the console). It now shows Home Assistant-style error text in the
+  // card and stays quiet until the next setConfig() (7.0.0-beta.4).
   _render(){
+    try{this._renderInner();this._rocErr=null;}
+    catch(e){
+      this._rocErr=e;
+      try{console.error('[room-overlay-card] render failed:',e);}catch(_){}
+      try{
+        this.shadowRoot.innerHTML='<ha-card style="padding:12px 16px;color:var(--error-color,#db4437);font:14px/1.4 var(--paper-font-body1_-_font-family,sans-serif);border:1px solid var(--error-color,#db4437);"><b>Room Overlay Card</b> — configuration error<br><span style="color:var(--primary-text-color);font-family:monospace;font-size:12px;"></span></ha-card>';
+        const sp=this.shadowRoot.querySelector('span');if(sp)sp.textContent=String((e&&e.message)||e);
+      }catch(_){}
+      this._relevantEntities=[];this._relevantAttrSources=[];this._navEntities=null;this._navAttrSources=null;
+      this._rendered=true; // nothing to update; a new setConfig() renders again
+    }
+  }
+  _renderInner(){
     if(!this._config)return;
     this._ovAnimFinish(); // a running overview zoom ends in its final state first
     const _gen=++this._renderGen; // stale async mounts (card helpers) bail via this
@@ -3867,7 +3958,7 @@ class RoomOverlayCard extends HTMLElement{
       _navOld=this._navStash.el;_navScroll=this._navStash.scroll||[0,0];this._navRestore=this._navStash;this._navStash=null;
     }
     this._navKey=_navKey;
-    this.shadowRoot.innerHTML='<style>:host{display:block;--roc-active-c:var(--roc-active,#ffb35c);--roc-cold-c:var(--roc-cold,#6cb8ff);--roc-alert-c:var(--roc-alert,#ff7a6e);--roc-surface-c:var(--roc-surface,rgba(20,22,26,.85));--roc-border-c:var(--roc-border,rgba(255,255,255,.08));--roc-text-c:var(--roc-text,#f2f3f5);--roc-text-2-c:var(--roc-text-2,#9aa3ad);--roc-chip-bg-c:var(--roc-chip-bg,rgba(10,12,15,.55));}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}.ico.ico-ring{display:none;position:absolute;inset:-3px;border-radius:50%;z-index:3;pointer-events:none;background:conic-gradient(var(--roc-active-c) 0 var(--p,0%),rgba(255,255,255,.14) var(--p,0%) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}.ico-badge{position:absolute;top:-4px;right:-4px;z-index:4;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none;}.ico-badge:empty{display:none;}.roc-lcp-cell{min-width:0;container-type:inline-size;}.roc-lcp{position:relative;box-sizing:border-box;width:100%;border-radius:999px;border:2px solid var(--roc-border-c);background:var(--lcp-bg,#16191d);overflow:hidden;display:flex;align-items:center;gap:8px;padding:0 12px 0 3px;color:var(--roc-text-c);font-size:13px;line-height:1;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .6s ease-in-out;}.roc-lcp.unavailable{opacity:.5;}.roc-lcp-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lcp-col,rgba(255,179,92,.55));transition:width .3s ease,background-color .4s ease;pointer-events:none;}.roc-lcp.dragging .roc-lcp-fill{transition:none;}.roc-lcp-ic{position:relative;flex:none;width:calc(min(var(--lcp-h,30px) - 8px,34px));height:calc(min(var(--lcp-h,30px) - 8px,34px));border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);color:var(--roc-text-2-c);box-sizing:border-box;--mdc-icon-size:calc(min(var(--lcp-h,30px) - 8px,34px) * .6);}.roc-lcp.on .roc-lcp-ic{background:var(--lcp-solid,#ffb35c);border-color:transparent;color:#1a1206;}.roc-lcp-nm{position:relative;flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-lcp-val{position:relative;flex:none;font-variant-numeric:tabular-nums;color:var(--roc-text-2-c);}.roc-lcp.on .roc-lcp-val{color:var(--roc-text-c);font-weight:500;}.roc-lcp:focus-visible{outline:2px solid var(--roc-text-c);outline-offset:2px;}@container (max-width:120px){.roc-lcp-nm{display:none;}.roc-lcp{justify-content:space-between;}}.roc-navchip{background:var(--roc-chip-bg-c);border-radius:4px;padding:1px 5px;}.roc-nav.roc-dim .roc-thumb:not([data-act]){opacity:.8;}.roc-nav.roc-dim .roc-thumb:hover{opacity:1;}.ico-chip{box-shadow:0 3px 8px rgba(0,0,0,.4);}.ico.ico-chip::before{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);}.ico.ico-chip::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}@media (prefers-reduced-motion:reduce){*:not(.roc-hold):not(.roc-hold *){animation:none!important;}.roc-panel,.roc-panel-backdrop,.content{transition:none!important;}.roc-panel.pl-sheet-right,.roc-panel.pl-sheet-bottom{transform:none!important;}}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.roc-pm[data-section-panel]{position:fixed;inset:0;width:auto;height:auto;max-height:none;border-radius:0;transform:translateY(14px);padding-bottom:env(safe-area-inset-bottom,0px);}.roc-panel.roc-pm.open[data-section-panel]{transform:none;}.roc-panel-backdrop.roc-pm{position:fixed;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel:not(.roc-cols-set) .roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:12px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:var(--roc-active-c);font-weight:500;}.roc-tile.is-active{box-shadow:inset 0 0 0 1px var(--roc-active-c);}.roc-tile.is-active .roc-tile-progress-bar{background:var(--roc-active-c);}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-img .roc-tile-quick{flex-direction:row;flex-wrap:wrap;justify-content:center;margin-top:2px;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}'+(_ovAny||_fpAny?ROC_OV_CSS:'')+(_fpAny?ROC_FP_CSS:'')+(_ovAny&&rocSigAny(cAll)?ROC_SIG_CSS:'')+'</style>'+(this._rocExtraCss?'<style class="roc-xcss">'+this._rocExtraCss+'</style>':'')+'<ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"'+(_ovOn||_fpOn?' style="position:absolute;inset:0;"':'')+'><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+_ovHtml+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this._vpW())+'&#215;'+Math.round(this._vpH())+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_studio?'':'<button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>')+''+(c._roc_preview||c._roc_studio?'':'<button class="tm-studio" title="Open the full-screen Room Card Studio" style="position:absolute;top:38px;right:96px;z-index:200;background:rgba(40,70,140,0.88);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#9998; Studio</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;--roc-active-c:var(--roc-active,#ffb35c);--roc-cold-c:var(--roc-cold,#6cb8ff);--roc-alert-c:var(--roc-alert,#ff7a6e);--roc-surface-c:var(--roc-surface,rgba(20,22,26,.85));--roc-border-c:var(--roc-border,rgba(255,255,255,.08));--roc-text-c:var(--roc-text,#f2f3f5);--roc-text-2-c:var(--roc-text-2,#9aa3ad);--roc-chip-bg-c:var(--roc-chip-bg,rgba(10,12,15,.55));}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}[data-roc-na="1"]{filter:grayscale(1) brightness(.55);}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}.ico.ico-ring{display:none;position:absolute;inset:-3px;border-radius:50%;z-index:3;pointer-events:none;background:conic-gradient(var(--roc-active-c) 0 var(--p,0%),rgba(255,255,255,.14) var(--p,0%) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}.ico-badge{position:absolute;top:-4px;right:-4px;z-index:4;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none;}.ico-badge:empty{display:none;}.roc-lcp-cell{min-width:0;container-type:inline-size;}.roc-lcp{position:relative;box-sizing:border-box;width:100%;border-radius:999px;border:2px solid var(--roc-border-c);background:var(--lcp-bg,#16191d);overflow:hidden;display:flex;align-items:center;gap:8px;padding:0 12px 0 3px;color:var(--roc-text-c);font-size:13px;line-height:1;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .6s ease-in-out;}.roc-lcp.unavailable{opacity:.5;}.roc-lcp-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lcp-col,rgba(255,179,92,.55));transition:width .3s ease,background-color .4s ease;pointer-events:none;}.roc-lcp.dragging .roc-lcp-fill{transition:none;}.roc-lcp-ic{position:relative;flex:none;width:calc(min(var(--lcp-h,30px) - 8px,34px));height:calc(min(var(--lcp-h,30px) - 8px,34px));border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);color:var(--roc-text-2-c);box-sizing:border-box;--mdc-icon-size:calc(min(var(--lcp-h,30px) - 8px,34px) * .6);}.roc-lcp.on .roc-lcp-ic{background:var(--lcp-solid,#ffb35c);border-color:transparent;color:#1a1206;}.roc-lcp-nm{position:relative;flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-lcp-val{position:relative;flex:none;font-variant-numeric:tabular-nums;color:var(--roc-text-2-c);}.roc-lcp.on .roc-lcp-val{color:var(--roc-text-c);font-weight:500;}.roc-lcp:focus-visible{outline:2px solid var(--roc-text-c);outline-offset:2px;}@container (max-width:120px){.roc-lcp-nm{display:none;}.roc-lcp{justify-content:space-between;}}.roc-navchip{background:var(--roc-chip-bg-c);border-radius:4px;padding:1px 5px;}.roc-nav.roc-dim .roc-thumb:not([data-act]){opacity:.8;}.roc-nav.roc-dim .roc-thumb:hover{opacity:1;}.ico-chip{box-shadow:0 3px 8px rgba(0,0,0,.4);}.ico.ico-chip::before{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);}.ico.ico-chip::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}@media (prefers-reduced-motion:reduce){*:not(.roc-hold):not(.roc-hold *){animation:none!important;}.roc-panel,.roc-panel-backdrop,.content{transition:none!important;}.roc-panel.pl-sheet-right,.roc-panel.pl-sheet-bottom{transform:none!important;}}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.roc-pm[data-section-panel]{position:fixed;inset:0;width:auto;height:auto;max-height:none;border-radius:0;transform:translateY(14px);padding-bottom:env(safe-area-inset-bottom,0px);}.roc-panel.roc-pm.open[data-section-panel]{transform:none;}.roc-panel-backdrop.roc-pm{position:fixed;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel:not(.roc-cols-set) .roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:12px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:var(--roc-active-c);font-weight:500;}.roc-tile.is-active{box-shadow:inset 0 0 0 1px var(--roc-active-c);}.roc-tile.is-active .roc-tile-progress-bar{background:var(--roc-active-c);}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-img .roc-tile-quick{flex-direction:row;flex-wrap:wrap;justify-content:center;margin-top:2px;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}'+(_ovAny||_fpAny?ROC_OV_CSS:'')+(_fpAny?ROC_FP_CSS:'')+(_ovAny&&rocSigAny(cAll)?ROC_SIG_CSS:'')+'</style>'+(this._rocExtraCss?'<style class="roc-xcss">'+this._rocExtraCss+'</style>':'')+'<ha-card style="height:'+_rootH+';"><div class="roc-grid" style="'+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"'+(_ovOn||_fpOn?' style="position:absolute;inset:0;"':'')+'><div class="layer base" style="'+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);"></div>'+_ovHtml+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this._vpW())+'&#215;'+Math.round(this._vpH())+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_studio?'':'<button class="tm-prof" style="position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#8645; '+_rt.toUpperCase()+'</button>')+''+(c._roc_preview||c._roc_studio?'':'<button class="tm-studio" title="Open the full-screen Room Card Studio" style="position:absolute;top:38px;right:96px;z-index:200;background:rgba(40,70,140,0.88);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#9998; Studio</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -4149,7 +4240,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const el=this.shadowRoot.querySelector('[data-z="'+escSel(z.id)+'"]');
       if(!el)continue;this._zoneEls[z.id]=el;
       if(z.tap_action||z.hold_action||z.double_tap_action)
-        this._addZoneListeners(el,z.tap_action,z.hold_action,z.double_tap_action,z.hold_delay);
+        this._addZoneListeners(el,z.tap_action,z.hold_action,z.double_tap_action,z.hold_delay,z.entity);
       if(z.slider&&z.slider.entity&&!tm)this._attachSlider(el,z);
     }
     this._biconEls={};this._blabelEls={};this._bcontEls={};
@@ -4159,7 +4250,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const bel=this.shadowRoot.querySelector('[data-b="'+escSel(b.id)+'"]');
       this._bcontEls[b.id]=bel;
       if(bel&&(b.tap_action||b.hold_action||b.double_tap_action))
-        this._addZoneListeners(bel,b.tap_action,b.hold_action,b.double_tap_action,b.hold_delay);
+        this._addZoneListeners(bel,b.tap_action,b.hold_action,b.double_tap_action,b.hold_delay,b.entity);
     }
     this._icoEls={};this._icoIconEls={};
     for(const ico of(c.icons||[])){
@@ -4170,7 +4261,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       // icon per tick — 20 icons meant 20 querySelector calls on every state
       // change, for a node that cannot change between renders.
       this._icoIconEls[ico.id]=el.querySelector('ha-icon');
-      if(ico.tap_action||ico.hold_action||ico.double_tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay);
+      if(ico.tap_action||ico.hold_action||ico.double_tap_action)this._addZoneListeners(el,ico.tap_action,ico.hold_action,ico.double_tap_action,ico.hold_delay,ico.entity);
     }
     this._vwEls={};this._vwBgEls={};this._vwIconEls={};this._vwCountEls={};
     for(const vw of(c.vacuum_widgets||[])){
@@ -4181,7 +4272,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       this._vwIconEls[vw.id]=this.shadowRoot.querySelector('[data-vwi="'+escSel(vw.id)+'"]');
       this._vwCountEls[vw.id]=this.shadowRoot.querySelector('[data-vwc="'+escSel(vw.id)+'"]');
       if(vw.tap_action||vw.hold_action||vw.double_tap_action)
-        this._addZoneListeners(el,vw.tap_action,vw.hold_action,vw.double_tap_action,vw.hold_delay);
+        this._addZoneListeners(el,vw.tap_action,vw.hold_action,vw.double_tap_action,vw.hold_delay,vw.entity);
     }
     this._lblEls={};this._sortedLblGrads={};
     for(const lbl of(c.labels||[])){
@@ -4191,7 +4282,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       if(lel&&!_isMini&&(lbl.tap_action||lbl.hold_action||lbl.double_tap_action)){
         lel.style.pointerEvents='auto';lel.style.cursor='pointer';
         lel.setAttribute('tabindex','0');lel.setAttribute('role','button');
-        this._addZoneListeners(lel,lbl.tap_action,lbl.hold_action,lbl.double_tap_action,lbl.hold_delay);
+        this._addZoneListeners(lel,lbl.tap_action,lbl.hold_action,lbl.double_tap_action,lbl.hold_delay,lbl.entity);
       }
     }
     this._sortedBmFg=c.brightness_model?.filter_gradient?.length?c.brightness_model.filter_gradient.slice().sort((a,b)=>a.value-b.value):null;
@@ -4202,7 +4293,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       if(gel&&!_isMini&&(g.tap_action||g.hold_action||g.double_tap_action)){
         gel.style.pointerEvents='auto';gel.style.cursor='pointer';
         gel.setAttribute('tabindex','0');gel.setAttribute('role','button');
-        this._addZoneListeners(gel,g.tap_action,g.hold_action,g.double_tap_action,g.hold_delay);
+        this._addZoneListeners(gel,g.tap_action,g.hold_action,g.double_tap_action,g.hold_delay,g.entity);
       }
     }
     this._cardEls={};this._contEls={};
@@ -4335,6 +4426,10 @@ navSelf._navChipInto(chipCont,chCfg,r);
                 });
                 if(!matches.length)throw new Error('card not found in dashboard (key: '+key+')');
                 if(matches.length>1)throw new Error(matches.length+' matching cards — set a unique card_id to disambiguate');
+                // 7.0.0-beta.4: never overwrite a change made elsewhere (another tab, the studio,
+                // HA's editor) since this card was loaded — the YAML is offered instead
+                const _was=matches[0].arr[matches[0].idx];
+                if(self._rocRaw&&JSON.stringify(_was)!==JSON.stringify(self._rocRaw))throw new Error('the card was changed elsewhere since this page loaded — copy the YAML, or reload and edit again');
                 matches[0].arr[matches[0].idx]=Object.assign({},self._config,{type:'custom:room-overlay-card'});
                 return _callWS({type:'lovelace/config/save',url_path:_urlPath,config:nc});
               })
@@ -4799,7 +4894,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
             if(q&&q.service&&_tileSelf._hass){const dd=q.service.indexOf('.');_tileSelf._hass.callService(q.service.slice(0,dd),q.service.slice(dd+1),q.data||{},q.target);}
           });
         });
-        if(td.tap_action||td.hold_action||td.double_tap_action)_tileSelf._addZoneListeners(tileEl,td.tap_action,td.hold_action,td.double_tap_action,td.hold_delay);
+        if(td.tap_action||td.hold_action||td.double_tap_action)_tileSelf._addZoneListeners(tileEl,td.tap_action,td.hold_action,td.double_tap_action,td.hold_delay,td.entity);
       });
     }
     const _secBackdropEl=this.shadowRoot.querySelector('[data-section-backdrop]');
@@ -5038,7 +5133,8 @@ navSelf._navChipInto(chipCont,chCfg,r);
     const cAll=this._config;
     if(!Array.isArray(cAll.rooms)||idx<0||idx>=cAll.rooms.length||idx===this._roomIdx)return;
     if(manual)this._manualHoldUntil=Date.now()+((cAll.follow_hold??60)*1000);
-    if(Math.abs(idx-this._roomIdx)>1)dir=0; // non-adjacent → crossfade
+    const _nR=cAll.rooms.length,_dR=Math.abs(idx-this._roomIdx);
+    if(_dR>1&&!(_nR>2&&_dR===_nR-1))dir=0; // non-adjacent → crossfade (last ↔ first wraps around and still slides — 7.0.0-beta.4)
     if(rocReducedMotion())dir=0; // reduced motion: crossfade, no slide
     // Ghost of the old room for the transition (embedded cards render blank in
     // the clone for ~0.3 s — acceptable)
@@ -5129,19 +5225,22 @@ navSelf._navChipInto(chipCont,chCfg,r);
     // base_camera / camera_refresh are room-scoped keys → use the merged room view
     const c=this._roomCfg||this._config;if(!c||!c.base_camera)return;
     const iv=Math.max(2,c.camera_refresh??10)*1000;
-    const self=this;
+    const self=this,gen=this._renderGen,base=this._baseEl;
     const tick=function(){
-      if(!self._hass||!self._visible||!self._baseEl)return;
+      // not while the tab is hidden (a wall tablet with its screen off) — 7.0.0-beta.4
+      if(!self._hass||!self._visible||!self._baseEl||(typeof document!=='undefined'&&document.hidden))return;
       const st=self._hass.states[c.base_camera];
       const ep=st&&st.attributes&&st.attributes.entity_picture;
       if(!ep)return;
       const url=ep+(ep.includes('?')?'&':'?')+'_roc='+Date.now();
       const img=new Image();
-      img.onload=function(){if(self._baseEl)self._baseEl.style.backgroundImage='url("'+url.replace(/"/g,'%22')+'")';};
+      // a frame that lands after a room switch belongs to the old room's camera
+      img.onload=function(){if(self._renderGen===gen&&self._baseEl===base)base.style.backgroundImage='url("'+url.replace(/"/g,'%22')+'")';};
       img.src=url;
     };
     tick();
-    this._camTimer=setInterval(tick,iv);
+    // a nav mini shows one frame; only the card on screen keeps refreshing (each mini had its own timer)
+    if(!(this._config&&this._config._roc_mini))this._camTimer=setInterval(tick,iv);
   }
 
   _teardownTemplates(){
@@ -5925,7 +6024,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     },60);
   }
   _update(){
-    if(!this._hass||!this._config||!this._rendered)return;
+    if(!this._hass||!this._config||!this._rendered||this._rocErr)return;
     // Throttled root-height re-check piggybacked on state updates: leaving
     // dashboard edit mode removes HA's card-actions bar WITHOUT resizing the
     // scroller or recreating the card — no observer fires, and the card would
@@ -6170,7 +6269,8 @@ navSelf._navChipInto(chipCont,chCfg,r);
         if(tv!==undefined&&el.textContent!==tv)el.textContent=tv;
         continue;
       }
-      const ent=s[lbl.entity];if(!ent)continue;
+      const ent=s[lbl.entity];
+      if(!ent){if(lbl.entity&&el.textContent!=='—')el.textContent='—';continue;} // entity gone / renamed: not the last value (7.0.0-beta.4)
       const rawVal=lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state;
       if(lbl.format==='relative'){
         const _rt=(lbl.prefix||'')+relTime(rawVal,this._hass.locale?.language)+(lbl.suffix&&lbl.suffix!=='auto'?lbl.suffix:'');
@@ -6193,8 +6293,11 @@ navSelf._navChipInto(chipCont,chCfg,r);
       if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
       let val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
-      if(isNaN(val))continue;
       const mn=g.min??0,mx=g.max??100;
+      // a blind on a cover without a position: closed → fully covered, open → open (7.0.0-beta.4)
+      if(isNaN(val)&&g._cover){if(ent.state==='closed')val=mx;else if(ent.state==='open')val=mn;}
+      if(isNaN(val)){if(el.dataset.rocNa!=='1')el.dataset.rocNa='1';continue;} // unavailable: greyed (CSS), not a stale live value
+      if(el.dataset.rocNa)el.dataset.rocNa='';
       // rawPct = normalized position with NO top_offset applied. Always 0=open /
       // 1=closed regardless of the blind's own raw motor direction. Kept around
       // because day_night's phase must be driven by the real travel, not by the
@@ -6302,7 +6405,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
   // Binary approximation: overlay shows when its opacity resolves > 0;
   // grouped (pop-up panel) overlays and visible_template overlays are skipped.
   _updateNav(){
-    if(!this._hass||!this._rendered)return;
+    if(!this._hass||!this._rendered||this._rocErr)return;
     const s=this._hass.states,cAll=this._config;
     if(Array.isArray(cAll.rooms)&&cAll.rooms.length){
       const _navLiveVal=cAll.nav&&cAll.nav.live;
@@ -6356,27 +6459,60 @@ navSelf._navChipInto(chipCont,chCfg,r);
     return a;
   }
 
-  _exec(tapAction,event){
+  _exec(tapAction,event,defEntity){
     if(!tapAction)return;
     if(event){event.stopPropagation();event.preventDefault();}
-    const a=this._resolveAct(tapAction);
+    let a=this._resolveAct(tapAction);
     if(!a||a.action==='none')return;
+    // toggle / more-info without an entity: the element's own (HA's convention); `entity_id` too
+    if((a.action==='toggle'||a.action==='more-info')&&!a.entity){const _e=a.entity_id||defEntity;if(_e)a=Object.assign({},a,{entity:Array.isArray(_e)?_e[0]:_e});}
     // Swallow taps generated by a room swipe (zones fire on touchend, which the
     // wrap-level click suppressor cannot catch)
     if(this._roomDragActive||(this._lastRoomDragEnd&&Date.now()-this._lastRoomDragEnd<400))return;
     if(a.confirmation){
       const _ct=typeof a.confirmation==='object'?(a.confirmation.text||'Are you sure?'):'Are you sure?';
-      if(!window.confirm(_ct))return;
+      // the card's own dialog (7.0.0-beta.4): window.confirm is blocked in kiosk browsers and
+      // some WebViews, where the action then never ran
+      const self=this;this._confirm(_ct).then(function(ok){if(ok)self._execAct(a);});
+      return;
     }
+    this._execAct(a);
+  }
+  _confirm(text){
+    const self=this;
+    return new Promise(function(res){
+      const host=self.shadowRoot&&self.shadowRoot.querySelector('ha-card'); // the whole card (an overview / floor plan page hides .wrap)
+      if(!host){res(window.confirm(text));return;}
+      const _pos=host.style.position,_set=getComputedStyle(host).position==='static';if(_set)host.style.position='relative'; // only while the dialog is open
+      const ov=document.createElement('div');
+      ov.className='roc-confirm';ov.setAttribute('role','alertdialog');ov.setAttribute('aria-modal','true');
+      ov.style.cssText='position:absolute;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);';
+      ov.innerHTML='<div style="max-width:min(360px,90%);background:var(--card-background-color,#1c1f24);color:var(--primary-text-color,#eee);border-radius:12px;padding:16px 18px;box-shadow:0 8px 28px rgba(0,0,0,.5);font:14px/1.45 var(--paper-font-body1_-_font-family,sans-serif);">'
+        +'<div data-t style="margin-bottom:14px;"></div><div style="display:flex;justify-content:flex-end;gap:8px;">'
+        +'<button type="button" data-no style="background:none;border:1px solid var(--divider-color,#555);color:inherit;border-radius:8px;padding:6px 14px;cursor:pointer;">Cancel</button>'
+        +'<button type="button" data-yes style="background:var(--primary-color,#03a9f4);border:0;color:var(--text-primary-color,#fff);border-radius:8px;padding:6px 14px;cursor:pointer;">OK</button></div></div>';
+      ov.querySelector('[data-t]').textContent=text;
+      const done=function(v,e){if(e){e.stopPropagation();e.preventDefault();}document.removeEventListener('keydown',key,true);ov.remove();if(_set)host.style.position=_pos;res(v);};
+      const key=function(e){if(e.key==='Escape')done(false,e);else if(e.key==='Enter')done(true,e);};
+      ['pointerdown','mousedown','touchstart','touchend','click'].forEach(function(t){ov.addEventListener(t,function(e){e.stopPropagation();},{passive:t!=='click'});});
+      ov.querySelector('[data-no]').addEventListener('click',function(e){done(false,e);});
+      ov.querySelector('[data-yes]').addEventListener('click',function(e){done(true,e);});
+      ov.addEventListener('click',function(e){if(e.target===ov)done(false,e);});
+      document.addEventListener('keydown',key,true);
+      host.appendChild(ov);
+      try{ov.querySelector('[data-yes]').focus();}catch(_){}
+    });
+  }
+  _execAct(a){
     if(this._config.haptic!==false)try{window.dispatchEvent(new CustomEvent('haptic',{detail:'light'}));}catch(_){}
     switch(a.action){
-      case'navigate':{const p=a.navigation_path||a.path;if(p){history.pushState(null,'',p);const _lc=new Event('location-changed',{bubbles:true,composed:true});_lc.detail={replace:false};window.dispatchEvent(_lc);window.dispatchEvent(new PopStateEvent('popstate'));}}break;
+      case'navigate':{const p=a.navigation_path||a.path;if(p){const rep=!!a.navigation_replace;if(rep)history.replaceState(null,'',p);else history.pushState(null,'',p);const _lc=new Event('location-changed',{bubbles:true,composed:true});_lc.detail={replace:rep};window.dispatchEvent(_lc);window.dispatchEvent(new PopStateEvent('popstate'));}}break;
       case'url':{const u=a.url_path||a.url;if(u)window.open(u,a.new_tab===false?'_self':'_blank');}break;
       case'more-info':if(a.entity)this.dispatchEvent(new CustomEvent('hass-more-info',{bubbles:true,composed:true,detail:{entityId:a.entity}}));break;
       case'perform-action':
       case'call-service':{
         const svc=a.perform_action||a.service;
-        if(svc){const d=svc.indexOf('.');this._hass.callService(svc.slice(0,d),svc.slice(d+1),a.data??a.service_data??{},a.target);}
+        if(svc){const d=svc.indexOf('.');const pr=this._hass.callService(svc.slice(0,d),svc.slice(d+1),a.data??a.service_data??{},a.target);if(pr&&typeof pr.catch==='function')pr.catch(function(e){console.warn('[room-overlay-card] '+svc+' failed:',(e&&e.message)||e);});}
       }break;
       case'browser-mod-popup':{const _bmData={title:a.title??'',size:a.size??'normal',content:a.content??{}};const _bmId=window.browser_mod?.browserID||window.browser_mod?.browser_id;if(_bmId)_bmData.browser_id=_bmId;this._hass.callService('browser_mod','popup',_bmData);}break;
       case'toggle':if(a.entity)this._hass.callService('homeassistant','toggle',{entity_id:a.entity});break;
@@ -6465,7 +6601,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     // RECREATED here, not conditionally `.observe()`d on nulled handles (the
     // old bug: a card that went through an edit toggle had no layout triggers
     // left and stayed mis-sized until the next state update or swipe).
-    if(this._rendered&&this._config){
+    if(this._rendered&&this._config&&!this._rocErr){
       this._wireVisibility();
       this._wireLayoutObservers();
       this._wireRelTimer();
@@ -11165,7 +11301,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(addBl)addBl.addEventListener('click',function(){
       const c=self._collectConfig();
       const blA=A(c,'blinds');
-      blA.push({id:'blind_'+(blA.length+1),top:'10%',left:'30%',width:'20%',height:'40%',entity:'',min:0,max:100,blind_type:'roller'});
+      blA.push({id:'blind_'+(blA.length+1),top:'10%',left:'30%',width:'20%',height:'40%',entity:'',attribute:'current_position',min:100,max:0,blind_type:'roller'}); // Home Assistant's direction: 100 = open (7.0.0-beta.4)
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-bl]').forEach(function(btn){

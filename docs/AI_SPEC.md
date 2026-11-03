@@ -42,7 +42,8 @@ card's schema. If a key is not in the grammar, the card does not know it.
    group ids are referenced elsewhere — keep them consistent.
 3. Lengths are strings with a unit (`"40%"`, `"24px"`) or plain numbers (px). Quote `%` values.
 4. Conditions are objects: `{entity: sun.sun, state: below_horizon}`, `{entity: x, state_not: off}`,
-   `{entity: x, operator: ">", value: 25}`, combined with `and:` / `or:`.
+   `{entity: x, operator: ">", value: 25}` or Home Assistant's `{entity: x, above: 20, below: 25}`,
+   combined with `and:` / `or:`. `toggle` / `more-info` without `entity` act on the element's own.
 5. Templates are Home Assistant Jinja strings (`"{{ states('sensor.x') }}"`) and only work in the
    keys typed *tmpl* in the grammar (`label.template`, `visible_template`, `tile.value`, …).
 6. Use the newest form: `layout:` (not `max_height` / `breakpoints`, which are v3 keys);
@@ -364,6 +365,8 @@ cond {
   state_not: any;
   operator: "<"|">"|"<="|">="|"=="|"!=";
   value: any;
+  above: num @7.0.0;
+  below: num @7.0.0;
   and: cond;
   or: cond;
 }

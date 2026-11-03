@@ -2,13 +2,6 @@
 // Device frames for the canvas. The card chooses its layout profile from the frame's size (its
 // _rocVp viewport override), so "Tablet portrait" shows the portrait profile on a landscape PC.
 const RS_FRAMES={fit:null,landscape:{w:1280,h:800},portrait:{w:800,h:1280},phone:{w:390,h:844}};
-// Outline rows: [config key, editor section id (data-panel), icon]
-const RS_KINDS=[
-  ['overlays','overlays','mdi:layers-outline'],['zones','zones','mdi:gesture-tap'],['badges','badges','mdi:label-outline'],
-  ['icons','icons','mdi:star-four-points-outline'],['labels','labels','mdi:format-text'],['gauges','gauges','mdi:gauge'],
-  ['glows','glows','mdi:lightbulb-on-outline'],['blinds','blinds','mdi:blinds-horizontal'],['elements','elements','mdi:card-bulleted-outline'],
-  ['groups','groups','mdi:dock-window'],['vacuum_widgets','vacuum_widgets','mdi:robot-vacuum'],['light_controls','lights','mdi:tune-vertical'],
-];
 // Room keys kept on the previewed room while the shared Global defaults are edited — the same
 // list the editor's own preview uses (_previewCfg), so the canvas falls through to the defaults.
 const RS_KEEP_VISUAL=['id','name','area_match','base_image','base_camera','camera_refresh','base_image_conditions'];
@@ -612,7 +605,7 @@ class RocStudio{
   // Measured on the canvas (what you see), applied to top / left. Values that are not "%"
   // strings are left alone — the button reports how many were skipped.
   _boxes(){
-    const card=this._card,self=this;
+    const card=this._card;
     if(!card||typeof card._rocBox!=='function')return[];
     return this._selSet().filter(function(x){return RS_TYPES[x.type]&&RS_TYPES[x.type].canvas;}).map(function(x){
       let b=null;try{b=card._rocBox(x.type,x.id);}catch(_){}
@@ -1175,7 +1168,7 @@ class RocStudio{
 
   // ---------------------------------------------------------------- chrome
   _renderChrome(){
-    const self=this,I=this.I,rooms=this._rooms();
+    const self=this,rooms=this._rooms();
     // room select
     const sel=this._roomSel;
     sel.style.display=rooms.length?'':'none';
@@ -1432,7 +1425,7 @@ class RocStudio{
     const lbl=this._saveBtn.querySelector('span');
     this._saveBtn.disabled=true;if(lbl)lbl.textContent=this.t('saving');
     const done=function(){self._saveBtn.disabled=false;if(lbl)lbl.textContent=self.t('save');self._saving=null;};
-    this._saving=rsSaveDashboard(tg,this.hass,cfg,!!opts.force).then(function(){
+    this._saving=rsSaveDashboard(tg,this.hass,cfg,!!opts.force,this.I.cfgKey).then(function(){
       done();
       self.base=rsJ(cfg);
       self._savedAt=self.t('saved_at',{t:rsTime(Date.now())});

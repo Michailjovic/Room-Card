@@ -3,8 +3,6 @@
 // device type: ratio < threshold → portrait, else landscape. See LAYOUT.md.
 const ROC_PROFILES=['portrait','landscape'];
 const ROC_LEGACY_TIERS=['mobile','tablet','desktop','ultrawide'];
-// Regions a layout profile can place on its % grid
-const ROC_REGIONS=['nav','cards_above','image','lights','cards_below','cover'];
 function rocBrowserId(){try{return window.browser_mod?.browserID||window.browser_mod?.browser_id||'';}catch(_){return'';}}
 // Active profile: layout.orientation force ('portrait'|'landscape'), per-device
 // map {by_browser:{<browser_mod id>:profile},default:...}, or 'auto' by ratio.

@@ -131,6 +131,15 @@ function blindToGaugeConfig(b){
     top:b.top,left:b.left,width:b.width,height:b.height,z_index:z,
     orientation:'top',background:b.background||'transparent',border_radius:b.border_radius||'0'};
   if(b.attribute!==undefined)base.attribute=b.attribute;
+  else if(/^cover\./.test(String(b.entity||''))){
+    // 7.0.0-beta.4: a cover without `attribute` drew nothing (its state open/closed is no number).
+    // It reads current_position in Home Assistant's direction (100 = open) — the editors' default
+    // pair min 0 / max 100 counts as unset here — and falls back to open / closed for a cover
+    // that reports no position.
+    base.attribute='current_position';base._cover=true;
+    const dflt=(b.min==null||b.min===0)&&(b.max==null||b.max===100);
+    if(dflt){base.min=100;base.max=0;}
+  }
   if(b.top_offset!==undefined)base.top_offset=b.top_offset;
   if(b.transition!==undefined)base.transition=b.transition;
   if(b.visible!==undefined)base.visible=b.visible;

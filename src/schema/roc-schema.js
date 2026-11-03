@@ -99,7 +99,7 @@ const S={
   companion:{keys:{card:{t:'card'},media:{t:'str'},height:{t:'len'},type:{t:'str'}},open:true},
   // ---------------------------------------------------------------- shared value objects
   cond:{keys:{entity:{t:'entity'},attribute:{t:'str'},state:{t:'any'},state_not:{t:'any'},
-    operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},and:{t:'cond'},or:{t:'cond'}}},
+    operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},above:{t:'num',since:'7.0.0'},below:{t:'num',since:'7.0.0'},and:{t:'cond'},or:{t:'cond'}}},
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
   action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event'},

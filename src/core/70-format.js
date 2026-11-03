@@ -84,6 +84,13 @@ function evalCond(c,s){
     if(isNaN(nv)||isNaN(cv))r=false;
     else switch(c.operator){case'<':r=nv<cv;break;case'>':r=nv>cv;break;case'<=':r=nv<=cv;break;case'>=':r=nv>=cv;break;case'==':r=nv===cv;break;case'!=':r=nv!==cv;break;default:r=false;}
   }
+  // Home Assistant's numeric_state form (7.0.0-beta.4): above / below, either or both. Before, a
+  // condition written that way matched no test at all and was therefore always true.
+  else if(c.above!=null||c.below!=null){
+    const ab=c.above!=null?parseFloat(c.above):NaN,be=c.below!=null?parseFloat(c.below):NaN;
+    if(isNaN(nv))r=false;
+    else{if(c.above!=null&&!(nv>ab))r=false;if(c.below!=null&&!(nv<be))r=false;}
+  }
   if(r&&c.and)r=evalCond(c.and,s);
   if(!r&&c.or)r=evalCond(c.or,s);
   return r;

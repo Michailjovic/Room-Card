@@ -176,6 +176,11 @@ entity: sensor.temperature
 operator: ">"
 value: 25
 
+# …or Home Assistant's numeric_state form (7.0): above, below or both (a range)
+entity: sensor.temperature
+above: 20
+below: 25
+
 # AND / OR chaining
 entity: sensor.temperature
 operator: ">"
@@ -414,9 +419,9 @@ Visualize window covers directly on the room image.
 blinds:
   - id: bedroom_blind
     entity: cover.bedroom_blind
-    attribute: current_position   # omit to use entity state (open/closed)
-    min: 0      # entity value = fully open
-    max: 100    # entity value = fully closed
+    attribute: current_position   # omit on a cover: current_position, 100 = open (see below)
+    min: 100    # entity value = fully open   (Home Assistant covers: 100)
+    max: 0      # entity value = fully closed (Home Assistant covers: 0)
     top_offset: 3.4  # real/visual coverage % at fully OPEN — see note below
     top: "10%"
     left: "30%"
@@ -438,8 +443,15 @@ blinds:
   far they sit apart decides whether you see through the sheer bands or get a blackout, and that
   offset sweeps as the blind travels. Calibrate it with `shift_turns` / `shift_start` — see below.
 
-> **Inverted motor direction** — if your cover reports `0` = closed and `100` = open, swap:
-> `min: 100`, `max: 0`.
+> **Direction** — `min` is the value at fully **open**, `max` at fully **closed**. Home Assistant
+> covers report `current_position` 100 = open, 0 = closed, so they need `min: 100`, `max: 0` (what
+> the studio and the editor write). The card's own default is the other way round (`min: 0`,
+> `max: 100`, for motors and sensors that count closing) — a config that leaves both out on a
+> numeric entity keeps that.
+>
+> **Without `attribute`** (7.0) a `cover.*` blind reads `current_position` in Home Assistant's
+> direction (when `min`/`max` are left out or at 0 / 100), and a cover that reports no position is
+> drawn fully closed when it is `closed` and open when it is `open`.
 
 > **`top_offset`** — many motors keep a deliberate safety margin at their own fully-**open**
 > limit, so the blind never actually retracts all the way — a sliver of material always stays
@@ -571,10 +583,10 @@ zones:
 
 | Action | Required params | Description |
 |---|---|---|
-| `navigate` | `path` | Navigate to a dashboard path |
+| `navigate` | `path` / `navigation_path` | Navigate to a dashboard path (`navigation_replace: true` replaces the history entry) |
 | `url` | `url_path` | Open a URL (`new_tab: false` for same tab) |
-| `more-info` | `entity` | Open entity more-info dialog |
-| `toggle` | `entity` | Toggle entity on/off |
+| `more-info` | `entity` (default: the element's own) | Open entity more-info dialog |
+| `toggle` | `entity` (default: the element's own) | Toggle entity on/off |
 | `call-service` / `perform-action` | `service` / `perform_action` | Call any HA action; supports `data:` and `target:` |
 | `browser-mod-popup` | `title`, `size`, `content` | Open a browser-mod popup |
 | `toggle-group` / `show-group` / `hide-group` | `group` | Control element groups |
@@ -583,8 +595,15 @@ zones:
 | `fire-dom-event` | anything | Dispatches the action as a Lovelace `ll-custom` event (v6.16.0) — browser_mod 2 popups and other custom actions |
 | `none` | — | Do nothing |
 
-Any action may carry `confirmation: true` (or `confirmation: {text: "..."}`). A `hold_action`
+Any action may carry `confirmation: true` (or `confirmation: {text: "..."}`) — the card asks in its
+own dialog (7.0; it used the browser's `confirm()`, which kiosk browsers block). A `hold_action`
 shows a **progress ring** while you press, which turns green the moment the hold registers.
+
+**The element's entity (7.0).** Like Home Assistant's own cards, `toggle` and `more-info` without an
+`entity` act on the element's own `entity` (zone, icon, badge, label, gauge, tile, overview pill or
+chip): `tap_action: {action: toggle}` on an icon with `entity: light.desk` toggles the desk light.
+`entity_id` is accepted as another spelling. Keyboard: Enter / Space run the tap action, or — on an
+element that has only a hold or double-tap action — that one.
 
 **Scroll vs. tap (v6.12.2).** On touch, starting a page scroll with your finger on top of a
 tappable zone/icon/label/gauge/vacuum_widget/tile no longer fires its `tap_action` — the card now

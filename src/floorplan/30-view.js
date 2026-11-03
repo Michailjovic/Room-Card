@@ -26,6 +26,7 @@ const RFP_ITEM_CSS='.rfp-items{position:absolute;inset:0;pointer-events:none;ove
   +'.rfp-it-label.is-on .rfp-it-tx{color:var(--rfp-on);}';
 // Domains a marker toggles on tap (else more-info), and states that count as "off"
 const RFP_TOGGLE=['light','switch','fan','input_boolean','cover','humidifier']; // tap toggles these; never a lock, valve or siren by accident
+const RFP_COVER_SAFE=['blind','shade','curtain','shutter','awning']; // …and a cover only when it is a window covering, never a garage door or gate
 const RFP_OFF=['off','closed','idle','standby','unavailable','unknown','docked','paused','none','','locked','not_home','away'];
 const RFP_MEDIA_ON=['playing','on','paused','buffering'];
 class RfpView{
@@ -267,7 +268,7 @@ class RfpView{
     // the vacuum's trail while it cleans (v6.49.0), in plan metres
     if(this.L.vacuum&&this.L.trail&&this._anyvac().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
     // walls
-    const walls=[];M.rooms.forEach(function(r){rfpWallSegs(r.poly,M.openings).forEach(function(w){walls.push(w);});});
+    const walls=rfpWallNet(M.rooms.map(function(r){return r.poly;}),M.openings);
     if(proj==='top'){
       const col=T.line||(T.wall&&T.wall.top)||'#888';
       const ww=T.line?(T.rough?0.07:0.1):((T.wall&&T.wall.w)||0.12);
@@ -287,26 +288,70 @@ class RfpView{
       walls.forEach(function(w){w.depth=((w.a[0]+w.b[0])/2)*VD[0]+((w.a[1]+w.b[1])/2)*VD[1];});
       walls.sort(function(a,b){return a.depth-b.depth;});
       const topW=Math.max(2,(wl.w||0.12)*F.S*0.55);
-      s+='<g>';
+      // heights first: a wall facing the viewer (outside towards the viewer) is cut away to 30 %;
+      // a wall shared by two rooms always stands full height
       walls.forEach(function(w){
         const mx=(w.a[0]+w.b[0])/2,my=(w.a[1]+w.b[1])/2,e=0.08;
-        const front=inAny(mx-VD[0]*e,my-VD[1]*e)&&!inAny(mx+VD[0]*e,my+VD[1]*e);
-        const h=front?wl.h*0.3:wl.h;
-        if(w.win||w.door){s+=self._openingFace(T,F,w,front,topW);return;}
+        w.front=!w.shared&&inAny(mx-VD[0]*e,my-VD[1]*e)&&!inAny(mx+VD[0]*e,my+VD[1]*e);
+        w.h=w.door?0:(w.front?wl.h*0.3:wl.h);
+      });
+      // Joints (7.0.0-beta.4). The top edge used to be one thick line with square caps, so at every
+      // corner where a full wall met a cut-away one the full wall's cap stuck out past the corner
+      // (a "tooth"). Now each end looks at the walls that meet it: next to a wall at least as high
+      // it is extended by half the line width (the corner closes), next to lower walls only it ends
+      // flush and a short post marks the wall's cut end down to the lower top; a free end (a door
+      // gap) ends flush.
+      const near=0.06;
+      const meet=function(p,self0){
+        let hi=false,lo=-1;
+        walls.forEach(function(o){
+          if(o===self0||o.door)return;
+          if(rfpDistSeg(p[0],p[1],o.a[0],o.a[1],o.b[0],o.b[1])>near)return;
+          // closing the corner only where two walls END together; at a T the crossing wall covers it
+          const corner=Math.hypot(p[0]-o.a[0],p[1]-o.a[1])<=near||Math.hypot(p[0]-o.b[0],p[1]-o.b[1])<=near;
+          if(o.h>=self0.h-1e-6){if(corner)hi=true;}else lo=Math.max(lo,o.h);
+        });
+        return{hi:hi,lo:lo};
+      };
+      walls.forEach(function(w){
+        if(w.door)return;
+        w.ja=meet(w.a,w);w.jb=meet(w.b,w);
+      });
+      const vertOf=function(w){return self._wallVert(F,w);};
+      s+='<g>';
+      walls.forEach(function(w){
+        if(w.win||w.door){s+=self._openingFace(T,F,w,w.front,topW);return;}
+        const h=w.h;
         const A=rfpP(F,w.a[0],w.a[1],0),B=rfpP(F,w.b[0],w.b[1],0),C=rfpP(F,w.b[0],w.b[1],h),D=rfpP(F,w.a[0],w.a[1],h);
-        const vert=Math.abs(w.a[0]-w.b[0])<Math.abs(w.a[1]-w.b[1]);
-        s+='<polygon points="'+rfpPts([A,B,C,D])+'" fill="'+(vert?(wl.side2||wl.side):wl.side)+'"'+(wl.edge?' stroke="rgba(91,124,255,.35)" stroke-width="1"':'')+'/>';
-        if(wl.edge)s+='<line x1="'+rfpN(D[0])+'" y1="'+rfpN(D[1])+'" x2="'+rfpN(C[0])+'" y2="'+rfpN(C[1])+'" stroke="'+wl.top+'" stroke-width="'+rfpN(topW*3)+'" stroke-linecap="round" opacity=".18"/>';
-        s+='<line x1="'+rfpN(D[0])+'" y1="'+rfpN(D[1])+'" x2="'+rfpN(C[0])+'" y2="'+rfpN(C[1])+'" stroke="'+wl.top+'" stroke-width="'+rfpN(topW)+'" stroke-linecap="square"/>';
+        s+='<polygon points="'+rfpPts([A,B,C,D])+'" fill="'+(vertOf(w)?(wl.side2||wl.side):wl.side)+'"'+(wl.edge?' stroke="rgba(91,124,255,.35)" stroke-width="1"':'')+'/>';
+        const dx=C[0]-D[0],dy=C[1]-D[1],dl=Math.hypot(dx,dy)||1,ux=dx/dl,uy=dy/dl,x=topW/2;
+        const D2=w.ja.hi?[D[0]-ux*x,D[1]-uy*x]:D,C2=w.jb.hi?[C[0]+ux*x,C[1]+uy*x]:C;
+        if(wl.edge)s+='<line x1="'+rfpN(D2[0])+'" y1="'+rfpN(D2[1])+'" x2="'+rfpN(C2[0])+'" y2="'+rfpN(C2[1])+'" stroke="'+wl.top+'" stroke-width="'+rfpN(topW*3)+'" stroke-linecap="round" opacity=".18"/>';
+        s+='<line x1="'+rfpN(D2[0])+'" y1="'+rfpN(D2[1])+'" x2="'+rfpN(C2[0])+'" y2="'+rfpN(C2[1])+'" stroke="'+wl.top+'" stroke-width="'+rfpN(topW)+'" stroke-linecap="butt"/>';
+        [[w.a,w.ja],[w.b,w.jb]].forEach(function(e){
+          if(e[1].hi||e[1].lo<0)return;
+          const p0=rfpP(F,e[0][0],e[0][1],e[1].lo),p1=rfpP(F,e[0][0],e[0][1],h);
+          s+='<line x1="'+rfpN(p0[0])+'" y1="'+rfpN(p0[1])+'" x2="'+rfpN(p1[0])+'" y2="'+rfpN(p1[1]-topW/2)+'" stroke="'+wl.top+'" stroke-width="'+rfpN(topW)+'" stroke-linecap="butt"/>';
+        });
       });
       s+='</g>';
     }
     s+=this._robotsSvg(T,F);
-    if(T.dims)s+=this._dims(T,M,F);
+    // overall dimensions measure the screen box, which is the plan's only on a quarter turn
+    const rq=((this.rot%90)+90)%90;
+    if(T.dims&&(rq<0.5||rq>89.5))s+=this._dims(T,M,F);
     if(this.L.labels)s+=this._labels(T,M,F);
     if(T.paper&&fx)s+='<rect width="'+W+'" height="'+H+'" filter="url(#'+id+'-paper)" pointer-events="none"/>';
     if(T.vignette)s+='<rect width="'+W+'" height="'+H+'" fill="url(#'+id+'-vg)" pointer-events="none"/>';
     return s;
+  }
+  // Which of the theme's two wall tones a wall gets: by its direction ON SCREEN (the rotated and
+  // mirrored plan), so the light stays put when the plan is turned (7.0.0-beta.4 — it used to be
+  // the plan's own axes, so a quarter turn swapped the tones).
+  _wallVert(F,w){
+    const m=F.rm||[1,0,0,1],dx=w.b[0]-w.a[0],dy=w.b[1]-w.a[1];
+    const x=m[0]*dx+m[2]*dy,y=m[1]*dx+m[3]*dy;
+    return Math.abs(x)<Math.abs(y);
   }
   // ---- doors and windows (v6.49.0, V7_PLAN §6.5) ----
   // Top view, in plan metres: a window is a frame with a pane line (its colour says open), an open
@@ -350,8 +395,7 @@ class RfpView{
     let s='';
     if(w.win){
       const o=w.win,k=o.k,h=front?wl.h*0.3:wl.h,sill=front?h:wl.h*0.38;
-      const vert=Math.abs(w.a[0]-w.b[0])<Math.abs(w.a[1]-w.b[1]);
-      const side=vert?(wl.side2||wl.side):wl.side;
+      const side=this._wallVert(F,w)?(wl.side2||wl.side):wl.side;
       s+='<polygon points="'+rfpPts([P(w.a,0),P(w.b,0),P(w.b,sill),P(w.a,sill)])+'" fill="'+side+'"/>';
       if(front){
         s+='<line x1="'+rfpN(P(w.a,sill)[0])+'" y1="'+rfpN(P(w.a,sill)[1])+'" x2="'+rfpN(P(w.b,sill)[0])+'" y2="'+rfpN(P(w.b,sill)[1])+'" data-rfp-glass="'+k+'" data-rfp-ga="stroke" stroke="'+WT.glass+'" stroke-width="'+rfpN(topW)+'" stroke-linecap="square"/>';
@@ -972,7 +1016,7 @@ class RfpView{
     this._applyItems();
   }
   _applyPersons(SG){
-    const N=this._nodes,M=this.M,fs=this.fs,F=this.F,self=this;
+    const N=this._nodes,M=this.M,fs=this.fs,F=this.F;
     if(!N||!N.person||!Object.keys(N.person).length)return;
     const sig=JSON.stringify(SG.where);if(sig===this._pSig)return;this._pSig=sig;
     const groups={};
@@ -1053,7 +1097,9 @@ class RfpView{
     if(t.item!=null){
       const it=M.items.find(function(x){return x.k===t.item;});if(!it)return;
       const c=it.cfg,d=it.entity.split('.')[0];
-      if(kind==='tap')a=c.tap_action||(it.entity?(RFP_TOGGLE.indexOf(d)>=0?{action:'toggle',entity:it.entity}:{action:'more-info',entity:it.entity}):null);
+      const S=(this.o.hass&&this.o.hass.states)||{},dc=S[it.entity]&&S[it.entity].attributes&&S[it.entity].attributes.device_class;
+      const tog=RFP_TOGGLE.indexOf(d)>=0&&(d!=='cover'||RFP_COVER_SAFE.indexOf(dc)>=0);
+      if(kind==='tap')a=c.tap_action||(it.entity?(tog?{action:'toggle',entity:it.entity}:{action:'more-info',entity:it.entity}):null);
       else a=c.hold_action||(it.entity?{action:'more-info',entity:it.entity}:null);
     }else if(t.clean!=null){
       // "clean this room": AnyVac's planner with the room's name on the map (confirmed first)

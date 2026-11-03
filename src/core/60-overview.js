@@ -57,7 +57,11 @@ function rocOvLive(cAll,ov,style){
   if(style==='row')return(nl==='full'||nl==='custom'||nl==='composite')?'composite':nl;
   return nl;
 }
-const ROC_OV_TOGGLE=['light','switch','fan','input_boolean','cover','siren','humidifier'];
+// One tap toggles these. Never a siren, lock or valve; a cover only when it is a window covering —
+// a garage door or gate (also `cover`) gets more-info (7.0.0-beta.4). The floor plan uses the same
+// rule (RFP_TOGGLE / RFP_COVER_SAFE).
+const ROC_OV_TOGGLE=['light','switch','fan','input_boolean','cover','humidifier'];
+const ROC_COVER_SAFE=['blind','shade','curtain','shutter','awning'];
 const ROC_OV_OFF=['off','closed','idle','standby','unavailable','unknown','docked','paused','none',''];
 function rocOvChipActive(ch,states){
   const ents=ch.entities||[];
@@ -80,6 +84,7 @@ function rocOvMediaIds(o,out){
 }
 function rocOvChipDefaultTap(id){
   const dom=String(id).split('.')[0];
+  if(dom==='cover')return{condition:{entity:id,attribute:'device_class',state:ROC_COVER_SAFE},then:{action:'toggle',entity:id},else:{action:'more-info',entity:id}};
   return ROC_OV_TOGGLE.indexOf(dom)>=0?{action:'toggle',entity:id}:{action:'more-info',entity:id};
 }
 // State chips of one room tile. `overview_tile.chips`: omitted / 'auto' →

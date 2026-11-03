@@ -110,6 +110,28 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const back=G.inv(fit,...G.P(fit,3.2,1.7,0));
     t('fit '+pj+': the plan fits the box and screen → plan inverts',ok&&Math.abs(back[0]-3.2)<1e-6&&Math.abs(back[1]-1.7)<1e-6);
   });
+  // 7.0.0-beta.4: the wall network — one wall where two rooms meet, no slivers, doors cut only their own wall
+  {
+    const A=[[0,0],[4,0],[4,3],[0,3]],B=[[4.08,0],[7,0],[7,3],[4.08,3]];           // 8 cm apart, facing
+    const net=G.wallNet([A,B],[]);
+    const shared=net.filter(w=>w.shared);
+    t('wall net: two rooms 8 cm apart share ONE wall on the middle line',shared.length===1&&Math.abs(shared[0].a[0]-4.04)<1e-6&&Math.abs(shared[0].b[0]-4.04)<1e-6);
+    t('wall net: …and neither room keeps its own copy of it',!net.some(w=>!w.shared&&Math.abs(w.a[0]-w.b[0])<1e-6&&(Math.abs(w.a[0]-4)<1e-6||Math.abs(w.a[0]-4.08)<1e-6)));
+    t('wall net: 7 walls for two boxes (3 + 3 + the shared one)',net.length===7);
+    const C=[[0,0],[2,0],[2,2],[0,2]],D=[[0,2.25],[2,2.25],[2,4],[0,4]];
+    t('wall net: walls 25 cm apart stay two walls (thicker than a partition)',G.wallNet([C,D],[]).filter(w=>w.shared).length===0);
+    const sideBySide=[[0,0],[3,0],[3,2],[0,2]],same=[[0.5,0.1],[2.5,0.1],[2.5,1.5],[0.5,1.5]];
+    t('wall net: rooms on the same side of a line are not merged',G.wallNet([sideBySide,same],[]).filter(w=>w.shared).length===0);
+    const H=[[0,0],[2.9,0],[2.9,2],[0,2]],K=[[3,0.1],[5,0.1],[5,2.1],[3,2.1]];
+    const nk=G.wallNet([H,K],[]);
+    t('wall net: a 10 cm overhang at the end joins the shared wall (no stub left)',nk.filter(w=>w.shared).length===1&&!nk.some(w=>Math.hypot(w.b[0]-w.a[0],w.b[1]-w.a[1])<0.15));
+    const cut=G.wallSegs([[2,0],[2.9,0],[2.9,1.2]],[{at:[2.75,0.25],width:0.8,u:[1,0]}],0.3,true);
+    t('walls: a door near a corner cuts its own wall only, not the perpendicular one',cut.some(w=>Math.abs(w.a[0]-2.9)<1e-6&&Math.abs(w.b[0]-2.9)<1e-6&&Math.abs(w.a[1])<1e-6));
+    const sl=G.wallSegs([[0,0],[1,0]],[{at:[0.5,0],width:0.84,u:[1,0]}],0.3,true);
+    t('walls: an 8 cm sliver next to a door is not drawn as a post',sl.length===0);
+    const mu=G.wallSegs([[0,0],[3,0]],[{at:[0.9,0],width:0.9,u:[1,0]},{at:[1.83,0],width:0.9,u:[1,0]}],0.3,true);
+    t('walls: a 3 cm mullion between two windows stays',mu.some(w=>Math.abs(w.a[0]-1.35)<1e-6&&Math.abs(w.b[0]-1.38)<1e-6));
+  }
   const r90=G.fit(all,'top',90,600,1200,10,0);
   t('rotate 90: the long flat stands up in a portrait box',r90.S>G.fit(all,'top',0,600,1200,10,0).S*1.5);
   // themes
@@ -427,6 +449,15 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     t('robot: a plan without an AnyVac source has none',!sr(e4).querySelector('[data-rfp-robot]'));
     const F0=e4._fpInst.F;
     e4.remove();
+    {// 7.0.0-beta.4: wall joints — no square caps sticking out; a full wall that meets a cut-away one ends in a post
+      const ci=clone(BASE);ci.rooms[0].floorplan.projection='iso';ci.rooms[0].floorplan.theme='night';
+      const ei=mk(ci,mkHass(st));await sleep(30);
+      const svg=ei._fpInst.svg.innerHTML,top=ei._fpInst.T.wall.top;
+      const tops=[...svg.matchAll(/<line [^>]*stroke="([^"]+)"[^>]*stroke-linecap="(\w+)"/g)].filter(m=>m[1]===top);
+      t('walls (iso): every top edge ends flush (no square caps)',tops.length>0&&tops.every(m=>m[2]==='butt'));
+      const posts=[...svg.matchAll(/<line x1="([\d.-]+)" y1="[\d.-]+" x2="([\d.-]+)" y2="[\d.-]+" stroke="([^"]+)"/g)].filter(m=>m[3]===top&&m[1]===m[2]);
+      t('walls (iso): a full wall meeting a cut-away one shows its end (a post)',posts.length>0);
+      ei.remove();}
     const c5=clone(BASE);c5.rooms[0].floorplan.mirror='horizontal';c5.rooms[0].floorplan.theme='blueprint';
     const e5=mk(c5,mkHass(st));await sleep(30);
     const F5=e5._fpInst.F,Pg=F.geom.P;
@@ -483,6 +514,8 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const btn=S1.querySelector('[data-rfp-cleanbtn="3"]');
     t('cleaning layer: a clean button next to the label',!!btn&&btn.style.left!=='-100px');
     calls.length=0;ev(btn,'pointerdown');ev(btn,'pointerup');await sleep(20);
+    t('clean button: asks first in the card\'s own dialog, nothing runs yet',calls.length===0&&!!e1.shadowRoot.querySelector('.roc-confirm'));
+    {const y=e1.shadowRoot.querySelector('.roc-confirm [data-yes]');if(y)y.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));}await sleep(20);
     t('clean button → anyvac.clean with the room\'s name on the map (after a confirmation)',calls.length===1&&calls[0][0]==='anyvac'&&calls[0][1]==='clean'&&JSON.stringify(calls[0][2])==='{"rooms":["Kitchen"],"mode":"dry"}'&&e1._roomIdx===0);
     // AnyVac's live update while cleaning: position and progress
     const av2=clone(av);av2.attributes.in_cleaning=true;av2.attributes.live={base_points:100,seq:4,pos_home_px:{x:1300,y:900,a:0},dry_home_px:[],wet_home_px:[[{x:1300,y:900},{x:1320,y:900}]]};

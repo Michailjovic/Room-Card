@@ -214,13 +214,26 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   check('a concurrent change is detected (no save)',await T.save()===false&&saves.length===1&&!!layerBtn(T,'overwrite'));
   layerBtn(T,'overwrite').click();await wait(20);
   check('"Overwrite anyway" saves on request',saves.length===2&&saves[1].views[0].cards[1].aspect_ratio==='9/9');
+  // 7.0.0-beta.4: a card added ABOVE it in another tab — the studio's card moved to cards[2]
+  server.views[0].cards.unshift({type:'markdown',content:'new'});
+  T._commit(Object.assign(clone(T.work),{aspect_ratio:'7/5'}),'test');
+  check('beta.4: a card that moved (unchanged) is found and saved where it is now, no question',await T.save()===true&&saves.length===3&&saves[2].views[0].cards[2].aspect_ratio==='7/5'&&saves[2].views[0].cards[0].type==='markdown'&&saves[2].views[0].cards[1].aspect_ratio==='16/9');
+  // moved AND changed elsewhere: "Overwrite anyway" must never replace whatever sits at the old place
+  server.views[0].cards.unshift({type:'markdown',content:'another'});
+  server.views[0].cards[3]=Object.assign({},server.views[0].cards[3],{aspect_ratio:'1/1'});
+  T._commit(Object.assign(clone(T.work),{aspect_ratio:'8/5'}),'test');
+  check('beta.4: moved + changed → conflict',await T.save()===false&&saves.length===3&&!!layerBtn(T,'overwrite'));
+  layerBtn(T,'overwrite').click();await wait(20);
+  check('beta.4: Overwrite with a duplicate card_id refuses instead of replacing another card',saves.length===3&&server.views[0].cards[2].aspect_ratio==='16/9'&&/more than one/.test(T._sr.textContent));
+  [...T._sr.querySelectorAll('.layer')].forEach(l=>l.remove());T._layers.length=0;
   // restore from history
   T._showHistory();
   const rb=[...T._sr.querySelectorAll('.layer .hl button')];
-  check('history lists the saved versions',rb.length===2,rb.length);
-  rb[1].click();
+  check('history lists the saved versions',rb.length===3,rb.length);
+  rb[2].click();
   check('restore loads an older version as a normal (undoable) change',T.work.aspect_ratio==='3/2'&&T._dirty()&&T.undoStack.length>0);
   T.close();D.root.remove();
+  server={title:'Flat',views:[{title:'Home',path:'home',cards:[CARD({aspect_ratio:'16/9'}),CARD({aspect_ratio:'4/3'})]}]}; // the beta.4 checks added cards above
   // non-admin / YAML mode / not found → copy-YAML
   const D2=mkDash('storage',false);
   const T2=await C._rocStudio.open({from:'dashboard',card:D2.cards[0],hass:D2.h});

@@ -205,7 +205,13 @@ test('v6.50.0: the clean button starts AnyVac; the studio aligns a vacuum from a
   await page.evaluate(()=>{window.__calls.length=0;window.confirm=()=>true;});
   const at=await page.evaluate(()=>{const S=window.__h.card.shadowRoot;const b=S.querySelector('[data-rfp-cleanbtn="3"]').getBoundingClientRect();return{x:b.left+b.width/2,y:b.top+b.height/2};});
   await page.mouse.click(at.x,at.y);
+  // 7.0.0-beta.4: the card's own confirmation dialog (window.confirm is blocked in kiosks)
+  expect(await page.evaluate(()=>window.__calls.length)).toBe(0);
+  const ok=await page.evaluate(()=>{const S=window.__h.card.shadowRoot;const b=S.querySelector('.roc-confirm [data-yes]');if(!b)return null;const r=b.getBoundingClientRect();return{x:r.left+r.width/2,y:r.top+r.height/2,t:S.querySelector('.roc-confirm [data-t]').textContent};});
+  expect(ok&&ok.t).toMatch(/^Start cleaning .+\?$/);
+  await page.mouse.click(ok.x,ok.y);
   expect(await page.evaluate(()=>window.__calls.map(c=>[c[0],c[1],JSON.stringify(c[2])]))).toEqual([['anyvac','clean','{"rooms":["Kitchen"],"mode":"dry"}']]);
+  expect(await page.evaluate(()=>!!window.__h.card.shadowRoot.querySelector('.roc-confirm'))).toBe(false);
   // studio: Vacuums — the S8 (the plan's frame) on, the S7 (another frame) aligned by 5 rooms
   await openStudio(page);
   await page.evaluate(SG=>eval(SG)._fpVacuums(),SG);
@@ -228,6 +234,36 @@ test('v6.50.0: the clean button starts AnyVac; the studio aligns a vacuum from a
   expect(v2[0]).toEqual({entity:'sensor.kitchen_s8_anyvac_map',color:'#e11d48'});
   expect(v2[1].transform.rooms).toBe(5);
   expect(await page.evaluate(SG=>eval(SG)._card.shadowRoot.querySelector('[data-rfp-rhead="0"] circle').getAttribute('stroke'),SG)).toBe('#e11d48');
+});
+
+test('7.0.0-beta.4: the plan turns freely — a slider per layout profile, previews while dragged, one undo step',async({page})=>{
+  await page.goto(base+'/');await plan(page);await openStudio(page);
+  // the toolbar's turn button opens the rotation row
+  await page.evaluate(SG=>eval(SG)._fpRotBtn.click(),SG);
+  expect(await page.evaluate(SG=>{const S=eval(SG);return!!S._fpRotEl&&!S._fpRotEl.hidden&&S._fpRotLab.textContent;},SG)).toMatch(/^Landscape/);
+  const u0=await page.evaluate(SG=>eval(SG).undoStack.length,SG);
+  // dragging previews without committing
+  await page.evaluate(SG=>{const S=eval(SG),r=S._fpRotRng;r.value='37';r.dispatchEvent(new Event('input'));},SG);
+  expect(await page.evaluate(SG=>[Math.round(eval(SG)._fpView.rot),eval(SG).undoStack.length],SG)).toEqual([37,u0]);
+  expect((await fpc(page)).rotate).toBeUndefined();
+  // letting go commits
+  await page.evaluate(SG=>{const S=eval(SG),r=S._fpRotRng;r.value='37';r.dispatchEvent(new Event('change'));},SG);
+  expect((await fpc(page)).rotate).toEqual({landscape:37,portrait:'auto'});
+  expect(await page.evaluate(SG=>eval(SG).undoStack.length,SG)).toBe(u0+1);
+  // near a multiple of 15° the slider snaps
+  await page.evaluate(SG=>{const S=eval(SG),r=S._fpRotRng;r.value='44';r.dispatchEvent(new Event('change'));},SG);
+  expect((await fpc(page)).rotate).toEqual({landscape:45,portrait:'auto'});
+  // the plan is drawn at that angle, walls without errors
+  expect(await page.evaluate(SG=>{const v=eval(SG)._fpView;return[Math.round(v.rot),/NaN/.test(v.svg.innerHTML)];},SG)).toEqual([45,false]);
+  // the portrait frame edits portrait only
+  await page.evaluate(SG=>eval(SG)._setFrame('portrait'),SG);
+  await page.waitForFunction(SG=>eval(SG)._fpRotProf()==='portrait',SG);
+  expect(await page.evaluate(SG=>eval(SG)._fpRotLab.textContent,SG)).toMatch(/^Portrait · Auto/);
+  await page.evaluate(SG=>{const S=eval(SG),n=S._fpRotNum;n.value='120';n.dispatchEvent(new Event('change'));},SG);
+  expect((await fpc(page)).rotate).toEqual({landscape:45,portrait:120});
+  // Auto resets the profile shown, the other keeps its angle
+  await page.evaluate(SG=>eval(SG)._fpRotEl.querySelector('[data-act="fp-rot-auto"]').click(),SG);
+  expect((await fpc(page)).rotate).toEqual({landscape:45,portrait:'auto'});
 });
 
 test('v6.50.0: a room\'s label is dragged in the studio (label_at)',async({page})=>{

@@ -85,8 +85,13 @@ vacuum or AnyVac is gone.
 - `mirror` *(6.49; `both` 6.50)*: `horizontal`, `vertical` or `both` flips the drawing, for a vacuum map that shows the
   home mirrored. Only the drawing flips: the stored coordinates stay the vacuum's, so a re-import,
   the robot and editing in the studio keep working. Combine it with `rotate` (90 / 180 / 270).
-  `rotate` can differ per layout profile — `rotate: {landscape: 0, portrait: 90}`. The studio's
-  toolbar has a *turn by 90°* button (for the profile the canvas shows) and a *mirror* button.
+  `rotate` can differ per layout profile — `rotate: {landscape: 0, portrait: 90}` — and takes any
+  angle (7.0): `rotate: {landscape: 30, portrait: 120}` turns the house on its turntable before the
+  projection. The studio's toolbar has a **Turn** button that opens a slider (0–359°, it snaps to
+  multiples of 15°), ±90° buttons and **Auto**, for the profile the canvas shows — switch the device
+  frame to set the other one — and a *mirror* button. Wall tones follow the screen, so the light
+  does not swap sides when the plan is turned. The overall dimensions (blueprint) are drawn only on
+  a quarter turn.
 - `quality: low` draws without SVG filters (paper, rough lines, soft shadow) for a weak tablet;
   animations stop when the plan is off screen and with *reduce motion*.
 
@@ -219,8 +224,9 @@ heating, walls, labels and everything else stay on top.
 - **`type: label`** — a text pill with the live value (`prefix`, `suffix`, `decimals`,
   `attribute`), or a fixed `text`.
 
-Tap toggles a `light`, `switch`, `fan`, `input_boolean`, `cover` or `humidifier` and opens
-more-info for everything else (a lock or a valve is never toggled by a tap); hold opens more-info. `tap_action` / `hold_action` take any card action. `color`
+Tap toggles a `light`, `switch`, `fan`, `input_boolean`, `humidifier` or a window cover (`cover`
+with device class blind, shade, curtain, shutter or awning) and opens more-info for everything else
+(a lock, valve, siren, garage door or gate is never toggled by a tap — 7.0); hold opens more-info. `tap_action` / `hold_action` take any card action. `color`
 sets the lit colour, `size` the chip size (`34px`). In the studio the **Marker** tool places one.
 
 ## Layers
@@ -245,6 +251,13 @@ glass.
 | `invert` | | the cover's position counts the other way (100 = closed) |
 | `mirror`, `outward` | doors | the hinge at the other end / the door opens to the other side |
 | `tap_action`, `hold_action` | | default: tap → more-info of the blind (else the sensor), hold → more-info of the sensor |
+
+**Walls (7.0).** Every room is its own polygon, so where two rooms meet there are two edges a few
+centimetres apart (the vacuum map leaves a gap, or an overlap). Edges of two rooms that face each
+other within 20 cm and run side by side for 30 cm or more become **one** wall on the middle line;
+the projected themes draw it full height. A wall that meets a cut-away (front) wall ends flush with
+a short post down to the lower wall instead of its top sticking out past the corner, and a sliver
+under 12 cm next to a door or window is left out. A door cuts only the wall it sits in.
 
 In the projected themes a window sits on the wall face with a sill; on the front walls, which are
 cut away low so the rooms stay visible, only its top edge shows the glass colour. The `thermal` and

@@ -972,3 +972,18 @@ companion app (author), and the tablet run of the S5 probe.
 - The author's "S7 and S8 swapped": checked against AnyVac — the sensors' duid / dock types match
   their names, the rigid room fits are right (IoU .85 / .89 vs .50 mirrored), and the robots sit
   where each robot's own map puts them; waiting for the author's physical check.
+
+### 7.0.0-beta.4 — the last beta (floor plan walls, free rotation, review findings)
+
+- Floor plan walls: `rfpWallNet()` merges facing edges of two rooms (≤ 20 cm apart, ≥ 30 cm
+  overlap, stubs under 20 cm absorbed) into one shared wall on the middle line; joints end flush,
+  extend only where two walls end together at the same height, and a full wall meeting a lower one
+  gets a post. Openings cut only parallel edges; slivers < 12 cm next to an opening are dropped.
+  Wall tones by screen direction (`F.rm`), dimensions only on quarter turns.
+- Studio: free rotation row (slider / number / ±90° / Auto) per layout profile; preview on input,
+  one undo step on change (`_commit(…,'props','fp-rotate')`).
+- Review of 7.0.0-beta.3 (`ANALYSIS_v7.0.0-beta.3.md`, probe `tests/probes/probe_v7_0_0b3.js`):
+  all findings fixed and moved into `tests/lifecycle.test.js` §9, `tests/floorplan.test.js`,
+  `tests/studio.test.js` and `tests/floorplan.spec.js`.
+- Next: Phase 10b — the documentation rework as agreed, then 7.0.0.
+

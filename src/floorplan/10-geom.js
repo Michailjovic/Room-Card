@@ -49,13 +49,14 @@ function rfpPole(p){
   scan(best[0]-cx,best[1]-cy,best[0]+cx,best[1]+cy,8);
   return best;
 }
-// Wall pieces of one room: every edge minus the openings (doors) that sit on it. An opening
+// Wall pieces of one room: every edge minus the openings (doors) that sit on it (`open`: p is a
+// path, not a closed polygon). An opening
 // belongs to an edge when its centre is within `tol` of the edge line, so one door cuts the walls
 // of BOTH rooms it connects (adjacent rooms are separate polygons a few cm apart).
-function rfpWallSegs(p,openings,tol){
+function rfpWallSegs(p,openings,tol,open){
   tol=tol==null?0.3:tol;
   const out=[];
-  for(let i=0;i<p.length;i++){
+  for(let i=0;i<(open?p.length-1:p.length);i++){
     const a=p[i],b=p[(i+1)%p.length];
     const dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);if(L<1e-6)continue;
     const ux=dx/L,uy=dy/L;
@@ -63,6 +64,8 @@ function rfpWallSegs(p,openings,tol){
     for(const o of openings||[]){
       const at=o.at,w=rfpNum(o.width)>0?rfpNum(o.width):0.8;
       if(!at)continue;
+      // only along the wall it sits in: a door near a corner used to cut the perpendicular wall too
+      if(o.u&&Math.abs(o.u[0]*uy-o.u[1]*ux)>0.2)continue;
       const rx=at[0]-a[0],ry=at[1]-a[1];
       const t=rx*ux+ry*uy,d=Math.abs(rx*uy-ry*ux);
       if(d>tol||t<-w/2||t>L+w/2)continue;
@@ -70,10 +73,71 @@ function rfpWallSegs(p,openings,tol){
     }
     cuts.sort(function(m,n){return m[0]-n[0];});
     let cur=0;
-    const seg=function(t0,t1){if(t1-t0>0.01)out.push({a:[a[0]+ux*t0,a[1]+uy*t0],b:[a[0]+ux*t1,a[1]+uy*t1],edge:i});};
-    for(const k of cuts){if(k[1]<=cur||k[0]>=L)continue;if(k[0]>cur)seg(cur,k[0]);cur=Math.max(cur,k[1]);}
-    if(cur<L)seg(cur,L);
+    // a sliver (< 12 cm) between a door or window and a corner is the frame, not a wall: it stood as
+    // a lone post. Between two openings it is a mullion and stays.
+    const seg=function(t0,t1,cut){if(t1-t0>(cut?0.12:0.01))out.push({a:[a[0]+ux*t0,a[1]+uy*t0],b:[a[0]+ux*t1,a[1]+uy*t1],edge:i});};
+    let first=true;
+    for(const k of cuts){if(k[1]<=cur||k[0]>=L)continue;if(k[0]>cur)seg(cur,k[0],first);cur=Math.max(cur,k[1]);first=false;}
+    if(cur<L)seg(cur,L,cuts.length>0);
   }
+  return out;
+}
+// The wall network of the whole plan (7.0.0-beta.4). Each room is its own polygon, so the wall
+// between two rooms used to be drawn twice — on top of each other when the rooms touch, or as two
+// walls a few cm apart when the vacuum map left a gap (or an overlap) between them. Edges of two
+// rooms that run parallel within `tol` (0.2 m), face each other and overlap by 0.3 m or more are merged: the shared stretch becomes ONE wall on
+// the middle line (shared: true, owned by the lower room index), the rest of each edge stays where
+// it is. Doors and windows then cut the result exactly like rfpWallSegs does.
+function rfpWallNet(polys,openings,tol){
+  tol=tol==null?0.2:tol;
+  const edges=[];
+  polys.forEach(function(p,ri){
+    for(let i=0;i<p.length;i++){
+      const a=p[i],b=p[(i+1)%p.length],dx=b[0]-a[0],dy=b[1]-a[1],L=Math.hypot(dx,dy);
+      if(L<1e-6)continue;
+      const u=[dx/L,dy/L],mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2;
+      const n=rfpInPoly(mx-u[1]*0.04,my+u[0]*0.04,p)?[-u[1],u[0]]:[u[1],-u[0]]; // into the room
+      edges.push({r:ri,i:i,a:a,b:b,L:L,u:u,n:n});
+    }
+  });
+  const pieces=[];
+  edges.forEach(function(e){
+    const cover=[];      // [t0,t1] stretches of e that another room's edge runs along
+    edges.forEach(function(f){
+      if(f.r===e.r)return;
+      if(Math.abs(e.u[0]*f.u[1]-e.u[1]*f.u[0])>0.05)return;            // not parallel (~3°)
+      if(e.n[0]*f.n[0]+e.n[1]*f.n[1]>-0.9)return;                      // rooms on the same side: two walls
+      const off=(f.a[0]-e.a[0])*-e.u[1]+(f.a[1]-e.a[1])*e.u[0];         // signed distance of f's line
+      if(Math.abs(off)>tol)return;
+      const ta=(f.a[0]-e.a[0])*e.u[0]+(f.a[1]-e.a[1])*e.u[1],tb=(f.b[0]-e.a[0])*e.u[0]+(f.b[1]-e.a[1])*e.u[1];
+      const fa=Math.min(ta,tb),fb=Math.max(ta,tb);
+      const o0=Math.max(0,fa),o1=Math.min(e.L,fb);
+      if(o1-o0<0.3)return;                                              // a brush past a corner
+      // a stub of either edge shorter than tol past the shared stretch joins it (no 5 cm tooth)
+      const t0=Math.max(o0-0,o0-fa)<tol?Math.min(0,fa):o0,t1=Math.max(e.L-o1,fb-o1)<tol?Math.max(e.L,fb):o1;
+      cover.push([Math.max(0,t0),Math.min(e.L,t1)]);
+      // the lower room owns the shared stretch and draws it on the middle line
+      if(e.r<f.r){
+        const h=off/2,nx=-e.u[1]*h,ny=e.u[0]*h;
+        pieces.push({a:[e.a[0]+e.u[0]*t0+nx,e.a[1]+e.u[1]*t0+ny],b:[e.a[0]+e.u[0]*t1+nx,e.a[1]+e.u[1]*t1+ny],edge:e.i,room:e.r,shared:true});
+      }
+    });
+    cover.sort(function(m,n){return m[0]-n[0];});
+    let cur=0;
+    const keep=function(t0,t1){if(t1-t0>0.04)pieces.push({a:[e.a[0]+e.u[0]*t0,e.a[1]+e.u[1]*t0],b:[e.a[0]+e.u[0]*t1,e.a[1]+e.u[1]*t1],edge:e.i,room:e.r});};
+    cover.forEach(function(k){if(k[1]<=cur)return;if(k[0]>cur)keep(cur,k[0]);cur=Math.max(cur,k[1]);});
+    if(cur<e.L)keep(cur,e.L);
+  });
+  // a stretch shared by three rooms would be emitted twice: drop exact repeats
+  const seen={},uniq=pieces.filter(function(w){
+    const k=[w.a[0],w.a[1],w.b[0],w.b[1]].map(function(v){return Math.round(v*50);});
+    const k1=k.join(','),k2=[k[2],k[3],k[0],k[1]].join(',');
+    if(seen[k1]||seen[k2])return false;seen[k1]=1;return true;
+  });
+  const out=[];
+  uniq.forEach(function(w){
+    rfpWallSegs([w.a,w.b],openings,0.3,true).forEach(function(s){s.edge=w.edge;s.room=w.room;if(w.shared)s.shared=true;out.push(s);});
+  });
   return out;
 }
 // Where an opening sits: the nearest edge over every room, the unit direction along it, the
@@ -112,7 +176,7 @@ function rfpFit(pts,proj,rotDeg,W,H,pad,zTop,mirror){
   const P=RFP_PROJ[proj]||RFP_PROJ.top;
   const r=(rfpNum(rotDeg)||0)*Math.PI/180,c=Math.cos(r),s=Math.sin(r);
   const mr=mirror==='horizontal'?[-1,0,0,1]:(mirror==='vertical'?[1,0,0,-1]:(mirror==='both'?[-1,0,0,-1]:[1,0,0,1]));
-  const m=rfpMul(P.m,rfpMul([c,s,-s,c],mr));
+  const rm=rfpMul([c,s,-s,c],mr),m=rfpMul(P.m,rm);
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
   for(const q of pts){
     const sx=m[0]*q[0]+m[2]*q[1],sy=m[1]*q[0]+m[3]*q[1];
@@ -125,7 +189,7 @@ function rfpFit(pts,proj,rotDeg,W,H,pad,zTop,mirror){
   const pl=pad.l!=null?pad.l:pad,pr=pad.r!=null?pad.r:pad,pt=pad.t!=null?pad.t:pad,pb=pad.b!=null?pad.b:pad;
   const S=Math.max(0.0001,Math.min((W-pl-pr)/w,(H-pt-pb)/h));
   const e=pl+((W-pl-pr)-w*S)/2-x0*S,f=pt+((H-pt-pb)-h*S)/2-y0*S;
-  return{m:[m[0]*S,m[1]*S,m[2]*S,m[3]*S],e:e,f:f,S:S,zf:P.z*S,proj:proj,unit:m};
+  return{m:[m[0]*S,m[1]*S,m[2]*S,m[3]*S],e:e,f:f,S:S,zf:P.z*S,proj:proj,unit:m,rm:rm};
 }
 function rfpP(F,x,y,z){return[F.m[0]*x+F.m[2]*y+F.e,F.m[1]*x+F.m[3]*y+F.f-(z||0)*F.zf];}
 // Screen → plan on the floor (z = 0).

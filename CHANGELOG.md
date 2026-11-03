@@ -1,5 +1,79 @@
 # Changelog
 
+## [7.0.0-beta.4] - unreleased (pre-release)
+
+The last beta before 7.0.0: the floor plan's walls and free rotation (the author's field test),
+and every finding of the full review of 7.0.0-beta.3.
+
+### Floor plan
+
+- **Walls are drawn as one network.** Every room is its own polygon, so where two rooms meet the
+  wall was drawn twice — on top of each other, or as two walls a few cm apart where the vacuum map
+  left a gap or an overlap. Edges of two rooms that face each other within 20 cm and run side by
+  side for 30 cm or more are now one wall on the middle line, drawn full height.
+- **Corners no longer stick out.** The top edge of a wall had square line caps, so where a full
+  wall met a cut-away (front) wall its top poked out past the corner. Walls now end flush; a full
+  wall that meets a lower one shows its cut end as a short post, and two walls of the same height
+  close their corner.
+- A door near a corner no longer cuts a gap into the perpendicular wall, and a sliver under 12 cm
+  next to a door or window is not drawn as a lone post.
+- **Free rotation per layout profile.** `rotate` takes any angle (it did; the studio offered only
+  quarter turns). The studio's **Turn** button opens a slider (0–359°, snaps to multiples of 15°),
+  an angle box, ±90° and **Auto**, for the profile the canvas shows — switch the device frame to
+  set the other one. Dragging previews; letting go is one undo step.
+- Wall tones follow the screen, not the plan's axes, so the light no longer swaps sides when the
+  plan is turned. The blueprint's overall dimensions are drawn only on a quarter turn (on any other
+  angle they measured the screen box).
+- A marker on a `cover` toggles it only when it is a window covering (device class blind, shade,
+  curtain, shutter or awning); a garage door or gate opens more-info.
+
+### Fixes
+
+- **Studio: "Overwrite anyway" could replace another card.** The studio writes the card back where
+  it found it. When a card was added or removed above it in another tab, that place held a
+  different card — and *Overwrite* replaced it. Now a card that only moved is found by its content
+  and saved where it is, without asking; *Overwrite* writes only over this card (same key at the
+  old place with nothing added next to it, or the one room card with that key) and otherwise says
+  it cannot tell which card is meant.
+- **Actions without an entity did nothing.** Like Home Assistant's own cards, `toggle` and
+  `more-info` without `entity` now act on the element's own entity (zones, icons, badges, labels,
+  gauges, tiles, overview pills and chips) — the documented tile example `{action: more-info}`
+  works. `entity_id` is accepted as another spelling.
+- **Home Assistant's `above:` / `below:` conditions** (numeric_state) are understood. Written that
+  way a condition used to match no test at all and was always true.
+- **A list written as a single object** (`gauges: {…}`, `brightness_model: {source: {…}}`, …) is
+  read as a list of one, with one console warning. It used to stop the render and leave an empty
+  card. Anything else the renderer cannot handle now shows a configuration-error card instead of
+  nothing.
+- **Blinds on a cover without `attribute`** read `current_position` in Home Assistant's direction
+  (100 = open) and fall back to open / closed for covers without a position; before, they never
+  filled (the docs promised open / closed). New blinds from the studio and the editor are written
+  with `attribute: current_position, min: 100, max: 0`. Existing configs that set `attribute` are
+  unchanged.
+- **Cover controls follow the position** while the state stays `open` (many covers never report
+  `opening` / `closing`): `current_position` is now watched for every blind on a cover.
+- **A card made only of overview or floor plan pages** is accepted (it asked for a `base_image`).
+- **Overview chips:** the default tap no longer toggles a siren; a cover chip toggles only a window
+  covering (same rule as the floor plan).
+- A label whose entity disappeared shows `—` instead of its last value; an unavailable gauge is
+  greyed instead of looking live.
+- **Confirmations** (`confirmation:` and the floor plan's clean button) ask in the card's own
+  dialog; `window.confirm` is blocked in kiosk browsers, where the action never ran.
+- `navigation_replace` is honoured; a failed `perform-action` is logged instead of an unhandled
+  rejection.
+- Keyboard: Enter / Space on an element with only a hold or double-tap action runs that action.
+- `next-room` / `prev-room` from the last room to the first slides instead of cross-fading.
+- `base_camera`: no refresh while the tab is hidden, one frame (no timer) in nav minis, and a frame
+  that arrives after a room switch is dropped.
+- Legacy Edit-mode **Save** refuses to overwrite a card changed elsewhere since the page loaded.
+
+### Performance and housekeeping
+
+- Nav thumbnails' high-quality copies: each image is downloaded and decoded once (it was twice),
+  stored as WebP instead of PNG, at most two sizes per image (older blobs are released).
+- Two flaky frame-timing e2e checks tolerate one dropped frame on a loaded runner.
+- Dead code removed (`ROC_REGIONS`, unused variables, the studio's unused outline table).
+
 ## [7.0.0-beta.3] - unreleased (pre-release)
 
 ### Floor plan: vacuums (the author's feedback)

@@ -320,6 +320,120 @@ t('unset editor fields never render the literal "null"',
 t('_e escapes apostrophes like escA does',edEsc._e("it's")==="it&#39;s");
 t('_e maps nullish to empty string',edEsc._e(undefined)===''&&edEsc._e(null)==='');
 
+// =====================================================================
+// 9. 7.0.0-beta.4 — findings of ANALYSIS_v7.0.0-beta.3.md (each was a FAIL
+//    in tests/probes/probe_v7_0_0b3.js on beta.3).
+// =====================================================================
+{
+  const tick=()=>new Promise(r=>setTimeout(r,40));
+  const IMG='/local/x.webp';
+  const st=(id,v,a)=>({[id]:{entity_id:id,state:String(v),attributes:a||{}}});
+  const callsOf=(el)=>{const c=[];el._hass.callService=function(d,sv,data,tg){c.push([d,sv,data,tg]);return Promise.resolve();};return c;};
+  // actions take the element's entity (HA convention)
+  {const el=mkCard({base_image:IMG,layout:{},icons:[{id:'i',entity:'light.a',icon:'mdi:x',top:'10%',left:'10%',tap_action:{action:'toggle'}}]},st('light.a','on'));
+    await tick();const calls=callsOf(el);
+    el.shadowRoot.querySelector('[data-ico="i"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    t('beta.4: {action: toggle} without entity toggles the icon\'s entity',calls.length===1&&calls[0][2].entity_id==='light.a');}
+  {let got=null;
+    const el=mkCard({base_image:IMG,layout:{},sections:[{id:'s',name:'S',tiles:[{entity:'switch.wm',name:'WM',tap_action:{action:'more-info'}}]}],
+      icons:[{id:'i',icon:'mdi:x',top:'10%',left:'10%',tap_action:{action:'open-section',section:'s'}}]},st('switch.wm','on'));
+    await tick();el.addEventListener('hass-more-info',e=>got=e.detail);
+    el.shadowRoot.querySelector('[data-ico="i"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();
+    const tile=el.shadowRoot.querySelector('.roc-tile');if(tile)tile.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();
+    t('beta.4: tile {action: more-info} opens the tile entity (the documented example)',!!(got&&got.entityId==='switch.wm'));}
+  {let got=null;const el=mkCard({base_image:IMG,layout:{},zones:[{id:'z',top:'1%',left:'1%',width:'9%',height:'9%',tap_action:{action:'more-info',entity_id:'light.b'}}]},{});
+    await tick();el.addEventListener('hass-more-info',e=>got=e.detail);
+    el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    t('beta.4: more-info with entity_id (HA spelling) works',!!(got&&got.entityId==='light.b'));}
+  {const el=mkCard({base_image:IMG,layout:{},zones:[{id:'z',entity:'light.a',top:'1%',left:'1%',width:'9%',height:'9%',hold_action:{action:'toggle'}}]},st('light.a','on'));
+    await tick();const calls=callsOf(el);
+    el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    t('beta.4: keyboard Enter runs the hold action of a hold-only element',calls.length===1);}
+  // HA numeric_state conditions
+  {const S={'sensor.t':{state:'20',attributes:{}},'sensor.u':{state:'unavailable',attributes:{}}};
+    t('beta.4: {above: 25} at 20 is false',w.eval('evalCond')({entity:'sensor.t',above:25},S)===false);
+    t('beta.4: {below: 10} at 20 is false',w.eval('evalCond')({entity:'sensor.t',below:10},S)===false);
+    t('beta.4: {above: 15, below: 25} at 20 is true',w.eval('evalCond')({entity:'sensor.t',above:15,below:25},S)===true);
+    t('beta.4: above on a non-numeric state is false',w.eval('evalCond')({entity:'sensor.u',above:1},S)===false);}
+  // a single object where a list belongs
+  {let err=null,el=null;try{el=mkCard({base_image:IMG,layout:{},brightness_model:{source:{entity:'sensor.lux'},filter_gradient:[{value:0,filter:'brightness(0.3)'},{value:100,filter:'none'}]}},st('sensor.lux',0));}catch(e){err=e;}
+    await tick();
+    t('beta.4: brightness_model.source as one object renders and filters',!err&&el._rendered&&!el._rocErr&&/brightness\(0\.3/.test(el._baseEl.style.filter));}
+  {const el=mkCard({base_image:IMG,layout:{},gauges:{id:'g',entity:'sensor.x',top:'1%',left:'1%',width:'2%',height:'20%'}},st('sensor.x',50));await tick();
+    t('beta.4: gauges: as an object is read as a list of one',!!el._gaugeEls.g&&!el._rocErr);}
+  {const raw={base_image:IMG,layout:{},gauges:{id:'g',entity:'sensor.x'}};const el=mkCard(raw,{});
+    t('beta.4: the config object HA handed in is not mutated',!Array.isArray(raw.gauges));}
+  {const el=w.document.createElement('room-overlay-card');w.document.body.appendChild(el);
+    el.setConfig({base_image:IMG,layout:{},icons:[{id:'i',icon:'mdi:x',tap_action:{action:'toggle'}}]});
+    const orig=el._renderInner;el._renderInner=function(){throw new Error('boom');};
+    el.hass=mkHass({});
+    t('beta.4: a render failure shows an error card instead of an empty one',!!el._rocErr&&/configuration error/.test(el.shadowRoot.textContent)&&/boom/.test(el.shadowRoot.textContent));
+    el.hass=mkHass({'x.y':{state:'1',attributes:{}}});
+    t('beta.4: …and does not retry the render on every state change',el._rocErr&&el._rocErr.message==='boom');
+    el._renderInner=orig;el.setConfig({base_image:IMG,layout:{},zones:[]});
+    t('beta.4: …a new config renders normally again',!el._rocErr&&!!el.shadowRoot.querySelector('.wrap'));}
+  // blinds on covers
+  {const el=mkCard({base_image:IMG,layout:{},blinds:[{id:'b',entity:'cover.x',top:'10%',left:'10%',width:'10%',height:'30%'}]},st('cover.x','open',{current_position:25}));
+    await tick();await tick();const f=Object.values(el._gaugeFills)[0];
+    t('beta.4: blind on a cover without attribute reads current_position, 100 = open (25 % open → 75 % covered)',!!f&&f.style.height==='75%');}
+  {const el=mkCard({base_image:IMG,layout:{},blinds:[{id:'b',entity:'cover.x',top:'10%',left:'10%',width:'10%',height:'30%'}]},st('cover.x','closed'));
+    await tick();await tick();const f=Object.values(el._gaugeFills)[0];
+    t('beta.4: blind on a cover without a position: closed → fully covered',!!f&&f.style.height==='100%');}
+  {const el=mkCard({base_image:IMG,layout:{},blinds:[{id:'b',entity:'cover.x',top:'10%',left:'10%',width:'10%',height:'30%',min:100,max:0,attribute:'current_position'}]},st('cover.x','open',{current_position:25}));
+    await tick();await tick();const f=Object.values(el._gaugeFills)[0];
+    t('beta.4: explicit attribute + min/max unchanged (legacy configs keep their look)',!!f&&f.style.height==='75%');}
+  {const s=p=>st('cover.x','open',{current_position:p,supported_features:15});
+    const el=mkCard({base_image:IMG,layout:{},blinds:[{id:'b',entity:'cover.x',top:'10%',left:'10%',width:'10%',height:'30%',control:true}]},s(40));
+    await tick();await tick();el.hass=mkHass(s(75));await tick();await tick();
+    const rec=el._ccEls&&el._ccEls.b;
+    t('beta.4: cover control follows current_position while the state stays "open"',!!rec&&rec.pct&&rec.pct.textContent==='75 %');}
+  // pages without a picture
+  {let err=null;try{mkCard({layout:{},rooms:[{id:'plan',floorplan:{rooms:[{name:'A',polygon:[[0,0],[4,0],[4,3],[0,3]]}]}}]},{});}catch(e){err=e;}
+    t('beta.4: a card made only of a floor plan page is accepted',!err);}
+  {let err=null;try{mkCard({layout:{},rooms:[{id:'home',overview:{}}]},{});}catch(e){err=e;}
+    t('beta.4: a card made only of an overview page is accepted',!err);}
+  {let err=null;try{mkCard({layout:{},rooms:[{id:'a',name:'A'}]},{});}catch(e){err=e;}
+    t('beta.4: a room with no picture and no page is still refused',!!err);}
+  // stale values
+  {const el=mkCard({base_image:IMG,layout:{},labels:[{id:'l',entity:'sensor.t',suffix:'°',top:'10%',left:'10%'}]},st('sensor.t','21.5'));
+    await tick();const lb=el._lblEls.l,a=lb.textContent;el.hass=mkHass({'sensor.other':{state:'1',attributes:{}}});await tick();
+    t('beta.4: a label whose entity disappeared shows — instead of the last value',a!=='—'&&lb.textContent==='—');}
+  {const el=mkCard({base_image:IMG,layout:{},gauges:[{id:'g',entity:'sensor.x',top:'1%',left:'1%',width:'2%',height:'20%'}]},st('sensor.x','40'));
+    await tick();el.hass=mkHass(st('sensor.x','unavailable'));await tick();
+    t('beta.4: an unavailable gauge is greyed, not left looking live',el._gaugeEls.g.dataset.rocNa==='1');
+    el.hass=mkHass(st('sensor.x','60'));await tick();
+    t('beta.4: …and back to normal with a value',!el._gaugeEls.g.dataset.rocNa);}
+  // safe default taps
+  {const tap=w.eval('rocOvChipDefaultTap');
+    t('beta.4: overview chip of a siren: more-info, not toggle',tap('siren.alarm').action==='more-info');
+    const S={'cover.garage':{state:'closed',attributes:{device_class:'garage'}},'cover.blind':{state:'open',attributes:{device_class:'blind'}}};
+    const el=mkCard({base_image:IMG,layout:{}},S);
+    t('beta.4: overview chip of a garage door: more-info',el._resolveAct(tap('cover.garage')).action==='more-info');
+    t('beta.4: overview chip of a blind: toggle',el._resolveAct(tap('cover.blind')).action==='toggle');}
+  // next-room wraps with a slide; confirmation in the card
+  {const rooms=[0,1,2,3].map(i=>({id:'r'+i,base_image:IMG}));const el=mkCard({layout:{},rooms},{});await tick();
+    el._roomIdx=3;el._render();
+    el._lastRoomDragEnd=0;el._exec({action:'next-room'}); // rAF runs inline in this file: the slide has already started
+    const cs=[...el.shadowRoot.querySelectorAll('.content')];
+    t('beta.4: next-room from the last room slides (no crossfade)',el._roomIdx===0&&cs.length===2&&cs[1].style.transform==='translateX(-100%)');}
+  {const el=mkCard({base_image:IMG,layout:{},zones:[{id:'z',top:'1%',left:'1%',width:'9%',height:'9%',tap_action:{action:'toggle',entity:'light.a',confirmation:{text:'Sure?'}}}]},st('light.a','on'));
+    await tick();const calls=callsOf(el);let nat=0;w.confirm=()=>{nat++;return true;};
+    el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    const dlg=el.shadowRoot.querySelector('.roc-confirm');
+    t('beta.4: confirmation uses the card\'s own dialog (not window.confirm), nothing runs yet',!!dlg&&nat===0&&calls.length===0&&dlg.textContent.indexOf('Sure?')>=0);
+    dlg.querySelector('[data-yes]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();
+    t('beta.4: …OK runs the action and closes the dialog',calls.length===1&&!el.shadowRoot.querySelector('.roc-confirm'));
+    el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));await tick();
+    t('beta.4: …Escape cancels',calls.length===1&&!el.shadowRoot.querySelector('.roc-confirm'));}
+  {const el=mkCard({base_image:IMG,layout:{},zones:[{id:'z',top:'1%',left:'1%',width:'9%',height:'9%',tap_action:{action:'navigate',navigation_path:'/x',navigation_replace:true}}]},{});
+    await tick();let rep=null,how='';w.addEventListener('location-changed',e=>{rep=e.detail&&e.detail.replace;},{once:true});
+    const hp=w.history.pushState,hr=w.history.replaceState;w.history.pushState=function(){how='push';};w.history.replaceState=function(a,b,u){how='replace:'+u;};
+    el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+    w.history.pushState=hp;w.history.replaceState=hr;
+    t('beta.4: navigate honours navigation_replace',how==='replace:/x'&&rep===true);}
+}
+
 await new Promise(r=>setTimeout(r,300));
 t('rejected template subscription is caught, not unhandled',unhandled===0);
 

@@ -217,6 +217,8 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#conditions).
 | `state_not` | any |  |  |
 | `operator` | `<` · `>` · `<=` · `>=` · `==` · `!=` |  |  |
 | `value` | any |  |  |
+| `above` | number |  | since 7.0.0 |
+| `below` | number |  | since 7.0.0 |
 | `and` | [condition](#t-cond) |  |  |
 | `or` | [condition](#t-cond) |  |  |
 

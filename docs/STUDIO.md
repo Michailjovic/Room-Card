@@ -243,8 +243,10 @@ edits the plan instead of elements, with a toolbar above it:
 - **Rectangle** / **Polygon** — draw a room (a polygon closes on its first corner, a double-click
   or Enter; Esc cancels).
 - **Door** — click a wall to place a door (0.8 m wide).
-- **Turn** / **Mirror** (v6.50.0) — turn the drawing by 90° (`rotate`) and flip it (`mirror`:
-  none → horizontal → vertical → both).
+- **Turn** / **Mirror** (v6.50.0) — **Turn** opens a row with a slider (7.0: any angle, snapping to
+  multiples of 15°), an angle box, ±90° and **Auto** — it sets `rotate` for the layout profile the
+  canvas shows (switch the device frame to set the other); dragging previews, letting go is one
+  undo step. **Mirror** flips the drawing (`mirror`: none → horizontal → vertical → both).
 - **Vacuums** (v6.50.0) — which AnyVac vacuums the plan shows; a vacuum mapped in another home
   frame is aligned by the rooms both maps share (the panel says how well it fits). Since v6.51.0
   each row has two colour pickers: the vacuum's colour and its mop trail's.

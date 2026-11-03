@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **v6.41.0** (2026-10-21, v5.2.0/v5.3.0, v6.26–v6.29 and v6.32–v6.39 unused). Verified against Home
+Current release: **7.0.0-beta.4** (pre-release; last stable v6.51.0 — v5.2.0/v5.3.0, v6.26–v6.29 and v6.32–v6.39 unused). Verified against Home
 Assistant 2026.10.2.
 
 **The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
@@ -49,6 +49,7 @@ cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the co
 | 9 — the studio becomes the default editor: HA's editor = launcher (Open Studio / wizard, basics, YAML); the 6.x tabs behind *Classic editor* until 7.1; beta field test | 7.0.0-beta.1 | 🔨 built; field test (≥ 2 weeks, checklist V7_PLAN §14) |
 | 10a — docs during the beta: landing README, getting started, studio, overview, troubleshooting, generated reference, AI spec + llms.txt, presets, issue forms; two schema fixes | 7.0.0-beta.2 | 🔨 built |
 | beta feedback: robots keep their colour when a map loads late, mop band keeps its hue on wood, cleaning line on small rooms | 7.0.0-beta.3 | 🔨 built |
+| last beta: floor plan wall network + free rotation per profile, every finding of the 7.0.0-beta.3 review | 7.0.0-beta.4 | 🔨 built |
 | 10b — live demo, screenshots / GIFs, archive of finished plans, repo topics, HACS default submission; 7.0.0 after the field test | 7.0.0 | next |
 
 ## Shipped history (condensed)

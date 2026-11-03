@@ -144,7 +144,7 @@ rooms:
       focus: 50% 40%               # which part of the photo the tile shows (like object-position)
       chips: auto                  # auto (default) | none | a list:
       # chips:
-      #   - light.bedroom_ceiling            # tap toggles (light, switch, fan, cover…)
+      #   - light.bedroom_ceiling            # tap toggles (light, switch, fan, a window cover…)
       #   - entity: media_player.bedroom_tv  # tap = more-info for anything else
       #     icon: mdi:television
       #   - entity: climate.bedroom

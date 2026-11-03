@@ -4529,7 +4529,7 @@ class RoomOverlayCardEditor extends HTMLElement{
     if(addBl)addBl.addEventListener('click',function(){
       const c=self._collectConfig();
       const blA=A(c,'blinds');
-      blA.push({id:'blind_'+(blA.length+1),top:'10%',left:'30%',width:'20%',height:'40%',entity:'',min:0,max:100,blind_type:'roller'});
+      blA.push({id:'blind_'+(blA.length+1),top:'10%',left:'30%',width:'20%',height:'40%',entity:'',attribute:'current_position',min:100,max:0,blind_type:'roller'}); // Home Assistant's direction: 100 = open (7.0.0-beta.4)
       self._config=c;self._render();self._fire(c);
     });
     this.querySelectorAll('[data-rm-bl]').forEach(function(btn){

@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.0.0-beta.3';
+const ROC_STUDIO_VERSION='7.0.0-beta.4';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -155,7 +155,7 @@ const S={
   companion:{keys:{card:{t:'card'},media:{t:'str'},height:{t:'len'},type:{t:'str'}},open:true},
   // ---------------------------------------------------------------- shared value objects
   cond:{keys:{entity:{t:'entity'},attribute:{t:'str'},state:{t:'any'},state_not:{t:'any'},
-    operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},and:{t:'cond'},or:{t:'cond'}}},
+    operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},above:{t:'num',since:'7.0.0'},below:{t:'num',since:'7.0.0'},and:{t:'cond'},or:{t:'cond'}}},
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
   action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event'},
@@ -475,7 +475,7 @@ const ROC_STUDIO_STR={en:{
   fp_hint_rect:'Drag a rectangle on the plan.',fp_hint_poly:'Click the corners; click the first one (or double-click) to close the room. Esc cancels.',
   fp_hint_door:'Click a wall to place a door.',fp_hint_marker:'Click where the marker goes, then pick its entity in Properties.',fp_hint_window:'Click a wall to place a window.',
   fp_window_n:'Window {n}',
-  fp_rot:'Turn the plan by 90° (for the layout profile shown: landscape or portrait)',fp_rot_l:'',fp_rot_p:'Turned for portrait',fp_rot_l2:'Turned for landscape',fp_flip:'Mirror the plan (none → horizontal → vertical → both)',fp_flip_l:'',
+  fp_rot:'Turn the plan (for the layout profile shown: landscape or portrait)',fp_rot_l:'',fp_rot_angle:'Angle',fp_rot_m90:'Turn 90° left',fp_rot_p90:'Turn 90° right',fp_rot_auto:'Auto',fp_rot_auto_t:'Auto: a quarter turn when it makes the plan clearly bigger',fp_rot_for_l:'Landscape',fp_rot_for_p:'Portrait',fp_rot_p:'Turned for portrait',fp_rot_l2:'Turned for landscape',fp_flip:'Mirror the plan (none → horizontal → vertical → both)',fp_flip_l:'',
   fp_flip_none:'Mirror: none',fp_flip_horizontal:'Mirror: horizontal',fp_flip_vertical:'Mirror: vertical',fp_flip_both:'Mirror: both',
   fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',fp_vac_color:'Colour of the vacuum (robot, dry line, badge)',fp_vac_mop:'Colour of its mop trail',
   fp_vacs_body:'Which AnyVac vacuums this plan shows (the robot, its trail, the badge). A vacuum mapped in another home frame is aligned to this plan by the rooms both maps share (same names in the Roborock app); the fit can be tuned in YAML (floorplan.vacuums[].transform). Automatic = every vacuum in the frame the plan was imported from.',
@@ -539,6 +539,16 @@ function rsPathOf(root,needle){
   })(root,[]);
   return found;
 }
+// every path inside `root` whose object satisfies pred (cards found by content, 7.0.0-beta.4)
+function rsPathsWhere(root,pred){
+  const out=[];
+  (function walk(o,p){
+    if(!o||typeof o!=='object')return;
+    if(!Array.isArray(o)&&pred(o))out.push(p);
+    for(const k of Object.keys(o))walk(o[k],p.concat(Array.isArray(o)?+k:k));
+  })(root,[]);
+  return out;
+}
 function rsAt(o,path){return path.reduce(function(a,k){return a==null?a:a[k];},o);}
 function rsJ(o){return JSON.stringify(o);}
 function rsTime(ms){const d=new Date(ms);const p=function(n){return String(n).padStart(2,'0');};return p(d.getHours())+':'+p(d.getMinutes());}
@@ -546,7 +556,7 @@ function rsDate(ms){const d=new Date(ms);return d.toLocaleDateString()+' '+rsTim
 // ---- Styles (inside the studio's own shadow root; HA's theme variables inherit from <html>) ---
 const ROC_STUDIO_CSS=`
 :host(:focus){outline:none;}
-.fpbar{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:12px;}.fpbar[hidden]{display:none;}.fpbar .seg button{padding:4px 8px;}.fphint{font-size:12px;opacity:.75;max-width:420px;line-height:1.3;}.fphint.warn{color:#ffb35c;opacity:1;}.fpimp{display:grid;gap:8px;min-width:0;}.fpimp>*{min-width:0;}.fpimp-row{display:flex;align-items:center;gap:8px;}.fpimp-row>span{flex:0 0 130px;font-size:13px;}.fpimp-row .pf-in{flex:1 1 0;width:auto;min-width:0;}.fpimp-map{display:grid;gap:6px;max-height:34vh;overflow:auto;}.fpimp-opts{display:grid;gap:4px;font-size:13px;}.fpimp-opt{display:flex;gap:8px;align-items:center;}.fpimp-prev{min-height:40px;}
+.fpbar{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;margin-left:12px;}.fpbar[hidden]{display:none;}.fpbar .seg button{padding:4px 8px;}.fprot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 0 12px;font-size:12px;}.fprot[hidden]{display:none;}.fprot input[type=range]{width:180px;}.fprot .fprot-n{width:56px;}.fprot-p{opacity:.8;min-width:90px;}.fphint{font-size:12px;opacity:.75;max-width:420px;line-height:1.3;}.fphint.warn{color:#ffb35c;opacity:1;}.fpimp{display:grid;gap:8px;min-width:0;}.fpimp>*{min-width:0;}.fpimp-row{display:flex;align-items:center;gap:8px;}.fpimp-row>span{flex:0 0 130px;font-size:13px;}.fpimp-row .pf-in{flex:1 1 0;width:auto;min-width:0;}.fpimp-map{display:grid;gap:6px;max-height:34vh;overflow:auto;}.fpimp-opts{display:grid;gap:4px;font-size:13px;}.fpimp-opt{display:flex;gap:8px;align-items:center;}.fpimp-prev{min-height:40px;}
 :host{all:initial;display:block;position:fixed;inset:0;font-family:var(--paper-font-body1_-_font-family,Roboto,system-ui,sans-serif);font-size:14px;color:var(--primary-text-color,#e8eaed);
   --rs-bg:var(--primary-background-color,#111418);--rs-panel:var(--card-background-color,#1c1f24);--rs-sub:var(--secondary-background-color,#24282e);
   --rs-line:var(--divider-color,rgba(255,255,255,.12));--rs-acc:var(--primary-color,#03a9f4);--rs-txt2:var(--secondary-text-color,#9aa3ad);
@@ -823,23 +833,52 @@ function rsResolveDashboard(card,hass){
   return{
     kind:'dashboard',lovelace:ll,urlPath:ll.urlPath==null?null:ll.urlPath,path:path,
     orig:rsJ(rsAt(ll.config,path)),
+    sib:rsSib(ll.config,path),
     dashName:ll.config.title||ll.urlPath||'Overview',
     where:(v?('view “'+(v.title||v.path||('#'+path[1]))+'”'):'')+' · '+path.join('/'),
   };
 }
-async function rsSaveDashboard(tgt,hass,cfg,force){
+// The card is written where it was found when the studio opened (tgt.path). Before writing:
+//  · the same card at the same place → save;
+//  · that place holds something else, but exactly one card in the dashboard still matches what
+//    was opened (a card was added or removed above it) → save there, no question;
+//  · otherwise it was changed elsewhere → conflict. "Overwrite anyway" (force) then still only
+//    writes over THIS card: the room card at the path when it has the same key (card_id / first
+//    image), else the one room card with that key anywhere — never whatever card now sits at the
+//    old position (7.0.0-beta.4: it used to replace that other card).
+// how many entries the list holding the card has (a card added or removed next to it changes it)
+function rsSib(root,path){const p=rsAt(root,path.slice(0,-1));return Array.isArray(p)?p.length:-1;}
+async function rsSaveDashboard(tgt,hass,cfg,force,keyOf){
   const fresh=await hass.callWS({type:'lovelace/config',url_path:tgt.urlPath});
-  const cur=rsAt(fresh,tgt.path);
-  if(!force&&rsJ(cur)!==tgt.orig){const e=new Error('conflict');e.conflict=true;throw e;}
+  let path=tgt.path;
+  if(rsJ(rsAt(fresh,path))!==tgt.orig){
+    const same=rsPathsWhere(fresh,function(o){return rsJ(o)===tgt.orig;});
+    if(same.length===1)path=same[0];
+    else if(!force){const e=new Error('conflict');e.conflict=true;throw e;}
+    else{
+      const isRc=function(o){return o&&o.type==='custom:room-overlay-card';};
+      let want=null;try{want=keyOf?keyOf(JSON.parse(tgt.orig)):null;}catch(_){}
+      const cur=rsAt(fresh,path);
+      const byKey=want==null?[]:rsPathsWhere(fresh,function(o){return isRc(o)&&keyOf(o)===want;});
+      // still ours at the old place: a room card with the same key, and nothing was added or removed
+      // next to it (with a duplicate card_id the key alone cannot tell two cards apart)
+      const here=isRc(cur)&&want!=null&&keyOf(cur)===want&&(rsSib(fresh,path)===tgt.sib||byKey.length===1);
+      if(!here){
+        if(byKey.length!==1){const e=new Error(byKey.length?'it moved and more than one room card matches — give this card a unique card_id':'this card is no longer on the dashboard');e.lost=true;throw e;}
+        path=byKey[0];
+      }
+    }
+  }
   const nc=JSON.parse(rsJ(fresh));
-  const parent=rsAt(nc,tgt.path.slice(0,-1));
-  if(!parent||typeof parent!=='object')throw new Error('card position '+tgt.path.join('/')+' no longer exists');
-  parent[tgt.path[tgt.path.length-1]]=cfg;
+  const parent=rsAt(nc,path.slice(0,-1));
+  if(!parent||typeof parent!=='object')throw new Error('card position '+path.join('/')+' no longer exists');
+  parent[path[path.length-1]]=cfg;
   const ll=tgt.lovelace;
   // lovelace.saveConfig updates the open dashboard immediately (and rolls back on failure);
   // the plain WS call is the fallback when HA's frontend object is not available.
   if(ll&&typeof ll.saveConfig==='function')await ll.saveConfig(nc);
   else await hass.callWS({type:'lovelace/config/save',url_path:tgt.urlPath,config:nc});
+  tgt.path=path;tgt.sib=rsSib(nc,path);
   tgt.orig=rsJ(cfg);
 }
 
@@ -867,7 +906,7 @@ const RS_TYPES={
   label:{key:'labels',pre:'lbl',panel:'labels',icon:'mdi:format-text',canvas:true,draw:'point',idp:'label_',def:{entity:''}},
   gauge:{key:'gauges',pre:'g',panel:'gauges',icon:'mdi:gauge',canvas:true,draw:'box',idp:'gauge_',def:{width:'2%',height:'20%',entity:'',min:0,max:100}},
   glow:{key:'glows',pre:'gw',panel:'glows',icon:'mdi:lightbulb-on-outline',canvas:true,draw:'point',idp:'glow_',centre:true,def:{entity:'',size:'25%',intensity:0.7}},
-  blind:{key:'blinds',pre:'bl',panel:'blinds',icon:'mdi:blinds-horizontal',canvas:true,draw:'box',idp:'blind_',def:{width:'20%',height:'40%',entity:'',min:0,max:100,blind_type:'roller'}},
+  blind:{key:'blinds',pre:'bl',panel:'blinds',icon:'mdi:blinds-horizontal',canvas:true,draw:'box',idp:'blind_',def:{width:'20%',height:'40%',entity:'',attribute:'current_position',min:100,max:0,blind_type:'roller'}},
   element:{key:'elements',pre:'el',panel:'elements',icon:'mdi:card-bulleted-outline',canvas:true,draw:'box',idp:'el_',def:{width:'30%',height:'20%',card:{type:'tile',entity:''}}},
   vacuum_widget:{key:'vacuum_widgets',pre:'vw',panel:'vacuum_widgets',icon:'mdi:robot-vacuum',canvas:true,draw:'point',idp:'vac_',def:{icon:'mdi:robot-vacuum',size:'44px',vacuums:[]}},
   badge:{key:'badges',pre:'b',panel:'badges',icon:'mdi:label-outline',canvas:false,idp:'badge_',def:{position:'bottom-left'}},
@@ -1630,13 +1669,6 @@ function rsMarkNests(root){
 // Device frames for the canvas. The card chooses its layout profile from the frame's size (its
 // _rocVp viewport override), so "Tablet portrait" shows the portrait profile on a landscape PC.
 const RS_FRAMES={fit:null,landscape:{w:1280,h:800},portrait:{w:800,h:1280},phone:{w:390,h:844}};
-// Outline rows: [config key, editor section id (data-panel), icon]
-const RS_KINDS=[
-  ['overlays','overlays','mdi:layers-outline'],['zones','zones','mdi:gesture-tap'],['badges','badges','mdi:label-outline'],
-  ['icons','icons','mdi:star-four-points-outline'],['labels','labels','mdi:format-text'],['gauges','gauges','mdi:gauge'],
-  ['glows','glows','mdi:lightbulb-on-outline'],['blinds','blinds','mdi:blinds-horizontal'],['elements','elements','mdi:card-bulleted-outline'],
-  ['groups','groups','mdi:dock-window'],['vacuum_widgets','vacuum_widgets','mdi:robot-vacuum'],['light_controls','lights','mdi:tune-vertical'],
-];
 // Room keys kept on the previewed room while the shared Global defaults are edited — the same
 // list the editor's own preview uses (_previewCfg), so the canvas falls through to the defaults.
 const RS_KEEP_VISUAL=['id','name','area_match','base_image','base_camera','camera_refresh','base_image_conditions'];
@@ -2240,7 +2272,7 @@ class RocStudio{
   // Measured on the canvas (what you see), applied to top / left. Values that are not "%"
   // strings are left alone — the button reports how many were skipped.
   _boxes(){
-    const card=this._card,self=this;
+    const card=this._card;
     if(!card||typeof card._rocBox!=='function')return[];
     return this._selSet().filter(function(x){return RS_TYPES[x.type]&&RS_TYPES[x.type].canvas;}).map(function(x){
       let b=null;try{b=card._rocBox(x.type,x.id);}catch(_){}
@@ -2803,7 +2835,7 @@ class RocStudio{
 
   // ---------------------------------------------------------------- chrome
   _renderChrome(){
-    const self=this,I=this.I,rooms=this._rooms();
+    const self=this,rooms=this._rooms();
     // room select
     const sel=this._roomSel;
     sel.style.display=rooms.length?'':'none';
@@ -3060,7 +3092,7 @@ class RocStudio{
     const lbl=this._saveBtn.querySelector('span');
     this._saveBtn.disabled=true;if(lbl)lbl.textContent=this.t('saving');
     const done=function(){self._saveBtn.disabled=false;if(lbl)lbl.textContent=self.t('save');self._saving=null;};
-    this._saving=rsSaveDashboard(tg,this.hass,cfg,!!opts.force).then(function(){
+    this._saving=rsSaveDashboard(tg,this.hass,cfg,!!opts.force,this.I.cfgKey).then(function(){
       done();
       self.base=rsJ(cfg);
       self._savedAt=self.t('saved_at',{t:rsTime(Date.now())});
@@ -3682,6 +3714,7 @@ RocStudio.prototype._fpOnView=function(v){
   if(this.C&&this.C._rocFloorplan)this.G=this.C._rocFloorplan.geom;
   if(v.svg!==this._fpSvg){this._fpSvg=v.svg;this._fpBind(v.svg);}
   this._fpDraw();
+  this._fpRotSync(); // the device frame (layout profile) may have changed
 };
 RocStudio.prototype._fpActive=function(){return this.mode==='arrange'&&this._fpIdx()>=0&&!!this._fpView&&!!this.G;};
 // ---- selection, after config changes ----
@@ -3718,7 +3751,8 @@ RocStudio.prototype._fpChrome=function(){
     act('mdi:import','fp_import',function(){self._fpImport();});
     act('mdi:robot-vacuum','fp_vacs',function(){self._fpVacuums();});
     act('mdi:image','fp_bg',function(){self._fpBackground();});
-    act('mdi:rotate-right','fp_rot',function(){self._fpTurn();});
+    const rotB=act('mdi:rotate-right','fp_rot',function(){self._fpRotPop(!self._fpRotEl||self._fpRotEl.hidden);});
+    rotB.setAttribute('aria-haspopup','true');this._fpRotBtn=rotB;
     act('mdi:flip-horizontal','fp_flip',function(){self._fpFlip();});
     act('mdi:image-outline','fp_trace',function(){self._fpTrace();});
     act('mdi:door-open','fp_doors',function(){self._fpAutoDoors();});
@@ -3727,7 +3761,8 @@ RocStudio.prototype._fpChrome=function(){
     this._fpBar=bar;this._cvInfo.appendChild(bar);
   }
   this._fpBar.hidden=!on||this.mode!=='arrange';
-  if(!on)return;
+  if(!on){if(this._fpRotEl)this._fpRotEl.hidden=true;return;}
+  this._fpRotSync();
   const st=this._fpState();
   for(const k in this._fpToolBtns)this._fpToolBtns[k].setAttribute('aria-pressed',String(st.tool===k));
   this._fpDelBtn.disabled=st.sel==null&&st.door==null&&st.item==null;
@@ -4237,6 +4272,56 @@ RocStudio.prototype._fpTurn=function(){
     f.rotate=nr;
   });
   this._fpFlash(prof==='portrait'?'fp_rot_p':'fp_rot_l2');
+};
+// Free rotation (7.0.0-beta.4): a slider under the toolbar turns the plan by any angle for the
+// layout profile the canvas shows (switch the device frame to set the other one). Dragging
+// previews, letting go commits one undo step; ±90° and Auto sit next to it.
+RocStudio.prototype._fpRotProf=function(){const v=this._fpView;return(v&&v.o&&v.o.profile)==='portrait'?'portrait':'landscape';};
+RocStudio.prototype._fpRotSet=function(val,commit){
+  const prof=this._fpRotProf(),other=prof==='portrait'?'landscape':'portrait';
+  const upd=function(f){
+    const r=f.rotate,o=r&&typeof r==='object'&&!Array.isArray(r)?r:{portrait:r==null?'auto':r,landscape:r==null?'auto':r};
+    const nr={};nr[prof]=val;nr[other]=o[other]!=null?o[other]:'auto';
+    if(nr.portrait==='auto'&&nr.landscape==='auto')delete f.rotate;else f.rotate=nr;
+  };
+  if(!commit){
+    const tmp=JSON.parse(rsJ(this._fpCfg()));upd(tmp);this._fpTmp=tmp;this._fpPreview();this._fpTmp=null;return;
+  }
+  this._fpEdit(function(f){upd(f);},'props','fp-rotate');
+};
+RocStudio.prototype._fpRotPop=function(show){
+  const self=this;
+  if(!this._fpRotEl){
+    const box=rsEl('span',{class:'fprot',role:'group','aria-label':this.t('fp_rot')});
+    const lab=rsEl('span',{class:'fprot-p'});
+    const rng=rsEl('input',{type:'range',min:'0',max:'359',step:'1','aria-label':this.t('fp_rot_angle')});
+    const num=rsEl('input',{type:'number',min:'0',max:'359',step:'1',class:'fprot-n','aria-label':this.t('fp_rot_angle')});
+    // near a multiple of 15° the slider snaps to it (0, 45, 90… are what people want most)
+    const snap=function(v){v=((Math.round(+v)%360)+360)%360;const q=Math.round(v/15)*15;return(Math.abs(q-v)<=2?q:v)%360;};
+    rng.addEventListener('input',function(){const v=snap(rng.value);num.value=v;self._fpRotSet(v,false);});
+    rng.addEventListener('change',function(){self._fpRotSet(snap(rng.value),true);});
+    num.addEventListener('change',function(){const v=snap(num.value||0);num.value=v;rng.value=v;self._fpRotSet(v,true);});
+    const step=function(d){const cur=self._fpView&&isFinite(self._fpView.rot)?self._fpView.rot:0;self._fpRotSet(((Math.round(cur)+d)%360+360)%360,true);};
+    box.appendChild(lab);box.appendChild(rng);box.appendChild(num);box.appendChild(rsEl('span',{text:'°'}));
+    box.appendChild(rsEl('button',{type:'button',class:'btn sm',title:this.t('fp_rot_m90'),'aria-label':this.t('fp_rot_m90'),onclick:function(){step(-90);}},[rsIcon('mdi:rotate-left')]));
+    box.appendChild(rsEl('button',{type:'button',class:'btn sm',title:this.t('fp_rot_p90'),'aria-label':this.t('fp_rot_p90'),onclick:function(){step(90);}},[rsIcon('mdi:rotate-right')]));
+    box.appendChild(rsEl('button',{type:'button',class:'btn sm','data-act':'fp-rot-auto',title:this.t('fp_rot_auto_t'),onclick:function(){self._fpRotSet('auto',true);}},[this.t('fp_rot_auto')]));
+    this._fpRotEl=box;this._fpRotLab=lab;this._fpRotRng=rng;this._fpRotNum=num;
+    box.hidden=true;
+    this._fpBar.parentNode.insertBefore(box,this._fpBar.nextSibling);
+  }
+  this._fpRotEl.hidden=!show;
+  if(this._fpRotBtn)this._fpRotBtn.setAttribute('aria-expanded',String(!!show));
+  this._fpRotSync();
+};
+RocStudio.prototype._fpRotSync=function(){
+  if(!this._fpRotEl||this._fpRotEl.hidden)return;
+  const prof=this._fpRotProf(),r=this._fpCfg().rotate;
+  const own=r&&typeof r==='object'&&!Array.isArray(r)?r[prof]:r;
+  const cur=this._fpView&&isFinite(this._fpView.rot)?Math.round(this._fpView.rot):0;
+  this._fpRotLab.textContent=this.t(prof==='portrait'?'fp_rot_for_p':'fp_rot_for_l')+(own==null||own==='auto'?' · '+this.t('fp_rot_auto'):'');
+  if(document.activeElement!==this._fpRotNum&&(!this._sr||this._sr.activeElement!==this._fpRotNum))this._fpRotNum.value=cur;
+  this._fpRotRng.value=cur;
 };
 RocStudio.prototype._fpFlip=function(){
   const seq=['none','horizontal','vertical','both'],cur=this._fpCfg().mirror,i=seq.indexOf(cur);
