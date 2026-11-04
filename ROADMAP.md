@@ -22,7 +22,7 @@ pre-releases. Release notes: [`RELEASE_NOTES_v7.0.0.md`](docs/releases/RELEASE_N
 Left over from Phase 10:
 
 - [ ] HACS default-repository PR (checklist below) — now that a full 7.0.0 release exists
-- [ ] Short studio GIFs, tool by tool, in [`docs/STUDIO.md`](docs/STUDIO.md)
+- [x] Studio GIFs in [`docs/STUDIO.md`](docs/STUDIO.md): device frames, select / move / undo, add by drawing, turning the floor plan
 - [ ] The install text checked against a real Home Assistant 2026.11 Marketplace (labels taken
   from its documentation)
 

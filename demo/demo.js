@@ -44,8 +44,8 @@ function callService(domain,service,data,target){data=data||{};const L=ids(data,
   switch(domain){
     case'light':L.forEach(id=>light(id,service,data));break;
     case'switch':case'input_boolean':case'fan':case'humidifier':case'homeassistant':
-      L.forEach(id=>{const o=states[id];if(!o)return;put(id,service==='toggle'?(ON.includes(o.state)?'off':'on'):(service==='turn_off'?'off':'on'));
-        if(id.startsWith('light.'))light(id,service,data);});break;
+      L.forEach(id=>{const o=states[id];if(!o)return;if(id.startsWith('light.')){light(id,service,data);return;} // homeassistant.toggle on a light
+        put(id,service==='toggle'?(ON.includes(o.state)?'off':'on'):(service==='turn_off'?'off':'on'));});break;
     case'cover':L.forEach(id=>{if(!states[id])return;if(service==='stop_cover'){clearInterval(moving[id]);put(id,+states[id].attributes.current_position>0?'open':'closed');return;}
       moveCover(id,service==='open_cover'?100:service==='close_cover'?0:service==='toggle'?(+states[id].attributes.current_position>0?0:100):Math.round(+data.position||0));});break;
     case'media_player':L.forEach(id=>{const o=states[id];if(!o)return;

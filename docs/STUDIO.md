@@ -79,6 +79,11 @@ room 1 first. One Undo takes it back.
 
 ## The workspace
 
+| | |
+|---|---|
+| ![Switching the canvas between tablet, tablet portrait and phone](../screenshots/studio-frames.webp) | ![Live: the canvas works like the card — tapping the light pills](../screenshots/studio-live.webp) |
+| *Device frames: Tablet, Tablet portrait, Phone* | *Live: the canvas works like the card on the dashboard* |
+
 ```
 ┌ toolbar: room · frame (Fit / Tablet / Tablet portrait / Phone) · Arrange / Live · Add · undo / redo · YAML · History · Save ┐
 │ outline (rooms, every element, search) │ canvas — the real card, live states │ inspector: Properties | All settings (the tabbed form) │
@@ -168,6 +173,11 @@ another card — a *Paste room* line appears) and **delete**. A copy gets a uniq
 
 ## Moving, resizing, adding
 
+| | |
+|---|---|
+| ![Select an element in the outline, drag it on the canvas, undo](../screenshots/studio-move.webp) | ![Add → Zone, then drag a box on the picture](../screenshots/studio-add.webp) |
+| *Select in the outline, drag on the canvas, Undo* | *Add → Zone, then drag a box on the picture* |
+
 **Moving and resizing** (canvas in *Arrange*):
 
 - drag to move; it snaps to a 0.5 % grid and, with a blue guide line, to the left / centre /
@@ -235,6 +245,8 @@ the first time you open the studio, never by a dashboard that just shows the car
 you if the second one is missing.
 
 ## Floor plan pages
+
+![Turning the floor plan with the Turn slider](../screenshots/studio-floorplan.webp)
 
 Since v6.47.0, *Add a floor plan page* at the bottom of the Rooms list adds a
 page that draws the home as a plan ([docs/FLOORPLAN.md](FLOORPLAN.md)). On that page the canvas
