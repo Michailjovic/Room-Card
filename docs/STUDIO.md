@@ -230,8 +230,8 @@ Saving depends on where you opened it:
 **Closing.** Escape or ✕ with unsaved changes asks first: save, discard or keep editing.
 
 **Installing.** The studio is a second file, `room-overlay-card-studio.js`. It is downloaded only
-the first time you open the studio, never by a dashboard that just shows the card. HACS installs
-it automatically. A manual install needs both files in the same folder; the Studio button tells
+the first time you open the studio, never by a dashboard that just shows the card. The Marketplace
+(HACS before Home Assistant 2026.11) installs it automatically. A manual install needs both files in the same folder; the Studio button tells
 you if the second one is missing.
 
 ## Floor plan pages

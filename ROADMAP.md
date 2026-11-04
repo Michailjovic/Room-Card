@@ -1,7 +1,7 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.0.0-beta.4** (pre-release; last stable v6.51.0). Verified against Home
-Assistant 2026.10.2.
+Current release: **7.0.0** (2026-11-04). Verified against Home Assistant 2026.10.2; the install
+text covers 2026.11's Marketplace.
 
 The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in
 [`docs/archive/`](docs/archive). This file only says where the card is going.
@@ -10,31 +10,21 @@ Legend: 🎯 agreed · 💡 candidate, not decided · 🔭 idea · 🅿️ parke
 
 ---
 
-## 🎯 Now — 7.0.0: Studio, floor plan, AnyVac
+## ✅ 7.0.0 — Studio, floor plan, AnyVac (2026-11-04)
 
-Plan: [`V7_PLAN.md`](V7_PLAN.md). The card's own full-screen editor (**Room Card Studio**), a
-**floor plan page** drawn from the vacuum map via [AnyVac](https://github.com/Michailjovic/anyvac)
+Plan: [`V7_PLAN.md`](docs/archive/V7_PLAN.md). The card's own full-screen editor (**Room Card
+Studio**), a **floor plan page** drawn from the vacuum map via [AnyVac](https://github.com/Michailjovic/anyvac)
 or by hand, live vacuums on it, and the overview's cross-room signals. Phases 1–8 shipped as
-v6.40.0–v6.51.0; Phase 9 (the studio becomes the default editor) and the documentation's first
-part are in the 7.0.0 betas.
+v6.40.0–v6.51.0, Phase 9 in the 7.0.0 betas; 7.0.0 is 7.0.0-beta.4 with the documentation of
+Phase 10. It is the first full release on GitHub since 6.25.1 — 6.30.0 to 7.0.0-beta.4 were
+pre-releases. Release notes: [`RELEASE_NOTES_v7.0.0.md`](docs/releases/RELEASE_NOTES_v7.0.0.md).
 
-Before 7.0.0 (V7_PLAN §9, Phase 10b):
+Left over from Phase 10:
 
-- [x] Working files out of git (session scratch, internal reviews, personal configs) — 2026-11-04
-- [x] Finished plans moved to [`docs/archive/`](docs/archive) — 2026-11-04
-- [x] This roadmap rewritten for after v7 — 2026-11-04
-- [x] Screenshots refreshed from the live demo: README hero (floor plan → room → lights → blind),
-  lights off / on, overview, a section, studio, phone, floor plan themes — 2026-11-04
-- [ ] Short studio GIFs, tool by tool, in [`docs/STUDIO.md`](docs/STUDIO.md) (V7_PLAN §9.2)
-- [x] Live demo in [`demo/`](demo) (mock `hass`, the author's card and pictures, studio included)
-  and its Pages workflow — 2026-11-04
-- [ ] GitHub Pages switched on (Settings → Pages → Source: GitHub Actions), demo link checked
-- [ ] Install instructions for Home Assistant 2026.11, where HACS is built in as the *Marketplace*
-  (custom repositories are still added by link; resources move to `/local/community/`)
-- [ ] Repo topics on GitHub
-- [ ] HACS default-repository submission (checklist below)
-- [ ] English release notes for 7.0.0; `V7_PLAN.md` moves to `docs/archive/`
-- [ ] Field test with no regression (V7_PLAN §14) — gate G4, the author's go
+- [ ] HACS default-repository PR (checklist below) — now that a full 7.0.0 release exists
+- [ ] Short studio GIFs, tool by tool, in [`docs/STUDIO.md`](docs/STUDIO.md)
+- [ ] The install text checked against a real Home Assistant 2026.11 Marketplace (labels taken
+  from its documentation)
 
 ## 🎯 Next — 7.1
 
@@ -110,8 +100,8 @@ Requirements as published at [hacs.xyz/docs/publish/include](https://www.hacs.xy
 
 | Line | Highlights | Plan |
 |---|---|---|
-| **7.0.0-beta.1–4** (2026-10/11) | studio as the default editor, docs set (getting started, studio, overview, floor plan, reference, AI spec), floor plan walls and free rotation, field-test fixes | [V7_PLAN](V7_PLAN.md) |
-| **v6.40–v6.51** | v7 phases 1–8: `src/` + schema, studio shell → canvas → forms → wizard, floor plan page, presence / media / markers, doors and windows, AnyVac live vacuums | [V7_PLAN](V7_PLAN.md) |
+| **7.0.0** (2026-11-04) | studio as the default editor, docs set (getting started, studio, overview, floor plan, reference, AI spec), live demo, floor plan walls and free rotation, field-test fixes (betas 1–4) | [V7_PLAN](docs/archive/V7_PLAN.md) |
+| **v6.40–v6.51** | v7 phases 1–8: `src/` + schema, studio shell → canvas → forms → wizard, floor plan page, presence / media / markers, doors and windows, AnyVac live vacuums | [V7_PLAN](docs/archive/V7_PLAN.md) |
 | **v6.30–v6.31** | overview page: every room as a live tile, header, side columns, section dock, zoom transition | [OVERVIEW_PLAN](docs/archive/OVERVIEW_PLAN.md) |
 | **v6.16–v6.25** | design refresh, native light pills, action builder, entity fields, preview + undo, js-yaml, persistent nav strip | — |
 | **v6.8–v6.15** | cockpit sections and panels, image / auto / declared tiles, editor audit fixes | [COCKPIT_PLAN](docs/archive/COCKPIT_PLAN.md) |

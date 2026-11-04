@@ -1,5 +1,26 @@
 # Changelog
 
+## [7.0.0] - 2026-11-04
+
+**The first stable release of v7: Room Card Studio, the floor plan page and AnyVac.** The code is
+7.0.0-beta.4's — the version number is the only change in the three files; this release adds the
+documentation and the live demo. On GitHub the last full release before it was 6.25.1 (6.30.0 to
+7.0.0-beta.4 were pre-releases), so for anyone who installs only stable releases everything below
+down to 6.30.0 is new. The [release notes](docs/releases/RELEASE_NOTES_v7.0.0.md) sum it up.
+
+### Documentation
+
+- **Live demo** on GitHub Pages: the card, the studio and the floor plan against a mock Home
+  Assistant, with the author's own rooms (`demo/`, published by `.github/workflows/pages.yml`).
+- **New screenshots**, taken from the demo — the README's hero: the floor plan zooms into a room,
+  its lights come on and the blind comes down.
+- **Installing on Home Assistant 2026.11**, where HACS is built in as the *Marketplace*: README,
+  Getting started, Studio and Troubleshooting describe the Marketplace and HACS on older versions.
+- ROADMAP rewritten for after v7; the finished plans (v5, live nav, editor revalidation, cockpit,
+  overview, v7) moved to `docs/archive/`; `V8_PLAN.md` added (an idea, undecided).
+- Working files (session scratch, internal reviews, personal configs) are no longer in the
+  repository.
+
 ## [7.0.0-beta.4] - unreleased (pre-release)
 
 The last beta before 7.0.0: the floor plan's walls and free rotation (the author's field test),
@@ -766,7 +787,7 @@ that only shows on a dashboard does not download any of this.
 
 ### v7 foundation (V7_PLAN.md Phase 1) — no change for dashboards
 
-First release of the v7 line (studio, floorplan, AnyVac — see [`V7_PLAN.md`](V7_PLAN.md)).
+First release of the v7 line (studio, floorplan, AnyVac — see [`V7_PLAN.md`](docs/archive/V7_PLAN.md)).
 Everything here is groundwork; **a dashboard renders exactly as on v6.31.0** (verified below).
 
 - **Source split into `src/`.** The 10.7k-line `room-overlay-card.js` is now assembled from 15

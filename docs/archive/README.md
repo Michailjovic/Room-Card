@@ -11,6 +11,7 @@ decisions (and the alternatives rejected) that the code and later plans refer to
 | [EDITOR_UX_REVALIDATION.md](EDITOR_UX_REVALIDATION.md) | editor GUI/UX pass | v5.9.0–v5.10.1 |
 | [COCKPIT_PLAN.md](COCKPIT_PLAN.md) | sections, panels and tiles (the cockpit) | v6.8.0–v6.11.x |
 | [OVERVIEW_PLAN.md](OVERVIEW_PLAN.md) | the overview page | v6.30.0 |
+| [V7_PLAN.md](V7_PLAN.md) | Room Card Studio, the floor plan page, AnyVac, the v7 documentation | v6.40.0–7.0.0 |
 
-The current plans are in the repository root: [`V7_PLAN.md`](../../V7_PLAN.md) (7.0.0) and
-[`V8_PLAN.md`](../../V8_PLAN.md) (an idea). See also [`ROADMAP.md`](../../ROADMAP.md).
+The current plan is in the repository root: [`V8_PLAN.md`](../../V8_PLAN.md) (an idea). See also
+[`ROADMAP.md`](../../ROADMAP.md).

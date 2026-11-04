@@ -5,7 +5,7 @@ this file is a closed decision. No card code is written before Phase 0 (a visual
 author's own plan) says the idea is worth building. Not before 7.0.0 ships. Phase 0 prototype built
 the same day (§2a); the decision is the author's.
 
-Builds on the floor plan page of [`V7_PLAN.md`](V7_PLAN.md) / [`docs/FLOORPLAN.md`](docs/FLOORPLAN.md)
+Builds on the floor plan page of [`V7_PLAN.md`](docs/archive/V7_PLAN.md) / [`docs/FLOORPLAN.md`](docs/FLOORPLAN.md)
 and changes nothing there.
 
 ---

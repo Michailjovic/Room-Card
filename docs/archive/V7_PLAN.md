@@ -1,12 +1,12 @@
 # Room Card v7 — Studio, Floorplan, AnyVac — Implementation Plan
 
-Status: **agreed 2026-10-21** (versions from v6.40.0). Phase 0 (spikes) in progress. Written to be executed
+Status: **done — released as 7.0.0 on 2026-11-04** (agreed 2026-10-21, versions from v6.40.0). Kept for its closed decisions. Phase 0 (spikes) in progress. Written to be executed
 without the conversation that produced it: §1 lists decisions that are **closed** — do not re-open
 them and do not re-derive alternatives already rejected there. §3 lists spikes that must be done
 **before** any phase that depends on them.
 
-Builds on, and does not change, [`COCKPIT_PLAN.md`](docs/archive/COCKPIT_PLAN.md) (sections, panels,
-launchers) and [`OVERVIEW_PLAN.md`](docs/archive/OVERVIEW_PLAN.md) (overview page, zoom transition). Replaces
+Builds on, and does not change, [`COCKPIT_PLAN.md`](COCKPIT_PLAN.md) (sections, panels,
+launchers) and [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) (overview page, zoom transition). Replaces
 the parked "living floorplan" idea (ROADMAP 1b) and the old v7.0.0 plan ("debugged overview + AI
 README"), which is folded into §4 Phase 10.
 
@@ -250,7 +250,7 @@ blueprint | thermal | tiles | sketch), `theme_by` {portrait, landscape, dark, li
 instead of a separate `items:` list — `lights`, `climate`, `temperature`, `humidity`,
 `tap_action`, `hold_action` — next to `room`, `name`, `polygon`, `floor`, `anyvac_room`. `items:`
 stays free for Phase 6's markers placed at a point. `openings` holds doors only (windows: Phase 7).
-Reference: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
+Reference: [docs/FLOORPLAN.md](../FLOORPLAN.md).
 
 ### 6.2 Rendering (Phase 5)
 
@@ -296,7 +296,7 @@ name); a plan room's `media` (players → app / source on the label + a soft glo
 `hold_action`), drawn as an HTML layer over the SVG so `ha-icon` works; `floorplan.layers`
 (`lights`, `heating`, `labels`, `presence`, `media`, `attention`, `vacuum`, `items`). Attention and
 the vacuum are badges on the room label. Temperature as a room tint stays the `thermal` theme's.
-Reference: [docs/FLOORPLAN.md](docs/FLOORPLAN.md).
+Reference: [docs/FLOORPLAN.md](../FLOORPLAN.md).
 
 ### 6.5 Wall elements (Phase 7)
 
@@ -457,7 +457,7 @@ such change is verified in the real browser before release.
 
 All spikes run against **Home Assistant 2026.10.2** — the author's live instance (read-only, nothing
 saved) and an identical version in Docker for anything that writes. Spike code:
-[`prototypes/v7-spikes/`](prototypes/v7-spikes).
+[`prototypes/v7-spikes/`](../../prototypes/v7-spikes).
 
 | Spike | Result | Consequence for the plan |
 |---|---|---|

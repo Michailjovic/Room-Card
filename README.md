@@ -14,7 +14,7 @@ editor with the live card on a canvas — no YAML needed.
 
 **▶ [Try the live demo](https://michailjovic.github.io/Room-Card/)** — the real card and studio in your browser, against a mock Home Assistant.
 
-- **Install:** [HACS or manual](#installation) · **First room in two minutes:** [Getting started](docs/GETTING_STARTED.md)
+- **Install:** [Marketplace, HACS or manual](#installation) · **First room in two minutes:** [Getting started](docs/GETTING_STARTED.md)
 - **Guides:** [Studio](docs/STUDIO.md) · [Configuration](docs/CONFIGURATION.md) · [Overview page](docs/OVERVIEW.md) · [Floor plan](docs/FLOORPLAN.md) · [Presets](PRESETS.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
 - **Every key:** [generated reference](docs/REFERENCE.md) · for AI assistants: [AI spec](docs/AI_SPEC.md) and [`llms.txt`](llms.txt)
 
@@ -22,17 +22,32 @@ editor with the live card on a canvas — no YAML needed.
 
 ## Installation
 
-### Via HACS (recommended)
+### Home Assistant 2026.11 and newer — the Marketplace (recommended)
+
+Since 2026.11 HACS is built into Home Assistant as the **Marketplace**.
+
+1. **Settings → Marketplace → Add from link** → enter `Michailjovic/Room-Card` (or the full GitHub
+   URL) → **Add**; if it asks for the type, choose **Dashboard**. Adding a repository by link needs
+   a GitHub connection — the Marketplace walks you through it the first time. (Once the card is in
+   the default catalog, searching for *Room Overlay Card* is enough.)
+2. Open **Room Overlay Card** → **Install**. The Marketplace puts the files in `www/community/` and
+   adds the dashboard resource for you (if you keep resources in YAML, the install dialog shows the
+   line to add).
+3. Reload the browser (`Ctrl+Shift+R`); on a tablet or phone, reload the dashboard.
+
+To install another version — a beta, or to roll back — open the card → **⋮ → Install another
+version**.
+
+### Home Assistant 2026.10 and older — HACS
 
 1. **HACS → ⋮ → Custom repositories** → add `https://github.com/Michailjovic/Room-Card`, type
-   **Dashboard**. (Once the card is in HACS's default store, searching for *Room Overlay Card* is
-   enough.)
-2. Open **Room Overlay Card** in HACS and **Download**.
-3. Hard-refresh the browser (`Ctrl+Shift+R`); on a tablet or phone, reload the dashboard.
+   **Dashboard**.
+2. Open **Room Overlay Card** in HACS and **Download**, then hard-refresh the browser.
 
-HACS installs all three files (the card, the studio and the floor plan renderer). To install a
-specific version — a beta, or to roll back — open the card in HACS → **⋮ → Redownload**, tick
-*Show beta versions* if you want one, and pick the version.
+To pick a version, open the card → **⋮ → Redownload**, tick *Show beta versions* for a beta.
+
+The Marketplace and HACS install all three files (the card, the studio and the floor plan
+renderer).
 
 ### Manual
 
@@ -202,7 +217,7 @@ The source lives in `src/` as plain-JavaScript parts (no framework, no transpili
 `room-overlay-card-floorplan.js`. The assembled files stay committed — they are what a manual or
 local install loads and what every test tier runs against — and CI fails when they are out of
 date with `src/`. `npm run build` then produces the minified release assets (terser, property
-mangling off) that HACS installs.
+mangling off) that the Marketplace and HACS install.
 
 ```
 src/core/      shared helpers: layout, glow, transform, migration, rooms, sections, overview, signals, formatting…
