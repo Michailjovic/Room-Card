@@ -63,6 +63,8 @@ vacuum or AnyVac is gone.
 
 ## Themes
 
+![night, clay, blueprint and neon](../screenshots/floorplan-themes.webp)
+
 | Theme | Projection | Look |
 |---|---|---|
 | `night` *(default)* | oblique cut-away | dark; wood, tiles and carpet, low walls, warm light pools, glowing heating loops |

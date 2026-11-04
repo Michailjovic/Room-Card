@@ -889,7 +889,7 @@ Tip for every release: wait until the GitHub release shows the `room-overlay-car
 A room in `rooms:` can now be an **overview page** (`overview:`): every other room as a tile,
 plus an optional header, left/right card columns and a dock of section launchers. Tap a tile and
 the room opens in its usual view, growing out of its tile. Spec and closed decisions:
-[`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md); reference:
+[`OVERVIEW_PLAN.md`](docs/archive/OVERVIEW_PLAN.md); reference:
 [Configuration → Overview page](docs/CONFIGURATION.md#overview-page-v6300).
 
 - **A page, not a mode.** An ordinary room entry — put it first to open on it. Swipe, wheel,
@@ -2595,7 +2595,7 @@ Every field keeps its exact same id — this is a pure DOM regrouping, `_collect
 
 ### Editor: Layout tab — Portrait/Landscape sub-tabs, live mini grid preview, and a real live-preview fix
 
-Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md)) — this pass covers the Layout tab specifically (proposal 7, "Live preview for the Layout tab"), plus two smaller usability wins for the same tab. The Elements tab's alphabetical-with-icons section ordering (proposal 1) was reviewed and kept as-is — it reads fine and is out of scope for this round.
+Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](docs/archive/EDITOR_UX_REVALIDATION.md)) — this pass covers the Layout tab specifically (proposal 7, "Live preview for the Layout tab"), plus two smaller usability wins for the same tab. The Elements tab's alphabetical-with-icons section ordering (proposal 1) was reviewed and kept as-is — it reads fine and is out of scope for this round.
 
 **1. Portrait / Landscape as sub-tabs, not stacked boxes.** The two profile editors used to render one after another, doubling the tab's length and making it easy to edit the wrong profile by mistake. They're now behind a small Portrait/Landscape pill toggle (same pattern as the top-level Image/Elements/Layout/Rooms&menu tabs); both profiles stay mounted underneath so field values and focus survive switching, only visibility toggles.
 

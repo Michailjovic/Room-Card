@@ -8,6 +8,10 @@ a form for whatever is selected. Everything can be built here without writing YA
 Home Assistant's areas, elements placed and sized on the image, sections, the overview page and
 floor plan pages.
 
+![Room Card Studio: the outline on the left, the live card on the canvas, the form on the right](../screenshots/studio.webp)
+
+You can try it without installing anything in the [live demo](https://michailjovic.github.io/Room-Card/) (*✎ Open Studio*).
+
 ---
 
 ## Opening the studio

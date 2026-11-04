@@ -4,7 +4,8 @@
 
 From nothing to a room that lights up with your lamps, then a whole home with an overview and a
 floor plan. Every step is done in Room Card Studio; the YAML it writes is shown along the way for
-reference — you never have to type it.
+reference — you never have to type it. To look around first, open the
+[live demo](https://michailjovic.github.io/Room-Card/).
 
 ---
 

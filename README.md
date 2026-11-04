@@ -10,7 +10,9 @@ with the lights, the blinds come down, live values and controls sit on the furni
 home from your robot vacuum's map. Everything is built in **Room Card Studio**, a full-screen
 editor with the live card on a canvas — no YAML needed.
 
-![Room Overlay Card – hero screenshot](screenshots/hero.png)
+![The floor plan zooms into the living room, its lights come on and the blind comes down](screenshots/hero.webp)
+
+**▶ [Try the live demo](https://michailjovic.github.io/Room-Card/)** — the real card and studio in your browser, against a mock Home Assistant.
 
 - **Install:** [HACS or manual](#installation) · **First room in two minutes:** [Getting started](docs/GETTING_STARTED.md)
 - **Guides:** [Studio](docs/STUDIO.md) · [Configuration](docs/CONFIGURATION.md) · [Overview page](docs/OVERVIEW.md) · [Floor plan](docs/FLOORPLAN.md) · [Presets](PRESETS.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
@@ -90,14 +92,17 @@ aspect_ratio: "16/9"
 
 ## Screenshots
 
+![The living room with its lights off and on](screenshots/lights.webp)
+*The photo follows the room's lights — off, on.*
+
 | | |
 |---|---|
-| ![Responsive — one card across devices](screenshots/responsive.png) | ![Night scene](screenshots/night.png) |
-| *One card, every screen — the same card at different widths* | *Night mode — dim filter active* |
-| ![Day scene](screenshots/day.png) | ![Blinds](screenshots/blinds.png) |
-| *Day scene — full brightness* | *Day/night zebra blind at 60 %* |
-| ![Gauges](screenshots/gauges.png) | ![Tabbed form](screenshots/editor-image-tab.png) |
-| *Gauges — temperature, humidity, CO₂* | *The tabbed form (the studio's All settings)* |
+| ![Overview page](screenshots/overview.webp) | ![A section panel](screenshots/sections.webp) |
+| *Overview — every room as a live tile, section launchers at the bottom* | *A section — running appliances, each shown as itself* |
+| ![Room Card Studio](screenshots/studio.webp) | ![The same card on a phone](screenshots/phone.webp) |
+| *Room Card Studio — the live card on a canvas, the form beside it* | *The same card in the phone layout* |
+
+All of these come from the [live demo](https://michailjovic.github.io/Room-Card/) — the author's own flat.
 
 ---
 
@@ -129,6 +134,8 @@ Guide: [docs/OVERVIEW.md](docs/OVERVIEW.md).
 ---
 
 ## The floor plan page
+
+![The floor plan in the night, clay, blueprint and neon themes](screenshots/floorplan-themes.webp)
 
 A page that draws your home as a **plan**: floors, walls, doors and windows, each room's lights
 as a glow in their colour, floor heating, temperature and humidity; who is where, what plays,
@@ -205,6 +212,7 @@ src/studio/    Room Card Studio → room-overlay-card-studio.js (loaded on deman
 src/floorplan/ the floor plan renderer → room-overlay-card-floorplan.js (loaded on demand)
 src/schema/    the config schema registry — every key, its type and scope
 tools/         assemble.js, gen-docs.js (docs/REFERENCE.md and the AI spec from the schema)
+demo/          the live demo: a mock Home Assistant, the author's card and pictures (GitHub Pages)
 ```
 
 ```bash

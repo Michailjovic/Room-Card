@@ -242,7 +242,7 @@ tap away on a phone.
 ## Editor UX rebuild (v5.9.0 – v5.10.1)
 
 The control surface had grown a lot across v3–v4 and was getting hard to navigate, even for the
-author. A full pass (analysis in `EDITOR_UX_REVALIDATION.md`, decided incrementally rather than
+author. A full pass (analysis in [`EDITOR_UX_REVALIDATION.md`](archive/EDITOR_UX_REVALIDATION.md), decided incrementally rather than
 implemented wholesale) shipped four changes, all reflected in the walkthrough above:
 
 - **Edit mode unified** (v5.9.0) — *Test mode* and *Drag-edit preview* used to be two separate

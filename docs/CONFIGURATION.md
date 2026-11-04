@@ -1254,7 +1254,7 @@ sections:
             target: { entity_id: switch.screen_down }
 ```
 
-Declared tiles combine with everything else a section can pull in (COCKPIT_PLAN.md kap.4): the
+Declared tiles combine with everything else a section can pull in ([COCKPIT_PLAN.md](archive/COCKPIT_PLAN.md) §4): the
 resolution order is **declared → room-tagged collected → auto → embedded `card:`**. Declared comes
 first because it is the most deliberate authoring — content the section owns outright, not
 something happened to be tagged elsewhere.

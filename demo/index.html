@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<!--
+  Room Overlay Card — live demo (V7_PLAN §9.4). The real card, studio and floor plan renderer
+  against a mock Home Assistant (demo.js): config.json is the author's own card, scenario.json an
+  evening in his flat. Nothing leaves the browser tab. Served by GitHub Pages
+  (.github/workflows/pages.yml); locally: serve the repo root and open /demo/.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Room Overlay Card — live demo</title>
+<meta name="description" content="Live demo of Room Overlay Card for Home Assistant: rooms that react to their lights, an overview, a floor plan and the full-screen Room Card Studio.">
+<style>
+  :root{color-scheme:dark;--primary-color:#03a9f4;--accent-color:#ff9800;--card-background-color:#1c1f24;--ha-card-background:#1c1f24;
+    --primary-background-color:#111418;--secondary-background-color:#24282e;--divider-color:rgba(255,255,255,.12);
+    --primary-text-color:#e8eaed;--secondary-text-color:#9aa3ad;--ha-card-border-radius:12px;}
+  html,body{margin:0;height:100%;background:#0e1013;color:#e8eaed;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}
+  header{display:flex;align-items:center;gap:10px;height:48px;padding:0 12px;background:#15181d;border-bottom:1px solid rgba(255,255,255,.08);box-sizing:border-box;}
+  header b{font-size:15px;white-space:nowrap;} header .tag{color:#9aa3ad;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  header .sp{flex:1;}
+  header button,header a{flex:none;background:#232830;color:#e8eaed;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:6px 12px;font:600 13px/1.2 inherit;cursor:pointer;text-decoration:none;}
+  header button.pri{background:#2a4a8c;border-color:#4b6fc0;}
+  header button:hover,header a:hover{filter:brightness(1.2);}
+  #stage{position:relative;height:calc(100% - 48px);display:flex;justify-content:center;align-items:center;overflow:hidden;}
+  #frame{width:100%;height:100%;}
+  body.phone #frame{width:400px;max-width:calc(100% - 16px);height:860px;max-height:calc(100% - 16px);border:1px solid rgba(255,255,255,.16);border-radius:28px;overflow:hidden;}
+  #lovelace{height:100%;}
+  room-overlay-card{display:block;height:100%;}
+  #more{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:2000;}
+  #more[hidden],#toast[hidden]{display:none;}
+  #more .box{min-width:260px;max-width:90vw;background:#1c1f24;border:1px solid rgba(255,255,255,.12);border-radius:16px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5);}
+  #more h3{margin:0 0 4px;font-size:16px;} #more .st{font-size:26px;font-weight:600;margin:6px 0 10px;} #more .at{color:#9aa3ad;font-size:12px;white-space:pre-line;}
+  #more .row{display:flex;gap:8px;margin-top:14px;} #more button{flex:1;background:#232830;color:#e8eaed;border:1px solid rgba(255,255,255,.14);border-radius:10px;padding:9px;font:600 13px inherit;cursor:pointer;}
+  #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:#232830;border:1px solid rgba(255,255,255,.16);border-radius:10px;padding:8px 14px;z-index:2100;font-size:13px;}
+  @media (max-width:640px){header .tag{display:none;}}
+</style>
+</head>
+<body>
+<header>
+  <b>Room Overlay Card</b><span class="tag">live demo · mock Home Assistant · changes stay in this tab</span>
+  <span class="sp"></span>
+  <button id="studio" class="pri" type="button">✎ Open Studio</button>
+  <button id="dev" type="button">Phone</button>
+  <a href="https://github.com/Michailjovic/Room-Card">GitHub</a>
+</header>
+<div id="stage"><div id="frame"><div id="lovelace"></div></div></div>
+<div id="more" hidden></div>
+<div id="toast" hidden></div>
+<script type="module" src="demo.js"></script>
+</body>
+</html>

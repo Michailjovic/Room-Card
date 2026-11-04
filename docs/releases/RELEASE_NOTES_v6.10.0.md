@@ -1,6 +1,6 @@
 # v6.10.0 — Cockpit: auto tiles & onboarding
 
-The cockpit plan's last phase (COCKPIT_PLAN.md kap.8) is about getting a first section on screen
+The cockpit plan's last phase (COCKPIT_PLAN.md §8) is about getting a first section on screen
 without writing any YAML by hand at all. `source: auto` fills a section straight from Home
 Assistant's own entity list, and three editor helpers — recipes, an untagged-device scan, and a
 one-click room bootstrap from HA's area registry — do the rest of the typing.
@@ -27,7 +27,7 @@ to hang a `tile.image` off, so [image tiles](RELEASE_NOTES_v6.9.0.md) stay a col
 ## Combining sources — a fixed gap closed
 
 The plan always described a section's content as up to three sources at once, resolved in order:
-collected tiles, then auto tiles, then an embedded card at the bottom (kap.4). v6.8.0's `card:`
+collected tiles, then auto tiles, then an embedded card at the bottom (§4). v6.8.0's `card:`
 handling didn't actually honour that — a `card:` section rendered the card alone and silently
 dropped any collected tiles. That's fixed here: a section can genuinely combine all three now, in
 that order, in the same panel body. A plain `card:` section with nothing else tagged into it

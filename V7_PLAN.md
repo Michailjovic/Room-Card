@@ -5,8 +5,8 @@ without the conversation that produced it: §1 lists decisions that are **closed
 them and do not re-derive alternatives already rejected there. §3 lists spikes that must be done
 **before** any phase that depends on them.
 
-Builds on, and does not change, [`COCKPIT_PLAN.md`](COCKPIT_PLAN.md) (sections, panels,
-launchers) and [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) (overview page, zoom transition). Replaces
+Builds on, and does not change, [`COCKPIT_PLAN.md`](docs/archive/COCKPIT_PLAN.md) (sections, panels,
+launchers) and [`OVERVIEW_PLAN.md`](docs/archive/OVERVIEW_PLAN.md) (overview page, zoom transition). Replaces
 the parked "living floorplan" idea (ROADMAP 1b) and the old v7.0.0 plan ("debugged overview + AI
 README"), which is folded into §4 Phase 10.
 
@@ -457,7 +457,7 @@ such change is verified in the real browser before release.
 
 All spikes run against **Home Assistant 2026.10.2** — the author's live instance (read-only, nothing
 saved) and an identical version in Docker for anything that writes. Spike code:
-[`prototypes/v7-spikes/`](prototypes/v7-spikes/).
+[`prototypes/v7-spikes/`](prototypes/v7-spikes).
 
 | Spike | Result | Consequence for the plan |
 |---|---|---|
@@ -986,4 +986,21 @@ companion app (author), and the tablet run of the S5 probe.
   all findings fixed and moved into `tests/lifecycle.test.js` §9, `tests/floorplan.test.js`,
   `tests/studio.test.js` and `tests/floorplan.spec.js`.
 - Next: Phase 10b — the documentation rework as agreed, then 7.0.0.
+
+### Phase 10b — progress (2026-11-04)
+
+- Repo cleanup (§9.5): session scratch (`Claude outputs/`), the internal reviews (`*ANALYSIS*.md`)
+  and the author's old configs taken out of git and ignored; the finished plans moved to
+  `docs/archive/` (with a README); links rewritten, none dead. ROADMAP rewritten for after v7.
+- Live demo (§9.4): `demo/` — the author's own card and pictures (WebP, 6 MB) against a mock
+  Home Assistant (`demo.js`: states, light groups, covers that move, media, climate, vacuums,
+  `callWS`, an `<ha-icon>` with the 123 MDI icons the card uses, a small more-info dialog);
+  *✎ Open Studio* saves "to the dashboard" in the tab. `.github/workflows/pages.yml` publishes it
+  with the minified bundles; GitHub Pages has to be switched on once.
+- Screenshots (§9.6) from the demo: `hero.webp` (floor plan → living room → lights → blind),
+  `lights.webp`, `overview.webp`, `sections.webp`, `studio.webp`, `phone.webp`,
+  `floorplan-themes.webp`; README, Studio, Overview, Floor plan and Getting started use them.
+  The v1–v5 screenshots left git; the classic editor's stay until 7.1.
+- Still open: studio GIFs tool by tool, Pages switched on, repo description / topics, install
+  text for the 2026.11 Marketplace, HACS default PR, 7.0.0 release notes, this plan to the archive.
 
