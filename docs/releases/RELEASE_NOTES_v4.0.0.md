@@ -1,6 +1,6 @@
 # v4.0.0 — Layout engine rebuild: two profiles on a % grid
 
-**Breaking release.** The 4-tier responsive system (mobile / tablet / desktop / ultrawide, width breakpoints) is gone. In its place: **two GUI-built layout profiles — `portrait` and `landscape` — where every block of the card is placed on a percentage grid of the available viewport.** Old configs are auto-migrated on load. Full spec in [LAYOUT.md](LAYOUT.md).
+**Breaking release.** The 4-tier responsive system (mobile / tablet / desktop / ultrawide, width breakpoints) is gone. In its place: **two GUI-built layout profiles — `portrait` and `landscape` — where every block of the card is placed on a percentage grid of the available viewport.** Old configs are auto-migrated on load. Full spec in [LAYOUT.md](../../LAYOUT.md).
 
 ## Highlights
 

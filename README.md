@@ -10,9 +10,11 @@ with the lights, the blinds come down, live values and controls sit on the furni
 home from your robot vacuum's map. Everything is built in **Room Card Studio**, a full-screen
 editor with the live card on a canvas — no YAML needed.
 
-![Room Overlay Card – hero screenshot](screenshots/hero.png)
+![The floor plan zooms into the living room, its lights come on and the blind comes down](screenshots/hero.webp)
 
-- **Install:** [HACS or manual](#installation) · **First room in two minutes:** [Getting started](docs/GETTING_STARTED.md)
+**▶ [Try the live demo](https://michailjovic.github.io/Room-Card/)** — the real card and studio in your browser, against a mock Home Assistant.
+
+- **Install:** [Marketplace, HACS or manual](#installation) · **First room in two minutes:** [Getting started](docs/GETTING_STARTED.md)
 - **Guides:** [Studio](docs/STUDIO.md) · [Configuration](docs/CONFIGURATION.md) · [Overview page](docs/OVERVIEW.md) · [Floor plan](docs/FLOORPLAN.md) · [Presets](PRESETS.md) · [Troubleshooting](docs/TROUBLESHOOTING.md)
 - **Every key:** [generated reference](docs/REFERENCE.md) · for AI assistants: [AI spec](docs/AI_SPEC.md) and [`llms.txt`](llms.txt)
 
@@ -20,17 +22,32 @@ editor with the live card on a canvas — no YAML needed.
 
 ## Installation
 
-### Via HACS (recommended)
+### Home Assistant 2026.11 and newer — the Marketplace (recommended)
+
+Since 2026.11 HACS is built into Home Assistant as the **Marketplace**.
+
+1. **Settings → Marketplace → Add from link** → enter `Michailjovic/Room-Card` (or the full GitHub
+   URL) → **Add**; if it asks for the type, choose **Dashboard**. Adding a repository by link needs
+   a GitHub connection — the Marketplace walks you through it the first time. (Once the card is in
+   the default catalog, searching for *Room Overlay Card* is enough.)
+2. Open **Room Overlay Card** → **Install**. The Marketplace puts the files in `www/community/` and
+   adds the dashboard resource for you (if you keep resources in YAML, the install dialog shows the
+   line to add).
+3. Reload the browser (`Ctrl+Shift+R`); on a tablet or phone, reload the dashboard.
+
+To install another version — a beta, or to roll back — open the card → **⋮ → Install another
+version**.
+
+### Home Assistant 2026.10 and older — HACS
 
 1. **HACS → ⋮ → Custom repositories** → add `https://github.com/Michailjovic/Room-Card`, type
-   **Dashboard**. (Once the card is in HACS's default store, searching for *Room Overlay Card* is
-   enough.)
-2. Open **Room Overlay Card** in HACS and **Download**.
-3. Hard-refresh the browser (`Ctrl+Shift+R`); on a tablet or phone, reload the dashboard.
+   **Dashboard**.
+2. Open **Room Overlay Card** in HACS and **Download**, then hard-refresh the browser.
 
-HACS installs all three files (the card, the studio and the floor plan renderer). To install a
-specific version — a beta, or to roll back — open the card in HACS → **⋮ → Redownload**, tick
-*Show beta versions* if you want one, and pick the version.
+To pick a version, open the card → **⋮ → Redownload**, tick *Show beta versions* for a beta.
+
+The Marketplace and HACS install all three files (the card, the studio and the floor plan
+renderer).
 
 ### Manual
 
@@ -90,14 +107,17 @@ aspect_ratio: "16/9"
 
 ## Screenshots
 
+![The living room with its lights off and on](screenshots/lights.webp)
+*The photo follows the room's lights — off, on.*
+
 | | |
 |---|---|
-| ![Responsive — one card across devices](screenshots/responsive.png) | ![Night scene](screenshots/night.png) |
-| *One card, every screen — the same card at different widths* | *Night mode — dim filter active* |
-| ![Day scene](screenshots/day.png) | ![Blinds](screenshots/blinds.png) |
-| *Day scene — full brightness* | *Day/night zebra blind at 60 %* |
-| ![Gauges](screenshots/gauges.png) | ![Tabbed form](screenshots/editor-image-tab.png) |
-| *Gauges — temperature, humidity, CO₂* | *The tabbed form (the studio's All settings)* |
+| ![Overview page](screenshots/overview.webp) | ![A section panel](screenshots/sections.webp) |
+| *Overview — every room as a live tile, section launchers at the bottom* | *A section — running appliances, each shown as itself* |
+| ![Room Card Studio](screenshots/studio.webp) | ![The same card on a phone](screenshots/phone.webp) |
+| *Room Card Studio — the live card on a canvas, the form beside it* | *The same card in the phone layout* |
+
+All of these come from the [live demo](https://michailjovic.github.io/Room-Card/) — the author's own flat.
 
 ---
 
@@ -129,6 +149,8 @@ Guide: [docs/OVERVIEW.md](docs/OVERVIEW.md).
 ---
 
 ## The floor plan page
+
+![The floor plan in the night, clay, blueprint and neon themes](screenshots/floorplan-themes.webp)
 
 A page that draws your home as a **plan**: floors, walls, doors and windows, each room's lights
 as a glow in their colour, floor heating, temperature and humidity; who is where, what plays,
@@ -195,7 +217,7 @@ The source lives in `src/` as plain-JavaScript parts (no framework, no transpili
 `room-overlay-card-floorplan.js`. The assembled files stay committed — they are what a manual or
 local install loads and what every test tier runs against — and CI fails when they are out of
 date with `src/`. `npm run build` then produces the minified release assets (terser, property
-mangling off) that HACS installs.
+mangling off) that the Marketplace and HACS install.
 
 ```
 src/core/      shared helpers: layout, glow, transform, migration, rooms, sections, overview, signals, formatting…
@@ -205,6 +227,7 @@ src/studio/    Room Card Studio → room-overlay-card-studio.js (loaded on deman
 src/floorplan/ the floor plan renderer → room-overlay-card-floorplan.js (loaded on demand)
 src/schema/    the config schema registry — every key, its type and scope
 tools/         assemble.js, gen-docs.js (docs/REFERENCE.md and the AI spec from the schema)
+demo/          the live demo: a mock Home Assistant, the author's card and pictures (GitHub Pages)
 ```
 
 ```bash

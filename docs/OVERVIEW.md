@@ -5,6 +5,8 @@
 Since v6.30.0. Every key of `overview:`, `overview_tile:` and their parts is listed in the
 [generated reference](REFERENCE.md#t-overview).
 
+![An overview page: every room as a live tile, section launchers in the dock](../screenshots/overview.webp)
+
 One room in `rooms:` can be an **overview page**: every other room as a tile, plus the house-level
 things around them. Tap a tile and that room opens in its normal view, growing out of its tile.
 

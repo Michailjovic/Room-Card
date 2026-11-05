@@ -1,6 +1,6 @@
 # v5.9.11 — Editor Layout tab: sub-tabs, live mini grid preview, and a real live-preview fix
 
-Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md)).
+Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](../archive/EDITOR_UX_REVALIDATION.md)).
 This pass covers the Layout tab (proposal 7 — "Live preview for the Layout tab") plus two smaller
 usability wins for the same tab. The Elements tab's alphabetical-with-icons ordering (proposal 1)
 was reviewed and kept as-is for now — it reads fine as is.

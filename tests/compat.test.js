@@ -42,8 +42,7 @@ function load(code){
 // ---- configs: every room-overlay-card in the reference YAML files + synthetic nav variants
 function collectConfigs(w){
   const cfgs=[];
-  const files=['example-bedroom.yaml','flat-multiroom.yaml','flat-multiroom-v4.yaml']
-    .concat(fs.existsSync(path.join(ROOT,'Claude outputs'))?fs.readdirSync(path.join(ROOT,'Claude outputs')).filter(f=>/^room-card-.*\.yaml$/.test(f)).map(f=>'Claude outputs/'+f):[]);
+  const files=fs.readdirSync(path.join(ROOT,'tests','fixtures')).filter(f=>/\.ya?ml$/.test(f)).map(f=>'tests/fixtures/'+f).concat(['flat-multiroom.yaml']);
   for(const f of files){
     const p=path.join(ROOT,f);if(!fs.existsSync(p))continue;
     const d=w.__rocYaml.load(fs.readFileSync(p,'utf8'));

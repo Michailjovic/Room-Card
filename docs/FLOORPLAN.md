@@ -63,6 +63,8 @@ vacuum or AnyVac is gone.
 
 ## Themes
 
+![night, clay, blueprint and neon](../screenshots/floorplan-themes.webp)
+
 | Theme | Projection | Look |
 |---|---|---|
 | `night` *(default)* | oblique cut-away | dark; wood, tiles and carpet, low walls, warm light pools, glowing heating loops |
@@ -327,4 +329,4 @@ room's lights.
 ## Coming next
 
 Multi-floor homes (a frame / floor picker), openings in the `thermal` and `tiles` themes — see
-[V7_PLAN.md](../V7_PLAN.md) §6.
+[V7_PLAN.md](archive/V7_PLAN.md) §6.

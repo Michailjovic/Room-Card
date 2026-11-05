@@ -141,8 +141,7 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
   E.remove();
 
   // ---- 3. round-trip on every reference config --------------------------------------------
-  const files=['example-bedroom.yaml','flat-multiroom.yaml','flat-multiroom-v4.yaml']
-    .concat(fs.existsSync(path.join(ROOT,'Claude outputs'))?fs.readdirSync(path.join(ROOT,'Claude outputs')).filter(f=>/^room-card-.*\.yaml$/.test(f)).map(f=>'Claude outputs/'+f):[]);
+  const files=fs.readdirSync(path.join(ROOT,'tests','fixtures')).filter(f=>/\.ya?ml$/.test(f)).map(f=>'tests/fixtures/'+f).concat(['flat-multiroom.yaml']);
   const cards=[];
   for(const f of files){const p=path.join(ROOT,f);if(!fs.existsSync(p))continue;
     JSON.stringify(w.__rocY.load(fs.readFileSync(p,'utf8')),(k,v)=>{if(v&&typeof v==='object'&&String(v.type||'').includes('room-overlay-card'))cards.push([f,v]);return v;});}

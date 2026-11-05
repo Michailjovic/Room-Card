@@ -1,6 +1,6 @@
 # v7 Phase 0 spikes
 
-Throw-away code that answered the spike questions in [`V7_PLAN.md`](../../V7_PLAN.md) §3 / §13.
+Throw-away code that answered the spike questions in [`V7_PLAN.md`](../../docs/archive/V7_PLAN.md) §3 / §13.
 Not part of the shipped card or the regular test tiers (Phase 1 turns `s34.spec.js` into the
 HA-in-the-loop tier).
 

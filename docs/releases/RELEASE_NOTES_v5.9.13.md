@@ -1,6 +1,6 @@
 # v5.9.13 — Rooms & menu tab: split into 4 collapsible sections
 
-Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md))
+Part of the ongoing editor GUI/UX revalidation ([`EDITOR_UX_REVALIDATION.md`](../archive/EDITOR_UX_REVALIDATION.md))
 — proposal 4, the last remaining tab from that list.
 
 ## What's new

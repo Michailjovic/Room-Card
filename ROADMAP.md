@@ -1,348 +1,114 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.0.0-beta.4** (pre-release; last stable v6.51.0 — v5.2.0/v5.3.0, v6.26–v6.29 and v6.32–v6.39 unused). Verified against Home
-Assistant 2026.10.2.
+Current release: **7.0.0** (2026-11-04). Verified against Home Assistant 2026.10.2; the install
+text covers 2026.11's Marketplace.
 
-**The original roadmap, the v2.0.0 milestone, the v3.0 backlog, the entire
-v3.1 – v5.1 feature run, and the editor GUI/UX revalidation (v5.9.0–v5.10.1) are
-complete.** The card is feature-complete for daily use — remaining work is the
-push to get it into HACS's own default repository, one big optional vision item
-(live mini-room nav), and a short editor/UX polish backlog.
+The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in
+[`docs/archive/`](docs/archive). This file only says where the card is going.
 
-**Re-scope decided 2026-08-08:** v6.0.0 no longer marks the HACS default-repo
-submission (see below) — it marks the **documentation overhaul** (README split
-into a short landing page + [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) +
-[`docs/EDITOR.md`](docs/EDITOR.md)) plus the now-complete editor UX rebuild it
-documents. The HACS submission keeps its own checklist below but moves to the
-**next** milestone, versioned once it actually happens — not pre-assigned, so no
-version number gets reserved-then-reused.
-
-Legend: 🎯 should do · 💡 could do · 🔭 vision · ✅ shipped · ⛔ dropped · 🅿️ parked
+Legend: 🎯 agreed · 💡 candidate, not decided · 🔭 idea · 🅿️ parked · ⛔ not planned · ✅ done
 
 ---
 
-## 🎯 v7 — Studio, Floorplan, AnyVac (agreed 2026-10-21, releases from v6.40.0)
+## ✅ 7.0.0 — Studio, floor plan, AnyVac (2026-11-04)
 
-Full plan: [`V7_PLAN.md`](V7_PLAN.md). In short: the card's own **full-screen editor (Studio)**
-replaces HA's editor panel for forms and spatial work; a new **floorplan page** draws the home
-top-down or isometric from the vacuum map via **AnyVac** (or hand-drawn), with lights, floor
-heating, windows with blinds, doors and any entity placed on it; v7.0.0 ships with a rebuilt
-documentation set, an AI-readable spec (`docs/AI_SPEC.md` + `llms.txt`) and the HACS default
-submission. It absorbs the old v7.0.0 plan (AI README), the live floorplan (1b), the overview's
-cross-room signals (OVERVIEW_PLAN §9), the editor backlog E3–E6/D7 and the cockpit preset.
+Plan: [`V7_PLAN.md`](docs/archive/V7_PLAN.md). The card's own full-screen editor (**Room Card
+Studio**), a **floor plan page** drawn from the vacuum map via [AnyVac](https://github.com/Michailjovic/anyvac)
+or by hand, live vacuums on it, and the overview's cross-room signals. Phases 1–8 shipped as
+v6.40.0–v6.51.0, Phase 9 in the 7.0.0 betas; 7.0.0 is 7.0.0-beta.4 with the documentation of
+Phase 10. It is the first full release on GitHub since 6.25.1 — 6.30.0 to 7.0.0-beta.4 were
+pre-releases. Release notes: [`RELEASE_NOTES_v7.0.0.md`](docs/releases/RELEASE_NOTES_v7.0.0.md).
 
-| Phase | Release | Status |
-|---|---|---|
-| 0 — spikes | — | ✅ done (V7_PLAN §13) |
-| 1 — foundation (`src/`, schema, test tiers) | v6.40.0 | ✅ released |
-| 2 — Studio shell | v6.41.0 | ✅ released; gate G2 (author's PC and tablet) running |
-| 3a — canvas editing: selection ↔ inspector, outline + search, add on the image, copy/paste, snap guides; Edit mode retired | v6.42.0 | ✅ released |
-| 3b — multi-select, align / distribute, hide / lock layers, duplicate / copy rooms | v6.43.0 | ✅ released (+ fix: room-switch lag) |
-| 4a — Properties form: schema-generated fields, entity / icon pickers, action builder, YAML for structured keys, pinned validation | v6.44.0 | ✅ done |
-| 4b — sub-forms and lists: sections / tiles, light controls, nav, overview, cover control; Card settings, Navigation and Sections in the outline | v6.45.0 | ✅ done |
-| 4c — new-card wizard (rooms from HA areas, pictures incl. upload, lights, icons, section recipes, nav / overview / presence) | v6.46.0 | ✅ done |
-| 5 — floor plan page: geometry, AnyVac import, drawing / tracing in the studio, 7 themes (top / oblique / iso), room tap → zoom; + Phase 6's light / heating / temperature / humidity bindings | v6.47.0 | 🔨 built; gate G3 (the look on the author's tablet) next |
-| 6 — presence, media, markers and labels on the plan; cross-room signals on the plan and (opt-in) on overview tiles; layers | v6.48.0 | 🔨 built |
-| 7 — doors and windows on the walls: contact sensors, blinds by cover position, studio Window tool; + the live robot and its trail (from Phase 8), `mirror`, floor covering per room (`vinyl`, `floor_color`) | v6.49.0 | 🔨 built |
-| 8 — AnyVac live: vacuums from other frames (studio alignment), 3 s live position, last cleaned per room, "clean this room", photo background | v6.50.0 | ✅ committed |
-| colours per vacuum and for the mop trail (feedback) | v6.51.0 | ✅ committed |
-| 9 — the studio becomes the default editor: HA's editor = launcher (Open Studio / wizard, basics, YAML); the 6.x tabs behind *Classic editor* until 7.1; beta field test | 7.0.0-beta.1 | 🔨 built; field test (≥ 2 weeks, checklist V7_PLAN §14) |
-| 10a — docs during the beta: landing README, getting started, studio, overview, troubleshooting, generated reference, AI spec + llms.txt, presets, issue forms; two schema fixes | 7.0.0-beta.2 | 🔨 built |
-| beta feedback: robots keep their colour when a map loads late, mop band keeps its hue on wood, cleaning line on small rooms | 7.0.0-beta.3 | 🔨 built |
-| last beta: floor plan wall network + free rotation per profile, every finding of the 7.0.0-beta.3 review | 7.0.0-beta.4 | 🔨 built |
-| 10b — live demo, screenshots / GIFs, archive of finished plans, repo topics, HACS default submission; 7.0.0 after the field test | 7.0.0 | next |
+Left over from Phase 10:
 
-## Shipped history (condensed)
+- [ ] HACS default-repository PR (checklist below) — now that a full 7.0.0 release exists
+- [x] Studio GIFs in [`docs/STUDIO.md`](docs/STUDIO.md): device frames, select / move / undo, add by drawing, turning the floor plan
+- [ ] The install text checked against a real Home Assistant 2026.11 Marketplace (labels taken
+  from its documentation)
 
-### v1.x – v3.0 — foundation, responsive tiers, editor, multiroom — ✅ SHIPPED
+## 🎯 Next — 7.1
 
-- **v1.3 – v1.4** — core elements (zones, icons, labels, badges, gauges, blinds,
-  embedded cards), templates everywhere, relative-time labels, weather v2, CI smoke
-  tests, editor undo/redo, snap-to-grid + alignment guides, live icon previews.
-- **v1.5** — `color_from` tint, draw-to-create zones, pinch-zoom, per-element
-  `fade`/`slide`, actions on gauges & labels.
-- **v1.6 – v1.12** — **multi-room** (`rooms:`, thumbnail nav, `switch-room`, Bermuda
-  presence follow, `card_id`, side-rail nav, finger-drag), editor live preview, 3D
-  parallax tilt, `PRESETS.md`, `nav.width`/`nav.cards`, `room_entity` per-device
-  mapping, `follow_mode` + follow button, `room_state_entity`, `cards_above`/`cards_below`.
-- **v1.13 – v2.0** — **responsive tiers** (mobile/tablet/desktop/ultrawide), per-tier
-  scalars, hold-gesture feedback, **tabbed editor** + onboarding, persistent header,
-  GUI companion cards & room reorder, **v2.0.0 milestone** (test-mode declutter, README rework).
-- **v2.1 – v2.2** — **`lock_aspect`** (fixed-design-aspect stage), whole-dashboard Save,
-  **mouse-wheel room switching**.
-- **v3.0.0** — roadmap-completion release: nav/menu GUI block, per-tier inputs, unified
-  image-filter section, Advanced (YAML) toggle, **`url_sync` deep-linking**, full-room
-  drag preview. (v3.0.1–3.0.7: day_night attempts 🅿️, swipe/strip fixes, code-review batch.)
+- **The Classic editor goes.** The 6.x tabbed editor stays behind *Classic editor* for one minor
+  release after 7.0.0 (V7_PLAN §8), then is removed. `src/editor/` is about half of the main
+  file's sources, which every wall tablet downloads and parses today.
 
-### v3.1 – v4.5 — post-3.0 feature run — ✅ SHIPPED
+## 💡 Candidates for 7.x (not decided)
 
-| Version | Highlights |
-|---|---|
-| **v3.1.0** | **`nav.live: composite`** — nav thumbnails paint the room's active overlay images as stacked layers + `filter_conditions`/`brightness_model` (Phase 1 of live mini-room nav) |
-| **v3.2.0** | **`light_controls`** — a strip of `material-slider-card` light sliders whose border colour tracks a lux sensor (HSL ramp, no card_mod) |
-| v3.2.1–3 | `light_controls` follow-ups (`bg_off` fix, responsive height px/vh/%/per-tier), HACS `LICENSE`, editor Elements A–Z with icons/badges, swipe-strip fix |
-| **v3.3.0** | **Cover control (roleta)** — a `blind` `control:` block becomes an interactive glass module (position rail + up/stop/down + presets, `float` tap-reveal / `dock`, mobile horizontal bar) |
-| **v4.0.0** | **Layout engine rebuild** — two `portrait`/`landscape` profiles chosen by viewport ratio, **% CSS-grid regions**, per-profile cover dock/float, auto-migration from the v3 tier system + editor banner, new **Layout tab**, jsdom render tests |
-| **v4.1.0** | `light_controls` supports **on/off switches** (toggle pill sharing the lux ring) + editor **gradient preview** with ¼ ½ ¾ tick marks |
-| **v4.2.0** | Editor **opens on the room you were viewing** (via `url_sync` hash) |
-| **v4.3.0** | Toggle-pill height **matches the slider** (measured); editor-opens-on-room moved to an in-memory store (works without `url_sync`) |
-| **v4.4.0** | Fix: record the viewed room only on an actual room switch, so HA's edit-mode card recreation no longer clobbers it |
-| **v4.5.0** | HA's **own preview pane follows the edited room** — the editor writes the `url_sync` hash (+ `hashchange`) on open and room-pick |
+- **Devices from one source**, steps 1–2: the floor plan resolves a room's lights / climate /
+  sensors live from the room instead of copying them at import; a blind tagged into a section
+  renders its own cover control there. Proposed 2026-10-26, waiting for the author.
+- **Multi-floor homes** — one floor plan page per floor (V7_PLAN §11.4).
+- **Openings in the `thermal` and `tiles` themes** ([FLOORPLAN.md](docs/FLOORPLAN.md#coming-next)).
+- **Inline save-failure hint** (old E6) wherever a save can still fail silently.
 
-### v4.5.1 – v4.6.4 — responsiveness + edit-mode hardening — ✅ SHIPPED
+## 🔭 v8 idea — furniture on the floor plan
 
-Five generations of fixes to the viewport-height engine and edit-mode transitions,
-diagnosed live against the real dashboard each time: natural portrait height,
-landscape edit-bar reservation, scroll-container-relative measurement (not viewport),
-intrinsic image budget-fit (letterbox, never crop), the edit-mode "breathing" loop,
-and finally fully event-driven transitions (MutationObserver on HA's own DOM, no rAF,
-no timers). v4.6.3 also hardened the release pipeline itself after a silent asset-upload
-failure broke HACS installs.
+[`V8_PLAN.md`](V8_PLAN.md). Stylised furniture drawn by each theme, with control through the
+objects. Undecided; a Phase 0 prototype on the author's plan exists (V8_PLAN §2a).
 
-### v6.1 – v6.11 — calibration, vacuum widget, light glow, cockpit — ✅ SHIPPED
+## 🅿️ Parked · ⛔ not planned
 
-| Version | Highlights |
-|---|---|
-| **v6.1.0** | `day_night` blind **phase calibration** (`shift_turns` / `shift_start` / `shift_snap`) — the reserve no longer slides the stripe phase |
-| **v6.2.0–6.2.1** | **`vacuum_widgets`** — cross-room informational status badge (dry/wet/both/error), plus a proper dark rest-state chip |
-| **v6.3.0–6.5.5** | Vacuum widget: per-profile sizing + frosted glass, GUI editor panel with drag-to-position, dedicated vacuum entity rows, **Global (all rooms)** editor scope, Quick-position buttons, a purpose-built built-in icon, and distinct dry/wet/both motion |
-| **v6.6.0** | **`glows`** — light-spill layers blended onto the photo: colour from the light's own `rgb_color`/colour temperature, strength from its brightness, circle / ellipse / directional wash, optional flicker, GUI editor section with live falloff preview |
-| **v6.7.0** | **Overlay `transform:`** — an overlay moves with its entity (states map / numeric range / speed-driven spin), with `origin` as the hinge in % of the photo, optional `perspective`, and a GUI panel per overlay. Replaces the per-thing animation code every moving element used to need |
-| **v6.6.1** | Light glow editing surface — native colour picker + Auto, intensity slider, `min_brightness`/`animation_speed`/`anchor`/`transition` promoted to fields, and an un-blended Edit-mode chrome box per glow with drag + resize handles (geometry moved to plain `%` + `aspect-ratio`) |
-| **v6.8.0** | **Cockpit `sections:`** — pop-up panels of status/control tiles collected from across the whole card (or a single embedded card), opened via `open-section`; four placements, badge counting, template visibility, degradation instead of blank panels, and a GUI **Sections** tab + per-element Section select |
-| **v6.9.0** | **Cockpit image tiles** — `tile.image` + `tile.overlays` turns a cockpit tile into its own tiny stage (a device photo with moving parts), reusing the overlay `transform:` engine (states/range/spin) at tile scale, never a nested card; a tile-overlay editor mirrors the room overlay panel, scoped to one tile |
-| **v6.10.0** | **Cockpit auto tiles & onboarding** — `source: auto`+`domain:` fills a section straight from `hass.states`, sections can now combine collected + auto + an embedded card in one panel, and three editor helpers (recipes, a find-untagged-devices scan, bootstrap rooms from HA areas) remove the need to hand-write the first section's YAML |
-| **v6.10.1** | **Fix** — a slider dragged inside an open cockpit section sheet (e.g. a `card:`-embedded tile card's cover-position slider) no longer drags the room-swipe underneath it |
-| **v6.11.0** | **Declared tiles** — a section can own `tiles:` directly (no room/zone/icon tag needed); resolution order is now declared → collected → auto → card |
-| **v6.11.1** | **Fix** — `tile.quick` buttons on an image tile now lay out in a row instead of a vertical column |
-| **v6.11.2** | **Fix** — new `tile.image_ratio` overrides an image tile's hardcoded 4:3 stage, so a widescreen device photo (TV, monitor) no longer gets cropped by `background-size: cover` |
-| **v6.11.3** | **Declared tiles GUI editor** — a section's `tiles:` are now fully editable in the Sections tab (add/edit/duplicate/reorder/remove), reusing the tagged-element tile's Image/Aspect ratio/Overlays machinery; Aspect ratio also added to the tagged-element tile editor |
-| **v6.11.4** | **`state_images` attribute matching** — an entry can now match an entity's attribute (e.g. a media_player's `app_id`) instead of only its own state |
-| **v6.12.0** | **Cockpit tile `hold_action`/`double_tap_action`** — tiles now support the same long-press/double-tap actions as zones/icons/labels/gauges/vacuum_widgets, so e.g. a tap can navigate while a long-press opens more-info |
-| **v6.12.1** | **`icons[].chip`** — an icon can now render as the same frosted-glass circular badge the vacuum status widget uses, instead of a bare glyph, so a row of section-launcher icons can read as a consistent set of buttons |
-| **v6.12.2** | **Fix** — scrolling on touch no longer accidentally fires a tap_action; a real page-scroll drag is now told apart from a tap by travel distance, across every tappable element type |
-| **v6.13.0** | **`layout.height: fill`** — opts portrait into the same full-viewport pin landscape always had (portrait otherwise sizes to content), so a cockpit's section panels get real screen height on phones too |
-| **v6.14.0** | **`image_align`** — `top`/`center`/`bottom`, controls where the photo sits when its box is taller than needed (e.g. under `layout.height: fill`), instead of always centering the letterbox/crop |
-| **v6.15.0** | **`nav_mini: false` under `nav.live: full`** — per-element opt-OUT of a room's own live mini thumbnail (mirrors `custom`'s existing opt-in); editor checkbox becomes "Hide from mini" in this tier |
-| v6.15.1–6.15.9 | Bug + editor-UX audit fixes (see `BUG_UX_ANALYSIS_v6.15.1.md`), structured tile fields, the reverted `<ha-yaml-editor>` spike, nav-mini interactivity fix |
-| **v6.16.0** | **Design refresh, part 1** (`ANALYSIS_v6.15.9.md`) — one HA-native value formatter for labels/chips/tiles, neutral idle tiles, progress only while running, section-launcher ring + badge, design tokens (`--roc-*`), calmer nav chips; five logic fixes |
-| **v6.17.0** | **Design refresh, part 2** — built-in light pills (`light_controls.style: native`: icon · name · %, fill in the light's colour, drag to dim, no external card), cover control in the shared tokens (same size), editor Style select + KEEP fix |
-| **v6.17.1** | Fix: horizontal docked cover control (phone bar) sized to its buttons |
-| **v6.18.0** | **Editor: action builder** — tap / double tap / hold of zones, icons, tiles and the room set via type select + fields (sections/rooms/groups as selects), Custom (YAML) fallback, untouched rows saved byte-for-byte |
-| **v6.19.0** | **Editor: entity fields** — suggestions with friendly names, domain-filtered where it makes sense, "not found" hint, ID check (empty / invalid / duplicate), phone-width field rows, lazily filled suggestion lists |
-| **v6.20.0** | **Editor: preview + undo** — header preview receives every edit (old #7) and is no longer remounted on each editor render (old #15); Remove → *UNDO* bar |
-| **v6.21.0** | Editor polish — one-click ID fix, Electricity recipe only with its card installed, card-picker preview sketch (16:9) |
-| **v6.22.0** | Editor YAML boxes on vendored **js-yaml** (multi-line strings, block scalars, comments, line-numbered errors); unquoted Jinja still accepted |
-| **v6.23.0** | **Persistent nav strip** — a room switch keeps thumbnails, chips, live minis and nav cards mounted (switch ~33 → ~9 ms on 6 rooms with `nav.live: full`) |
-| **v6.24.0** | Reduced motion, panel `aria-modal` + focus return, untagged scan sees entities in section cards, English-only comments |
-| **v6.24.1** | Fix: full-screen section panels in portrait (`placement_portrait: inline` to opt out), backdrop click on a launcher switches sections, phone panels honour `columns:` |
-| **v6.25.0** | `nav.rows` + `nav.cards_position` (multi-row thumbnail grid, GUI), live minis cover narrow thumbnails, HQ-resampled thumbnail images (no moiré), GUI keeps nav keys it has no field for |
-| **v6.25.1** | Fix: the new nav row / strip-card fields alone now enable Save; e2e suite updated to the v6.24.1 full-screen portrait panels |
-| **v6.30.0** | **Overview page** — `rooms[].overview`: every room as a live tile with state chips, optional header (pills, nav strip cards), left/right card columns and a section dock; regions collapse into the grid; photo tiles or rows on phones; zoom transition tile ↔ room; the live strip is parked, not re-mounted; full GUI. See [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md) |
-| **v6.31.0** | Overview: grid order with ▲▼ in the GUI (`grid.rooms`, independent of the nav), optional room names (`grid.names`, `overview_tile.show_name`), fix: `fade` / zoom start under HA's Lit `ha-card`, fix: touchpad swipe left the view / skipped rooms |
-| **v6.40.0** | v7 Phase 1 — source split into `src/` + `tools/assemble.js`, config schema registry (`src/schema/`), schema / compat / HA-in-the-loop test tiers; no rendering change |
-| **v6.41.0** | v7 Phase 2 — **Room Card Studio**: full-screen editor (lazy-loaded second file `room-overlay-card-studio.js`), live canvas in device frames, today's editor as the inspector, undo/redo, unsaved-changes guard, Apply to HA's editor or save straight to the dashboard (located by identity, conflict check), YAML view, history, schema check in the status bar |
-| **v6.42.0** *(unreleased)* | v7 Phase 3a — Studio canvas editing: one selection across canvas, outline and inspector; outline lists every element with search (E5); add any element by clicking / drawing on the image (E3); duplicate, copy/paste across rooms, delete, keyboard; edge/centre snap guides (E4); blinds/gauges/embedded cards arrangeable; ✎ Studio button in HA's dashboard edit mode; Edit mode (`test_mode`) retired as a setting; fix: dragging an inherited element hid all shared ones |
-| **v6.43.0** *(unreleased)* | v7 Phase 3b — Studio: multi-selection (Shift/Ctrl click, Ctrl+A), group move, align / distribute, hide / lock layers (view only), duplicate / copy / paste / delete rooms; fix: room switch held the old room ~1/3 s and cut the slide (wheel, nav); fix: gauges/blinds not grabbable on the canvas |
-
-### v5.0 – v5.1 — internal cleanup + calibration — ✅ SHIPPED (user push pending)
-
-- **v5.0.0** — layout-engine cleanup: every layout trigger routed through one coalesced
-  `_requestPin` entry point, rAF audit (background/kiosk-tab safe), `ROC_DEBUG` diagnostics,
-  and a new Playwright **geometry regression harness** asserting real pixels in headless
-  Chromium (not just jsdom). No config or behaviour changes.
-- **v5.1.0** — blind visual-overlay **`top_offset`** calibration: many motors keep a
-  deliberate safety margin at their own "fully open" (raw 0%) limit, so the blind still
-  hangs a little even there. `top_offset` (%) linearly remaps the **visual overlay only**
-  to match reality; the cover-control widget keeps showing/sending the raw motor position,
-  unchanged. Default `0` = no behaviour change.
+- 🅿️ **Device packs / a `devices:` registry** — shareable device visuals bound to your own
+  entities ([COCKPIT_PLAN D14](docs/archive/COCKPIT_PLAN.md)); needs a way to distribute them.
+- 🅿️ **`day_night` blind: a fully transparent residual sliver.** The phase is calibrated since
+  v6.1.0 (`shift_turns` / `shift_start` / `shift_snap`); with the two-layer renderer the topmost
+  visible row of a fill is always opaque. Not without side-by-side photos of a real blind.
+- ⛔ **AI inside the card** (e.g. drafting zones through HA's `ai_task`) — models change too fast
+  for a finished product. The card is documented for AIs instead: [`docs/AI_SPEC.md`](docs/AI_SPEC.md),
+  [`llms.txt`](llms.txt).
+- ⛔ **Vacuum control and energy panels inside the card** — AnyVac / anyvac-card and
+  electricity-panel-card own those; the card shows, links and embeds (V7_PLAN non-goals,
+  COCKPIT_PLAN D12).
+- ⛔ **Merging `groups` into sections** (COCKPIT_PLAN D13) — two different layouts, a migration
+  for every existing config, no gain.
 
 ---
 
-## Development order (agreed 2026-08-05)
+## HACS default-repository submission
 
-1. ✅ **Live mini-room nav — Phase 2** (`nav.live: full` + `custom`) — all three tiers
-   (`off`/`composite`/`full`/`custom`) shipped v5.4.0-v5.7.0, live-verified working. Remaining
-   pieces (instance-reuse perf, optional swipe-reuse Phase 3) are non-blocking follow-ups — see
-   [`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md).
-2. ✅ **Haptic on hold-registered** (E7, mobile) — shipped v5.8.0.
-3. ✅ **Editor GUI/UX revalidation** — shipped incrementally as **v5.9.x–v5.10.x**. All four
-   "high impact" proposals landed: v5.9.0 header **Edit mode** merge (Test mode + Drag-edit
-   preview → one field) + Room/Edit mode/Haptics icons; v5.9.11 **Layout tab** sub-tabs + live
-   mini grid preview; v5.9.13 **Rooms & menu** split into 4 accordions; v5.10.1 removed the
-   dead `dock_side` control found by the code audit. See
-   [`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md) and [`docs/EDITOR.md`](docs/EDITOR.md).
-4. ✅ **v6.0.0 — Documentation overhaul** — README split into a landing page +
-   [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) + [`docs/EDITOR.md`](docs/EDITOR.md),
-   marking the editor rebuild (step 3) as done and documented.
-5. 🎯 **Official HACS default-repository submission** — next milestone, see below. Version
-   number TBD at submission time (not v6.0.0 — see re-scope note above).
-6. 🅿️ `day_night` blind visual model stays parked — explicitly **not** revisited before or
-   during the HACS submission push.
+The card installs from HACS as a *custom repository* today; the goal is HACS's own default list.
 
-## ✅ Editor GUI/UX revalidation — done, shipped v5.9.0–v5.10.1
+Requirements as published at [hacs.xyz/docs/publish/include](https://www.hacs.xyz/docs/publish/include/)
+(checked 2026-11-04). Since Home Assistant 2026.11 HACS ships inside Home Assistant as the
+*Marketplace*; the hacs.xyz pages for including default repositories are still published.
 
-A full pass over the editor for consistency and discoverability. The control surface had grown a
-lot across v3–v4 and was getting hard to navigate, even for the author. Analysis + proposals in
-[`EDITOR_UX_REVALIDATION.md`](EDITOR_UX_REVALIDATION.md), discussed and refined interactively
-with the user rather than implemented wholesale. User-facing walkthrough now lives in
-[`docs/EDITOR.md`](docs/EDITOR.md).
-
-Shipped:
-- ✅ v5.9.0 — merged **Test mode** + **Drag-edit preview** into one **Edit mode** header toggle
-  (persists `test_mode`, shows the live preview immediately, no separate ephemeral flag); added
-  icons to Room/Edit mode/Haptics, shortened "Haptic feedback" → "Haptics".
-- ✅ v5.9.11 — **Layout tab**: Portrait/Landscape sub-tabs (was two stacked profile boxes),
-  illustrative live mini grid preview per profile (reuses the real `rocGridCss`/`rocRegionCss`
-  render functions), and a real fix so Layout edits actually reach the mounted Edit-mode preview
-  card (they never did before — `layout` wasn't part of the item-count diff that decides whether
-  `setConfig()` remounts it). Decided (2026-08-08): Elements-tab alphabetical-with-icons ordering
-  (proposal 1) stays as-is — reviewed and preferred over reordering by intent.
-- ✅ v5.9.13 — **Rooms & menu tab**: split into 4 `sec()` accordions (Room identity / Presence &
-  follow / Navigation menu / Deep-linking), same pattern as Elements. All four "high impact"
-  proposals from `EDITOR_UX_REVALIDATION.md` are shipped.
-- ✅ v5.10.1 — removed the dead `dock_side` select (code audit finding, never had any effect).
-- Deferred, not blocking: per-item Advanced-YAML, copy-to-other-rooms, audit remaining
-  alphabetical lists — "medium"/"lower impact" proposals in `EDITOR_UX_REVALIDATION.md`, and the
-  header polish item (Advanced-YAML relocation, room-picker prominence, tab-bar styling) noted
-  there as "next" — picked up opportunistically, not gating any release.
-
-## 🎯 Official HACS default-repository submission — next milestone
-
-**Goal:** the card gets listed in HACS's own default repository, so new users can install
-it straight from HACS search instead of adding it as a custom/manual repository. The editor
-GUI/UX revalidation (above) has shipped and settled, and the documentation overhaul (v6.0.0,
-this release) gives the submission screenshots something finished to show off.
-
-1. ✅ **GitHub content overhaul** — done in v6.0.0: README split into a landing page +
-   [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) + [`docs/EDITOR.md`](docs/EDITOR.md),
-   reflecting the v4 layout engine, cover control, light controls (sliders + switches), and the
-   revalidated editor. Screenshots already exist in `screenshots/` and are current.
-1a. **Cockpit — sections & panels** — user-defined section buckets filled by tagging elements in
-   rooms, rendered as panels over the image; the whole-house "cockpit" is a preset built from
-   them, not code. Full spec, closed decisions and phasing: [`COCKPIT_PLAN.md`](COCKPIT_PLAN.md).
-   - ✅ **v6.8.0 — shipped**: `sections:` + panels (four placements, tiles, `open-section`,
-     degradation rules, GUI Sections tab). See [`CHANGELOG.md`](CHANGELOG.md#680---2026-09-09).
-   - ✅ **v6.9.0 — shipped**: image tiles (`tile.image` + `tile.overlays`, reusing the overlay
-     `transform:` engine at tile scale) and the matching tile-overlay editor. See
-     [`CHANGELOG.md`](CHANGELOG.md#690---2026-09-09).
-   - ✅ **v6.10.0 — shipped**: `source: auto`+`domain:` auto tiles, the collected→auto→card
-     resolution order, and the three editor onboarding helpers (recipes, untagged-device scan,
-     bootstrap rooms from HA areas). All phases in `COCKPIT_PLAN.md`'s phasing table are now
-     shipped. See [`CHANGELOG.md`](CHANGELOG.md#6100---2026-09-09).
-   - 🎯 Still open, unversioned: a worked cockpit preset for `PRESETS.md` (planned since kap.8,
-     not tied to a version number).
-
-1b. ➡️ **Superseded by [`V7_PLAN.md`](V7_PLAN.md) §6** — *Live floorplan (v7 vision)* — one floorplan image with live mini room cards at absolute
-   positions on it, reusing the `nav.live: full` mount/scale mechanism and `zoom` pan/zoom; click a
-   room to enter it. Wants its own planning document (in the style of `NAV_LIVE_FULL_PLAN.md`)
-   before any code.
-
-1c. ✅ **Overview page — shipped in v6.30.0** — one page showing every room as a tile (live mini + state chips), with
-   optional header (ticker, pills), left/right card columns (weather, calendar…) and a dock of
-   section launchers; any optional region left out collapses and the grid fills it. Phone: photo
-   tiles or list rows, the user picks. Agreed 2026-10-19, shipped as one release (the plan's
-   v6.26–v6.27 phases together); spec and closed decisions: [`OVERVIEW_PLAN.md`](OVERVIEW_PLAN.md).
-   Still open: the cross-room signals of §9 (presence ring, attention badge, vacuum).
-
-2. 🎯 **Repo topics** — add discoverability topics on the GitHub repo itself (`home-assistant`,
-   `lovelace`, `custom-card`, `hacs`, …) — required by the `hacs/default` review.
-3. 🎯 **Re-verify against the `hacs/default` validation checklist** — the repo's own HACS
-   validation Action has shipped since v1.8.0 ✅; confirm it still covers everything the
-   default-repo submission specifically checks for (README, `hacs.json`, releases, brands).
-4. 🎯 **Submit the PR to `hacs/default`.**
-5. 🎯 Bump version to mark the milestone once accepted/merged — number chosen at that time
-   (v6.0.0 is already spent on the documentation overhaul above).
-
-## ✅ Live mini-room navigation — Phase 2 (`nav.live: full` + `custom`) — done, v5.4.0-v5.7.0
-
-Full technical spec, code touch-points and phased implementation plan:
-[`NAV_LIVE_FULL_PLAN.md`](NAV_LIVE_FULL_PLAN.md). **Status:** mount/scale mechanism (v5.4.0),
-three rounds of live-verified sizing bugfixes (v5.5.0-v5.5.2 — connection-order, then a
-transform-vs-getBoundingClientRect measurement bug that needed two attempts to fully nail down;
-see those CHANGELOG entries), editor UI for `full` (v5.6.0 — *Rooms & menu* tab, "full" option
-reveals a *Mini-room settings* panel for templates/camera_refresh/width_ref), and the `custom` tier
-(v5.7.0 — same mount/scale mechanism as `full`, per-element opt-in via `nav_mini`/a "Show in mini"
-checkbox on every gauge/label/icon/badge/blind/embedded-card panel, plus a weather toggle) are all
-done. Still open: instance-reuse/lifecycle optimization (step 4 — currently rebuilds every mini on
-every card render) and optional Phase 3 (swipe reuses the live mini instance) — see the plan doc.
-
-**Goal:** nav thumbnails become *true miniatures* — each thumbnail hosts a real,
-non-interactive `room-overlay-card` rendered at a reference width and scaled down, so
-px-based fonts/icons/gauges keep exact proportions (a true miniature, not a reflow).
-"The menu is literally a scaled-down copy of what we built." Phase 1 (`composite`)
-shipped in v3.1.0; the building blocks (`_renderNeighbourPreview`, `_mountPreview`)
-already exist.
-
-- **Scaling:** host = thumb size + `overflow:hidden`; inner card at `width: W_ref` with
-  `transform: scale(thumbW / W_ref); transform-origin: top left`.
-- **Config transform** (same recipe as `_renderNeighbourPreview`): `_roc_preview: true`,
-  `nav.style: none` (recursion guard), `follow_mode: manual` + pinned `_roomIdx`, strip
-  `url_sync`, `cards_above/below`, `zoom`, `parallax`.
-- **Interactivity:** `pointer-events: none` on the mini; host keeps click/keyboard → switch room.
-- **Perf knobs:** `nav.mini.features` allowlist (default `[overlays, filters, blinds]`;
-  opt-in `gauges`/`labels`/`icons`/`weather`, animations off by default); default-strip
-  templates (`nav.mini.templates: true` to opt in); `camera_refresh` clamped ≥ 30 s;
-  reuse instances by config hash; documented cap ~8 rooms.
-- **Editor:** nav-style select gains "thumbnails — live minis".
-- **Risks:** GPU memory on old tablets, template subscription multiplication, recursion
-  (all mitigated by allowlist / default stripping / double recursion guard).
-
-## 🎯 Editor / UX polish backlog (from ANALYSIS_v3.0.6.md)
-
-| # | Item | Note |
-|---|---|---|
-| E7 | **Haptic on hold-registered** | ✅ shipped v5.8.0 — fires a haptic tick the moment a hold action registers, toggleable from the editor |
-| E3 | Draw-to-create for all element types | rubber-band currently makes zones only — ✅ v6.42.0 (Studio) |
-| E4 | Edge / centre snap guides | complements the 0.5 % grid + edge snap — ✅ v6.42.0 (Studio) |
-| E5 | Editor list filter / search | for long element lists — ✅ v6.42.0 (Studio) |
-| E6 | Inline save-failure hint | surface a failed Save in-editor |
-| D7 | Editor round-trip test harness | automate collect → config → re-render checks |
-
-## 🅿️ Parked
-
-- **`day_night` blind model** — the *phase* half of this is **solved in v6.1.0** and no longer
-  parked. Three early attempts failed (v3.0.1–3.0.3) and a fourth (v5.9.8) was reverted the same
-  day (v5.9.9) because it re-anchored the pattern to the bottom rail, which broke the fully-closed
-  look. v6.1.0 kept the existing renderer (two gradient layers: one fixed at background-position 0,
-  one scrolling) and fixed the actual defect: the scrolling layer's phase was driven by `pct`
-  *after* `top_offset`, so an un-retracted reserve slid the whole phase curve sideways. It is now
-  driven by the raw travel via `rocDayNightShift`, with `shift_turns` / `shift_start` /
-  `shift_snap` to calibrate against the real blind and `shift_legacy` as an escape hatch. See
-  CHANGELOG [6.1.0] and `docs/CONFIGURATION.md` → *Calibrating a `day_night` blind*.
-  **Still parked:** whether the two-layer composite matches real zebra optics in every respect —
-  in particular, because the fixed layer's pattern starts *solid* at position 0 and the fill is
-  top-anchored at row 0, **the topmost visible row of any `day_night` fill is unconditionally
-  opaque at any phase**, so a *purely* transparent residual sliver is still not reachable without a
-  different rendering mechanism. Do not attempt that piece without side-by-side photos of the real
-  blind at specific positions. **Not on the near-term development order.**
+1. ✅ HACS validation Action in CI (`hacs/action`, `category: plugin`) — must pass with no ignores.
+2. ✅ Full GitHub releases (not just tags), assets attached and verified by `release.yml`.
+3. ✅ `hacs.json` with `name` and `filename`; MIT licence recognised by GitHub.
+4. ✅ README with images (the *Check images* step applies to cards); *HACS Custom* badge until
+   the PR is merged.
+5. 🎯 Repo settings: a short description, topics (`home-assistant`, `lovelace`, `custom-card`,
+   `hacs`, `floorplan`, `roborock`), issues enabled.
+6. 🎯 The PR, from the owner's own (not an organisation) account: fork `hacs/default`, branch from
+   `master`, add `Michailjovic/Room-Card` to the `plugin` file **in alphabetical order**, fill in
+   the whole PR template. Review takes months; after the merge the next scheduled scan picks it up.
 
 ## Maintenance (ongoing)
 
-- **Watch-list of internal APIs** (re-verify each HA major):
-  - `lovelace/config` (+ `/save`) WS — test-mode Save button; undocumented but stable.
+- **Internal APIs on the watch-list** (re-verify every HA major):
+  - `lovelace/config` (+ `/save`) WebSocket — the studio's save straight to the dashboard;
+    undocumented but stable.
   - `window.browser_mod` (popup action) — third-party.
-- **Optional migration**: `set hass` → `context-request` states subscription (`hass`
-  property remains fully supported, so no urgency).
+- **Optional migration:** `set hass` → a `context-request` states subscription (the `hass`
+  property stays fully supported).
+- Minimum HA in `hacs.json` stays at 2023.9.0; newer-only features (grid options, entity
+  suggestions) degrade gracefully.
 
 ---
 
-## HA 2026.6 compatibility audit
+## History (condensed)
 
-| API used by the card | Status in HA 2026.6.2 |
-|---|---|
-| `setConfig` / `getCardSize` / `getGridOptions` / `getConfigElement` | ✅ current documented API |
-| `getGridOptions()` (columns only; rows omitted so the layout grid drives height) | ✅ documented |
-| `getEntitySuggestion` on `window.customCards` | ✅ implemented (camera suggestion) |
-| `hass` property updates (card + editor) | ✅ standard; `context-request` optional |
-| `hass.callService(domain, service, data, target)` | ✅ stable |
-| `render_template` WebSocket subscription (label templates) | ✅ current documented API |
-| `window.loadCardHelpers().createCardElement` (embedded + slider/cover cards) | ✅ direct-create fallback kept |
-| `config-changed` event from editor | ✅ current documented API |
-| `history.replaceState` + `hashchange` (`url_sync`, editor-drives-preview) | ✅ evergreen browser API |
-| `lovelace/config` (+ `/save`) WS — Save button | ⚠️ internal API (incl. sections layout); on watch-list |
-| `haptic` window event | ✅ frontend convention; harmless no-op when unsupported |
-| `browser_mod.popup` service | ⚠️ third-party dependency (user-installed) |
-| Pointer Events, IntersectionObserver, ResizeObserver, CSS filters/grid | ✅ evergreen browser APIs |
+| Line | Highlights | Plan |
+|---|---|---|
+| **7.0.0** (2026-11-04) | studio as the default editor, docs set (getting started, studio, overview, floor plan, reference, AI spec), live demo, floor plan walls and free rotation, field-test fixes (betas 1–4) | [V7_PLAN](docs/archive/V7_PLAN.md) |
+| **v6.40–v6.51** | v7 phases 1–8: `src/` + schema, studio shell → canvas → forms → wizard, floor plan page, presence / media / markers, doors and windows, AnyVac live vacuums | [V7_PLAN](docs/archive/V7_PLAN.md) |
+| **v6.30–v6.31** | overview page: every room as a live tile, header, side columns, section dock, zoom transition | [OVERVIEW_PLAN](docs/archive/OVERVIEW_PLAN.md) |
+| **v6.16–v6.25** | design refresh, native light pills, action builder, entity fields, preview + undo, js-yaml, persistent nav strip | — |
+| **v6.8–v6.15** | cockpit sections and panels, image / auto / declared tiles, editor audit fixes | [COCKPIT_PLAN](docs/archive/COCKPIT_PLAN.md) |
+| **v6.0–v6.7** | documentation overhaul, `day_night` calibration, vacuum widget, light glows, overlay `transform:` | — |
+| **v5.x** | layout engine cleanup + geometry harness, `top_offset`, live mini nav (`full` / `custom`), haptics, editor revalidation | [V5_PLAN](docs/archive/V5_PLAN.md), [NAV_LIVE_FULL_PLAN](docs/archive/NAV_LIVE_FULL_PLAN.md), [EDITOR_UX_REVALIDATION](docs/archive/EDITOR_UX_REVALIDATION.md) |
+| **v4.x** | layout engine rebuild: portrait / landscape profiles, % grid regions, cover dock / float | [LAYOUT](LAYOUT.md) |
+| **v3.x** | live nav (`composite`), `light_controls`, cover control | — |
+| **v1–v2** | overlays, zones, icons, labels, gauges, blinds, multi-room, presence follow, responsive tiers, the editor | — |
 
-Minimum HA in `hacs.json` stays at 2023.9.0 — 2026.6-only features (grid options, entity suggestions) degrade gracefully on older versions.
+Unused version numbers: v5.2.0, v5.3.0, v6.26–v6.29, v6.32–v6.39.

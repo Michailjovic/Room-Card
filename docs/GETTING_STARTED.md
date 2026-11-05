@@ -4,14 +4,16 @@
 
 From nothing to a room that lights up with your lamps, then a whole home with an overview and a
 floor plan. Every step is done in Room Card Studio; the YAML it writes is shown along the way for
-reference — you never have to type it.
+reference — you never have to type it. To look around first, open the
+[live demo](https://michailjovic.github.io/Room-Card/).
 
 ---
 
 ## 1. Install
 
-Install with HACS (as a custom repository until the card is in HACS's default store) or by hand:
-see [Installation](../README.md#installation). Then hard-refresh the browser.
+Install from Home Assistant's **Marketplace** (Home Assistant 2026.11 and newer; **HACS** on older
+versions) — added by link until the card is in the default catalog — or by hand: see
+[Installation](../README.md#installation). Then hard-refresh the browser.
 
 ## 2. Add the card and run the wizard
 

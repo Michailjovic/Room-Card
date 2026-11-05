@@ -1,0 +1,1004 @@
+{
+"states": {
+"binary_sensor.ariston_is_heating": {
+"state": "on",
+"attributes": {
+"friendly_name": "Ariston is heating"
+}
+},
+"binary_sensor.bosch_mycka_door": {
+"state": "off",
+"attributes": {
+"friendly_name": "Bosch mycka door"
+}
+},
+"binary_sensor.bosch_washerdryer_door": {
+"state": "off",
+"attributes": {
+"friendly_name": "Bosch washerdryer door"
+}
+},
+"binary_sensor.central_configuration_central_boiler": {
+"state": "on",
+"attributes": {
+"friendly_name": "Central configuration central boiler"
+}
+},
+"binary_sensor.versatile_bedroom_window_state": {
+"state": "off",
+"attributes": {
+"friendly_name": "Versatile bedroom window state"
+}
+},
+"binary_sensor.versatile_living_room_window_state": {
+"state": "off",
+"attributes": {
+"friendly_name": "Versatile living room window state"
+}
+},
+"binary_sensor.wdh_214us_tank_full": {
+"state": "off",
+"attributes": {
+"friendly_name": "Wdh 214us tank full"
+}
+},
+"climate.versatile_bedroom": {
+"state": "heat",
+"attributes": {
+"friendly_name": "Bedroom floor heating",
+"hvac_modes": [
+"heat",
+"off"
+],
+"hvac_action": "heating",
+"current_temperature": 21.3,
+"temperature": 22
+}
+},
+"climate.versatile_kitchen": {
+"state": "heat",
+"attributes": {
+"friendly_name": "Kitchen floor heating",
+"hvac_modes": [
+"heat",
+"off"
+],
+"hvac_action": "idle",
+"current_temperature": 22.1,
+"temperature": 22
+}
+},
+"climate.versatile_living_room": {
+"state": "heat",
+"attributes": {
+"friendly_name": "Living room floor heating",
+"hvac_modes": [
+"heat",
+"off"
+],
+"hvac_action": "heating",
+"current_temperature": 22.4,
+"temperature": 22
+}
+},
+"cover.roller_motor_bedroom": {
+"state": "open",
+"attributes": {
+"friendly_name": "Bedroom blind",
+"current_position": 45,
+"device_class": "blind",
+"supported_features": 15
+}
+},
+"cover.roller_motor_living_room": {
+"state": "open",
+"attributes": {
+"friendly_name": "Living room blind",
+"current_position": 100,
+"device_class": "blind",
+"supported_features": 15
+}
+},
+"humidifier.dehumidifier_pasapair": {
+"state": "off",
+"attributes": {
+"friendly_name": "Dehumidifier pasapair",
+"current_humidity": 49,
+"humidity": 50,
+"device_class": "dehumidifier"
+}
+},
+"humidifier.nwt_dehumidifier": {
+"state": "off",
+"attributes": {
+"friendly_name": "Nwt dehumidifier",
+"current_humidity": 61,
+"humidity": 50,
+"device_class": "dehumidifier"
+}
+},
+"humidifier.wdh_214us": {
+"state": "on",
+"attributes": {
+"friendly_name": "Wdh 214us",
+"current_humidity": 54,
+"humidity": 50,
+"device_class": "dehumidifier"
+}
+},
+"input_boolean.zobrazeni_pocasi": {
+"state": "off",
+"attributes": {
+"friendly_name": "Zobrazeni pocasi"
+}
+},
+"light.led_linka_leva": {
+"state": "on",
+"attributes": {
+"friendly_name": "Led linka leva",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": "brightness",
+"brightness": 150
+}
+},
+"light.light_group_bedroom": {
+"state": "on",
+"attributes": {
+"friendly_name": "Bedroom lights",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": 170,
+"entity_id": [
+"light.panel_bedroom_1",
+"light.panel_bedroom_2",
+"light.panel_bedroom_3"
+]
+}
+},
+"light.light_group_living_room": {
+"state": "off",
+"attributes": {
+"friendly_name": "Living room lights",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null,
+"entity_id": [
+"light.panel_living_room_1",
+"light.panel_living_room_2",
+"light.panel_living_room_3"
+]
+}
+},
+"light.panel_bathroom": {
+"state": "off",
+"attributes": {
+"friendly_name": "Panel bathroom",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"light.panel_bedroom_1": {
+"state": "on",
+"attributes": {
+"friendly_name": "Panel bedroom 1",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": "brightness",
+"brightness": 170
+}
+},
+"light.panel_bedroom_2": {
+"state": "on",
+"attributes": {
+"friendly_name": "Panel bedroom 2",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": "brightness",
+"brightness": 170
+}
+},
+"light.panel_bedroom_3": {
+"state": "on",
+"attributes": {
+"friendly_name": "Panel bedroom 3",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": "brightness",
+"brightness": 170
+}
+},
+"light.panel_hall": {
+"state": "off",
+"attributes": {
+"friendly_name": "Panel hall",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"light.panel_kitchen": {
+"state": "off",
+"attributes": {
+"friendly_name": "Panel kitchen",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"light.panel_living_room_1": {
+"state": "off",
+"attributes": {
+"friendly_name": "Panel living room 1",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"light.panel_living_room_2": {
+"state": "off",
+"attributes": {
+"friendly_name": "Panel living room 2",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"light.panel_living_room_3": {
+"state": "off",
+"attributes": {
+"friendly_name": "Panel living room 3",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"light.sensor_light_5ch": {
+"state": "on",
+"attributes": {
+"friendly_name": "Sensor light 5ch",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": "brightness",
+"brightness": 150
+}
+},
+"light.switch_kuchyn_hl_loznice_gang_3": {
+"state": "off",
+"attributes": {
+"friendly_name": "Switch kuchyn hl loznice gang 3",
+"supported_color_modes": [
+"brightness"
+],
+"color_mode": null,
+"brightness": null
+}
+},
+"media_player.43_smart_monitor_m7_2": {
+"state": "off",
+"attributes": {
+"friendly_name": "43 smart monitor m7 2"
+}
+},
+"media_player.lg_webos_tv_oled83g58lw_beuyljp": {
+"state": "playing",
+"attributes": {
+"friendly_name": "Bedroom TV",
+"app_name": "Nuvio TV",
+"source": "Nuvio TV"
+}
+},
+"media_player.marantz_cinema_60": {
+"state": "off",
+"attributes": {
+"friendly_name": "Marantz cinema 60"
+}
+},
+"media_player.televize_v_obyvaku_2": {
+"state": "off",
+"attributes": {
+"friendly_name": "Living room TV"
+}
+},
+"media_player.vision_master_pro2_3": {
+"state": "off",
+"attributes": {
+"friendly_name": "Vision master pro2 3"
+}
+},
+"script.tv_power_toggle_s_wol": {
+"state": "off",
+"attributes": {
+"friendly_name": "Tv power toggle s wol"
+}
+},
+"sensor.bathroom_bojler_animace": {
+"state": "hot",
+"attributes": {
+"friendly_name": "Bathroom bojler animace"
+}
+},
+"sensor.bathroom_shelly_h_t_gen_3_bathroom_humidity": {
+"state": "61",
+"attributes": {
+"friendly_name": "Bathroom shelly h t gen 3 bathroom humidity",
+"device_class": "humidity",
+"unit_of_measurement": "%",
+"state_class": "measurement"
+}
+},
+"sensor.bathroom_shelly_h_t_gen_3_bathroom_temperature": {
+"state": "23.5",
+"attributes": {
+"friendly_name": "Bathroom shelly h t gen 3 bathroom temperature",
+"device_class": "temperature",
+"unit_of_measurement": "°C",
+"state_class": "measurement"
+}
+},
+"sensor.bedroom_shelly_h_t_gen_3_bedroom_humidity": {
+"state": "55",
+"attributes": {
+"friendly_name": "Bedroom shelly h t gen 3 bedroom humidity",
+"device_class": "humidity",
+"unit_of_measurement": "%",
+"state_class": "measurement"
+}
+},
+"sensor.bedroom_shelly_h_t_gen_3_bedroom_temperature": {
+"state": "21.3",
+"attributes": {
+"friendly_name": "Bedroom shelly h t gen 3 bedroom temperature",
+"device_class": "temperature",
+"unit_of_measurement": "°C",
+"state_class": "measurement"
+}
+},
+"sensor.bosch_mycka_operation_state": {
+"state": "run",
+"attributes": {
+"friendly_name": "Bosch mycka operation state"
+}
+},
+"sensor.bosch_mycka_program_phase": {
+"state": "mainwash",
+"attributes": {
+"friendly_name": "Bosch mycka program phase"
+}
+},
+"sensor.bosch_mycka_program_progress": {
+"state": "45",
+"attributes": {
+"friendly_name": "Bosch mycka program progress",
+"unit_of_measurement": "%"
+}
+},
+"sensor.bosch_oven_operation_state": {
+"state": "inactive",
+"attributes": {
+"friendly_name": "Bosch oven operation state"
+}
+},
+"sensor.bosch_oven_program_progress": {
+"state": "0",
+"attributes": {
+"friendly_name": "Bosch oven program progress",
+"unit_of_measurement": "%"
+}
+},
+"sensor.bosch_washerdryer_operation_state": {
+"state": "run",
+"attributes": {
+"friendly_name": "Bosch washerdryer operation state"
+}
+},
+"sensor.bosch_washerdryer_program_progress": {
+"state": "62",
+"attributes": {
+"friendly_name": "Bosch washerdryer program progress",
+"unit_of_measurement": "%"
+}
+},
+"sensor.dual_blaze_6_8qt_6_4_litre_smart_air_fryer_cooking_status": {
+"state": "standby",
+"attributes": {
+"friendly_name": "Dual blaze 6 8qt 6 4 litre smart air fryer cooking status"
+}
+},
+"sensor.hall_shelly_h_t_gen_3_hall_humidity": {
+"state": "50",
+"attributes": {
+"friendly_name": "Hall shelly h t gen 3 hall humidity",
+"device_class": "humidity",
+"unit_of_measurement": "%",
+"state_class": "measurement"
+}
+},
+"sensor.hall_shelly_h_t_gen_3_hall_temperature": {
+"state": "22.9",
+"attributes": {
+"friendly_name": "Hall shelly h t gen 3 hall temperature",
+"device_class": "temperature",
+"unit_of_measurement": "°C",
+"state_class": "measurement"
+}
+},
+"sensor.kitchen_s6_kitchen_anyvac_map": {
+"state": "unknown",
+"attributes": {
+"friendly_name": "Kitchen s6 kitchen anyvac map"
+}
+},
+"sensor.kitchen_s8_maxv_ultra_anyvac_map": {
+"state": "unknown",
+"attributes": {
+"friendly_name": "Kitchen s8 maxv ultra anyvac map"
+}
+},
+"sensor.kitchen_shelly_h_t_gen_3_kitchen_humidity": {
+"state": "52",
+"attributes": {
+"friendly_name": "Kitchen shelly h t gen 3 kitchen humidity",
+"device_class": "humidity",
+"unit_of_measurement": "%",
+"state_class": "measurement"
+}
+},
+"sensor.kitchen_shelly_h_t_gen_3_kitchen_temperature": {
+"state": "22.1",
+"attributes": {
+"friendly_name": "Kitchen shelly h t gen 3 kitchen temperature",
+"device_class": "temperature",
+"unit_of_measurement": "°C",
+"state_class": "measurement"
+}
+},
+"sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom": {
+"state": "Nuvio TV",
+"attributes": {
+"friendly_name": "Bedroom TV source"
+}
+},
+"sensor.living_room_shelly_h_t_gen_3_living_room_humidity": {
+"state": "48",
+"attributes": {
+"friendly_name": "Living room shelly h t gen 3 living room humidity",
+"device_class": "humidity",
+"unit_of_measurement": "%",
+"state_class": "measurement"
+}
+},
+"sensor.living_room_shelly_h_t_gen_3_living_room_temperature": {
+"state": "22.4",
+"attributes": {
+"friendly_name": "Living room shelly h t gen 3 living room temperature",
+"device_class": "temperature",
+"unit_of_measurement": "°C",
+"state_class": "measurement"
+}
+},
+"sensor.meter_kotel_total_power": {
+"state": "1240",
+"attributes": {
+"friendly_name": "Meter kotel total power",
+"device_class": "power",
+"unit_of_measurement": "W"
+}
+},
+"sensor.plug_shelly_bedroom_charger_power": {
+"state": "0",
+"attributes": {
+"friendly_name": "Plug shelly bedroom charger power",
+"device_class": "power",
+"unit_of_measurement": "W"
+}
+},
+"sensor.presence_sensor_bathroom_illuminance_2": {
+"state": "3",
+"attributes": {
+"friendly_name": "Presence sensor bathroom illuminance 2",
+"device_class": "illuminance",
+"unit_of_measurement": "lx"
+}
+},
+"sensor.presence_sensor_hall_illuminance_2": {
+"state": "2",
+"attributes": {
+"friendly_name": "Presence sensor hall illuminance 2",
+"device_class": "illuminance",
+"unit_of_measurement": "lx"
+}
+},
+"sensor.presence_sensor_kitchen_illuminance_2": {
+"state": "18",
+"attributes": {
+"friendly_name": "Presence sensor kitchen illuminance 2",
+"device_class": "illuminance",
+"unit_of_measurement": "lx"
+}
+},
+"sensor.presence_sensor_living_room_illuminance_3": {
+"state": "4",
+"attributes": {
+"friendly_name": "Presence sensor living room illuminance 3",
+"device_class": "illuminance",
+"unit_of_measurement": "lx"
+}
+},
+"sensor.s6_kitchen_status": {
+"state": "docked",
+"attributes": {
+"friendly_name": "S6 kitchen status"
+}
+},
+"sensor.s7_maxv_anyvac_map": {
+"state": "unknown",
+"attributes": {
+"friendly_name": "S7 maxv anyvac map"
+}
+},
+"sensor.s7_maxv_status": {
+"state": "cleaning",
+"attributes": {
+"friendly_name": "S7 maxv status"
+}
+},
+"sensor.s8_maxv_ultra_status": {
+"state": "docked",
+"attributes": {
+"friendly_name": "S8 maxv ultra status"
+}
+},
+"sun.sun": {
+"state": "below_horizon",
+"attributes": {
+"friendly_name": "Sun"
+}
+},
+"switch.01_tv": {
+"state": "on",
+"attributes": {
+"friendly_name": "01 tv"
+}
+},
+"switch.bosch_mycka_power": {
+"state": "on",
+"attributes": {
+"friendly_name": "Bosch mycka power"
+}
+},
+"switch.dual_blaze_6_8qt_6_4_litre_smart_air_fryer": {
+"state": "off",
+"attributes": {
+"friendly_name": "Dual blaze 6 8qt 6 4 litre smart air fryer"
+}
+},
+"switch.shelly_plug_s_gen3_bedroom_charger": {
+"state": "off",
+"attributes": {
+"friendly_name": "Shelly plug s gen3 bedroom charger"
+}
+},
+"switch.switch_bathroom_switch_1": {
+"state": "on",
+"attributes": {
+"friendly_name": "Switch bathroom switch 1"
+}
+},
+"switch.switch_bathroom_switch_2": {
+"state": "off",
+"attributes": {
+"friendly_name": "Switch bathroom switch 2"
+}
+},
+"vacuum.s6_kitchen": {
+"state": "docked",
+"attributes": {
+"friendly_name": "S6",
+"battery_level": 100
+}
+},
+"vacuum.s7_maxv": {
+"state": "cleaning",
+"attributes": {
+"friendly_name": "S7 MaxV",
+"battery_level": 87
+}
+},
+"vacuum.s8_maxv_ultra": {
+"state": "docked",
+"attributes": {
+"friendly_name": "S8 MaxV Ultra",
+"battery_level": 64
+}
+},
+"water_heater.bojler": {
+"state": "eco",
+"attributes": {
+"friendly_name": "Water heater",
+"current_temperature": 48,
+"temperature": 53
+}
+},
+"weather.weather_google": {
+"state": "cloudy",
+"attributes": {
+"friendly_name": "Weather",
+"temperature": 9.4,
+"humidity": 81,
+"temperature_unit": "°C"
+}
+}
+},
+"areas": {
+"living_room": {
+"area_id": "living_room",
+"name": "Living room",
+"aliases": []
+},
+"bedroom": {
+"area_id": "bedroom",
+"name": "Bedroom",
+"aliases": []
+},
+"kitchen": {
+"area_id": "kitchen",
+"name": "Kitchen",
+"aliases": []
+},
+"hall": {
+"area_id": "hall",
+"name": "Hall",
+"aliases": []
+},
+"bathroom": {
+"area_id": "bathroom",
+"name": "Bathroom",
+"aliases": []
+}
+},
+"entities": {
+"binary_sensor.ariston_is_heating": {
+"entity_id": "binary_sensor.ariston_is_heating",
+"area_id": "bathroom"
+},
+"binary_sensor.bosch_mycka_door": {
+"entity_id": "binary_sensor.bosch_mycka_door",
+"area_id": "kitchen"
+},
+"binary_sensor.bosch_washerdryer_door": {
+"entity_id": "binary_sensor.bosch_washerdryer_door",
+"area_id": "bathroom"
+},
+"binary_sensor.central_configuration_central_boiler": {
+"entity_id": "binary_sensor.central_configuration_central_boiler",
+"area_id": null
+},
+"binary_sensor.versatile_bedroom_window_state": {
+"entity_id": "binary_sensor.versatile_bedroom_window_state",
+"area_id": "bedroom"
+},
+"binary_sensor.versatile_living_room_window_state": {
+"entity_id": "binary_sensor.versatile_living_room_window_state",
+"area_id": "living_room"
+},
+"binary_sensor.wdh_214us_tank_full": {
+"entity_id": "binary_sensor.wdh_214us_tank_full",
+"area_id": "bedroom"
+},
+"climate.versatile_bedroom": {
+"entity_id": "climate.versatile_bedroom",
+"area_id": "bedroom"
+},
+"climate.versatile_kitchen": {
+"entity_id": "climate.versatile_kitchen",
+"area_id": "kitchen"
+},
+"climate.versatile_living_room": {
+"entity_id": "climate.versatile_living_room",
+"area_id": "living_room"
+},
+"cover.roller_motor_bedroom": {
+"entity_id": "cover.roller_motor_bedroom",
+"area_id": "bedroom"
+},
+"cover.roller_motor_living_room": {
+"entity_id": "cover.roller_motor_living_room",
+"area_id": "living_room"
+},
+"humidifier.dehumidifier_pasapair": {
+"entity_id": "humidifier.dehumidifier_pasapair",
+"area_id": "living_room"
+},
+"humidifier.nwt_dehumidifier": {
+"entity_id": "humidifier.nwt_dehumidifier",
+"area_id": "bathroom"
+},
+"humidifier.wdh_214us": {
+"entity_id": "humidifier.wdh_214us",
+"area_id": "bedroom"
+},
+"input_boolean.zobrazeni_pocasi": {
+"entity_id": "input_boolean.zobrazeni_pocasi",
+"area_id": null
+},
+"light.led_linka_leva": {
+"entity_id": "light.led_linka_leva",
+"area_id": "kitchen"
+},
+"light.light_group_bedroom": {
+"entity_id": "light.light_group_bedroom",
+"area_id": "bedroom"
+},
+"light.light_group_living_room": {
+"entity_id": "light.light_group_living_room",
+"area_id": "living_room"
+},
+"light.panel_bathroom": {
+"entity_id": "light.panel_bathroom",
+"area_id": "bathroom"
+},
+"light.panel_bedroom_1": {
+"entity_id": "light.panel_bedroom_1",
+"area_id": "bedroom"
+},
+"light.panel_bedroom_2": {
+"entity_id": "light.panel_bedroom_2",
+"area_id": "bedroom"
+},
+"light.panel_bedroom_3": {
+"entity_id": "light.panel_bedroom_3",
+"area_id": "bedroom"
+},
+"light.panel_hall": {
+"entity_id": "light.panel_hall",
+"area_id": "hall"
+},
+"light.panel_kitchen": {
+"entity_id": "light.panel_kitchen",
+"area_id": "kitchen"
+},
+"light.panel_living_room_1": {
+"entity_id": "light.panel_living_room_1",
+"area_id": "living_room"
+},
+"light.panel_living_room_2": {
+"entity_id": "light.panel_living_room_2",
+"area_id": "living_room"
+},
+"light.panel_living_room_3": {
+"entity_id": "light.panel_living_room_3",
+"area_id": "living_room"
+},
+"light.sensor_light_5ch": {
+"entity_id": "light.sensor_light_5ch",
+"area_id": "kitchen"
+},
+"light.switch_kuchyn_hl_loznice_gang_3": {
+"entity_id": "light.switch_kuchyn_hl_loznice_gang_3",
+"area_id": "bedroom"
+},
+"media_player.43_smart_monitor_m7_2": {
+"entity_id": "media_player.43_smart_monitor_m7_2",
+"area_id": "living_room"
+},
+"media_player.lg_webos_tv_oled83g58lw_beuyljp": {
+"entity_id": "media_player.lg_webos_tv_oled83g58lw_beuyljp",
+"area_id": "bedroom"
+},
+"media_player.marantz_cinema_60": {
+"entity_id": "media_player.marantz_cinema_60",
+"area_id": "living_room"
+},
+"media_player.televize_v_obyvaku_2": {
+"entity_id": "media_player.televize_v_obyvaku_2",
+"area_id": "living_room"
+},
+"media_player.vision_master_pro2_3": {
+"entity_id": "media_player.vision_master_pro2_3",
+"area_id": "living_room"
+},
+"script.tv_power_toggle_s_wol": {
+"entity_id": "script.tv_power_toggle_s_wol",
+"area_id": null
+},
+"sensor.bathroom_bojler_animace": {
+"entity_id": "sensor.bathroom_bojler_animace",
+"area_id": "bathroom"
+},
+"sensor.bathroom_shelly_h_t_gen_3_bathroom_humidity": {
+"entity_id": "sensor.bathroom_shelly_h_t_gen_3_bathroom_humidity",
+"area_id": "bathroom"
+},
+"sensor.bathroom_shelly_h_t_gen_3_bathroom_temperature": {
+"entity_id": "sensor.bathroom_shelly_h_t_gen_3_bathroom_temperature",
+"area_id": "bathroom"
+},
+"sensor.bedroom_shelly_h_t_gen_3_bedroom_humidity": {
+"entity_id": "sensor.bedroom_shelly_h_t_gen_3_bedroom_humidity",
+"area_id": "bedroom"
+},
+"sensor.bedroom_shelly_h_t_gen_3_bedroom_temperature": {
+"entity_id": "sensor.bedroom_shelly_h_t_gen_3_bedroom_temperature",
+"area_id": "bedroom"
+},
+"sensor.bosch_mycka_operation_state": {
+"entity_id": "sensor.bosch_mycka_operation_state",
+"area_id": "kitchen"
+},
+"sensor.bosch_mycka_program_phase": {
+"entity_id": "sensor.bosch_mycka_program_phase",
+"area_id": "kitchen"
+},
+"sensor.bosch_mycka_program_progress": {
+"entity_id": "sensor.bosch_mycka_program_progress",
+"area_id": "kitchen"
+},
+"sensor.bosch_oven_operation_state": {
+"entity_id": "sensor.bosch_oven_operation_state",
+"area_id": "kitchen"
+},
+"sensor.bosch_oven_program_progress": {
+"entity_id": "sensor.bosch_oven_program_progress",
+"area_id": "kitchen"
+},
+"sensor.bosch_washerdryer_operation_state": {
+"entity_id": "sensor.bosch_washerdryer_operation_state",
+"area_id": "bathroom"
+},
+"sensor.bosch_washerdryer_program_progress": {
+"entity_id": "sensor.bosch_washerdryer_program_progress",
+"area_id": "bathroom"
+},
+"sensor.dual_blaze_6_8qt_6_4_litre_smart_air_fryer_cooking_status": {
+"entity_id": "sensor.dual_blaze_6_8qt_6_4_litre_smart_air_fryer_cooking_status",
+"area_id": "kitchen"
+},
+"sensor.hall_shelly_h_t_gen_3_hall_humidity": {
+"entity_id": "sensor.hall_shelly_h_t_gen_3_hall_humidity",
+"area_id": "hall"
+},
+"sensor.hall_shelly_h_t_gen_3_hall_temperature": {
+"entity_id": "sensor.hall_shelly_h_t_gen_3_hall_temperature",
+"area_id": "hall"
+},
+"sensor.kitchen_s6_kitchen_anyvac_map": {
+"entity_id": "sensor.kitchen_s6_kitchen_anyvac_map",
+"area_id": "kitchen"
+},
+"sensor.kitchen_s8_maxv_ultra_anyvac_map": {
+"entity_id": "sensor.kitchen_s8_maxv_ultra_anyvac_map",
+"area_id": "kitchen"
+},
+"sensor.kitchen_shelly_h_t_gen_3_kitchen_humidity": {
+"entity_id": "sensor.kitchen_shelly_h_t_gen_3_kitchen_humidity",
+"area_id": "kitchen"
+},
+"sensor.kitchen_shelly_h_t_gen_3_kitchen_temperature": {
+"entity_id": "sensor.kitchen_shelly_h_t_gen_3_kitchen_temperature",
+"area_id": "kitchen"
+},
+"sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom": {
+"entity_id": "sensor.lg_webos_tv_oled83g58lw_beuyljp_tv_source_bedroom",
+"area_id": "bedroom"
+},
+"sensor.living_room_shelly_h_t_gen_3_living_room_humidity": {
+"entity_id": "sensor.living_room_shelly_h_t_gen_3_living_room_humidity",
+"area_id": "living_room"
+},
+"sensor.living_room_shelly_h_t_gen_3_living_room_temperature": {
+"entity_id": "sensor.living_room_shelly_h_t_gen_3_living_room_temperature",
+"area_id": "living_room"
+},
+"sensor.meter_kotel_total_power": {
+"entity_id": "sensor.meter_kotel_total_power",
+"area_id": "bathroom"
+},
+"sensor.plug_shelly_bedroom_charger_power": {
+"entity_id": "sensor.plug_shelly_bedroom_charger_power",
+"area_id": "bedroom"
+},
+"sensor.presence_sensor_bathroom_illuminance_2": {
+"entity_id": "sensor.presence_sensor_bathroom_illuminance_2",
+"area_id": "bathroom"
+},
+"sensor.presence_sensor_hall_illuminance_2": {
+"entity_id": "sensor.presence_sensor_hall_illuminance_2",
+"area_id": "hall"
+},
+"sensor.presence_sensor_kitchen_illuminance_2": {
+"entity_id": "sensor.presence_sensor_kitchen_illuminance_2",
+"area_id": "kitchen"
+},
+"sensor.presence_sensor_living_room_illuminance_3": {
+"entity_id": "sensor.presence_sensor_living_room_illuminance_3",
+"area_id": "living_room"
+},
+"sensor.s6_kitchen_status": {
+"entity_id": "sensor.s6_kitchen_status",
+"area_id": "kitchen"
+},
+"sensor.s7_maxv_anyvac_map": {
+"entity_id": "sensor.s7_maxv_anyvac_map",
+"area_id": "hall"
+},
+"sensor.s7_maxv_status": {
+"entity_id": "sensor.s7_maxv_status",
+"area_id": "hall"
+},
+"sensor.s8_maxv_ultra_status": {
+"entity_id": "sensor.s8_maxv_ultra_status",
+"area_id": "kitchen"
+},
+"sun.sun": {
+"entity_id": "sun.sun",
+"area_id": null
+},
+"switch.01_tv": {
+"entity_id": "switch.01_tv",
+"area_id": "bedroom"
+},
+"switch.bosch_mycka_power": {
+"entity_id": "switch.bosch_mycka_power",
+"area_id": "kitchen"
+},
+"switch.dual_blaze_6_8qt_6_4_litre_smart_air_fryer": {
+"entity_id": "switch.dual_blaze_6_8qt_6_4_litre_smart_air_fryer",
+"area_id": "kitchen"
+},
+"switch.shelly_plug_s_gen3_bedroom_charger": {
+"entity_id": "switch.shelly_plug_s_gen3_bedroom_charger",
+"area_id": "bedroom"
+},
+"switch.switch_bathroom_switch_1": {
+"entity_id": "switch.switch_bathroom_switch_1",
+"area_id": "bathroom"
+},
+"switch.switch_bathroom_switch_2": {
+"entity_id": "switch.switch_bathroom_switch_2",
+"area_id": "bathroom"
+},
+"vacuum.s6_kitchen": {
+"entity_id": "vacuum.s6_kitchen",
+"area_id": "kitchen"
+},
+"vacuum.s7_maxv": {
+"entity_id": "vacuum.s7_maxv",
+"area_id": "hall"
+},
+"vacuum.s8_maxv_ultra": {
+"entity_id": "vacuum.s8_maxv_ultra",
+"area_id": "kitchen"
+},
+"water_heater.bojler": {
+"entity_id": "water_heater.bojler",
+"area_id": "bathroom"
+},
+"weather.weather_google": {
+"entity_id": "weather.weather_google",
+"area_id": null
+}
+}
+}

@@ -13,24 +13,27 @@ runs the old file — see the first section.
 - **Hard-refresh** the browser (`Ctrl+Shift+R`, on a Mac `Cmd+Shift+R`). On a wall tablet or in
   the companion app, reload the dashboard or restart the app; a kiosk browser may need its cache
   cleared.
-- **Updated in HACS right after the release appeared?** The release's files (the card, the studio
-  and the floor plan renderer) are attached to the GitHub release by a workflow a minute or two
-  after it is published. An update in that window can install a release without them. Wait a few
-  minutes, then in HACS open the card → **⋮ → Redownload**.
+- **Updated right after the release appeared?** The release's files (the card, the studio and the
+  floor plan renderer) are attached to the GitHub release by a workflow a minute or two after it
+  is published. An update in that window can install a release without them. Wait a few minutes,
+  then open the card in the Marketplace → **⋮ → Install another version** and install the same
+  version again (in HACS: **⋮ → Redownload**).
 - **A manual install:** all three files must be replaced together. A new card with an old studio
   file (or the other way round) can fail in odd ways.
 
 ## "Custom element doesn't exist: room-overlay-card"
 
 The dashboard resource is missing or wrong. **Settings → Dashboards → ⋮ → Manage resources** must
-list `/local/room-overlay-card.js` (manual install) or the HACS path, type **JavaScript module**.
-HACS adds it by itself; after adding it by hand, hard-refresh.
+list `/local/room-overlay-card.js` (manual install) or the Marketplace's `/local/community/…` path
+(HACS: `/hacsfiles/…`, which keeps working), type **JavaScript module**. The Marketplace and HACS
+add it by themselves — except when your resources are kept in YAML; after adding it by hand,
+hard-refresh.
 
 ## "Studio file … not found" / "Floor plan file … not found"
 
 The studio (`room-overlay-card-studio.js`) and the floor plan renderer
 (`room-overlay-card-floorplan.js`) are separate files, loaded from the same folder as
-`room-overlay-card.js` the first time they are needed. HACS installs them with every release
+`room-overlay-card.js` the first time they are needed. The Marketplace and HACS install them with every release
 (see [an update does not show](#an-update-does-not-show) if one is missing). A manual install
 needs all three files in the same folder; only `room-overlay-card.js` needs a resource entry.
 

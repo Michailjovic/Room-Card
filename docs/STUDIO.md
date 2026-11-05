@@ -8,6 +8,10 @@ a form for whatever is selected. Everything can be built here without writing YA
 Home Assistant's areas, elements placed and sized on the image, sections, the overview page and
 floor plan pages.
 
+![Room Card Studio: the outline on the left, the live card on the canvas, the form on the right](../screenshots/studio.webp)
+
+You can try it without installing anything in the [live demo](https://michailjovic.github.io/Room-Card/) (*✎ Open Studio*).
+
 ---
 
 ## Opening the studio
@@ -74,6 +78,11 @@ areas the card does not have yet and leaves everything else alone; a single-room
 room 1 first. One Undo takes it back.
 
 ## The workspace
+
+| | |
+|---|---|
+| ![Switching the canvas between tablet, tablet portrait and phone](../screenshots/studio-frames.webp) | ![Live: the canvas works like the card — tapping the light pills](../screenshots/studio-live.webp) |
+| *Device frames: Tablet, Tablet portrait, Phone* | *Live: the canvas works like the card on the dashboard* |
 
 ```
 ┌ toolbar: room · frame (Fit / Tablet / Tablet portrait / Phone) · Arrange / Live · Add · undo / redo · YAML · History · Save ┐
@@ -164,6 +173,11 @@ another card — a *Paste room* line appears) and **delete**. A copy gets a uniq
 
 ## Moving, resizing, adding
 
+| | |
+|---|---|
+| ![Select an element in the outline, drag it on the canvas, undo](../screenshots/studio-move.webp) | ![Add → Zone, then drag a box on the picture](../screenshots/studio-add.webp) |
+| *Select in the outline, drag on the canvas, Undo* | *Add → Zone, then drag a box on the picture* |
+
 **Moving and resizing** (canvas in *Arrange*):
 
 - drag to move; it snaps to a 0.5 % grid and, with a blue guide line, to the left / centre /
@@ -226,11 +240,13 @@ Saving depends on where you opened it:
 **Closing.** Escape or ✕ with unsaved changes asks first: save, discard or keep editing.
 
 **Installing.** The studio is a second file, `room-overlay-card-studio.js`. It is downloaded only
-the first time you open the studio, never by a dashboard that just shows the card. HACS installs
-it automatically. A manual install needs both files in the same folder; the Studio button tells
+the first time you open the studio, never by a dashboard that just shows the card. The Marketplace
+(HACS before Home Assistant 2026.11) installs it automatically. A manual install needs both files in the same folder; the Studio button tells
 you if the second one is missing.
 
 ## Floor plan pages
+
+![Turning the floor plan with the Turn slider](../screenshots/studio-floorplan.webp)
 
 Since v6.47.0, *Add a floor plan page* at the bottom of the Rooms list adds a
 page that draws the home as a plan ([docs/FLOORPLAN.md](FLOORPLAN.md)). On that page the canvas
