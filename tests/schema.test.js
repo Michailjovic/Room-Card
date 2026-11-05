@@ -53,8 +53,7 @@ check('embedded cards are not validated',L({type:'x',elements:[{id:'e',card:{typ
 check('missing required id → warn',L({type:'x',zones:[{top:'1%'}]},'warn').some(x=>x.path==='zones[0].id'));
 
 // ---- 2. reference configs ------------------------------------------------------
-const refFiles=['example-bedroom.yaml','flat-multiroom.yaml','flat-multiroom-v4.yaml']
-  .concat(fs.existsSync(path.join(ROOT,'Claude outputs'))?fs.readdirSync(path.join(ROOT,'Claude outputs')).filter(f=>/^room-card-.*\.yaml$/.test(f)).map(f=>'Claude outputs/'+f):[]);
+const refFiles=fs.readdirSync(path.join(ROOT,'tests','fixtures')).filter(f=>/\.ya?ml$/.test(f)).map(f=>'tests/fixtures/'+f).concat(['flat-multiroom.yaml']);
 let refCards=0;
 for(const f of refFiles){
   const p=path.join(ROOT,f);if(!fs.existsSync(p))continue;
