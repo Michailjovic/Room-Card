@@ -44,9 +44,8 @@ Every version in detail: [CHANGELOG](https://github.com/Michailjovic/Room-Card/b
 
 ## Installing
 
-- **Home Assistant 2026.11 and newer:** Settings → Marketplace → **Add from link** →
-  `Michailjovic/Room-Card` → open it → **Install**.
-- **Older Home Assistant:** HACS → ⋮ → Custom repositories → `https://github.com/Michailjovic/Room-Card`,
-  type Dashboard → Download.
+- **Home Assistant 2026.11 and newer:** Settings → Marketplace → search for **Room Overlay Card**
+  → **Install**.
+- **Older Home Assistant:** in HACS, search for **Room Overlay Card** → **Download**.
 - **Manual:** the three files from this release into `/config/www/` — see the
   [README](https://github.com/Michailjovic/Room-Card/blob/master/README.md#installation).

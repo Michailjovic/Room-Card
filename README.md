@@ -1,6 +1,6 @@
 # Room Overlay Card
 
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![hacs_badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration)
 [![GitHub release](https://img.shields.io/github/release/Michailjovic/Room-Card.svg)](https://github.com/Michailjovic/Room-Card/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -24,25 +24,21 @@ editor with the live card on a canvas — no YAML needed.
 
 ### Home Assistant 2026.11 and newer — the Marketplace (recommended)
 
-Since 2026.11 HACS is built into Home Assistant as the **Marketplace**.
+Since 2026.11 HACS is built into Home Assistant as the **Marketplace**; the card is in its default
+catalog.
 
-1. **Settings → Marketplace → Add from link** → enter `Michailjovic/Room-Card` (or the full GitHub
-   URL) → **Add**; if it asks for the type, choose **Dashboard**. Adding a repository by link needs
-   a GitHub connection — the Marketplace walks you through it the first time. (Once the card is in
-   the default catalog, searching for *Room Overlay Card* is enough.)
-2. Open **Room Overlay Card** → **Install**. The Marketplace puts the files in `www/community/` and
-   adds the dashboard resource for you (if you keep resources in YAML, the install dialog shows the
-   line to add).
-3. Reload the browser (`Ctrl+Shift+R`); on a tablet or phone, reload the dashboard.
+1. **Settings → Marketplace** → search for **Room Overlay Card** → open it → **Install**. The
+   Marketplace puts the files in `www/community/` and adds the dashboard resource for you (if you
+   keep resources in YAML, the install dialog shows the line to add).
+2. Reload the browser (`Ctrl+Shift+R`); on a tablet or phone, reload the dashboard.
 
 To install another version — a beta, or to roll back — open the card → **⋮ → Install another
 version**.
 
 ### Home Assistant 2026.10 and older — HACS
 
-1. **HACS → ⋮ → Custom repositories** → add `https://github.com/Michailjovic/Room-Card`, type
-   **Dashboard**.
-2. Open **Room Overlay Card** in HACS and **Download**, then hard-refresh the browser.
+1. In **HACS**, search for **Room Overlay Card** and **Download**.
+2. Hard-refresh the browser.
 
 To pick a version, open the card → **⋮ → Redownload**, tick *Show beta versions* for a beta.
 
