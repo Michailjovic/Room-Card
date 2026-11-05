@@ -21,7 +21,6 @@ pre-releases. Release notes: [`RELEASE_NOTES_v7.0.0.md`](docs/releases/RELEASE_N
 
 Left over from Phase 10:
 
-- [ ] HACS default-repository PR (checklist below) — now that a full 7.0.0 release exists
 - [x] Studio GIFs in [`docs/STUDIO.md`](docs/STUDIO.md): device frames, select / move / undo, add by drawing, turning the floor plan
 - [ ] The install text checked against a real Home Assistant 2026.11 Marketplace (labels taken
   from its documentation)
@@ -64,24 +63,15 @@ objects. Undecided; a Phase 0 prototype on the author's plan exists (V8_PLAN §2
 
 ---
 
-## HACS default-repository submission
+## ✅ In the default catalog (HACS / Marketplace)
 
-The card installs from HACS as a *custom repository* today; the goal is HACS's own default list.
+The card is in HACS's default list (`hacs/default` → `plugin`), so it installs from Home Assistant
+2026.11's Marketplace and from HACS by searching for *Room Overlay Card*. What keeps it there:
 
-Requirements as published at [hacs.xyz/docs/publish/include](https://www.hacs.xyz/docs/publish/include/)
-(checked 2026-11-04). Since Home Assistant 2026.11 HACS ships inside Home Assistant as the
-*Marketplace*; the hacs.xyz pages for including default repositories are still published.
-
-1. ✅ HACS validation Action in CI (`hacs/action`, `category: plugin`) — must pass with no ignores.
-2. ✅ Full GitHub releases (not just tags), assets attached and verified by `release.yml`.
-3. ✅ `hacs.json` with `name` and `filename`; MIT licence recognised by GitHub.
-4. ✅ README with images (the *Check images* step applies to cards); *HACS Custom* badge until
-   the PR is merged.
-5. 🎯 Repo settings: a short description, topics (`home-assistant`, `lovelace`, `custom-card`,
-   `hacs`, `floorplan`, `roborock`), issues enabled.
-6. 🎯 The PR, from the owner's own (not an organisation) account: fork `hacs/default`, branch from
-   `master`, add `Michailjovic/Room-Card` to the `plugin` file **in alphabetical order**, fill in
-   the whole PR template. Review takes months; after the merge the next scheduled scan picks it up.
+1. The HACS validation Action in CI (`hacs/action`, `category: plugin`) passes with no ignores.
+2. Full GitHub releases (not just tags), with the assets attached and verified by `release.yml`.
+3. `hacs.json` with `name` and `filename`; the MIT licence recognised by GitHub.
+4. A README with images; the repo's description, topics and issues.
 
 ## Maintenance (ongoing)
 

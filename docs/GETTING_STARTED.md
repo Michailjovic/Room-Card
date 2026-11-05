@@ -12,7 +12,7 @@ reference — you never have to type it. To look around first, open the
 ## 1. Install
 
 Install from Home Assistant's **Marketplace** (Home Assistant 2026.11 and newer; **HACS** on older
-versions) — added by link until the card is in the default catalog — or by hand: see
+versions) — search for *Room Overlay Card* — or by hand: see
 [Installation](../README.md#installation). Then hard-refresh the browser.
 
 ## 2. Add the card and run the wizard
