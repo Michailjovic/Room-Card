@@ -77,10 +77,10 @@ function rocLyPreviewHtml(lp){
     const rg=r[0],label=r[1],color=r[2];
     const pl=lp.place&&lp.place[rg];
     if(!pl)return;
-    inner+='<div style="'+rocRegionCss(pl)+'background:'+color+'2b;border:1px solid '+color+';border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+color+';min-height:12px;overflow:hidden;padding:1px;text-align:center;line-height:1.1;">'+label+'</div>';
+    inner+='<div style="'+escA(''+rocRegionCss(pl)+'background:'+color+'2b;border:1px solid '+color+';border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:'+color+';min-height:12px;overflow:hidden;padding:1px;text-align:center;line-height:1.1;')+'">'+label+'</div>';
   });
   if(!inner)inner='<div style="grid-column:1;grid-row:1;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--secondary-text-color);">No regions placed yet</div>';
-  return '<div style="'+gridCss+'height:100%;">'+inner+'</div>';
+  return '<div style="'+escA(''+gridCss+'height:100%;')+'">'+inner+'</div>';
 }
 // True when the image region sits on an 'auto' row — the image box then sizes
 // itself from the design aspect (CSS aspect-ratio on .wrap): exact fit, no crop,

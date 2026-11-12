@@ -437,6 +437,91 @@ t('_e maps nullish to empty string',edEsc._e(undefined)===''&&edEsc._e(null)==='
 await new Promise(r=>setTimeout(r,300));
 t('rejected template subscription is caught, not unhandled',unhandled===0);
 
+  // =====================================================================
+  // 7.0.1 — the analysis of 7.0.0 (ANALYSIS_v7.0.0.md, tests/probes/probe_v7_0_0.js)
+  // =====================================================================
+  {
+  const tick=()=>new Promise(r=>setTimeout(r,40));
+  const IMG='/local/x.webp';
+  const st=(id,v,a)=>({[id]:{entity_id:id,state:String(v),attributes:a||{}}});
+  const callsOf=(el)=>{const c=[];el._hass.callService=function(d,sv,data,tg){c.push([d,sv,data,tg]);return Promise.resolve();};return c;};
+  // (1) the confirmation dialog's key handler must not outlive the dialog
+  {const cfg={layout:{},room_entity:'input_select.room',rooms:[
+      {id:'a',base_image:IMG,zones:[{id:'z',top:'1%',left:'1%',width:'9%',height:'9%',tap_action:{action:'call-service',service:'cover.open_cover',target:{entity_id:'cover.g'},confirmation:true}}]},
+      {id:'b',base_image:IMG}]};
+    const S=Object.assign(st('cover.g','closed'),st('input_select.room','a'));
+    {const el=mkCard(cfg,S);await tick();const calls=callsOf(el);
+      el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+      const h2=mkHass(Object.assign({},S,st('input_select.room','b')));h2.callService=el._hass.callService;el.hass=h2;await tick();await tick();
+      t('7.0.1: a re-render (room follow) closes an open confirmation',el._roomIdx===1&&!el.shadowRoot.querySelector('.roc-confirm')&&!el._confirmDone);
+      w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await tick();
+      t('7.0.1: …and Enter pressed afterwards does not run the action',calls.length===0);el.remove();}
+    {const el=mkCard(cfg,S);await tick();const calls=callsOf(el);
+      el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+      el.remove();await tick();
+      w.document.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));await tick();
+      t('7.0.1: a confirmation is cancelled when the card leaves the page',calls.length===0&&!el._confirmDone);}
+    {const el=mkCard(cfg,S);await tick();const calls=callsOf(el);
+      const tap=()=>el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));
+      tap();
+      const inp=w.document.createElement('input');w.document.body.appendChild(inp);
+      inp.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,composed:true}));await tick();
+      t('7.0.1: Enter typed outside the dialog does not confirm it',calls.length===0&&!!el.shadowRoot.querySelector('.roc-confirm'));
+      el.shadowRoot.querySelector('.roc-confirm [data-no]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,composed:true}));await tick();
+      t('7.0.1: Enter on Cancel cancels',calls.length===0&&!el.shadowRoot.querySelector('.roc-confirm'));
+      tap();
+      el.shadowRoot.querySelector('.roc-confirm [data-yes]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,composed:true}));await tick();
+      t('7.0.1: Enter on OK confirms',calls.length===1&&!el.shadowRoot.querySelector('.roc-confirm'));
+      inp.remove();el.remove();}}
+  // (2) native light pills follow brightness / colour while the light stays on
+  {const LY={rows:['1fr','auto'],columns:['100%'],place:{image:{row:1},lights:{row:2}}};
+    const L=(b,rgb)=>st('light.a','on',{brightness:b,rgb_color:rgb,supported_color_modes:['rgb'],color_mode:'rgb'});
+    const el=mkCard({base_image:IMG,layout:{landscape:LY,portrait:LY},light_controls:{entities:['light.a',{entity:'light.b'}],style:'native'}},Object.assign(L(255,[255,0,0]),st('light.b','off')));
+    await tick();
+    t('7.0.1: light_controls entities are watched for brightness and colour',['brightness','rgb_color','color_temp_kelvin'].every(a=>el._relevantAttrSources.some(x=>x.entity==='light.a'&&x.attr===a))&&el._relevantAttrSources.some(x=>x.entity==='light.b'&&x.attr==='brightness'));
+    el.hass=mkHass(Object.assign(L(51,[0,0,255]),st('light.b','off')));await tick();
+    const p=(el._lcPills||[])[0];
+    t('7.0.1: a light dimmed elsewhere (state stays on) moves its pill',!!p&&p.val.textContent==='20 %'&&p.fill.style.width==='20%'&&p.el.style.getPropertyValue('--lcp-solid')==='rgb(0,0,255)');el.remove();}
+  // (3) visibility: one rule for every element
+  {const S=Object.assign(st('light.a','on'),st('sensor.t','20'),st('cover.c','open',{current_position:50}),st('vacuum.v','docked'));
+    const on={entity:'light.a',state:'on'},off={entity:'light.a',state:'off'};
+    const gone=e=>!e||e.style.display==='none'||e.style.visibility==='hidden';
+    const all=v=>({base_image:IMG,layout:{},
+      zones:[Object.assign({id:'e',top:'1%',left:'1%',width:'5%',height:'5%'},v)],icons:[Object.assign({id:'e',icon:'mdi:x',top:'1%',left:'9%'},v)],
+      badges:[Object.assign({id:'e',icon:'mdi:x',label:'L'},v)],labels:[Object.assign({id:'e',entity:'sensor.t',top:'9%',left:'1%'},v)],
+      gauges:[Object.assign({id:'e',entity:'sensor.t',top:'9%',left:'9%',width:'3%',height:'9%'},v)],blinds:[Object.assign({id:'b',entity:'cover.c',top:'20%',left:'1%',width:'5%',height:'9%'},v)],
+      glows:[Object.assign({id:'e',entity:'light.a',top:'30%',left:'30%',size:'10%'},v)],elements:[Object.assign({id:'e',top:'40%',left:'1%',width:'9%',height:'9%',card:{type:'custom:x-none'}},v)],
+      overlays:[Object.assign({id:'e',image:IMG},v)],vacuum_widgets:[Object.assign({id:'e',top:'50%',left:'1%',vacuums:[{entity:'vacuum.v'}]},v)]});
+    const els=el=>({zone:el._zoneEls.e,icon:el._icoEls.e,badge:el._bcontEls.e,label:el._lblEls.e,gauge:el._gaugeEls.e,blind:Object.keys(el._gaugeEls).filter(k=>k!=='e').map(k=>el._gaugeEls[k])[0],glow:el._glowEls.e,element:el._contEls.e,overlay:el._ovEls.e,vacuum:el._vwEls.e});
+    const which=(el,f)=>Object.entries(els(el)).filter(([k,e])=>!f(e)).map(x=>x[0]).join(',');
+    for(const [name,v,hide] of [['visible: [cond] that holds',{visible:[on]},false],['visible: [cond, cond] one fails',{visible:[on,off]},true],['visible: cond that fails',{visible:off},true],
+        ['visible_conditions: cond that fails',{visible_conditions:off},true],['visible_conditions: [cond] that holds',{visible_conditions:[on]},false]]){
+      const el=mkCard(all(v),S);await tick();
+      const bad=which(el,hide?gone:e=>!gone(e));
+      t('7.0.1: '+name+' → every element '+(hide?'hidden':'shown')+(bad?'   (not: '+bad+')':''),!bad);el.remove();}
+    // visible_template on a label and a vacuum widget
+    {const el=w.document.createElement('room-overlay-card');
+      const h=mkHass(S);h.connection.subscribeMessage=function(cb){Promise.resolve().then(function(){cb({result:'False'});});return Promise.resolve(function(){});};
+      el.setConfig({base_image:IMG,layout:{},labels:[{id:'l',entity:'sensor.t',top:'1%',left:'1%',visible_template:'{{ false }}'}],vacuum_widgets:[{id:'v',top:'9%',left:'1%',vacuums:[{entity:'vacuum.v'}],visible_template:'{{ false }}'}]});
+      el.hass=h;w.document.body.appendChild(el);await tick();
+      const h2=mkHass(Object.assign({},S,st('sensor.t','21')));h2.connection=h.connection;el.hass=h2;await tick();
+      t('7.0.1: visible_template hides a label and a vacuum widget, and a state update does not show them again',gone(el._lblEls.l)&&gone(el._vwEls.v));el.remove();}
+    t('7.0.1: a list condition is an AND; a non-condition never hides',w.eval('[evalCond([{entity:"light.a",state:"on"}],{"light.a":{state:"on",attributes:{}}}),evalCond([{entity:"light.a",state:"on"},{entity:"light.a",state:"off"}],{"light.a":{state:"on",attributes:{}}}),rocVisOk({visible:true},{}),rocVisOk({},{})].join()')==='true,false,true,true');}
+  // (5) config values in style="…" are escaped: quotes survive, nothing can add markup
+  {const el=mkCard({base_image:IMG,layout:{},
+      labels:[{id:'l',entity:'sensor.t',top:'10%',left:'10%',font_family:'"Roboto Mono", monospace',background:'url("/local/chip.png")'}],
+      zones:[{id:'z',top:'1%',left:'1%',width:'5%',height:'"><img src=x data-inj=1><i x="',tap_action:{action:'none'}}],
+      icons:[{id:'i',icon:'mdi:x',top:'20%',left:'"><img src=x data-inj=2><i x="',size:'"><img src=x data-inj=3><i x="'}],
+      gauges:[{id:'g',entity:'sensor.t',orientation:'radial',thickness:'"><img src=x data-inj=4><i x="',top:'30%',left:'30%',width:'10%',height:'10%'}]},st('sensor.t','21'));
+    await tick();
+    const l=el._lblEls.l;
+    t('7.0.1: a CSS value with double quotes is applied whole (font_family, url("…"))',!!l&&/Roboto Mono/.test(l.style.fontFamily)&&/chip\.png/.test(l.style.background)&&l.style.fontWeight==='bold'&&l.attributes.length===3);
+    t('7.0.1: a config string cannot add markup to the card',!el.shadowRoot.querySelector('[data-inj]'));el.remove();}
+  // V2: number formatters are built once per (locale, decimals)
+  {const r=w.eval('(function(){const N=Intl.NumberFormat;let n=0;Intl.NumberFormat=function(a,b){n++;return new N(a,b);};try{const h={locale:{language:"pl",number_format:"language"}};return[rocFmtNum(h,1.5,3),rocFmtNum(h,2.25,3),rocFmtNum(h,2,4),rocFmtNum(h,3,4),rocFmtNum(h,9.5,3)].join("|")+"#"+n;}finally{Intl.NumberFormat=N;}})()');
+    t('7.0.1: rocFmtNum reuses one Intl.NumberFormat per locale + decimals ('+r+')',r==='1,500|2,250|2,0000|3,0000|9,500#2');}
+  }
+
 console.log(fails?('FAILURES: '+fails):'ALL LIFECYCLE TESTS PASSED');
 process.exit(fails?1:0);
 

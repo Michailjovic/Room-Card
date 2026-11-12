@@ -986,9 +986,35 @@ class RocStudio{
     else if(tg.kind==='fproom'||tg.kind==='fpdoor'||tg.kind==='fpitem')it=this._fpItem(c,tg);
     else it=c;
     if(!it||typeof it!=='object')return;
+    const oldRoomId=tg.kind==='room'&&it.id!=null&&it.id!==''?String(it.id):null;
     mut(it);
+    const reRoom=oldRoomId!==null&&it.id!=null&&it.id!==''&&String(it.id)!==oldRoomId;
+    if(reRoom)this._roomIdRefs(c,oldRoomId,it);
     if(tg.kind==='nav'&&!Object.keys(c.nav).length)delete c.nav; // an emptied nav: no `nav: {}` left behind
     this._commit(c,'props',(tg.kind==='element'?tg.type+':'+tg.id:tg.kind+':'+(tg.id||''))+'.'+key);
+    if(reRoom)this._syncProps(true); // the form shows the id as it was kept (unique)
+  }
+  // A room's id changed (7.0.1): what points at the room by that id follows it — the overview's
+  // grid list, the floor plan's room bindings and switch-room actions. Before, the room dropped
+  // out of the overview and the plan lost its room without a word. The id stays unique.
+  _roomIdRefs(c,old,room){
+    const rooms=Array.isArray(c.rooms)?c.rooms:[];
+    const id=rsUniqueId(rooms.filter(function(r){return r!==room;}),'room_',String(room.id));
+    room.id=id;
+    const lo=old.toLowerCase();
+    const eq=function(v){return typeof v==='string'&&v.toLowerCase()===lo;};
+    let refs=0;
+    (function walk(o){
+      if(!o||typeof o!=='object')return;
+      if(Array.isArray(o)){o.forEach(walk);return;}
+      if(o.action==='switch-room'&&eq(o.room)){o.room=id;refs++;}
+      const g=o.overview&&typeof o.overview==='object'?o.overview.grid:null;
+      if(g&&Array.isArray(g.rooms))g.rooms.forEach(function(x,i,a){if(eq(x)){a[i]=id;refs++;}});
+      const fr=o.floorplan&&typeof o.floorplan==='object'?o.floorplan.rooms:null;
+      if(Array.isArray(fr))fr.forEach(function(x){if(x&&eq(x.room)){x.room=id;refs++;}});
+      Object.keys(o).forEach(function(k){if(k!=='card'&&k!=='content')walk(o[k]);}); // not into embedded cards
+    })(c);
+    this._lastRefs=refs;
   }
   // rename an element (or a section): unique id; the selection follows; sections and groups take
   // their references along (`section:` / `group:` keys, actions, the overview dock)

@@ -226,6 +226,7 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const e5=mk(c);await sleep(30);
     const s5=sr(e5),n=th2==='tiles'?s5.querySelectorAll('[data-rfp-tile]').length:s5.querySelectorAll('[data-rfp-hit]').length;
     t('theme '+th2+': five rooms, no SVG filters at low quality',n===5&&!s5.querySelector('filter'));
+    if(th2==='night')t('7.0.1: low quality runs the plan\'s animations in steps (rfp-eco)',!!s5.querySelector('svg.rfp-svg.rfp-eco')&&/\.rfp-eco \.rfp-flow\{animation-timing-function:steps\(30\)\}/.test(s5.innerHTML+[...s5.querySelectorAll('style')].map(x=>x.textContent).join('')));
     if(th2==='thermal'){
       const f=[0,1,2].map(k=>s5.querySelector('[data-rfp-thermo="'+k+'"]').getAttribute('fill'));
       t('thermal: colour follows the temperature (21.6° ≠ 23.6°)',f[0]!==f[1]&&f[1]!==f[2]&&s5.querySelector('[data-rfp-tt="0"]').textContent==='23.1°');
@@ -251,6 +252,7 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const c=clone(BASE);c.rooms[0].floorplan.theme='sketch';
     const e6=mk(c);await sleep(30);
     t('sketch at auto quality: rough + paper filters',sr(e6).querySelectorAll('filter').length===2);
+    t('7.0.1: auto quality keeps the smooth animations (no rfp-eco)',!sr(e6).querySelector('svg.rfp-eco'));
     e6.remove();
   }
   {

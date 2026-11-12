@@ -1,5 +1,58 @@
 # Changelog
 
+## [7.0.1] - 2026-11-11
+
+Fixes from a full review of 7.0.0, and two things that make the card lighter on a wall tablet.
+No new config keys.
+
+### Fixes
+
+- **A confirmation could run without being confirmed.** The card's own confirmation dialog (7.0)
+  listened for keys on the whole page and kept listening after the dialog was gone — when the card
+  re-rendered under it (presence follow switched the room, a `switch-room`, a config change) or
+  left the page. The next **Enter** pressed anywhere then ran the action, with no dialog on
+  screen. The dialog now closes as *Cancel* in those cases, Enter confirms only inside the dialog
+  (and cancels on *Cancel*), and a second question replaces the first.
+- **Native light pills did not follow a light changed elsewhere.** Dimmed or recoloured from a wall
+  switch, an automation or another device, the light stays `on` — and the pill kept its old
+  percentage and colour until something else in the room changed. `light_controls` entities are
+  now watched for brightness and colour.
+- **`visible:` as a list hid the element for good.** The reference has always allowed one
+  condition or a list; a list was read as one condition, matched nothing and the element never
+  showed. A list now means *all of them hold* — in `visible`, `visible_conditions`,
+  `alert_conditions` and anywhere else a condition is read.
+- **Visibility works the same on every element.** `visible_conditions` was read on labels, gauges
+  and blinds only and ignored everywhere else; `visible` was ignored on overlays;
+  `visible_template` did nothing on labels and vacuum widgets. All three now work on zones, icons,
+  badges, labels, gauges, blinds, glows, overlays, embedded cards and vacuum widgets.
+  *If an overlay of yours carries a `visible:` that is false, it is hidden from now on.*
+- **Studio: changing a room's ID broke what pointed at the room.** The overview's `grid.rooms`
+  list, the floor plan's room bindings and `switch-room` actions kept the old id: the room dropped
+  out of the overview and the plan no longer opened it, and the config check stayed green. They
+  now follow the new id (one undo step); an id that is already taken is made unique.
+- **A CSS value with a double quote broke its element.** `font_family: '"Roboto Mono", monospace'`
+  or `background: url("/local/x.png")` cut the element's style short at the quote — the font, and
+  everything written after it, was lost. Every value the card writes into a `style` is now
+  escaped, which also means a pasted config can no longer add markup (or a script) to the page
+  through a size, a colour or a font.
+
+### Performance
+
+- **State updates are about half the work.** Every formatted number built its own
+  `Intl.NumberFormat`, and every navigation chip is formatted on every update — that alone was a
+  third of the card's update. Formatters are now made once per locale and precision (measured on
+  the demo config, CPU slowed 4×: 1.68 → 0.64 ms in the bedroom, 0.72 → 0.24 ms on the overview).
+- **Floor plan, `quality: low`: animations in steps.** The heating flow, the pulses and the
+  bobbing markers animate SVG paint, which the browser cannot hand to the compositor: at 60 frames
+  a second it restyled, repainted and rastered the whole plan for every frame, for as long as the
+  page was on screen. At `quality: low` they now run in steps, about ten a second (measured: 69 %
+  less main-thread rendering, 80 % less raster). The default look is unchanged.
+
+### Tests
+
+- New checks for every fix in the lifecycle, studio and floor plan tiers; `tests/probes/probe_v7_0_0.js`
+  reproduces every finding of the review (the ones not fixed here still fail there).
+
 ## [7.0.0] - 2026-11-04
 
 **The first stable release of v7: Room Card Studio, the floor plan page and AnyVac.** The code is

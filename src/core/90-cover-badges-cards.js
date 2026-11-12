@@ -49,11 +49,11 @@ function coverCtlHtml(cc,mob,mode){
   let presets='';
   for(const pp of _ccPresets){
     const col=ccColor(pp.color)||'#fff';
-    presets+='<button class="cc-preset" data-cc-preset data-pos="'+pp.position+'" title="'+escA(pp.name||(pp.position+' %'))+'" style="--cc-col:'+escA(col)+';">'
+    presets+='<button class="cc-preset" data-cc-preset data-pos="'+pp.position+'" title="'+escA(pp.name||(pp.position+' %'))+'" style="'+escA('--cc-col:'+(col)+';')+'">'
       +(pp.icon?'<ha-icon icon="'+escA(pp.icon)+'"></ha-icon>':'<span class="cc-preset-num">'+pp.position+'</span>')
       +'</button>';
   }
-  return '<div class="roc-cc'+(horiz?' cc-h':'')+'" data-cc="'+escA(cc.id)+'" data-cc-mode="'+(dock?'dock':'float')+'" title="'+escA(cc.name||'')+'" style="'+base+pos+'">'
+  return '<div class="roc-cc'+(horiz?' cc-h':'')+'" data-cc="'+escA(cc.id)+'" data-cc-mode="'+(dock?'dock':'float')+'" title="'+escA(cc.name||'')+'" style="'+escA(''+base+pos+'')+'">'
     +'<span class="cc-pct" data-cc-pct></span>'
     +(hasUp?'<button class="cc-cap" data-cc-up aria-label="Open"><ha-icon icon="mdi:chevron-up"></ha-icon></button>':'')
     +rail

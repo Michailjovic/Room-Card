@@ -807,6 +807,29 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
     EC.rocDefaultView=prevDV;try{w.localStorage.removeItem('roc-editor-classic');}catch(_){}
   }
 
+  // ---- 7.0.1: a room's id changed in the Room form — what points at the room follows ----------
+  {const cfg={type:'custom:room-overlay-card',layout:{},rooms:[
+      {id:'ov',overview:{grid:{rooms:['kitchen','hall']}}},
+      {id:'plan',floorplan:{rooms:[{room:'kitchen',polygon:[[0,0],[3,0],[3,3],[0,3]]},{room:'hall',polygon:[[3,0],[5,0],[5,3],[3,3]]}]}},
+      {id:'kitchen',name:'Kitchen',base_image:IMG+'k',elements:[{id:'e',top:'1%',left:'1%',width:'9%',height:'9%',card:{type:'custom:x-card',tap_action:{action:'switch-room',room:'kitchen'}}}]},
+      {id:'hall',name:'Hall',base_image:IMG+'h',icons:[{id:'i',icon:'mdi:x',top:'1%',left:'1%',tap_action:{action:'switch-room',room:'Kitchen'},hold_action:{action:'switch-room',room:'hall'}}]}]};
+    const S7=await C._rocStudio.open({config:clone(cfg),hass});
+    S7._setTab('props'); // an earlier block may have left the inspector on All settings (the tab is remembered)
+    S7._setRoom(2,false,'x');S7.sel=null;S7.cardSel=null;S7._renderChrome();await wait(60);
+    const idInp=[...S7._propsPane.querySelectorAll('input')].find(i=>i.value==='kitchen');
+    check('7.0.1: the Room form has the id field',!!idInp);
+    if(idInp){idInp.value='kuchyn';idInp.dispatchEvent(new w.Event('change',{bubbles:true}));await wait(60);}
+    const W7=S7.work;
+    check('7.0.1: room id kitchen → kuchyn: the overview grid, the floor plan binding and switch-room follow',
+      W7.rooms[2].id==='kuchyn'&&J(W7.rooms[0].overview.grid.rooms)==='["kuchyn","hall"]'&&W7.rooms[1].floorplan.rooms[0].room==='kuchyn'&&W7.rooms[3].icons[0].tap_action.room==='kuchyn',J([W7.rooms[0].overview.grid.rooms,W7.rooms[1].floorplan.rooms.map(r=>r.room),W7.rooms[3].icons[0].tap_action]));
+    check('7.0.1: …other rooms\' references and embedded cards are left alone',W7.rooms[1].floorplan.rooms[1].room==='hall'&&W7.rooms[3].icons[0].hold_action.room==='hall'&&W7.rooms[2].elements[0].card.tap_action.room==='kitchen');
+    S7.undo();
+    check('7.0.1: …and it is one undo step',J(S7.work)===J(S7.I.migrate(clone(cfg))));
+    S7._propsSet({kind:'room'},function(it){it.id='hall';},'id');
+    check('7.0.1: a room id that is taken is made unique',S7.work.rooms[2].id!=='hall'&&/^hall_/.test(S7.work.rooms[2].id)&&S7.work.rooms[0].overview.grid.rooms[0]===S7.work.rooms[2].id,S7.work.rooms[2].id);
+    S7.close();
+  }
+
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

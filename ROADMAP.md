@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.0.0** (2026-11-04). Verified against Home Assistant 2026.10.2; the install
+Current release: **7.0.1** (2026-11-11). Verified against Home Assistant 2026.10.2; the install
 text covers 2026.11's Marketplace.
 
 The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in

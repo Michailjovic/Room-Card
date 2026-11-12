@@ -94,8 +94,10 @@ vacuum or AnyVac is gone.
   frame to set the other one — and a *mirror* button. Wall tones follow the screen, so the light
   does not swap sides when the plan is turned. The overall dimensions (blueprint) are drawn only on
   a quarter turn.
-- `quality: low` draws without SVG filters (paper, rough lines, soft shadow) for a weak tablet;
-  animations stop when the plan is off screen and with *reduce motion*.
+- `quality: low` draws without SVG filters (paper, rough lines, soft shadow) for a weak tablet and
+  runs the plan's animations (heating flow, pulses, markers) in steps, about ten a second — a
+  browser repaints the whole plan for every frame of them, which a wall tablet that shows the plan
+  all day feels. Animations stop when the plan is off screen and with *reduce motion*.
 
 ## What a room shows
 

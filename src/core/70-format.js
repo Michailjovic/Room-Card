@@ -29,14 +29,22 @@ function rocNumLocale(hass){
     default:return lang;
   }
 }
+// One Intl.NumberFormat per (locale, decimals) — 7.0.1: building one for every value was a third
+// of the card's whole update (every nav chip is formatted on every state change).
+const ROC_NF_CACHE=new Map();
 function rocFmtNum(hass,n,dec){
   const loc=rocNumLocale(hass);
   if(loc!==null&&typeof Intl!=='undefined'&&Intl.NumberFormat){
     try{
-      const o={useGrouping:false};
-      if(dec!==undefined){o.minimumFractionDigits=dec;o.maximumFractionDigits=dec;}
-      else o.maximumFractionDigits=20;
-      return new Intl.NumberFormat(loc,o).format(n);
+      const k=(loc===undefined?'':loc)+'|'+(dec===undefined?'':dec);
+      let f=ROC_NF_CACHE.get(k);
+      if(!f){
+        const o={useGrouping:false};
+        if(dec!==undefined){o.minimumFractionDigits=dec;o.maximumFractionDigits=dec;}
+        else o.maximumFractionDigits=20;
+        f=new Intl.NumberFormat(loc,o);ROC_NF_CACHE.set(k,f);
+      }
+      return f.format(n);
     }catch(_){}
   }
   return dec!==undefined?n.toFixed(dec):String(n);
@@ -75,6 +83,10 @@ function rocFmtState(hass,st,o){
 function rocNumVal(v){return rocIsNum(v)?Number(v):NaN;}
 
 function evalCond(c,s){
+  // a list of conditions: all of them must hold (7.0.1 — the reference always allowed the list
+  // form; evaluated as one condition it matched no entity and the element stayed hidden)
+  if(Array.isArray(c)){for(const x of c){if(x&&!evalCond(x,s))return false;}return true;}
+  if(!c||typeof c!=='object')return true;
   const e=s[c.entity];if(!e)return false;
   const sv=c.attribute!==undefined?String(e.attributes[c.attribute]??''): e.state,nv=parseFloat(sv);let r=true;
   if(c.state!==undefined)r=Array.isArray(c.state)?c.state.map(String).includes(sv):sv===String(c.state); // v6.16.0: list form, like state_not and HA's own conditions
@@ -95,6 +107,15 @@ function evalCond(c,s){
   if(!r&&c.or)r=evalCond(c.or,s);
   return r;
 }
+
+// Is an element visible by its conditions? `visible` and `visible_conditions` are the same key
+// under two names (the second used to work on labels, gauges and blinds only); each takes one
+// condition or a list. Anything that is not a condition (unset, a boolean) does not hide.
+function rocVisOk(it,s){
+  const v=it.visible_conditions!==undefined?it.visible_conditions:it.visible;
+  return(v&&typeof v==='object')?evalCond(v,s):true;
+}
+function rocHasVis(it){return it.visible!==undefined||it.visible_conditions!==undefined;}
 
 // Conditional-value resolvers. Every one of these accepts EITHER the full
 // [{condition,value},…] list OR a bare scalar shorthand (`label: Kitchen`,

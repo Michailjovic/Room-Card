@@ -1061,11 +1061,25 @@ weather_overlay:
 
 ---
 
+## Conditional visibility
+
+Every element (zone, icon, badge, label, gauge, blind, glow, overlay, embedded card, vacuum widget)
+takes `visible:` — one [condition](#conditions), or a list of conditions that must all hold.
+`visible_conditions:` is the same key under its older name.
+
+```yaml
+icons:
+  - id: washer_done
+    icon: mdi:washing-machine
+    visible:
+      - { entity: sensor.washer_state, state: done }
+      - { entity: binary_sensor.someone_home, state: "on" }
+```
+
 ## Template visibility
 
-Any zone, icon, badge, overlay, embedded card, gauge or blind can be driven by a Jinja2 template
-(rendered live over WebSocket). `visible_template` takes precedence over `visible` /
-`visible_conditions`:
+Any of them can instead be driven by a Jinja2 template (rendered live over WebSocket).
+`visible_template` takes precedence over `visible` / `visible_conditions`:
 
 ```yaml
 zones:

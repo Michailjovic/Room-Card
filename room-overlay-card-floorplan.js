@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='7.0.0';
+const ROC_FP_VERSION='7.0.1';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -572,6 +572,10 @@ const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8
   +'.rfp-ping{animation:rfp-ping 2.2s ease-out infinite;transform-box:fill-box;transform-origin:center}@keyframes rfp-ping{0%{transform:scale(.7);opacity:.9}100%{transform:scale(2);opacity:0}}'
   +'.rfp-bob{animation:rfp-bob 1.4s ease-in-out infinite}@keyframes rfp-bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}'
   +'.rfp-paused .rfp-flow,.rfp-paused .rfp-pulse,.rfp-paused .rfp-ping,.rfp-paused .rfp-bob{animation-play-state:paused}'
+  // quality: low (7.0.1) — the same animations in steps, about 10 a second. They animate SVG
+  // paint (dash offset, opacity, a transform inside the SVG), which no compositor can run: at
+  // 60 frames a second the whole plan was restyled, repainted and rastered for every frame.
+  +'.rfp-eco .rfp-flow{animation-timing-function:steps(30)}.rfp-eco .rfp-pulse{animation-timing-function:steps(12)}.rfp-eco .rfp-ping{animation-timing-function:steps(22)}.rfp-eco .rfp-bob{animation-timing-function:steps(7)}'
   +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
 // Markers and labels on the plan (v6.48.0) are HTML over the SVG: they carry ha-icon.
 const RFP_ITEM_CSS='.rfp-items{position:absolute;inset:0;pointer-events:none;overflow:hidden;}'
@@ -689,6 +693,7 @@ class RfpView{
     const T=this.T=rfpTheme(fp,this.o.profile||'landscape',this._lastDark);
     const q=this.q=(fp.quality==='low'||fp.quality==='high')?fp.quality:'auto';
     this.fx=q!=='low';
+    this.svg.classList.toggle('rfp-eco',q==='low');
     const M=this.M=this._model();
     this.L=this._layers();
     this._st={};this._os={};this._og={};this._nodes=null;this._pSig='';
