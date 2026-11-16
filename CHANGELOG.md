@@ -1,5 +1,18 @@
 # Changelog
 
+## [7.0.3] - 2026-11-16
+
+No change to the card. A release now refuses to ship files that are not the version on its tag.
+
+### Repository
+
+- **`release.yml`: the tag must be the version in the code.** The GitHub release v7.0.1 was
+  published a minute before its commit was pushed, so GitHub put the tag on the commit before it:
+  the files attached to "7.0.1" were built from the 7.0.0 code, with every job green. A new step
+  compares the tag with `ROC_VERSION` (a beta tag `v7.0.0b4` is version `7.0.0-beta.4`) and stops
+  a new release that does not match — it stays without files, which is visible, instead of
+  shipping the wrong ones. Re-attaching the files of an old tag only warns.
+
 ## [7.0.2] - 2026-11-16
 
 The rest of the review of 7.0.0: forms the reference documents that the card did not read, stale
@@ -54,6 +67,9 @@ values, three studio fixes and a config check that sees dangling references. No 
   `tests/probes/probe_v7_0_0.js` now passes in full.
 
 ## [7.0.1] - 2026-11-11
+
+> **The files attached to the GitHub release v7.0.1 were built from the 7.0.0 code** (the release
+> was published before this commit was pushed). These fixes first shipped in 7.0.2.
 
 Fixes from a full review of 7.0.0, and two things that make the card lighter on a wall tablet.
 No new config keys.

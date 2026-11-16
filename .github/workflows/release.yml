@@ -48,6 +48,24 @@ jobs:
         with:
           node-version: 22
 
+      # The tag must be the version the code says it is. v7.0.1 was published a minute before its
+      # commit was pushed: GitHub put the tag on the commit before it, and the "7.0.1" files were
+      # 7.0.0 — with every job green. A new release now stops here (it stays without files, which
+      # is visible, instead of shipping the wrong ones). Re-attaching the files of an old tag only
+      # warns: a dozen early tags never matched. Betas: tag v7.0.0b4 is version 7.0.0-beta.4.
+      - name: The tag matches the version in the code
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          code="$(grep -o "const ROC_VERSION='[^']*'" room-overlay-card.js | head -n1 | sed "s/.*='\(.*\)'/\1/")"
+          if [ -z "$code" ]; then echo "::notice::no ROC_VERSION in room-overlay-card.js at $TAG - not checked"; exit 0; fi
+          norm() { printf '%s' "$1" | sed -E 's/^v//; s/-?beta\.?/b/'; }
+          if [ "$(norm "$TAG")" = "$(norm "$code")" ]; then echo "tag $TAG = version $code"; exit 0; fi
+          msg="Tag $TAG sits on a commit whose code says version $code. Was the release published before its commit was pushed? Push the commit, then publish the next version - this one has no files."
+          if [ "$EVENT" = "release" ]; then echo "::error::$msg"; exit 1; fi
+          echo "::warning::$msg"
+
       # The released files are MINIFIED (~31 % smaller raw, ~36 % gzipped);
       # the repo keeps the readable source. build.js --check fails the run if an
       # output is truncated, not smaller than its source, or missing the version
