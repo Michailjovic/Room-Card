@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.0.1';
+const ROC_VERSION='7.0.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -140,11 +140,19 @@ async function rocHqResize(bmp,W,H){
   if(!blob||blob.type!=='image/webp')blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
   return blob?URL.createObjectURL(blob):null;
 }
-// Two sizes per image at most: a third (a window being resized) frees the oldest blob.
-const ROC_HQ_SIZES=new Map(); // url → [key, …] oldest first
+// A few sizes per image, the least recently ASKED FOR goes first (7.0.2). It was "two, oldest
+// goes": with three card instances of different sizes on one page (or a dashboard, the studio's
+// canvas and an overview) each new size freed a blob another instance was still showing, and
+// that instance then made its own again — at the cost of someone else's.
+const ROC_HQ_MAX=4;
+const ROC_HQ_SIZES=new Map(); // url → [key, …]
+const ROC_HQ_USED=new Map();  // key → when it was last asked for
 function rocHqKeep(url,key){
-  const l=ROC_HQ_SIZES.get(url)||[];l.push(key);
-  while(l.length>2){const old=l.shift(),u=ROC_HQ.get(old);ROC_HQ.delete(old);if(u)try{URL.revokeObjectURL(u);}catch(_){}}
+  const l=ROC_HQ_SIZES.get(url)||[];l.push(key);ROC_HQ_USED.set(key,Date.now());
+  while(l.length>ROC_HQ_MAX){
+    let oi=0;for(let i=1;i<l.length-1;i++)if((ROC_HQ_USED.get(l[i])||0)<(ROC_HQ_USED.get(l[oi])||0))oi=i; // never the one just made
+    const old=l.splice(oi,1)[0],u=ROC_HQ.get(old);ROC_HQ.delete(old);ROC_HQ_USED.delete(old);if(u)try{URL.revokeObjectURL(u);}catch(_){}
+  }
   ROC_HQ_SIZES.set(url,l);
 }
 // One job per (url, size): fetch + decode ONCE — the natural size is learned from the same
@@ -186,7 +194,7 @@ function rocHqUrl(url,devW,devH,onReady){
   if(nat){
     const W=rocHqTarget(nat,devW,devH);if(!W)return url;
     const key=url+'|'+W,got=ROC_HQ.get(key);
-    if(got)return got;
+    if(got){ROC_HQ_USED.set(key,Date.now());return got;}
     rocHqWait(key,onReady);
     if(got===undefined){ROC_HQ.set(key,null);rocHqJob(url,devW,devH,key);}
     return url;
@@ -719,6 +727,10 @@ function roomMerge(c,idx){
   delete base.rooms;delete base.nav;
   return Object.assign(base,c.rooms[i]);
 }
+// decodeURIComponent that never throws: a malformed %-escape anywhere in the URL hash (another
+// card's, a hand-typed link) used to end the whole render in "URI malformed" (7.0.2)
+function rocDec(v){try{return decodeURIComponent(v);}catch(_){return String(v);}}
+function rocAsArr(v){return Array.isArray(v)?v:(v==null||v===''?[]:[v]);}
 function roomMatch(c,state){
   if(!Array.isArray(c.rooms)||state===null||state===undefined)return -1;
   const sv=String(state).trim().toLowerCase();
@@ -726,7 +738,7 @@ function roomMatch(c,state){
   for(let i=0;i<c.rooms.length;i++){
     const r=c.rooms[i];
     if(String(r.id||'').toLowerCase()===sv||String(r.name||'').toLowerCase()===sv)return i;
-    if(Array.isArray(r.area_match)&&r.area_match.some(function(a){return String(a).toLowerCase()===sv;}))return i;
+    if(rocAsArr(r.area_match).some(function(a){return String(a).toLowerCase()===sv;}))return i; // one name or a list (7.0.2: a plain string was ignored)
   }
   return -1;
 }
@@ -1260,6 +1272,11 @@ function rocFmtState(hass,st,o){
 // or "12:30" never pick a colour stop.
 function rocNumVal(v){return rocIsNum(v)?Number(v):NaN;}
 
+// A state as written in a config, as the string Home Assistant reports. A YAML-mode dashboard
+// reads an unquoted `on` / `off` as a boolean (YAML 1.1), which never equalled the state "on".
+// A boolean therefore matches "on" / "off" — and still "true" / "false", which is what a boolean
+// ATTRIBUTE reads as (`attribute: is_volume_muted, state: true` has always worked).
+function rocStEq(v,sv){return typeof v==='boolean'?(sv===(v?'on':'off')||sv===String(v)):sv===String(v);}
 function evalCond(c,s){
   // a list of conditions: all of them must hold (7.0.1 — the reference always allowed the list
   // form; evaluated as one condition it matched no entity and the element stayed hidden)
@@ -1267,8 +1284,8 @@ function evalCond(c,s){
   if(!c||typeof c!=='object')return true;
   const e=s[c.entity];if(!e)return false;
   const sv=c.attribute!==undefined?String(e.attributes[c.attribute]??''): e.state,nv=parseFloat(sv);let r=true;
-  if(c.state!==undefined)r=Array.isArray(c.state)?c.state.map(String).includes(sv):sv===String(c.state); // v6.16.0: list form, like state_not and HA's own conditions
-  else if(c.state_not!==undefined)r=Array.isArray(c.state_not)?!c.state_not.map(String).includes(sv):sv!==String(c.state_not);
+  if(c.state!==undefined)r=Array.isArray(c.state)?c.state.some(function(x){return rocStEq(x,sv);}):rocStEq(c.state,sv); // v6.16.0: list form, like state_not and HA's own conditions
+  else if(c.state_not!==undefined)r=Array.isArray(c.state_not)?!c.state_not.some(function(x){return rocStEq(x,sv);}):!rocStEq(c.state_not,sv);
   else if(c.operator!==undefined&&c.value!==undefined){
     const cv=typeof c.value==='number'?c.value:parseFloat(String(c.value));
     if(isNaN(nv)||isNaN(cv))r=false;
@@ -3713,7 +3730,7 @@ class RoomOverlayCard extends HTMLElement{
       const _tfTr=_tf?(',transform '+(_tf.transition||'0.8s ease')):'';
       return'<div class="layer ov" data-ov="'+escA(ov.id)+'" style="'+escA('z-index:'+(ov.z_index??i+1)+';opacity:0;'+_tfSt+'transition:opacity '+(ov.transition??'2s ease')+',filter '+(ov.transition??'2s ease')+_tfTr+';')+'"></div>';
     }).join('');
-    const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="${escA(`top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:50;cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}`)}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
+    const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="${escA(`top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:${z.z_index??50};cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}`)}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
     const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}const _bAct=b.tap_action||b.hold_action||b.double_tap_action;const _bA11y=_bAct?' tabindex="0" role="button" aria-label="'+escA(b.id)+'"':'';return'<div class="badge" data-b="'+escA(b.id)+'"'+_bA11y+' style="'+escA(''+makeBadgePos(tApply(b,_tier))+';cursor:'+(_bAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'')+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
     const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const isChip=!!ico.chip;const _ibg=isChip?'border-radius:50%;padding:9px;box-sizing:content-box;':(ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'');const _icoAct=ico.tap_action||ico.hold_action||ico.double_tap_action;const a11y=_icoAct?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico'+(isChip?' ico-chip':'')+'" data-ico="'+escA(ico.id)+'"'+a11y+' style="'+escA('position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(_icoAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'')+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="'+escA('--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;')+'"></ha-icon>'+(rocIcoSection(ico)?'<span class="ico-ring" data-ico-ring></span><span class="ico-badge" data-ico-badge></span>':'')+'</div>';}).join('');
@@ -3840,12 +3857,12 @@ class RoomOverlayCard extends HTMLElement{
     const _allGaugesRC=[...(c.gauges||[]).map(g=>tApply(g,_tier)),...(c.blinds||[]).map(b=>tApply(b,_tier)).flatMap(blindToGaugeConfig)];const gaugeHtml=_allGaugesRC.map(g=>{const bg=g.background||'rgba(0,0,0,0.5)';const br=g.border_radius||'4px';const _gor=g.orientation||'vertical';
     if(_gor==='radial'){
       const arc=Math.max(30,Math.min(360,g.arc??270)),r=42,circ=2*Math.PI*r,arcLen=circ*arc/360;
-      const rot=90+(360-arc)/2,th=g.thickness??10;
+      const rot=90+(360-arc)/2,th=parseFloat(g.thickness)||10; // a number in the gauge's own 100-unit box; "12px" reads as 12 (7.0.2: it drew NaN)
       this._radialMeta[g.id]={arcLen:arcLen,circ:circ};
       let tgt='';
       if(g.target!==undefined){
         const mn=g.min??0,mx=g.max??100;
-        const tp=Math.max(0,Math.min(1,(g.target-mn)/(mx-mn)));
+        const tp=Math.max(0,Math.min(1,((parseFloat(g.target)||0)-mn)/((mx-mn)||1)));
         const ang=(rot+tp*arc)*Math.PI/180;
         const x1=50+(r-th/2-2)*Math.cos(ang),y1=50+(r-th/2-2)*Math.sin(ang);
         const x2=50+(r+th/2+2)*Math.cos(ang),y2=50+(r+th/2+2)*Math.sin(ang);
@@ -4333,7 +4350,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       cont.className='elcont';cont.setAttribute('data-el',el.id);
       const _elVPos=el.bottom!==undefined?'bottom:'+el.bottom+';':'top:'+(el.top||'0')+';';
       const _elH=el.height?('height:'+el.height+';'):(el.bottom!==undefined?'height:auto;':'height:auto;');
-      cont.style.cssText=_elVPos+'left:'+el.left+';width:'+el.width+';'+_elH+'z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(_isMini?'pointer-events:none;':'')+(tm?'outline:2px dashed blue;':'');
+      cont.style.cssText=_elVPos+'left:'+el.left+';width:'+el.width+';'+_elH+'z-index:'+(el.z_index??4)+';overflow:'+(el.overflow??'hidden')+';border-radius:'+(el.border_radius??'0')+';'+(el.background?'background:'+el.background+';':'')+(_isMini?'pointer-events:none;':'')+(tm?'outline:2px dashed blue;':'');
       if(tm)cont.title='[element] '+el.id;
       const self=this,elId=el.id;
       const wrap=makeHACard(el.card,function(cardEl){
@@ -5119,7 +5136,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     let val=null;
     h.split('&').forEach(function(p){
       const eq=p.indexOf('=');
-      if(eq>0&&decodeURIComponent(p.slice(0,eq))===key)val=decodeURIComponent(p.slice(eq+1));
+      if(eq>0&&rocDec(p.slice(0,eq))===key)val=rocDec(p.slice(eq+1));
     });
     return val===null?-1:roomMatch(this._config,val);
   }
@@ -5130,7 +5147,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     const val=encodeURIComponent(String(r.id||r.name||idx));
     // Keep any unrelated hash params, replace just our key
     const parts=String(location.hash||'').replace(/^#/,'').split('&').filter(Boolean)
-      .filter(function(p){const eq=p.indexOf('=');return!(eq>0&&decodeURIComponent(p.slice(0,eq))===key);});
+      .filter(function(p){const eq=p.indexOf('=');return!(eq>0&&rocDec(p.slice(0,eq))===key);});
     parts.push(encodeURIComponent(key)+'='+val);
     const newHash='#'+parts.join('&');
     if((location.hash||'')===newHash)return; // already current
@@ -5240,7 +5257,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
         const opts=this._hass.states[_reW]?.attributes?.options||[];
         const opt=opts.find(function(o){
           const ol=String(o).toLowerCase();
-          return ol===String(r.id||'').toLowerCase()||ol===String(r.name||'').toLowerCase()||(Array.isArray(r.area_match)&&r.area_match.some(function(a){return String(a).toLowerCase()===ol;}));
+          return ol===String(r.id||'').toLowerCase()||ol===String(r.name||'').toLowerCase()||rocAsArr(r.area_match).some(function(a){return String(a).toLowerCase()===ol;});
         });
         if(opt)this._hass.callService(dom,'select_option',{entity_id:_reW,option:opt});
       }
@@ -6302,6 +6319,12 @@ navSelf._navChipInto(chipCont,chCfg,r);
         if(tv!==undefined&&el.textContent!==tv)el.textContent=tv;
         continue;
       }
+      if(lbl.text!==undefined&&!lbl.entity){ // a fixed text (7.0.2 — the key was in the reference and the studio's form, and did nothing)
+        const _tx=(lbl.prefix||'')+String(lbl.text)+(lbl.suffix&&lbl.suffix!=='auto'?lbl.suffix:'');
+        if(el.textContent!==_tx)el.textContent=_tx;
+        if(lbl.color)setSt(el,'color',Array.isArray(lbl.color)?resolveVal(lbl.color,s,'white'):lbl.color);
+        continue;
+      }
       const ent=s[lbl.entity];
       if(!ent){if(lbl.entity&&el.textContent!=='—')el.textContent='—';continue;} // entity gone / renamed: not the last value (7.0.0-beta.4)
       const rawVal=lbl.attribute!==undefined?ent.attributes[lbl.attribute]:ent.state;
@@ -6407,7 +6430,16 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._ccEls&&this._ccCfgs&&this._ccCfgs.length){
       for(const cc of this._ccCfgs){
         const rec=this._ccEls[cc.id];if(!rec)continue;
-        const ent=s[cc.entity];if(!ent)continue;
+        const ent=s[cc.entity];
+        if(!ent){ // entity gone / renamed: no stale position (7.0.2, like labels and nav chips) — only once it had one
+          if(rec._seen){
+            if(rec.pct&&rec.pct.textContent!=='—')rec.pct.textContent='—';
+            for(const pb of rec.presets)pb.classList.remove('active');
+            if(rec.stop)rec.stop.classList.remove('moving');
+          }
+          continue;
+        }
+        rec._seen=true;
         const attrs=ent.attributes||{};
         const hasPosAttr=attrs.current_position!=null;
         const pos=hasPosAttr?Math.max(0,Math.min(100,Math.round(attrs.current_position))):null;
@@ -6454,7 +6486,11 @@ navSelf._navChipInto(chipCont,chCfg,r);
       }
       for(const t of(this._ovThumbs||[]))this._paintThumb(t.el,cAll.rooms[t.ri],t.ri,t.mode);
       for(const ch of this._navChipEls){
-        const ent=s[ch.entity];if(!ent)continue;
+        const ent=s[ch.entity];
+        // entity gone: not its last value (7.0.2, like labels). Only a chip that HAD a value — a
+        // `{room}` chip of a room without that sensor stays empty, as it always was.
+        if(!ent){if(ch.seen&&ch.el.textContent!=='—'){ch.el.textContent='—';setSt(ch.el,'color','var(--roc-text-2-c)');}continue;}
+        ch.seen=true;
         const nv=rocNumVal(ent.state);
         const txt=rocFmtState(this._hass,ent,ch.cfg); // v6.16.0 shared formatter
         if(ch.el.textContent!==txt)ch.el.textContent=txt;
@@ -6479,7 +6515,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
         // entity's own state -- e.g. a media_player's app_id, which has no
         // dedicated state of its own to key off.
         const val=m.attribute?st.attributes?.[m.attribute]:st.state;
-        if(val===m.state)return m.image;
+        if(val!=null&&rocStEq(m.state,String(val)))return m.image; // 7.0.2: `state: 3` (a number) or an unquoted on / off never matched
       }
       const d=ov.state_images.find(m=>!('entity'in m));if(d)return d.image;
     }
@@ -6565,8 +6601,8 @@ navSelf._navChipInto(chipCont,chCfg,r);
         const svc=a.perform_action||a.service;
         if(svc){const d=svc.indexOf('.');const pr=this._hass.callService(svc.slice(0,d),svc.slice(d+1),a.data??a.service_data??{},a.target);if(pr&&typeof pr.catch==='function')pr.catch(function(e){console.warn('[room-overlay-card] '+svc+' failed:',(e&&e.message)||e);});}
       }break;
-      case'browser-mod-popup':{const _bmData={title:a.title??'',size:a.size??'normal',content:a.content??{}};const _bmId=window.browser_mod?.browserID||window.browser_mod?.browser_id;if(_bmId)_bmData.browser_id=_bmId;this._hass.callService('browser_mod','popup',_bmData);}break;
-      case'toggle':if(a.entity)this._hass.callService('homeassistant','toggle',{entity_id:a.entity});break;
+      case'browser-mod-popup':{const _bmData={title:a.title??'',size:a.size??'normal',content:a.content??{}};const _bmId=window.browser_mod?.browserID||window.browser_mod?.browser_id;if(_bmId)_bmData.browser_id=_bmId;const _bp=this._hass.callService('browser_mod','popup',_bmData);if(_bp&&typeof _bp.catch==='function')_bp.catch(function(e){console.warn('[room-overlay-card] browser_mod.popup failed:',(e&&e.message)||e);});}break;
+      case'toggle':if(a.entity){const _tp=this._hass.callService('homeassistant','toggle',{entity_id:a.entity});if(_tp&&typeof _tp.catch==='function')_tp.catch(function(e){console.warn('[room-overlay-card] toggle '+a.entity+' failed:',(e&&e.message)||e);});}break;
       case'switch-room':{
         const ri=roomMatch(this._config,a.room);
         if(ri>=0)this._switchRoom(ri,ri>this._roomIdx?1:-1,true);
@@ -11522,7 +11558,7 @@ const ROC_STUDIO_FILE='room-overlay-card-studio.js';
 // older release is never paired with a newer card.
 function rocStudioUrl(){return rocAssetUrl(ROC_STUDIO_FILE);}
 // v6.47.0: the same for any sibling file (the floor plan renderer, room-overlay-card-floorplan.js).
-function rocAssetUrl(file){
+function rocSelfSrc(){
   const re=/\/room-overlay-card(\.min)?\.js(\?|#|$)/;
   let src='';
   try{
@@ -11533,6 +11569,14 @@ function rocAssetUrl(file){
     const es=performance.getEntriesByType('resource');
     for(let i=es.length-1;i>=0;i--){if(re.test(es[i].name)){src=es[i].name;break;}}
   }catch(_){}
+  return src;
+}
+// Looked up once while this file loads (7.0.2), when its <script> and its resource-timing entry
+// are sure to be there — the timing buffer holds 250 entries and a long session overwrites
+// nothing but simply stops recording. The lookup at the time of use stays as the first choice.
+const ROC_SELF_SRC=rocSelfSrc();
+function rocAssetUrl(file){
+  const src=rocSelfSrc()||ROC_SELF_SRC;
   if(!src)return null;
   try{
     const u=new URL(src,location.href);

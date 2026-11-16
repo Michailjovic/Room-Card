@@ -1,5 +1,58 @@
 # Changelog
 
+## [7.0.2] - 2026-11-16
+
+The rest of the review of 7.0.0: forms the reference documents that the card did not read, stale
+values, three studio fixes and a config check that sees dangling references. No new config keys.
+
+### Fixes
+
+- **`area_match` as one string** (`area_match: Kitchen`) matches. The reference allows a string or
+  a list; only the list was read, so presence follow never found that room.
+- **An unquoted `on` / `off` in a YAML-mode dashboard** (which reads it as a boolean) matches the
+  state in conditions and `state_images`; `state_images` also match a number (`state: 3`).
+- **A label with `text:`** shows it (with `prefix` / `suffix`). The key was in the reference and in
+  the studio's form and did nothing.
+- **A radial gauge** no longer draws `NaN` for `thickness: "12px"` or a `target` that is not a
+  number. A zone takes `z_index` (it was fixed at 50); an embedded card takes `background`.
+- **Stale values:** a navigation chip and a cover control whose entity disappeared (renamed,
+  removed) show `—` instead of the last value, like labels since 7.0.
+- **A malformed `%` in the URL hash** (another card's, a hand-typed link) with `url_sync` on turned
+  the whole card into "configuration error: URI malformed". It is read as written now.
+- **`toggle` and `browser-mod-popup`** catch a rejected call (a lock has no `toggle`) instead of
+  leaving an unhandled rejection in the console.
+- **Thumbnail cache:** it kept two sizes per image and freed the oldest. With three card instances
+  of different sizes on one page (or a dashboard, the studio's canvas and an overview) each new
+  size freed a picture another instance was still showing, which then made its own again — at the
+  cost of someone else's. It keeps four, and frees the one asked for longest ago.
+- The studio and floor plan files are located from the card's own URL **when the card loads**, not
+  only when they are first needed (the browser stops recording resource URLs after 250 entries).
+
+### Studio
+
+- **Ctrl+S while typing** saved without the field being typed in and reported *Saved*. The field
+  is committed first.
+- **Renaming a group** moved the references of every room's group of that name; groups belong to a
+  room, and only that room's follow now. **Renaming a section** also follows into the floor plan's
+  `attention_sections`.
+- **The config check sees more.** It reported types only; it now also reports a `switch-room` /
+  `open-section` action, a `section:` tag, the overview's `grid.rooms` / `dock.sections` or a floor
+  plan room binding that points at nothing, and navigation, light controls or companion cards
+  that have no region in any layout profile (they are then never drawn). New function
+  `rocLint()` next to `rocValidate()`.
+- **The forms offer only what the card reads.** Removed from the schema (and so from the forms,
+  REFERENCE.md and AI_SPEC.md): `bottom` / `right` on elements that never read them (`bottom` stays
+  on embedded cards), `step` / `action` / `attribute` / `service` / `data` on a zone's `slider`,
+  `orientation` / `alert_conditions` on labels; a gauge's `target` is a number. Added:
+  `navigation_replace` (documented and read since 7.0, reported as an unknown key).
+
+### Repository
+
+- `release.yml`: the tag reaches the script through the environment instead of being written
+  into it.
+- New checks for every fix in the lifecycle, studio and schema tiers;
+  `tests/probes/probe_v7_0_0.js` now passes in full.
+
 ## [7.0.1] - 2026-11-11
 
 Fixes from a full review of 7.0.0, and two things that make the card lighter on a wall tablet.

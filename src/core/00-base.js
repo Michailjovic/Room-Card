@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.0.1';
+const ROC_VERSION='7.0.2';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -140,11 +140,19 @@ async function rocHqResize(bmp,W,H){
   if(!blob||blob.type!=='image/webp')blob=await new Promise(function(res){cv.toBlob(res,'image/png');});
   return blob?URL.createObjectURL(blob):null;
 }
-// Two sizes per image at most: a third (a window being resized) frees the oldest blob.
-const ROC_HQ_SIZES=new Map(); // url → [key, …] oldest first
+// A few sizes per image, the least recently ASKED FOR goes first (7.0.2). It was "two, oldest
+// goes": with three card instances of different sizes on one page (or a dashboard, the studio's
+// canvas and an overview) each new size freed a blob another instance was still showing, and
+// that instance then made its own again — at the cost of someone else's.
+const ROC_HQ_MAX=4;
+const ROC_HQ_SIZES=new Map(); // url → [key, …]
+const ROC_HQ_USED=new Map();  // key → when it was last asked for
 function rocHqKeep(url,key){
-  const l=ROC_HQ_SIZES.get(url)||[];l.push(key);
-  while(l.length>2){const old=l.shift(),u=ROC_HQ.get(old);ROC_HQ.delete(old);if(u)try{URL.revokeObjectURL(u);}catch(_){}}
+  const l=ROC_HQ_SIZES.get(url)||[];l.push(key);ROC_HQ_USED.set(key,Date.now());
+  while(l.length>ROC_HQ_MAX){
+    let oi=0;for(let i=1;i<l.length-1;i++)if((ROC_HQ_USED.get(l[i])||0)<(ROC_HQ_USED.get(l[oi])||0))oi=i; // never the one just made
+    const old=l.splice(oi,1)[0],u=ROC_HQ.get(old);ROC_HQ.delete(old);ROC_HQ_USED.delete(old);if(u)try{URL.revokeObjectURL(u);}catch(_){}
+  }
   ROC_HQ_SIZES.set(url,l);
 }
 // One job per (url, size): fetch + decode ONCE — the natural size is learned from the same
@@ -186,7 +194,7 @@ function rocHqUrl(url,devW,devH,onReady){
   if(nat){
     const W=rocHqTarget(nat,devW,devH);if(!W)return url;
     const key=url+'|'+W,got=ROC_HQ.get(key);
-    if(got)return got;
+    if(got){ROC_HQ_USED.set(key,Date.now());return got;}
     rocHqWait(key,onReady);
     if(got===undefined){ROC_HQ.set(key,null);rocHqJob(url,devW,devH,key);}
     return url;

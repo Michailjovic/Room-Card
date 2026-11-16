@@ -522,6 +522,51 @@ t('rejected template subscription is caught, not unhandled',unhandled===0);
     t('7.0.1: rocFmtNum reuses one Intl.NumberFormat per locale + decimals ('+r+')',r==='1,500|2,250|2,0000|3,0000|9,500#2');}
   }
 
+  // =====================================================================
+  // 7.0.2 — the rest of the 7.0.0 review (points 6, 7 and 9 of ANALYSIS_v7.0.0.md)
+  // =====================================================================
+  {
+  const tick=()=>new Promise(r=>setTimeout(r,40));
+  const IMG='/local/x.webp';
+  const st=(id,v,a)=>({[id]:{entity_id:id,state:String(v),attributes:a||{}}});
+  // forms the reference documents
+  t('7.0.2: area_match as one string matches (it was read only as a list)',w.eval('[roomMatch({rooms:[{id:"a"},{id:"b",area_match:"Kitchen"}]},"kitchen"),roomMatch({rooms:[{id:"a"},{id:"b",area_match:["x","Kitchen"]}]},"kitchen"),roomMatch({rooms:[{id:"a"},{id:"b"}]},"kitchen")].join()')==='1,1,-1');
+  t('7.0.2: a condition written with an unquoted on / off (a boolean in a YAML-mode dashboard) matches the state',w.eval('(function(){const s={"light.a":{state:"on",attributes:{}},"light.b":{state:"off",attributes:{}}};return[evalCond({entity:"light.a",state:true},s),evalCond({entity:"light.b",state:false},s),evalCond({entity:"light.a",state:false},s),evalCond({entity:"light.a",state_not:true},s),evalCond({entity:"light.b",state:[true,"idle"]},s)].join();})()')==='true,true,false,false,false');
+  t('7.0.2: …and a boolean still matches a boolean attribute and the state "true" (it always did)',w.eval('(function(){const s={"media_player.m":{state:"playing",attributes:{is_volume_muted:true}},"sensor.s":{state:"true",attributes:{}}};return[evalCond({entity:"media_player.m",attribute:"is_volume_muted",state:true},s),evalCond({entity:"media_player.m",attribute:"is_volume_muted",state:false},s),evalCond({entity:"sensor.s",state:true},s),evalCond({entity:"sensor.s",state_not:true},s)].join();})()')==='true,false,true,false');
+  {const el=mkCard({base_image:IMG,layout:{},
+      overlays:[{id:'o',state_images:[{entity:'sensor.n',state:3,image:'/local/three.webp'},{image:'/local/default.webp'}]},{id:'o2',state_images:[{entity:'light.a',state:true,image:'/local/on.webp'},{image:'/local/off.webp'}]}],
+      labels:[{id:'l',text:'Static',prefix:'[',suffix:']',top:'20%',left:'10%'}],
+      gauges:[{id:'g',entity:'sensor.n',orientation:'radial',thickness:'12px',target:2,top:'30%',left:'30%',width:'10%',height:'10%'},{id:'g2',entity:'sensor.n',orientation:'radial',target:'sensor.nope',top:'50%',left:'30%',width:'10%',height:'10%'}],
+      zones:[{id:'z',top:'1%',left:'1%',width:'5%',height:'5%',z_index:77}],
+      elements:[{id:'e',top:'50%',left:'1%',width:'9%',height:'9%',background:'rgb(1, 2, 3)',card:{type:'custom:x-none'}}]},Object.assign(st('sensor.n','3'),st('light.a','on')));
+    await tick();
+    t('7.0.2: state_images match a number and an unquoted on (compared as text)',/three\.webp/.test(el._ovEls.o.style.backgroundImage)&&/on\.webp/.test(el._ovEls.o2.style.backgroundImage));
+    t('7.0.2: a label with text: shows it (with prefix / suffix)',el._lblEls.l.textContent==='[Static]');
+    t('7.0.2: a radial gauge draws without NaN for thickness: "12px" and for a target that is not a number',!/NaN/.test(el._gaugeEls.g.innerHTML)&&!/NaN/.test(el._gaugeEls.g2.innerHTML)&&/stroke-width="12"/.test(el._gaugeEls.g.innerHTML));
+    t('7.0.2: a zone takes z_index; an embedded card takes background',el._zoneEls.z.style.zIndex==='77'&&/rgb\(1, 2, 3\)/.test(el._contEls.e.style.background));el.remove();}
+  // stale values
+  {const LY={rows:['auto','1fr'],columns:['100%'],place:{nav:{row:1},image:{row:2}}};
+    const el=mkCard({layout:{landscape:LY,portrait:LY},rooms:[{id:'a',name:'A',base_image:IMG,chips:[{entity:'sensor.t'}]},{id:'b',name:'B',base_image:IMG}]},st('sensor.t','21'));
+    await tick();const had=el._navChipEls.some(c=>c.el.textContent==='21');
+    el.hass=mkHass({});await tick();
+    t('7.0.2: a nav chip whose entity is gone shows — , not its last value',had&&el._navChipEls.every(c=>c.el.textContent==='—'));el.remove();}
+  {const C=p=>st('cover.x','open',{current_position:p,supported_features:15});
+    const el=mkCard({base_image:IMG,layout:{},blinds:[{id:'b',entity:'cover.x',attribute:'current_position',min:100,max:0,top:'10%',left:'10%',width:'10%',height:'30%',control:true}]},C(40));
+    await tick();const rec=Object.values(el._ccEls||{})[0];const before=rec&&rec.pct&&rec.pct.textContent;
+    el.hass=mkHass({});await tick();
+    t('7.0.2: a cover control whose entity is gone drops the position ('+before+' → '+(rec&&rec.pct&&rec.pct.textContent)+')',before==='40 %'&&rec.pct.textContent==='—');el.remove();}
+  // errors that used to escape
+  {const old=w.location.hash;w.location.hash='#%E0%A4%A=1&room=b';
+    const el=mkCard({layout:{},url_sync:true,rooms:[{id:'a',base_image:IMG},{id:'b',base_image:IMG}]},{});await tick();
+    t('7.0.2: a malformed %-escape in the URL hash neither breaks the card nor hides the room key',!/configuration error/.test(el.shadowRoot.innerHTML)&&el._roomIdx===1);
+    el.remove();w.location.hash=old||'';}
+  {const u0=unhandled;
+    const el=mkCard({base_image:IMG,layout:{},icons:[{id:'i',icon:'mdi:x',entity:'lock.a',top:'9%',left:'9%',tap_action:{action:'toggle'}}]},st('lock.a','locked'));
+    await tick();el._hass.callService=()=>Promise.reject(new Error('Service not found'));
+    el.shadowRoot.querySelector('[data-ico="i"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();await tick();
+    t('7.0.2: a rejected toggle is caught, not an unhandled rejection',unhandled===u0);el.remove();}
+  }
+
 console.log(fails?('FAILURES: '+fails):'ALL LIFECYCLE TESTS PASSED');
 process.exit(fails?1:0);
 

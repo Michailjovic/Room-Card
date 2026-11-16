@@ -13,7 +13,7 @@ const ROC_STUDIO_FILE='room-overlay-card-studio.js';
 // older release is never paired with a newer card.
 function rocStudioUrl(){return rocAssetUrl(ROC_STUDIO_FILE);}
 // v6.47.0: the same for any sibling file (the floor plan renderer, room-overlay-card-floorplan.js).
-function rocAssetUrl(file){
+function rocSelfSrc(){
   const re=/\/room-overlay-card(\.min)?\.js(\?|#|$)/;
   let src='';
   try{
@@ -24,6 +24,14 @@ function rocAssetUrl(file){
     const es=performance.getEntriesByType('resource');
     for(let i=es.length-1;i>=0;i--){if(re.test(es[i].name)){src=es[i].name;break;}}
   }catch(_){}
+  return src;
+}
+// Looked up once while this file loads (7.0.2), when its <script> and its resource-timing entry
+// are sure to be there — the timing buffer holds 250 entries and a long session overwrites
+// nothing but simply stops recording. The lookup at the time of use stays as the first choice.
+const ROC_SELF_SRC=rocSelfSrc();
+function rocAssetUrl(file){
+  const src=rocSelfSrc()||ROC_SELF_SRC;
   if(!src)return null;
   try{
     const u=new URL(src,location.href);

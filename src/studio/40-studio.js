@@ -1035,15 +1035,24 @@ class RocStudio{
       this.cardSel={kind:'section',id:String(id)};
     }else return;
     let refs=0;
+    // Groups belong to a room: only that room's references follow (7.0.2 — another room's group of
+    // the same name had its references rewritten too). A group in the shared defaults is every room's.
+    let scope=c;
+    if(refKey==='group'&&tg.kind==='element'){
+      const f2=this._findItem(tg.type,id,c);
+      const rm=f2&&Array.isArray(c.rooms)?c.rooms.find(function(r){return r&&r.groups===f2.list;}):null;
+      if(rm)scope=rm;
+    }
     if(refKey&&old!==String(id))(function walk(o,parentKey,isSectionList){
       if(!o||typeof o!=='object')return;
       if(Array.isArray(o)){
-        o.forEach(function(x,i){if(refKey==='section'&&parentKey==='sections'&&!isSectionList&&x===old){o[i]=id;refs++;}else walk(x,null,false);});
+        // lists of section ids: the overview dock's `sections`, the floor plan's `attention_sections` (7.0.2)
+        o.forEach(function(x,i){if(refKey==='section'&&(parentKey==='sections'||parentKey==='attention_sections')&&!isSectionList&&x===old){o[i]=id;refs++;}else walk(x,null,false);});
         return;
       }
       if(o[refKey]===old&&!(refKey==='group'&&o.id===id)){o[refKey]=id;refs++;}
       Object.keys(o).forEach(function(k){walk(o[k],k,o===c&&k==='sections');});
-    })(c,null,false);
+    })(scope,null,false);
     this._lastRefs=refs;
     this._commit(c,'props','id');
     this._syncProps(true);
@@ -1295,7 +1304,11 @@ class RocStudio{
     this._applyMarks(true);
   }
   _validate(){
-    try{return RocSchema.rocValidate(this.work).filter(function(x){return x.level!=='info';});}catch(e){return[{path:'',level:'error',msg:String(e&&e.message||e)}];}
+    try{
+      // + what the types cannot see (7.0.2): references that point at nothing, things without a place in the layout
+      const lint=typeof RocSchema.rocLint==='function'?RocSchema.rocLint(this.work):[];
+      return RocSchema.rocValidate(this.work).filter(function(x){return x.level!=='info';}).concat(lint);
+    }catch(e){return[{path:'',level:'error',msg:String(e&&e.message||e)}];}
   }
   _renderValidation(){
     const f=this._validate();
@@ -1436,6 +1449,12 @@ class RocStudio{
   save(opts){
     const self=this,tg=this.target;
     opts=opts||{};
+    // A Properties field commits when it loses the focus: Ctrl+S while still typing used to save
+    // without it and report "Saved" (7.0.2). Commit the field being edited first.
+    try{
+      const ae=this._sr&&this._sr.activeElement;
+      if(ae&&this._propsPane&&this._propsPane.contains(ae)&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName||''))ae.dispatchEvent(new Event('change',{bubbles:true}));
+    }catch(_){}
     if(tg.kind==='yaml'){this._showYaml();return Promise.resolve(false);}
     if(tg.kind==='editor'){
       if(this._dirty())this._applyToEditor();

@@ -82,6 +82,11 @@ function rocFmtState(hass,st,o){
 // or "12:30" never pick a colour stop.
 function rocNumVal(v){return rocIsNum(v)?Number(v):NaN;}
 
+// A state as written in a config, as the string Home Assistant reports. A YAML-mode dashboard
+// reads an unquoted `on` / `off` as a boolean (YAML 1.1), which never equalled the state "on".
+// A boolean therefore matches "on" / "off" — and still "true" / "false", which is what a boolean
+// ATTRIBUTE reads as (`attribute: is_volume_muted, state: true` has always worked).
+function rocStEq(v,sv){return typeof v==='boolean'?(sv===(v?'on':'off')||sv===String(v)):sv===String(v);}
 function evalCond(c,s){
   // a list of conditions: all of them must hold (7.0.1 — the reference always allowed the list
   // form; evaluated as one condition it matched no entity and the element stayed hidden)
@@ -89,8 +94,8 @@ function evalCond(c,s){
   if(!c||typeof c!=='object')return true;
   const e=s[c.entity];if(!e)return false;
   const sv=c.attribute!==undefined?String(e.attributes[c.attribute]??''): e.state,nv=parseFloat(sv);let r=true;
-  if(c.state!==undefined)r=Array.isArray(c.state)?c.state.map(String).includes(sv):sv===String(c.state); // v6.16.0: list form, like state_not and HA's own conditions
-  else if(c.state_not!==undefined)r=Array.isArray(c.state_not)?!c.state_not.map(String).includes(sv):sv!==String(c.state_not);
+  if(c.state!==undefined)r=Array.isArray(c.state)?c.state.some(function(x){return rocStEq(x,sv);}):rocStEq(c.state,sv); // v6.16.0: list form, like state_not and HA's own conditions
+  else if(c.state_not!==undefined)r=Array.isArray(c.state_not)?!c.state_not.some(function(x){return rocStEq(x,sv);}):!rocStEq(c.state_not,sv);
   else if(c.operator!==undefined&&c.value!==undefined){
     const cv=typeof c.value==='number'?c.value:parseFloat(String(c.value));
     if(isNaN(nv)||isNaN(cv))r=false;

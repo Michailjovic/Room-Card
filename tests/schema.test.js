@@ -134,5 +134,20 @@ const props=new Set([...cardCode.matchAll(/\.([a-z][a-z0-9]*(?:_[a-z0-9]+)+)\b/g
 const unknownProps=[...props].filter(p=>!known.has(p)&&!HA_NAMES.has(p)).sort();
 check('every snake_case key the card reads is in the schema (or a Home Assistant name)',unknownProps.length===0,unknownProps.join(', '));
 
+// ---- 7.0.2: the schema says only what the card reads; rocLint ---------------------------------
+{const {rocLint}=require(path.join(ROOT,'src','schema','roc-schema.js'));
+  const K=rocSchemaKeys();
+  check('7.0.2: bottom / right are not offered where nothing reads them (bottom stays on an embedded card)',
+    ['zone','icon','label','gauge','blind','glow','vacuumWidget'].every(t=>!K[t].includes('bottom')&&!K[t].includes('right'))&&K.element.includes('bottom')&&!K.element.includes('right'));
+  check('7.0.2: slider and label list only the keys the card reads',['step','action','attribute','service','data'].every(k=>!K.slider.includes(k))&&!K.label.includes('orientation')&&!K.label.includes('alert_conditions')&&K.label.includes('text')&&K.gauge.includes('alert_conditions'));
+  const v=rocValidate({type:'custom:room-overlay-card',base_image:'/x.webp',layout:{},tap_action:{action:'navigate',navigation_path:'/x',navigation_replace:true}}).filter(x=>x.level!=='info');
+  check('7.0.2: navigation_replace (documented, read by the card) is a known key',v.length===0,JSON.stringify(v));
+  check('7.0.2: rocLint is silent for a config without a layout block and for a non-object',rocLint({type:'x',base_image:'/x.webp'}).length===0&&rocLint(null).length===0);
+  const L={rows:['1fr'],columns:['100%'],place:{image:{row:1}}};
+  const lint=rocLint({type:'x',layout:{orientation:'landscape',landscape:L},cards_above:[{card:{type:'markdown',tap_action:{action:'switch-room',room:'zzz'}}}],rooms:[{id:'a',base_image:'/a.webp',area_match:'Kitchen'},{id:'b',base_image:'/b.webp',icons:[{id:'i',tap_action:{action:'switch-room',room:'kitchen'},hold_action:{action:'switch-room',room:'x'}}]}]}).map(x=>x.path);
+  check('7.0.2: rocLint — a forced orientation checks that profile only; rooms match by id, name or area_match; embedded cards are skipped',
+    JSON.stringify(lint.slice().sort())===JSON.stringify(['layout.landscape.place','layout.landscape.place','rooms[1].icons[0].hold_action.room'].sort()),JSON.stringify(lint));
+}
+
 console.log(fails?('\n'+fails+' SCHEMA TEST(S) FAILED'):'\nALL SCHEMA TESTS PASSED');
 process.exit(fails?1:0);

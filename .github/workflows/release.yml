@@ -34,7 +34,9 @@ jobs:
     steps:
       - name: Resolve tag
         id: tag
-        run: echo "tag=${{ github.event.release.tag_name || inputs.tag }}" >> "$GITHUB_OUTPUT"
+        env:
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Checkout tagged source
         uses: actions/checkout@v5

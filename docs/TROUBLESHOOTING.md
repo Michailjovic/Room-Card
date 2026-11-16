@@ -74,6 +74,13 @@ The studio's status bar checks the config against the schema:
 - **expected …, got …** — a value of the wrong type or outside the allowed list.
 - **v3 key — migrated on load** — an old layout key; the card converts it in memory. Open the
   editor and save to keep the converted form.
+- **no room has this id** / **no section has this id** (7.0.2) — a `switch-room` or `open-section`
+  action, a `section:` tag, the overview's `grid.rooms` / `dock.sections` or the floor plan's room
+  binding names something that is not in the card (often after a rename done by hand).
+- **… has no "nav" / "lights" / "cards_above" / "cards_below" region in any layout profile**
+  (7.0.2) — a layout profile shows only the regions its `place:` holds. The navigation, light
+  controls or companion cards are configured, but no profile gives them a place, so they are never
+  drawn. (One profile without them is a design and is not reported.)
 - An element **id with spaces or other characters** outside `A-Z a-z 0-9 _ -` (the browser console
   warns about it) can break selection; rename it with the **ID** field of its form.
 

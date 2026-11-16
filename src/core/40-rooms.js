@@ -51,6 +51,10 @@ function roomMerge(c,idx){
   delete base.rooms;delete base.nav;
   return Object.assign(base,c.rooms[i]);
 }
+// decodeURIComponent that never throws: a malformed %-escape anywhere in the URL hash (another
+// card's, a hand-typed link) used to end the whole render in "URI malformed" (7.0.2)
+function rocDec(v){try{return decodeURIComponent(v);}catch(_){return String(v);}}
+function rocAsArr(v){return Array.isArray(v)?v:(v==null||v===''?[]:[v]);}
 function roomMatch(c,state){
   if(!Array.isArray(c.rooms)||state===null||state===undefined)return -1;
   const sv=String(state).trim().toLowerCase();
@@ -58,7 +62,7 @@ function roomMatch(c,state){
   for(let i=0;i<c.rooms.length;i++){
     const r=c.rooms[i];
     if(String(r.id||'').toLowerCase()===sv||String(r.name||'').toLowerCase()===sv)return i;
-    if(Array.isArray(r.area_match)&&r.area_match.some(function(a){return String(a).toLowerCase()===sv;}))return i;
+    if(rocAsArr(r.area_match).some(function(a){return String(a).toLowerCase()===sv;}))return i; // one name or a list (7.0.2: a plain string was ignored)
   }
   return -1;
 }

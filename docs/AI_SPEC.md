@@ -379,6 +379,7 @@ action {
   entity: entity;
   entity_id: entity;
   navigation_path: str;
+  navigation_replace: bool @7.0.0;
   path: str;
   url: str;
   url_path: str;
@@ -497,8 +498,6 @@ zone {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
@@ -519,17 +518,12 @@ zone {
 }
 slider {
   entity: entity;
-  action: str;
-  attribute: str;
   direction: "horizontal"|"vertical";
   min: num;
   max: num;
-  step: num;
   live: bool;
   invert: bool;
   color: color;
-  service: str;
-  data: map;
 }
 badge {
   id!: str;
@@ -558,8 +552,6 @@ icon {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
@@ -591,8 +583,6 @@ label {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
@@ -615,10 +605,8 @@ label {
   font_weight: str | num;
   font_family: str;
   text_shadow: str;
-  orientation: str;
   animation: str;
   animation_color: color;
-  alert_conditions: cond;
   tap_action: action;
   hold_action: action;
   double_tap_action: action;
@@ -637,8 +625,6 @@ gauge {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
@@ -652,8 +638,8 @@ gauge {
   background: color;
   border_radius: len;
   arc: num;
-  thickness: len;
-  target: num | entity;
+  thickness: num | len;
+  target: num;
   target_color: color;
   animation: str;
   animation_color: color;
@@ -677,8 +663,6 @@ blind {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
@@ -740,11 +724,10 @@ element {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
+  bottom: len;
   card: card;
   overflow: str;
   border_radius: len;
@@ -767,8 +750,6 @@ glow {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;
@@ -806,8 +787,6 @@ vacuumWidget {
   id!: str;
   top: len;
   left: len;
-  bottom: len;
-  right: len;
   width: len;
   height: len;
   z_index: num;

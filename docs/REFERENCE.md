@@ -245,6 +245,7 @@ With `action: fire-dom-event` the other keys are passed through unchecked. Guide
 | `entity` | entity id |  |  |
 | `entity_id` | entity id |  |  |
 | `navigation_path` | string |  |  |
+| `navigation_replace` | boolean |  | since 7.0.0 |
 | `path` | string |  |  |
 | `url` | string |  |  |
 | `url_path` | string |  |  |
@@ -463,8 +464,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#clickable-zones).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
@@ -494,17 +493,12 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#slider-zones).
 | Key | Type | Default | Notes |
 |---|---|---|---|
 | `entity` | entity id |  |  |
-| `action` | string |  |  |
-| `attribute` | string |  |  |
 | `direction` | `horizontal` · `vertical` |  |  |
 | `min` | number |  |  |
 | `max` | number |  |  |
-| `step` | number |  |  |
 | `live` | boolean |  |  |
 | `invert` | boolean |  |  |
 | `color` | colour |  |  |
-| `service` | string |  |  |
-| `data` | object |  |  |
 
 <a id="t-badge"></a>
 
@@ -549,8 +543,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
@@ -591,8 +583,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
@@ -615,10 +605,8 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `font_weight` | string **or** number |  |  |
 | `font_family` | string |  |  |
 | `text_shadow` | string |  |  |
-| `orientation` | string |  |  |
 | `animation` | string |  |  |
 | `animation_color` | colour |  |  |
-| `alert_conditions` | [condition](#t-cond) |  |  |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |
 | `double_tap_action` | [action](#t-action) |  |  |
@@ -646,8 +634,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#gauges).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
@@ -661,8 +647,8 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#gauges).
 | `background` | colour |  |  |
 | `border_radius` | length |  |  |
 | `arc` | number |  |  |
-| `thickness` | length |  |  |
-| `target` | number **or** entity id |  |  |
+| `thickness` | number **or** length |  |  |
+| `target` | number |  |  |
 | `target_color` | colour |  |  |
 | `animation` | string |  |  |
 | `animation_color` | colour |  |  |
@@ -695,8 +681,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#blinds).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
@@ -782,11 +766,10 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#embedded-ha-cards).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
+| `bottom` | length |  |  |
 | `card` | Lovelace card config |  |  |
 | `overflow` | string |  |  |
 | `border_radius` | length |  |  |
@@ -818,8 +801,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#light-glow-light-spill-on-the-photo).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |
@@ -875,8 +856,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#vacuum-status-widget).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `bottom` | length |  |  |
-| `right` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
 | `z_index` | number |  |  |

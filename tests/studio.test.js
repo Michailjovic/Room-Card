@@ -830,6 +830,43 @@ const layerBtn=(S,act)=>S._sr.querySelector('.layer [data-act="'+act+'"]');
     S7.close();
   }
 
+  // ---- 7.0.2: Ctrl+S with a field still being typed in; rename scopes; the config check's lint ----
+  {const LY8={rows:['auto','1fr'],columns:['100%'],place:{nav:{row:1},image:{row:2}}};
+    const cfg={type:'custom:room-overlay-card',layout:{landscape:LY8},sections:[{id:'s1',title:'S',tiles:[{entity:'switch.a',name:'A'}]}],rooms:[
+      {id:'ov',overview:{dock:{sections:['s1']}}},
+      {id:'plan',floorplan:{attention_sections:['s1'],rooms:[{room:'a',polygon:[[0,0],[3,0],[3,3],[0,3]]}]}},
+      {id:'a',name:'A',base_image:IMG+'a',groups:[{id:'panel'}],icons:[{id:'i',icon:'mdi:x',top:'1%',left:'1%',group:'panel',tap_action:{action:'toggle-group',group:'panel'},hold_action:{action:'open-section',section:'s1'}}]},
+      {id:'b',name:'B',base_image:IMG+'b',groups:[{id:'panel'}],icons:[{id:'j',icon:'mdi:y',top:'1%',left:'1%',group:'panel',tap_action:{action:'toggle-group',group:'panel'}}]}]};
+    const S8=await C._rocStudio.open({config:clone(cfg),hass});
+    S8._setTab('props');S8._setRoom(2,false,'x');await wait(40);
+    check('7.0.2: a clean config has no lint findings',S8._validate().length===0,J(S8._validate()));
+    S8._propsRename({kind:'element',type:'group',id:'panel'},'panel_a');
+    let W8=S8.work;
+    check('7.0.2: renaming a group moves its own room\'s references',W8.rooms[2].groups[0].id==='panel_a'&&W8.rooms[2].icons[0].group==='panel_a'&&W8.rooms[2].icons[0].tap_action.group==='panel_a');
+    check('7.0.2: …and leaves another room\'s group of the same name alone',W8.rooms[3].groups[0].id==='panel'&&W8.rooms[3].icons[0].group==='panel'&&W8.rooms[3].icons[0].tap_action.group==='panel');
+    S8._propsRename({kind:'section',idx:0},'laundry');W8=S8.work;
+    check('7.0.2: renaming a section also follows into the floor plan\'s attention_sections',W8.sections[0].id==='laundry'&&W8.rooms[0].overview.dock.sections[0]==='laundry'&&W8.rooms[1].floorplan.attention_sections[0]==='laundry'&&W8.rooms[2].icons[0].hold_action.section==='laundry',J([W8.rooms[0].overview.dock.sections,W8.rooms[1].floorplan.attention_sections]));
+    // Ctrl+S while a Properties field holds text that was not committed yet
+    S8._select('icon','i','outline');await wait(60);
+    const f8=[...S8._propsPane.querySelectorAll('input')].find(x=>x.value==='mdi:x');
+    check('7.0.2: the icon form shows its icon field',!!f8);
+    if(f8){f8.focus();f8.value='mdi:typed';f8.dispatchEvent(new w.Event('input',{bubbles:true}));
+      S8._dlg.dispatchEvent(new w.KeyboardEvent('keydown',{key:'s',ctrlKey:true,bubbles:true,cancelable:true,composed:true}));await wait(60);
+      check('7.0.2: Ctrl+S commits the field being typed in before it saves',S8.work.rooms[2].icons[0].icon==='mdi:typed'&&/mdi:typed/.test(S8._yamlText()));}
+    S8.close();
+    // lint: references that point at nothing, things without a region
+    const LYi={rows:['1fr'],columns:['100%'],place:{image:{row:1}}};
+    const bad={type:'custom:room-overlay-card',layout:{landscape:LYi,portrait:LYi},sections:[{id:'s1',title:'S'}],rooms:[
+      {id:'ov',overview:{grid:{rooms:['a','gone']},dock:{sections:['nope']}}},
+      {id:'a',base_image:IMG+'a',light_controls:{entities:['light.x']},icons:[{id:'i',icon:'mdi:x',top:'1%',left:'1%',section:'ghost',tap_action:{action:'switch-room',room:'nowhere'},hold_action:{action:'open-section',section:'s1'}}]},
+      {id:'b',base_image:IMG+'b'}]};
+    const S9=await C._rocStudio.open({config:clone(bad),hass});
+    const F9=S9._validate().map(x=>x.path);
+    check('7.0.2: the config check reports dangling room / section references and things without a layout region',
+      ['rooms[1].icons[0].tap_action.room','rooms[1].icons[0].section','rooms[0].overview.grid.rooms[1]','rooms[0].overview.dock.sections[0]','layout'].every(p=>F9.includes(p))&&F9.filter(p=>p==='layout').length===2&&!F9.includes('rooms[1].icons[0].hold_action.section')&&!F9.includes('rooms[0].overview.grid.rooms[0]'),J(F9));
+    S9.close();
+  }
+
   console.log(fails?('\n'+fails+' STUDIO TEST(S) FAILED'):'\nALL STUDIO TESTS PASSED');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

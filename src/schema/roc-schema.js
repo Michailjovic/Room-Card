@@ -20,7 +20,8 @@
 'use strict';
 const PROF_OVR={portrait:{t:'self'},landscape:{t:'self'},mobile:{t:'self',legacy:true},tablet:{t:'self',legacy:true},desktop:{t:'self',legacy:true},ultrawide:{t:'self',legacy:true}};
 // keys every positioned element shares
-const POS={id:{t:'str',req:true},top:{t:'len'},left:{t:'len'},bottom:{t:'len'},right:{t:'len'},width:{t:'len'},height:{t:'len'},z_index:{t:'num'}};
+// (7.0.2: `bottom` / `right` were listed here for every element, but only an embedded card reads `bottom` and nothing reads `right`)
+const POS={id:{t:'str',req:true},top:{t:'len'},left:{t:'len'},width:{t:'len'},height:{t:'len'},z_index:{t:'num'}};
 const VIS={group:{t:'str'},visible:{t:'cond|list:cond'},visible_conditions:{t:'cond|list:cond'},visible_template:{t:'tmpl'},fade:{t:'bool|str'},slide:{t:'bool|str'},nav_mini:{t:'bool'}};
 const ACTS={tap_action:{t:'action'},hold_action:{t:'action'},double_tap_action:{t:'action'},hold_delay:{t:'num'}};
 const COCKPIT={section:{t:'str'},tile:{t:'obj:tile'}};
@@ -103,7 +104,7 @@ const S={
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
   action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event'},
-    entity:{t:'entity'},entity_id:{t:'entity'},navigation_path:{t:'str'},path:{t:'str'},url:{t:'str'},url_path:{t:'str'},new_tab:{t:'bool'},
+    entity:{t:'entity'},entity_id:{t:'entity'},navigation_path:{t:'str'},navigation_replace:{t:'bool',since:'7.0.0'},path:{t:'str'},url:{t:'str'},url_path:{t:'str'},new_tab:{t:'bool'},
     service:{t:'str'},perform_action:{t:'str'},data:{t:'map'},service_data:{t:'map'},target:{t:'map'},
     title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},section:{t:'str'},group:{t:'str'},
     confirmation:{t:'bool|map'},haptic:{t:'str'},condition:{t:'cond'},then:{t:'action'},else:{t:'action'}},open:'fire-dom-event'},
@@ -115,8 +116,8 @@ const S={
   stateImage:{keys:{entity:{t:'entity'},attribute:{t:'str'},state:{t:'any'},image:{t:'url'}}},
   overlayConds:{keys:{opacity:{t:'list:condVal'},filter:{t:'list:condVal'}}},
   zone:{keys:Object.assign({},POS,ACTS,VIS,COCKPIT,{slider:{t:'obj:slider'}},PROF_OVR)},
-  slider:{keys:{entity:{t:'entity'},action:{t:'str'},attribute:{t:'str'},direction:{t:'enum:horizontal|vertical'},min:{t:'num'},max:{t:'num'},step:{t:'num'},
-    live:{t:'bool'},invert:{t:'bool'},color:{t:'color'},service:{t:'str'},data:{t:'map'}}},
+  slider:{keys:{entity:{t:'entity'},direction:{t:'enum:horizontal|vertical'},min:{t:'num'},max:{t:'num'},
+    live:{t:'bool'},invert:{t:'bool'},color:{t:'color'}}}, // 7.0.2: action / attribute / step / service / data were never read
   badge:{keys:Object.assign({id:{t:'str',req:true},position:{t:'enum:top-left|top-right|bottom-left|bottom-right'},icon:{t:'str'},icon_color:{t:'color|list:condVal'},
     label:{t:'str|list:condVal'},label_template:{t:'tmpl'},animation:{t:'enum:none|pulse|blink'},animation_color:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR)},
   icon:{keys:Object.assign({},POS,{icon:{t:'str|list:condVal'},entity:{t:'entity'},attribute:{t:'str'},size:{t:'len'},color:{t:'color|list:condVal'},background:{t:'color'},
@@ -124,10 +125,10 @@ const S={
   label:{keys:Object.assign({},POS,{entity:{t:'entity'},attribute:{t:'str'},template:{t:'tmpl'},text:{t:'str'},prefix:{t:'str'},suffix:{t:'str'},unit:{t:'str'},
     decimals:{t:'num'},format:{t:'str'},unavailable_text:{t:'str'},color:{t:'color|list:condVal'},color_gradient:{t:'list:gradStop'},
     background:{t:'color'},padding:{t:'str'},border_radius:{t:'len'},font_size:{t:'len'},font_weight:{t:'str|num'},font_family:{t:'str'},text_shadow:{t:'str'},
-    orientation:{t:'str'},animation:{t:'str'},animation_color:{t:'color'},alert_conditions:{t:'cond'}},ACTS,VIS,COCKPIT,PROF_OVR)},
+    animation:{t:'str'},animation_color:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR)}, // 7.0.2: orientation / alert_conditions are a gauge's keys, a label never read them
   gauge:{keys:Object.assign({},POS,{entity:{t:'entity'},attribute:{t:'str'},min:{t:'num'},max:{t:'num'},
     orientation:{t:'enum:vertical|top|horizontal|left|right|radial'},color:{t:'color'},color_gradient:{t:'list:gradStop'},background:{t:'color'},border_radius:{t:'len'},
-    arc:{t:'num'},thickness:{t:'len'},target:{t:'num|entity'},target_color:{t:'color'},
+    arc:{t:'num'},thickness:{t:'num|len'},target:{t:'num'},target_color:{t:'color'},
     animation:{t:'str'},animation_color:{t:'color'},alert_conditions:{t:'cond'},transition:{t:'str'}},ACTS,VIS,COCKPIT,PROF_OVR)},
   blind:{keys:Object.assign({},POS,{entity:{t:'entity'},attribute:{t:'str'},min:{t:'num'},max:{t:'num'},
     blind_type:{t:'enum:roller|venetian|day_night'},slat_color:{t:'color'},slat_count:{t:'num'},slat_gap:{t:'len'},slat_width:{t:'len'},gap_color:{t:'color'},
@@ -137,7 +138,7 @@ const S={
   coverControl:{keys:{placement:{t:'prof:bool|enum:off|float|dock'},display:{t:'prof:bool|enum:off|popover|float|dock',legacy:true},slider:{t:'bool'},presets:{t:'list:coverPreset'},buttons:{t:'any'},
     name:{t:'str'},top:{t:'len'},left:{t:'len'},width:{t:'len'},height:{t:'len'},position:{t:'str'}}},
   coverPreset:{keys:{position:{t:'num'},icon:{t:'str'},color:{t:'color'},name:{t:'str'}}},
-  element:{keys:Object.assign({},POS,{card:{t:'card'},overflow:{t:'str'},border_radius:{t:'len'},background:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR),fromEl:true},
+  element:{keys:Object.assign({},POS,{bottom:{t:'len'},card:{t:'card'},overflow:{t:'str'},border_radius:{t:'len'},background:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR),fromEl:true},
   glow:{keys:Object.assign({},POS,{entity:{t:'entity'},size:{t:'len'},shape:{t:'enum:circle|ellipse|wash'},angle:{t:'num|str'},intensity:{t:'num'},
     falloff:{t:'enum:soft|tight|wide'},color:{t:'color'},fallback_color:{t:'color'},blend:{t:'str'},animation:{t:'enum:none|flicker|pulse'},animation_speed:{t:'str'},
     min_brightness:{t:'num'},anchor:{t:'enum:center|corner'},transition:{t:'str'}},VIS,COCKPIT,PROF_OVR)},
@@ -296,8 +297,56 @@ function obj(type,v,path,out,self){
   if(!self)for(const k in T.keys)if(T.keys[k].req&&v[k]===undefined)out.push({path:(path?path+'.':'')+k,level:'warn',msg:'missing required key'});
 }
 function rocValidate(cfg){const out=[];if(!isObj(cfg))return[{path:'',level:'error',msg:'config must be an object'}];obj('card',cfg,'',out);return out;}
+// ---- lint (7.0.2) --------------------------------------------------------------
+// rocLint(config) → [{path, level: 'warn', msg}] — what the types cannot see: references that
+// point at nothing, and things that are configured but have no region in any layout profile (the
+// card then never shows them). Kept apart from rocValidate: such a config is valid.
+function rocLint(cfg){
+  const out=[];if(!isObj(cfg))return out;
+  const lo=function(v){return String(v==null?'':v).trim().toLowerCase();};
+  const warn=function(path,msg){out.push({path:path,level:'warn',msg:msg});};
+  const rooms=Array.isArray(cfg.rooms)?cfg.rooms:[];
+  const roomKeys=new Set();
+  rooms.forEach(function(r){if(!isObj(r))return;[r.id,r.name].concat(Array.isArray(r.area_match)?r.area_match:(r.area_match==null?[]:[r.area_match])).forEach(function(x){if(x!=null&&x!=='')roomKeys.add(lo(x));});});
+  const roomIds=new Set(rooms.filter(isObj).map(function(r){return String(r.id);})); // the grid and the plan match by id alone
+  const secIds=new Set((Array.isArray(cfg.sections)?cfg.sections:[]).filter(isObj).map(function(s){return String(s.id);}));
+  (function walk(o,path){
+    if(Array.isArray(o)){o.forEach(function(x,i){walk(x,path+'['+i+']');});return;}
+    if(!isObj(o))return;
+    if(o.action==='switch-room'&&o.room!=null&&typeof o.room!=='object'&&rooms.length&&!roomKeys.has(lo(o.room)))warn(path+'.room','no room has this id or name');
+    if(o.action==='open-section'&&o.section!=null&&!secIds.has(String(o.section)))warn(path+'.section','no section has this id');
+    if(o.action===undefined&&typeof o.section==='string'&&o.id!==undefined&&!secIds.has(o.section))warn(path+'.section','no section has this id');
+    Object.keys(o).forEach(function(k){if(k!=='card'&&k!=='content')walk(o[k],path?path+'.'+k:k);}); // not into embedded cards
+  })(cfg,'');
+  rooms.forEach(function(r,i){
+    if(!isObj(r))return;
+    const ov=isObj(r.overview)?r.overview:null,fp=isObj(r.floorplan)?r.floorplan:null,p='rooms['+i+']';
+    if(ov&&isObj(ov.grid)&&Array.isArray(ov.grid.rooms))ov.grid.rooms.forEach(function(x,k){if(!roomIds.has(String(x)))warn(p+'.overview.grid.rooms['+k+']','no room has this id — it is left out of the grid');});
+    if(ov&&isObj(ov.dock)&&Array.isArray(ov.dock.sections))ov.dock.sections.forEach(function(x,k){if(!secIds.has(String(x)))warn(p+'.overview.dock.sections['+k+']','no section has this id');});
+    if(fp&&Array.isArray(fp.attention_sections))fp.attention_sections.forEach(function(x,k){if(!secIds.has(String(x)))warn(p+'.floorplan.attention_sections['+k+']','no section has this id');});
+    if(fp&&Array.isArray(fp.rooms))fp.rooms.forEach(function(x,k){if(isObj(x)&&x.room!=null&&x.room!==''&&!roomIds.has(String(x.room)))warn(p+'.floorplan.rooms['+k+'].room','no room has this id — the plan room opens nothing');});
+  });
+  // regions: a profile shows only what its `place` holds
+  const L=isObj(cfg.layout)?cfg.layout:null;
+  if(L){
+    const holders=[cfg].concat(rooms.filter(isObj));
+    const want=[];
+    const pages=rooms.filter(function(r){return isObj(r)&&!r.nav_hidden;}).length;
+    if(pages>1&&!(isObj(cfg.nav)&&cfg.nav.style==='none'))want.push(['nav','the room navigation']);
+    if(holders.some(function(h){return isObj(h.light_controls)&&Array.isArray(h.light_controls.entities)&&h.light_controls.entities.length;}))want.push(['lights','light_controls']);
+    ['cards_above','cards_below'].forEach(function(k){if(holders.some(function(h){return Array.isArray(h[k])&&h[k].length;}))want.push([k,k]);});
+    const o=L.orientation;
+    const profs=(o==='landscape'||o==='portrait')?[o]:['landscape','portrait'];
+    // only when NO profile places it: one profile without the navigation is a design, none is a mistake
+    want.forEach(function(w){
+      const placed=profs.some(function(pf){const def=isObj(L[pf])?L[pf]:null;return!!(def&&isObj(def.place)&&isObj(def.place[w[0]]));});
+      if(!placed)warn(profs.length===1?'layout.'+profs[0]+'.place':'layout',w[1]+' has no "'+w[0]+'" region in '+(profs.length===1?'the '+profs[0]+' profile':'any layout profile')+' — it is never shown');
+    });
+  }
+  return out;
+}
 // every key name the schema knows, per type (for coverage tests and the docs generator)
 function rocSchemaKeys(){const o={};for(const t in S)o[t]=Object.keys(S[t].keys);return o;}
-const api={ROC_SCHEMA:S,rocValidate,rocSchemaKeys};
+const api={ROC_SCHEMA:S,rocValidate,rocLint,rocSchemaKeys};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;else Object.assign(root,api);
 })(typeof window!=='undefined'?window:globalThis);
