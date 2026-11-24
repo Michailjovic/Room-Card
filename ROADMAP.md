@@ -1,7 +1,7 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.0.3** (2026-11-16). Verified against Home Assistant 2026.10.2; the install
-text covers 2026.11's Marketplace.
+Current release: **7.0.4** (2026-11-25). Verified against Home Assistant 2026.11.3, installed from
+its Marketplace.
 
 The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in
 [`docs/archive/`](docs/archive). This file only says where the card is going.
@@ -22,8 +22,9 @@ pre-releases. Release notes: [`RELEASE_NOTES_v7.0.0.md`](docs/releases/RELEASE_N
 Left over from Phase 10:
 
 - [x] Studio GIFs in [`docs/STUDIO.md`](docs/STUDIO.md): device frames, select / move / undo, add by drawing, turning the floor plan
-- [ ] The install text checked against a real Home Assistant 2026.11 Marketplace (labels taken
-  from its documentation)
+- [x] The install text checked against a real Home Assistant 2026.11 Marketplace (2026.11.3: found
+  by name in the default catalog, all three files installed, the dashboard resource added by
+  itself, *⋮ → Install another version* lists every release)
 
 ## 🎯 Next — 7.1
 

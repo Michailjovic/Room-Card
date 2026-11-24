@@ -252,8 +252,12 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const c=clone(BASE);c.rooms[0].floorplan.theme='sketch';
     const e6=mk(c);await sleep(30);
     t('sketch at auto quality: rough + paper filters',sr(e6).querySelectorAll('filter').length===2);
-    t('7.0.1: auto quality keeps the smooth animations (no rfp-eco)',!sr(e6).querySelector('svg.rfp-eco'));
+    t('7.0.4: auto quality runs the animations in steps too (rfp-eco is the default)',!!sr(e6).querySelector('svg.rfp-eco'));
     e6.remove();
+    const ch=clone(BASE);ch.rooms[0].floorplan.quality='high';
+    const eh=mk(ch);await sleep(30);
+    t('7.0.4: quality high keeps them smooth (no rfp-eco) and keeps the filters',!sr(eh).querySelector('svg.rfp-eco')&&!!sr(eh).querySelector('svg.rfp-svg'));
+    eh.remove();
   }
   {
     const c=clone(BASE);c.rooms[0].floorplan={};

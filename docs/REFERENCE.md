@@ -543,8 +543,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `width` | length |  |  |
-| `height` | length |  |  |
 | `z_index` | number |  |  |
 | `icon` | string **or** list of [`condVal`](#t-condval) |  |  |
 | `entity` | entity id |  |  |
@@ -740,7 +738,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#cover-control-roleta).
 | `left` | length |  |  |
 | `width` | length |  |  |
 | `height` | length |  |  |
-| `position` | string |  |  |
 
 <a id="t-coverpreset"></a>
 
@@ -856,10 +853,9 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#vacuum-status-widget).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `width` | length |  |  |
-| `height` | length |  |  |
 | `z_index` | number |  |  |
 | `size` | length |  |  |
+| `icon` | string |  |  |
 | `vacuums` | list of [`vacuumRef`](#t-vacuumref) |  |  |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |

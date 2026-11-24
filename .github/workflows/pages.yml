@@ -36,12 +36,16 @@ jobs:
           cp dist/room-overlay-card*.js dist/room-overlay-card*.js.map _site/
           touch _site/.nojekyll
           du -sh _site
+      # 7.0.4: the Pages actions on Node 24 (the v5 / v3 / v4 ones ran on Node 20, which GitHub
+      # forces onto Node 24 with a deprecation warning). Since upload-pages-artifact v4, dotfiles
+      # are left out unless asked for — the site has one, .nojekyll.
       - name: Configure Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Upload the site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
+          include-hidden-files: true
       - name: Deploy
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

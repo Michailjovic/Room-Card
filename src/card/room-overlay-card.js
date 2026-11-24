@@ -761,7 +761,10 @@ class RoomOverlayCard extends HTMLElement{
       // setTimeout(0), NOT rAF — rAF never fires in background tabs (kiosk
       // dashboards!) or during HA view transitions; a 0-delay task runs the
       // moment the current work (HA's navigation handling) is done.
-      this._locHandler=function(){setTimeout(function(){
+      // One run per navigation (7.0.4): a navigate action — the card's own, like HA's custom-card
+      // helpers — fires location-changed AND popstate back to back, which used to run this twice.
+      this._locHandler=function(){if(self._locT)return;self._locT=setTimeout(function(){
+        self._locT=null;
         if(!self._rendered)return;
         self._requestPin('location-changed');
         self._watchEditBar();

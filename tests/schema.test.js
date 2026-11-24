@@ -149,5 +149,15 @@ check('every snake_case key the card reads is in the schema (or a Home Assistant
     JSON.stringify(lint.slice().sort())===JSON.stringify(['layout.landscape.place','layout.landscape.place','rooms[1].icons[0].hold_action.room'].sort()),JSON.stringify(lint));
 }
 
+// ---- 7.0.4: point-placed elements, the vacuum widget's icon, the cover control ------------------
+{
+  const K=rocSchemaKeys();
+  check('7.0.4: an icon and a vacuum widget are sized by size — no width / height offered',!K.icon.includes('width')&&!K.icon.includes('height')&&!K.vacuumWidget.includes('width')&&!K.vacuumWidget.includes('height')&&K.icon.includes('size')&&K.vacuumWidget.includes('size'));
+  check('7.0.4: boxes keep theirs (zone, gauge, blind, glow, embedded card)',['zone','gauge','blind','glow','element'].every(t=>K[t].includes('width')&&K[t].includes('height')));
+  check('7.0.4: a cover control has no position key (nothing read it)',!K.coverControl.includes('position'));
+  const v=rocValidate({type:'custom:room-overlay-card',base_image:'/x.webp',layout:{},vacuum_widgets:[{id:'v',icon:'mdi:robot-vacuum',size:'44px',top:'1%',left:'1%',vacuums:[{entity:'sensor.s'}]}]}).filter(x=>x.level!=='info');
+  check('7.0.4: a vacuum widget\'s icon (documented, and what the studio writes) is a known key',v.length===0,JSON.stringify(v));
+}
+
 console.log(fails?('\n'+fails+' SCHEMA TEST(S) FAILED'):'\nALL SCHEMA TESTS PASSED');
 process.exit(fails?1:0);

@@ -552,8 +552,6 @@ icon {
   id!: str;
   top: len;
   left: len;
-  width: len;
-  height: len;
   z_index: num;
   icon: str | condVal[];
   entity: entity;
@@ -712,7 +710,6 @@ coverControl {
   left: len;
   width: len;
   height: len;
-  position: str;
 }
 coverPreset {
   position: num;
@@ -787,10 +784,9 @@ vacuumWidget {
   id!: str;
   top: len;
   left: len;
-  width: len;
-  height: len;
   z_index: num;
   size: len;
+  icon: str;
   vacuums: vacuumRef[];
   tap_action: action;
   hold_action: action;

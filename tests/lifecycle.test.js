@@ -567,6 +567,22 @@ t('rejected template subscription is caught, not unhandled',unhandled===0);
     t('7.0.2: a rejected toggle is caught, not an unhandled rejection',unhandled===u0);el.remove();}
   }
 
+  // 7.0.4 — a navigation runs the card's location handler once
+  {
+  const tick=()=>new Promise(r=>setTimeout(r,40));
+  const el=mkCard({base_image:'/local/x.webp',layout:{},zones:[{id:'z',top:'1%',left:'1%',width:'9%',height:'9%',tap_action:{action:'navigate',navigation_path:'/lovelace/x'}}]},{});
+  await tick();
+  let pins=0;const rp=el._requestPin.bind(el);el._requestPin=function(r){if(r==='location-changed')pins++;return rp(r);};
+  let pops=0;const onPop=()=>{pops++;};w.addEventListener('popstate',onPop);
+  const hp=w.history.pushState;w.history.pushState=function(){}; // this window is about:blank, where a real pushState throws
+  el.shadowRoot.querySelector('[data-z="z"]').dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();
+  w.history.pushState=hp;w.removeEventListener('popstate',onPop);
+  t('7.0.4: a navigate action runs the location handler once (location-changed + popstate are one navigation), popstate still fires for others',pins===1&&pops===1);
+  w.dispatchEvent(new w.Event('location-changed'));await tick();
+  t('7.0.4: …and the next navigation runs it again',pins===2);
+  el.remove();
+  }
+
 console.log(fails?('FAILURES: '+fails):'ALL LIFECYCLE TESTS PASSED');
 process.exit(fails?1:0);
 

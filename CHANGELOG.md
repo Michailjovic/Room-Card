@@ -1,5 +1,39 @@
 # Changelog
 
+## [7.0.4] - 2026-11-25
+
+Lighter floor plan by default, two small fixes and a tidier schema. No new config keys.
+
+### Changes
+
+- **Floor plan: the animations run in steps by default** (about ten a second) — the heating flow,
+  the pulses and the markers. They animate SVG paint, which the browser cannot hand to the
+  compositor: smooth, they repainted the whole plan 60 times a second for as long as it was on
+  screen. Until now only `quality: low` stepped them; **`quality: high`** now keeps them smooth.
+  `quality: low` still also drops the SVG filters.
+
+### Fixes
+
+- **A navigate action ran the card's navigation handler twice** (it fires `location-changed` and
+  `popstate` back to back, like Home Assistant's own helpers). One navigation is now one run, for
+  every card on the page; the events themselves are unchanged.
+- **A vacuum widget's `icon`** was missing from the schema: it is documented, the card reads it and
+  the studio writes it into every new widget — and the config check then reported it as an
+  unknown key.
+
+### Schema
+
+- **Icons and vacuum widgets no longer offer `width` / `height`** — they are placed at a point and
+  sized by `size`, and never read either. A cover control no longer offers `position`, which
+  nothing read. (The forms, REFERENCE.md and AI_SPEC.md follow; a config that still has them is
+  drawn exactly as before, the config check only notes the key.)
+
+### Repository
+
+- The demo workflow uses the Pages actions on Node 24 (`configure-pages` v6,
+  `upload-pages-artifact` v5, `deploy-pages` v5) — the Node 20 deprecation warning is gone.
+- ROADMAP: the Marketplace install text is checked on Home Assistant 2026.11.3.
+
 ## [7.0.3] - 2026-11-16
 
 No change to the card. A release now refuses to ship files that are not the version on its tag.

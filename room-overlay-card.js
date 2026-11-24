@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.0.3';
+const ROC_VERSION='7.0.4';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -2518,7 +2518,10 @@ class RoomOverlayCard extends HTMLElement{
       // setTimeout(0), NOT rAF — rAF never fires in background tabs (kiosk
       // dashboards!) or during HA view transitions; a 0-delay task runs the
       // moment the current work (HA's navigation handling) is done.
-      this._locHandler=function(){setTimeout(function(){
+      // One run per navigation (7.0.4): a navigate action — the card's own, like HA's custom-card
+      // helpers — fires location-changed AND popstate back to back, which used to run this twice.
+      this._locHandler=function(){if(self._locT)return;self._locT=setTimeout(function(){
+        self._locT=null;
         if(!self._rendered)return;
         self._requestPin('location-changed');
         self._watchEditBar();
