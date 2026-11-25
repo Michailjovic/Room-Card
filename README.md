@@ -232,6 +232,8 @@ npm run docs            # regenerate docs/REFERENCE.md and the AI spec's schema 
 npm test                # assemble + docs check, smoke, render, lifecycle, design, overview, schema, floorplan, studio tiers (jsdom)
 npm run test:e2e        # Playwright: geometry regression, studio and floor plan tests, real Chromium
 npm run test:compat     # render every reference config with the last release and this build, compare
+npm run test:keys       # every key of the schema has an effect, or a reason why a render cannot show it (~1 min)
+npm run test:stale      # an in-place update draws what a fresh render draws, every demo page and entity (~5–10 min)
 npm run test:ha         # real Home Assistant in Docker: editor dialog, studio, dashboard save paths
 npm run build           # build the minified dist/ bundles
 npm run build:verify    # build, then run the test tiers against the minified bundles

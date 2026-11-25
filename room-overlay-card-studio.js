@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.0.4';
+const ROC_STUDIO_VERSION='7.0.5';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -80,7 +80,11 @@ const PROF_OVR={portrait:{t:'self'},landscape:{t:'self'},mobile:{t:'self',legacy
 const POS={id:{t:'str',req:true},top:{t:'len'},left:{t:'len'},width:{t:'len'},height:{t:'len'},z_index:{t:'num'}};
 // elements placed at a point and sized by `size` (7.0.4: an icon or a vacuum widget never read width / height)
 const PT={id:{t:'str',req:true},top:{t:'len'},left:{t:'len'},z_index:{t:'num'}};
+// 7.0.5: the animation a badge, a label and an icon share (blink / pulse; a colour makes pulse glow)
+const ANIM={animation:{t:'enum:none|pulse|blink'},animation_color:{t:'color'}};
 const VIS={group:{t:'str'},visible:{t:'cond|list:cond'},visible_conditions:{t:'cond|list:cond'},visible_template:{t:'tmpl'},fade:{t:'bool|str'},slide:{t:'bool|str'},nav_mini:{t:'bool'}};
+// 7.0.5: an overlay shows and hides at once (its opacity follows `conditions` / `transition`) — no fade / slide
+const VIS_OV=Object.assign({},VIS);delete VIS_OV.fade;delete VIS_OV.slide;
 const ACTS={tap_action:{t:'action'},hold_action:{t:'action'},double_tap_action:{t:'action'},hold_delay:{t:'num'}};
 const COCKPIT={section:{t:'str'},tile:{t:'obj:tile'}};
 const COND_VAL={condition:{t:'cond'},value:{t:'any'}};
@@ -149,7 +153,7 @@ const S={
     cards_above:{t:'list:companion',room:true},cards_below:{t:'list:companion',room:true},
     light_controls:{t:'obj:lightControls',room:true},
   }},
-  baseImageCond:{keys:Object.assign({image:{t:'url'}},COND_VAL)},
+  baseImageCond:{keys:{condition:{t:'cond'},image:{t:'url'}}}, // 7.0.5: `value` was never read — the image is `image`
   filterCond:{keys:{condition:{t:'cond'},filter:{t:'str'}}},
   weather:{keys:{entity:{t:'entity'},effect:{t:'enum:auto|rain|snow|fog|lightning'},opacity:{t:'num'},z_index:{t:'num'},angle:{t:'num|str'}}},
   brightnessModel:{keys:{source:{t:'list:bmSource'},filter_gradient:{t:'list:bmStop'}}}, // 7.0.0-beta.2: source is a list (the card reads the first that has a value)
@@ -170,28 +174,29 @@ const S={
   spin:{keys:{min_duration:{t:'num|str'},max_duration:{t:'num|str'},axis:{t:'enum:x|y|z'},reverse:{t:'bool'},min_value:{t:'num'},max_value:{t:'num'}}},
   // ---------------------------------------------------------------- elements
   overlay:{keys:Object.assign({id:{t:'str',req:true},image:{t:'url'},state_images:{t:'list:stateImage'},conditions:{t:'obj:overlayConds'},
-    transition:{t:'str'},z_index:{t:'num'},animation:{t:'enum:none|pulse|blink'},color_from:{t:'entity'},transform:{t:'obj:transform',since:'6.7.0'},className:{t:'str'}},VIS,COCKPIT,PROF_OVR)},
+    transition:{t:'str'},z_index:{t:'num'},animation:{t:'enum:none|pulse|blink'},color_from:{t:'entity'},transform:{t:'obj:transform',since:'6.7.0'}},VIS_OV,COCKPIT,PROF_OVR)}, // 7.0.5: `className` / `fade` / `slide` were never read
   stateImage:{keys:{entity:{t:'entity'},attribute:{t:'str'},state:{t:'any'},image:{t:'url'}}},
   overlayConds:{keys:{opacity:{t:'list:condVal'},filter:{t:'list:condVal'}}},
   zone:{keys:Object.assign({},POS,ACTS,VIS,COCKPIT,{slider:{t:'obj:slider'}},PROF_OVR)},
   slider:{keys:{entity:{t:'entity'},direction:{t:'enum:horizontal|vertical'},min:{t:'num'},max:{t:'num'},
     live:{t:'bool'},invert:{t:'bool'},color:{t:'color'}}}, // 7.0.2: action / attribute / step / service / data were never read
   badge:{keys:Object.assign({id:{t:'str',req:true},position:{t:'enum:top-left|top-right|bottom-left|bottom-right'},icon:{t:'str'},icon_color:{t:'color|list:condVal'},
-    label:{t:'str|list:condVal'},label_template:{t:'tmpl'},animation:{t:'enum:none|pulse|blink'},animation_color:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR)},
-  icon:{keys:Object.assign({},PT,{icon:{t:'str|list:condVal'},entity:{t:'entity'},attribute:{t:'str'},size:{t:'len'},color:{t:'color|list:condVal'},background:{t:'color'},
-    chip:{t:'bool'},section_status:{t:'bool',since:'6.16.0'},animation:{t:'str'},animation_color:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR)},
-  label:{keys:Object.assign({},POS,{entity:{t:'entity'},attribute:{t:'str'},template:{t:'tmpl'},text:{t:'str'},prefix:{t:'str'},suffix:{t:'str'},unit:{t:'str'},
-    decimals:{t:'num'},format:{t:'str'},unavailable_text:{t:'str'},color:{t:'color|list:condVal'},color_gradient:{t:'list:gradStop'},
+    label:{t:'str|list:condVal'},label_template:{t:'tmpl'}},ANIM,ACTS,VIS,COCKPIT,PROF_OVR)},
+  icon:{keys:Object.assign({},PT,{icon:{t:'str|list:condVal'},entity:{t:'entity'},size:{t:'len'},color:{t:'color|list:condVal'},background:{t:'color'},
+    chip:{t:'bool'},section_status:{t:'bool',since:'6.16.0'}},ANIM,ACTS,VIS,COCKPIT,PROF_OVR)}, // 7.0.5: `attribute` was never read; the animation is drawn now
+  label:{keys:Object.assign({},PT,{entity:{t:'entity'},attribute:{t:'str'},template:{t:'tmpl'},text:{t:'str'},prefix:{t:'str'},suffix:{t:'str'},unit:{t:'str'},
+    decimals:{t:'num'},format:{t:'enum:raw|relative'},unavailable_text:{t:'str'},color:{t:'color|list:condVal'},color_gradient:{t:'list:gradStop'},
     background:{t:'color'},padding:{t:'str'},border_radius:{t:'len'},font_size:{t:'len'},font_weight:{t:'str|num'},font_family:{t:'str'},text_shadow:{t:'str'},
-    animation:{t:'str'},animation_color:{t:'color'}},ACTS,VIS,COCKPIT,PROF_OVR)}, // 7.0.2: orientation / alert_conditions are a gauge's keys, a label never read them
+    },ANIM,ACTS,VIS,COCKPIT,PROF_OVR)}, // 7.0.2: orientation / alert_conditions are a gauge's keys, a label never read them; 7.0.5: nor width / height (a label is placed at a point)
   gauge:{keys:Object.assign({},POS,{entity:{t:'entity'},attribute:{t:'str'},min:{t:'num'},max:{t:'num'},
     orientation:{t:'enum:vertical|top|horizontal|left|right|radial'},color:{t:'color'},color_gradient:{t:'list:gradStop'},background:{t:'color'},border_radius:{t:'len'},
     arc:{t:'num'},thickness:{t:'num|len'},target:{t:'num'},target_color:{t:'color'},
-    animation:{t:'str'},animation_color:{t:'color'},alert_conditions:{t:'cond'},transition:{t:'str'}},ACTS,VIS,COCKPIT,PROF_OVR)},
+    animation:{t:'enum:none|pulse|blink'},animation_color:{t:'color'},alert_conditions:{t:'cond'},transition:{t:'str'}},ACTS,VIS,COCKPIT,PROF_OVR)},
   blind:{keys:Object.assign({},POS,{entity:{t:'entity'},attribute:{t:'str'},min:{t:'num'},max:{t:'num'},
     blind_type:{t:'enum:roller|venetian|day_night'},slat_color:{t:'color'},slat_count:{t:'num'},slat_gap:{t:'len'},slat_width:{t:'len'},gap_color:{t:'color'},
     top_offset:{t:'num',since:'5.1.0'},shift_turns:{t:'num'},shift_start:{t:'num'},shift_snap:{t:'bool'},shift_legacy:{t:'bool'},
-    icon:{t:'str'},label:{t:'str'},label_template:{t:'tmpl'},value:{t:'any'},animation:{t:'str'},animation_color:{t:'color'},
+    icon:{t:'str'}, // the tile icon when the blind is collected into a section
+    // 7.0.5: label / label_template / value / animation / animation_color were never read
     control:{t:'bool|obj:coverControl'}},ACTS,VIS,COCKPIT,PROF_OVR)},
   coverControl:{keys:{placement:{t:'prof:bool|enum:off|float|dock'},display:{t:'prof:bool|enum:off|popover|float|dock',legacy:true},slider:{t:'bool'},presets:{t:'list:coverPreset'},buttons:{t:'any'},
     name:{t:'str'},top:{t:'len'},left:{t:'len'},width:{t:'len'},height:{t:'len'}}},
@@ -204,7 +209,7 @@ const S={
   vacuumWidget:{keys:Object.assign({},PT,{size:{t:'len'},icon:{t:'str'},vacuums:{t:'list:vacuumRef'}},ACTS,VIS,COCKPIT,PROF_OVR)}, // 7.0.4: icon (documented, read, written by the studio) was missing
   vacuumRef:{keys:{entity:{t:'entity'},name:{t:'str'}}},
   lightControls:{keys:{entities:{t:'list:lightEntity'},style:{t:'enum:native'},columns:{t:'num'},height:{t:'prof:len'},
-    lux_sensor:{t:'entity'},lux_max:{t:'num'},color_low:{t:'color'},color_high:{t:'color'},bg_off:{t:'color'},top:{t:'len'},left:{t:'len'}}},
+    lux_sensor:{t:'entity'},lux_max:{t:'num'},color_low:{t:'color'},color_high:{t:'color'},bg_off:{t:'color'}}}, // 7.0.5: top / left were never read (the strip sits in its layout region)
   lightEntity:{keys:{entity:{t:'entity'},name:{t:'str'},icon:{t:'str'}},scalar:'entity'},
   // ---------------------------------------------------------------- nav
   nav:{keys:{style:{t:'enum:thumbnails|tabs|dots|none'},position:{t:'enum:top|bottom|left|right'},live:{t:'enum:off|composite|full|custom'},
@@ -383,6 +388,23 @@ function rocLint(cfg){
     if(ov&&isObj(ov.dock)&&Array.isArray(ov.dock.sections))ov.dock.sections.forEach(function(x,k){if(!secIds.has(String(x)))warn(p+'.overview.dock.sections['+k+']','no section has this id');});
     if(fp&&Array.isArray(fp.attention_sections))fp.attention_sections.forEach(function(x,k){if(!secIds.has(String(x)))warn(p+'.floorplan.attention_sections['+k+']','no section has this id');});
     if(fp&&Array.isArray(fp.rooms))fp.rooms.forEach(function(x,k){if(isObj(x)&&x.room!=null&&x.room!==''&&!roomIds.has(String(x.room)))warn(p+'.floorplan.rooms['+k+'].room','no room has this id — the plan room opens nothing');});
+  });
+  // 7.0.5: a blind with a float cover control — the tap reveals the controller, so the blind's own actions never run
+  const floatCtl=function(ctl){
+    if(ctl===true)return true;if(!isObj(ctl))return false;
+    const pv=function(v){return isObj(v)?[v.portrait,v.landscape]:[v];};
+    const pl=pv(ctl.placement),dp=pv(ctl.display);
+    return pl.some(function(v,i){const d=dp.length>1?dp[i]:dp[0];
+      if(v==='off'||v===false||d==='off'||d===false)return false;
+      return v===undefined?d!=='dock':v!=='dock';});
+  };
+  [cfg].concat(rooms).forEach(function(h,hi){
+    if(!isObj(h)||!Array.isArray(h.blinds))return;
+    h.blinds.forEach(function(b,i){
+      if(!isObj(b)||!b.entity||!floatCtl(b.control))return;
+      const a=['tap_action','hold_action','double_tap_action'].filter(function(k){return b[k]!==undefined;});
+      if(a.length)warn((hi?'rooms['+(hi-1)+'].':'')+'blinds['+i+'].'+a[0],'not used: the float cover control takes the tap on this blind (placement: dock lets the blind\'s own actions run)');
+    });
   });
   // regions: a profile shows only what its `place` holds
   const L=isObj(cfg.layout)?cfg.layout:null;

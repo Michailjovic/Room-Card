@@ -1,5 +1,57 @@
 # Changelog
 
+## [7.0.5] - 2026-11-25
+
+Two new test tiers, the fixes they found, and a lighter room switch. No new config keys.
+
+### Fixes
+
+- **A blind in a group** showed and hid with nothing: `group` (and `fade` / `slide`) were dropped
+  on the way from the blind to its drawing. A blind's **`tap_action` / `hold_action` /
+  `double_tap_action`** were dropped the same way and never ran. They run now — except on a blind
+  with a `float` cover control, whose tap reveals the controller as documented; the config check
+  notes such an action (`placement: dock` or no `control:` lets it run).
+- **An icon's `animation` / `animation_color`** were in the schema and the studio's form and drew
+  nothing. An icon blinks or pulses now like a label or a badge (`pulse` with a colour glows).
+- **A badge with both `label` and `label_template`** showed the template's answer only until the
+  next state change put `label` back. `label` is the placeholder until the template answers.
+- **A gauge with `animation: none`** pulsed (any value but `blink` meant pulse).
+
+### Performance
+
+- **A room switch** lays out the card twice instead of four or five times and runs its state
+  pass once: the kept navigation strip got its scroll position back in the middle of the render
+  (a full layout of the new room, done again a moment later), every render's visibility observer
+  ran a second state pass for a card that never left the screen, every cached nearby picture
+  laid the card out again, and the dashboard's scroll container was searched for anew with a
+  style read up the whole page. In the demo (Chromium, desktop) the switch itself went from
+  about 16 to 13.5 ms (median of 18 switches); forced layouts from 4.5 to 2.3 per switch.
+
+### Schema
+
+- **The forms offer only what the card reads (continued):** removed an overlay's `className`,
+  `fade` and `slide` (an overlay shows and hides at once; its opacity follows `conditions` /
+  `transition`), an icon's `attribute`, a label's `width` / `height` (a label is placed at a
+  point), a blind's `label` / `label_template` / `value` / `animation` / `animation_color`, a base
+  image condition's `value` (the image is `image`) and the light controls' `top` / `left` (the
+  strip sits in its layout region). A config that still has them is drawn exactly as before; the
+  config check notes the key.
+- `animation` is `none` / `pulse` / `blink` on badges, labels, icons and gauges, and a label's
+  `format` is `raw` / `relative` — the forms offer a choice instead of a free text field.
+
+### Tests
+
+- **`tests/keys.test.js`** (`npm run test:keys`, ~1 min): for every key of every element type in
+  the schema, a card is drawn without it and with sample values, updated, and tapped. A key that
+  changes nothing either has a reason in its ALLOW list (it acts on a gesture, over time, in a
+  real layout…) or fails. Three groups of keys are listed there as *pending decision* — offered,
+  not read yet (see ROADMAP).
+- **`tests/stale.test.js`** (`npm run test:stale`, ~5–10 min): for every page of the demo, each
+  section panel open, and every entity of its scenario (state and attributes), the card updated
+  in place must draw exactly what a fresh render draws — the kind of bug 7.0.1 fixed by hand (the
+  light pills kept an old brightness). Reverting that fix makes it fail.
+- New checks for every fix above in the lifecycle and schema tiers.
+
 ## [7.0.4] - 2026-11-25
 
 Lighter floor plan by default, two small fixes and a tidier schema. No new config keys.

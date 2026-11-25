@@ -121,6 +121,13 @@ function rocVisOk(it,s){
   return(v&&typeof v==='object')?evalCond(v,s):true;
 }
 function rocHasVis(it){return it.visible!==undefined||it.visible_conditions!==undefined;}
+// The `animation` a badge, a label and (7.0.5) an icon share: `blink`, or `pulse` — a glow in
+// `animation_color` when one is given, else a fade. Inline CSS for the element's own style.
+function rocAnimCss(o){
+  if(!o||o.animation==='blink')return o?'animation:roc-blink 1s step-end infinite;':'';
+  if(o.animation!=='pulse')return'';
+  return o.animation_color?'--roc-ac:'+o.animation_color+';animation:roc-glow 2s ease-in-out infinite;':'animation:roc-pulse 2s ease-in-out infinite;';
+}
 
 // Conditional-value resolvers. Every one of these accepts EITHER the full
 // [{condition,value},…] list OR a bare scalar shorthand (`label: Kitchen`,

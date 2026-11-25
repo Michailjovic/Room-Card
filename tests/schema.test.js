@@ -159,5 +159,21 @@ check('every snake_case key the card reads is in the schema (or a Home Assistant
   check('7.0.4: a vacuum widget\'s icon (documented, and what the studio writes) is a known key',v.length===0,JSON.stringify(v));
 }
 
+// ---- 7.0.5: keys nothing read are gone; animation is one enum; a blind's actions vs its float control --
+{
+  const K=rocSchemaKeys();const {rocLint,ROC_SCHEMA:SC}=require(path.join(ROOT,'src','schema','roc-schema.js'));
+  const gone={overlay:['className','fade','slide'],icon:['attribute'],label:['width','height'],blind:['label','label_template','value','animation','animation_color'],
+    baseImageCond:['value'],lightControls:['top','left']};
+  const left=[];for(const t in gone)for(const k of gone[t])if(K[t].includes(k))left.push(t+'.'+k);
+  check('7.0.5: keys the card never read are not offered (overlay className / fade / slide, icon attribute, label width / height, blind label…, base image value, light controls top / left)',left.length===0,left.join(', '));
+  check('7.0.5: …and the ones that work stay (overlay visible, label top / left, blind icon / group / actions, base image condition + image)',K.overlay.includes('visible')&&K.label.includes('top')&&K.blind.includes('icon')&&K.blind.includes('group')&&K.blind.includes('tap_action')&&K.baseImageCond.includes('condition')&&K.baseImageCond.includes('image'));
+  check('7.0.5: badge, label, icon and gauge offer animation as none / pulse / blink',['badge','label','icon','gauge'].every(t=>SC[t].keys.animation.t==='enum:none|pulse|blink'));
+  check('7.0.5: a label\'s format is raw or relative',SC.label.keys.format.t==='enum:raw|relative');
+  const L=rocLint({blinds:[{id:'a',entity:'cover.x',control:true,tap_action:{action:'toggle'}},{id:'b',entity:'cover.x',control:{placement:'dock'},tap_action:{action:'toggle'}},{id:'c',entity:'cover.x',tap_action:{action:'toggle'}},
+    {id:'d',entity:'cover.x',control:{placement:{portrait:'dock',landscape:'float'}},hold_action:{action:'more-info'}},{id:'e',entity:'cover.x',control:{placement:'off'},tap_action:{action:'toggle'}}],
+    rooms:[{id:'r',blinds:[{id:'f',entity:'cover.y',control:{},double_tap_action:{action:'toggle'}}]}]});
+  check('7.0.5: rocLint notes a blind action a float cover control makes unused — not with dock / off / no control',L.map(x=>x.path).join()==='blinds[0].tap_action,blinds[3].hold_action,rooms[0].blinds[0].double_tap_action',JSON.stringify(L.map(x=>x.path)));
+}
+
 console.log(fails?('\n'+fails+' SCHEMA TEST(S) FAILED'):'\nALL SCHEMA TESTS PASSED');
 process.exit(fails?1:0);

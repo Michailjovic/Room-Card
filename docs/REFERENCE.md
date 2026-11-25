@@ -319,9 +319,8 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#conditions).
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `image` | image URL |  |  |
 | `condition` | [condition](#t-cond) |  |  |
-| `value` | any |  |  |
+| `image` | image URL |  |  |
 
 <a id="t-filtercond"></a>
 
@@ -416,13 +415,10 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#overlays).
 | `animation` | `none` · `pulse` · `blink` |  |  |
 | `color_from` | entity id |  |  |
 | `transform` | [`transform`](#t-transform) |  | since 6.7.0 |
-| `className` | string |  |  |
 | `group` | string |  |  |
 | `visible` | [condition](#t-cond) **or** list of [`cond`](#t-cond) |  |  |
 | `visible_conditions` | [condition](#t-cond) **or** list of [`cond`](#t-cond) |  |  |
 | `visible_template` | template |  |  |
-| `fade` | boolean **or** string |  |  |
-| `slide` | boolean **or** string |  |  |
 | `nav_mini` | boolean |  |  |
 | `section` | string |  |  |
 | `tile` | [`tile`](#t-tile) |  |  |
@@ -546,13 +542,12 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `z_index` | number |  |  |
 | `icon` | string **or** list of [`condVal`](#t-condval) |  |  |
 | `entity` | entity id |  |  |
-| `attribute` | string |  |  |
 | `size` | length |  |  |
 | `color` | colour **or** list of [`condVal`](#t-condval) |  |  |
 | `background` | colour |  |  |
 | `chip` | boolean |  |  |
 | `section_status` | boolean |  | since 6.16.0 |
-| `animation` | string |  |  |
+| `animation` | `none` · `pulse` · `blink` |  |  |
 | `animation_color` | colour |  |  |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |
@@ -581,8 +576,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `id` | string |  | required |
 | `top` | length |  |  |
 | `left` | length |  |  |
-| `width` | length |  |  |
-| `height` | length |  |  |
 | `z_index` | number |  |  |
 | `entity` | entity id |  |  |
 | `attribute` | string |  |  |
@@ -592,7 +585,7 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `suffix` | string |  |  |
 | `unit` | string |  |  |
 | `decimals` | number |  |  |
-| `format` | string |  |  |
+| `format` | `raw` · `relative` |  |  |
 | `unavailable_text` | string |  |  |
 | `color` | colour **or** list of [`condVal`](#t-condval) |  |  |
 | `color_gradient` | list of [`gradStop`](#t-gradstop) |  |  |
@@ -603,7 +596,7 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#icons--labels).
 | `font_weight` | string **or** number |  |  |
 | `font_family` | string |  |  |
 | `text_shadow` | string |  |  |
-| `animation` | string |  |  |
+| `animation` | `none` · `pulse` · `blink` |  |  |
 | `animation_color` | colour |  |  |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |
@@ -648,7 +641,7 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#gauges).
 | `thickness` | number **or** length |  |  |
 | `target` | number |  |  |
 | `target_color` | colour |  |  |
-| `animation` | string |  |  |
+| `animation` | `none` · `pulse` · `blink` |  |  |
 | `animation_color` | colour |  |  |
 | `alert_conditions` | [condition](#t-cond) |  |  |
 | `transition` | string |  |  |
@@ -698,11 +691,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#blinds).
 | `shift_snap` | boolean |  |  |
 | `shift_legacy` | boolean |  |  |
 | `icon` | string |  |  |
-| `label` | string |  |  |
-| `label_template` | template |  |  |
-| `value` | any |  |  |
-| `animation` | string |  |  |
-| `animation_color` | colour |  |  |
 | `control` | boolean **or** [`coverControl`](#t-covercontrol) |  |  |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |
@@ -901,8 +889,6 @@ Guide: [CONFIGURATION.md](CONFIGURATION.md#light-controls-sliders-with-lux-ring)
 | `color_low` | colour |  |  |
 | `color_high` | colour |  |  |
 | `bg_off` | colour |  |  |
-| `top` | length |  |  |
-| `left` | length |  |  |
 
 <a id="t-lightentity"></a>
 

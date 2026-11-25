@@ -145,6 +145,8 @@ function blindToGaugeConfig(b){
   if(b.visible!==undefined)base.visible=b.visible;
   if(b.visible_conditions!==undefined)base.visible_conditions=b.visible_conditions;
   if(b.visible_template!==undefined)base.visible_template=b.visible_template;
+  // 7.0.5: a blind in a group hid with nothing, its fade / slide and its actions were dropped here
+  ['group','fade','slide','tap_action','hold_action','double_tap_action','hold_delay'].forEach(function(k){if(b[k]!==undefined)base[k]=b[k];});
   if(type==='roller'){
     return[Object.assign({},base,{color:sc})];
   }else if(type==='day_night'){

@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.0.4** (2026-11-25). Verified against Home Assistant 2026.11.3, installed from
+Current release: **7.0.5** (2026-11-25). Verified against Home Assistant 2026.11.3, installed from
 its Marketplace.
 
 The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in
@@ -40,6 +40,11 @@ Left over from Phase 10:
 - **Multi-floor homes** — one floor plan page per floor (V7_PLAN §11.4).
 - **Openings in the `thermal` and `tiles` themes** ([FLOORPLAN.md](docs/FLOORPLAN.md#coming-next)).
 - **Inline save-failure hint** (old E6) wherever a save can still fail silently.
+- **Keys the schema offers that the card does not read yet** — implement or remove, the author
+  decides; `tests/keys.test.js` lists them as *PENDING DECISION*: an embedded card's
+  `tap_action` / `hold_action` / `double_tap_action` (the inner card has its own taps), a
+  navigation chip's `template` / `icon` / `active_state` / `tap_action` / `hold_action`, a vacuum
+  widget vacuum's `name`.
 
 ## 🔭 v8 idea — furniture on the floor plan
 
@@ -84,6 +89,10 @@ The card is in HACS's default list (`hacs/default` → `plugin`), so it installs
   property stays fully supported).
 - Minimum HA in `hacs.json` stays at 2023.9.0; newer-only features (grid options, entity
   suggestions) degrade gracefully.
+- **Two slow tiers outside `npm test`** (7.0.5): `npm run test:keys` (every schema key has an
+  effect, ~1 min) and `npm run test:stale` (an incremental update draws what a fresh render
+  draws, for every page and entity of the demo, ~5–10 min). A new key either works or gets a
+  reason in the ALLOW list of `tests/keys.test.js`.
 
 ---
 

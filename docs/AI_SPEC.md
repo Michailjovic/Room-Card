@@ -425,9 +425,8 @@ gradStop {
   color: color;
 }
 baseImageCond {
-  image: url;
   condition: cond;
-  value: any;
+  image: url;
 }
 filterCond {
   condition: cond;
@@ -473,13 +472,10 @@ overlay {
   animation: "none"|"pulse"|"blink";
   color_from: entity;
   transform: transform @6.7.0;
-  className: str;
   group: str;
   visible: cond | cond[];
   visible_conditions: cond | cond[];
   visible_template: tmpl;
-  fade: bool | str;
-  slide: bool | str;
   nav_mini: bool;
   section: str;
   tile: tile;
@@ -555,13 +551,12 @@ icon {
   z_index: num;
   icon: str | condVal[];
   entity: entity;
-  attribute: str;
   size: len;
   color: color | condVal[];
   background: color;
   chip: bool;
   section_status: bool @6.16.0;
-  animation: str;
+  animation: "none"|"pulse"|"blink";
   animation_color: color;
   tap_action: action;
   hold_action: action;
@@ -581,8 +576,6 @@ label {
   id!: str;
   top: len;
   left: len;
-  width: len;
-  height: len;
   z_index: num;
   entity: entity;
   attribute: str;
@@ -592,7 +585,7 @@ label {
   suffix: str;
   unit: str;
   decimals: num;
-  format: str;
+  format: "raw"|"relative";
   unavailable_text: str;
   color: color | condVal[];
   color_gradient: gradStop[];
@@ -603,7 +596,7 @@ label {
   font_weight: str | num;
   font_family: str;
   text_shadow: str;
-  animation: str;
+  animation: "none"|"pulse"|"blink";
   animation_color: color;
   tap_action: action;
   hold_action: action;
@@ -639,7 +632,7 @@ gauge {
   thickness: num | len;
   target: num;
   target_color: color;
-  animation: str;
+  animation: "none"|"pulse"|"blink";
   animation_color: color;
   alert_conditions: cond;
   transition: str;
@@ -680,11 +673,6 @@ blind {
   shift_snap: bool;
   shift_legacy: bool;
   icon: str;
-  label: str;
-  label_template: tmpl;
-  value: any;
-  animation: str;
-  animation_color: color;
   control: bool | coverControl;
   tap_action: action;
   hold_action: action;
@@ -816,8 +804,6 @@ lightControls {
   color_low: color;
   color_high: color;
   bg_off: color;
-  top: len;
-  left: len;
 }
 lightEntity (or a bare entity string) {
   entity: entity;

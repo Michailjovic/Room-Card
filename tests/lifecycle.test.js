@@ -583,6 +583,66 @@ t('rejected template subscription is caught, not unhandled',unhandled===0);
   el.remove();
   }
 
+  // 7.0.5 — a room switch does its state pass once, reuses its pictures and keeps its scroller
+  {
+  const tick=()=>new Promise(r=>setTimeout(r,40));
+  const st=(id,v,a)=>({[id]:{entity_id:id,state:String(v),attributes:a||{}}});
+  const el=mkCard({layout:{},rooms:[{id:'a',base_image:'/local/a.webp',overlays:[{id:'o',image:'/local/ao.webp'}]},{id:'b',base_image:'/local/b.webp'},{id:'c',base_image:'/local/c.webp'}]},{});
+  await tick();
+  let ups=0;const up=el._update.bind(el);el._update=function(){ups++;return up();};
+  const imgs0={};(el._preloadImgs||[]).forEach(function(im){imgs0[im._rocUrl]=im;});
+  const sc=w.document.body;el._scrollEl=sc;
+  el._switchRoom(1,1,true);await tick();
+  t('7.0.5: a room switch runs one state pass (the visibility observer re-observing the card no longer adds a second)',ups===1);
+  const same=(el._preloadImgs||[]).filter(function(im){return imgs0[im._rocUrl]===im;}).length;
+  t('7.0.5: …reuses the pictures the last render already preloaded ('+same+' of '+(el._preloadImgs||[]).length+')',same>=3&&same===(el._preloadImgs||[]).length);
+  t('7.0.5: …and keeps the scroll container it found (no style read up the dashboard)',el._scrollEl===sc);
+  ups=0;el._io.cb([{target:el,isIntersecting:false}],el._io);el._io.cb([{target:el,isIntersecting:true}],el._io);
+  t('7.0.5: scrolled back into view, the card still catches up with one state pass',ups===1);
+  el.remove();
+  }
+  {
+  const tick=()=>new Promise(r=>setTimeout(r,40));
+  const st=(id,v,a)=>({[id]:{entity_id:id,state:String(v),attributes:a||{}}});
+  const S=Object.assign({},st('cover.c','open',{current_position:40}),st('sensor.t','21'));
+  const blind=function(x){return Object.assign({id:'bl',entity:'cover.c',top:'10%',left:'10%',width:'10%',height:'30%'},x||{});};
+  // a blind in a group hides with the group, and its actions run (without a float control)
+  let el=mkCard({base_image:'/local/x.webp',layout:{},groups:[{id:'g',visible:false}],blinds:[blind({group:'g'})]},S);await tick();
+  const g0=el._gaugeEls.__bl_bl;
+  t('7.0.5: a blind in a hidden group is hidden with it (the group was dropped on the way to the drawing)',!!g0&&g0.style.visibility==='hidden');
+  el.remove();
+  const calls=[];
+  el=mkCard({base_image:'/local/x.webp',layout:{},blinds:[blind({tap_action:{action:'toggle'}})]},S);await tick();
+  el._hass.callService=function(d,sv,data){calls.push(d+'.'+sv+':'+JSON.stringify(data));return Promise.resolve();};
+  el._gaugeEls.__bl_bl.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();
+  t('7.0.5: a blind\'s tap_action runs',calls.length===1&&/cover\.c/.test(calls[0]));
+  el.remove();calls.length=0;
+  el=mkCard({base_image:'/local/x.webp',layout:{},blinds:[blind({control:true,tap_action:{action:'toggle'}})]},S);await tick();
+  el._hass.callService=function(d,sv,data){calls.push(d+'.'+sv);return Promise.resolve();};
+  el._gaugeEls.__bl_bl.dispatchEvent(new w.MouseEvent('click',{bubbles:true}));await tick();
+  const pop=el.shadowRoot.querySelector('[data-cc-root],.roc-cc,[data-cc]');
+  t('7.0.5: …but with a float cover control the tap still reveals the controller and runs nothing else',calls.length===0&&!!el._ccEls&&!!el._ccEls.bl);
+  el.remove();
+  // a badge with label and label_template: the template wins once it answers
+  let cb=null;
+  el=w.document.createElement('room-overlay-card');
+  el.setConfig({base_image:'/local/x.webp',layout:{},badges:[{id:'b',position:'top-left',icon:'mdi:x',label:'wait',label_template:'{{ 1 }}'}]});
+  el.hass=Object.assign(mkHass(S),{connection:{subscribeMessage(f){cb=f;return Promise.resolve(function(){});}}});
+  w.document.body.appendChild(el);await tick();
+  const bl=function(){return el.shadowRoot.querySelector('[data-bl="b"]').textContent;};
+  const before=bl();cb({result:'21 °C'});
+  el._update();await tick(); // any state pass (the badge watches no entity of its own here)
+  t('7.0.5: a badge label is the placeholder until its label_template answers, then the template stays ('+before+' → '+bl()+')',before==='wait'&&bl()==='21 °C');
+  el.remove();
+  // icon animation (it was in the schema and the studio, never drawn); a gauge with animation: none does not pulse
+  el=mkCard({base_image:'/local/x.webp',layout:{},icons:[{id:'i1',icon:'mdi:x',top:'1%',left:'1%',animation:'blink'},{id:'i2',icon:'mdi:x',top:'1%',left:'9%',animation:'pulse',animation_color:'#f00'}],
+    gauges:[{id:'g',entity:'sensor.t',top:'1%',left:'20%',width:'5%',height:'20%',animation:'none'}]},S);await tick();
+  const i1=el.shadowRoot.querySelector('[data-ico="i1"]').getAttribute('style'),i2=el.shadowRoot.querySelector('[data-ico="i2"]').getAttribute('style');
+  t('7.0.5: an icon blinks / pulses in its animation_color like a label',/roc-blink/.test(i1)&&/roc-glow/.test(i2)&&/--roc-ac:\s*#f00/.test(i2));
+  t('7.0.5: a gauge with animation: none does not pulse',!el._gaugeEls.g.style.animation);
+  el.remove();
+  }
+
 console.log(fails?('FAILURES: '+fails):'ALL LIFECYCLE TESTS PASSED');
 process.exit(fails?1:0);
 

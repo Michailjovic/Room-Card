@@ -524,8 +524,11 @@ blinds:
   window height) or `dock` (a rail that fills the `cover` layout region — put that region
   wherever you want the rail, per profile, in the Layout tab).
 - **`float`** (default): tap the blind to reveal / hide the controller next to it (horizontal
-  bottom bar on portrait). **`dock`**: the controller is permanently visible in the `cover`
-  layout region — its side and size come from where you place that region in each profile.
+  bottom bar on portrait). The tap belongs to the controller, so the blind's own `tap_action` /
+  `hold_action` / `double_tap_action` are not used (the config check notes them); with `dock` or
+  without `control:` they run like on any element (7.0.5). **`dock`**: the controller is
+  permanently visible in the `cover` layout region — its side and size come from where you place
+  that region in each profile.
   `placement` accepts `{portrait, landscape}` (e.g. dock on landscape, float on portrait).
 - **`slider`** — show the draggable position rail (`cover.set_cover_position`). Auto-hidden when
   the cover reports no `current_position` (assumed-state).
@@ -639,6 +642,7 @@ badges:
     # (only label_template does, below); a bare "{{ ... }}" string under label: renders
     # literally instead of being computed.
     label_template: "{{ states('sensor.temperature') | round(1) }} °C"
+    # with both, label: shows until the template's first answer, then the template wins (7.0.5)
     visible: { entity: binary_sensor.someone_home, state: "on" }
     tap_action: { action: more-info, entity: sensor.temperature }
 ```
@@ -662,6 +666,9 @@ icons:
       - value: "#888"
     tap_action: { action: toggle, entity: light.lamp }
 ```
+
+`animation: blink` or `pulse` (7.0.5) works as on labels and badges; with `animation_color` the pulse
+is a glow in that colour.
 
 An icon renders as a bare glyph by default. `background` gives it a plain flat-color circle behind it
 (`background: rgba(0,0,0,0.55)`). **`chip: true`** (v6.12.1) is a nicer alternative: the same

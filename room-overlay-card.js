@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.0.4';
+const ROC_VERSION='7.0.5';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -1311,6 +1311,13 @@ function rocVisOk(it,s){
   return(v&&typeof v==='object')?evalCond(v,s):true;
 }
 function rocHasVis(it){return it.visible!==undefined||it.visible_conditions!==undefined;}
+// The `animation` a badge, a label and (7.0.5) an icon share: `blink`, or `pulse` — a glow in
+// `animation_color` when one is given, else a fade. Inline CSS for the element's own style.
+function rocAnimCss(o){
+  if(!o||o.animation==='blink')return o?'animation:roc-blink 1s step-end infinite;':'';
+  if(o.animation!=='pulse')return'';
+  return o.animation_color?'--roc-ac:'+o.animation_color+';animation:roc-glow 2s ease-in-out infinite;':'animation:roc-pulse 2s ease-in-out infinite;';
+}
 
 // Conditional-value resolvers. Every one of these accepts EITHER the full
 // [{condition,value},…] list OR a bare scalar shorthand (`label: Kitchen`,
@@ -1619,6 +1626,8 @@ function blindToGaugeConfig(b){
   if(b.visible!==undefined)base.visible=b.visible;
   if(b.visible_conditions!==undefined)base.visible_conditions=b.visible_conditions;
   if(b.visible_template!==undefined)base.visible_template=b.visible_template;
+  // 7.0.5: a blind in a group hid with nothing, its fade / slide and its actions were dropped here
+  ['group','fade','slide','tap_action','hold_action','double_tap_action','hold_delay'].forEach(function(k){if(b[k]!==undefined)base[k]=b[k];});
   if(type==='roller'){
     return[Object.assign({},base,{color:sc})];
   }else if(type==='day_night'){
@@ -1967,7 +1976,7 @@ class RoomOverlayCard extends HTMLElement{
     ;(cfg.brightness_model?.source||[]).forEach(function(s){add(s.entity,s.attribute);});
     (cfg.gauges||[]).forEach(function(g){add(g.entity,g.attribute);if(g.alert_conditions?.attribute)add(g.alert_conditions.entity,g.alert_conditions.attribute);});
     (cfg.labels||[]).forEach(function(l){add(l.entity,l.attribute);});
-    (cfg.icons||[]).forEach(function(ico){add(ico.entity,ico.attribute);});
+    (cfg.icons||[]).forEach(function(ico){add(ico.entity);});
     // a cover's position moves without its state changing (many covers never report opening /
     // closing): the blind and its cover control follow current_position itself (7.0.0-beta.4)
     (cfg.blinds||[]).forEach(function(bl){add(bl.entity,bl.attribute);if(/^cover\./.test(String(bl.entity||''))&&bl.attribute!=='current_position')add(bl.entity,'current_position');});
@@ -2104,10 +2113,15 @@ class RoomOverlayCard extends HTMLElement{
     }else addImgs(c,now);
     // Per-image natural aspect cache — every room may use a different image with a
     // different resolution, so lock_aspect:true must detect each one separately.
+    // 7.0.5: a room switch made a new Image for every nearby picture, and each one already in the
+    // cache laid the card out again (synchronously, mid-render). The previous render's images are
+    // reused, and the stage is laid out again only for a ratio it did not know yet.
+    const _plPrev={};(this._preloadImgs||[]).forEach(function(im){if(im&&im._rocUrl)_plPrev[im._rocUrl]=im;});
     this._preloadImgs=[];const _plSelf=this;
     const load=function(url){
-      const img=new Image();
-      const grab=function(){if(img.naturalWidth&&img.naturalHeight){_plSelf._imgRatios[url]=img.naturalWidth/img.naturalHeight;_plSelf._layoutStage();}};
+      if(_plPrev[url]){_plSelf._preloadImgs.push(_plPrev[url]);return;}
+      const img=new Image();img._rocUrl=url;
+      const grab=function(){if(img.naturalWidth&&img.naturalHeight){const r=img.naturalWidth/img.naturalHeight;if(_plSelf._imgRatios[url]!==r){_plSelf._imgRatios[url]=r;_plSelf._layoutStage();}}};
       img.onload=grab;
       img.src=url;
       if(img.complete)grab(); // already cached → measure synchronously
@@ -2432,8 +2446,11 @@ class RoomOverlayCard extends HTMLElement{
     else{
       const self=this;
       this._io=new IntersectionObserver(function(entries){
+        const was=self._visible;
         self._visible=entries[entries.length-1].isIntersecting;
-        if(self._visible&&self._hass&&self._rendered)self._update();
+        // 7.0.5: only on hidden → visible. Every render observes anew, and the first report
+        // ("visible") ran a second full state pass right after the render's own.
+        if(self._visible&&!was&&self._hass&&self._rendered)self._update();
       },{threshold:0});
     }
     this._io.observe(this);
@@ -2492,7 +2509,7 @@ class RoomOverlayCard extends HTMLElement{
       if(this._scRo){this._scRo.disconnect();this._scRo=null;}
       if(this._bodyRo){this._bodyRo.disconnect();this._bodyRo=null;}
       if(!_restricted){
-        this._scrollEl=null; // re-resolve on every (re)wire (edit toggle rebuilds HA's DOM)
+        if(!this._navKeep)this._scrollEl=null; // re-resolve on every (re)wire (edit toggle rebuilds HA's DOM) — not on a room switch (7.0.5: a style read up the whole dashboard)
         const _scEl=this._scrollParent();
         if(_scEl&&_scEl.nodeType===1){
           this._scRo=new ResizeObserver(function(){self._requestPin('scroller-resize');});
@@ -3734,9 +3751,9 @@ class RoomOverlayCard extends HTMLElement{
       return'<div class="layer ov" data-ov="'+escA(ov.id)+'" style="'+escA('z-index:'+(ov.z_index??i+1)+';opacity:0;'+_tfSt+'transition:opacity '+(ov.transition??'2s ease')+',filter '+(ov.transition??'2s ease')+_tfTr+';')+'"></div>';
     }).join('');
     const zHtml=(c.zones||[]).map(z0=>{const z=tApply(z0,_tier);const act=z.tap_action||z.hold_action||z.double_tap_action||z.slider;const a11y=act?` tabindex="0" role="button" aria-label="${escA(z.id)}"`:'';return`<div class="zone" data-z="${escA(z.id)}"${a11y} style="${escA(`top:${z.top};left:${z.left};width:${z.width};height:${z.height};z-index:${z.z_index??50};cursor:${act?'pointer':'default'};box-sizing:border-box;-webkit-tap-highlight-color:transparent;${tm?'outline:3px solid red;background:rgba(255,0,0,0.08);':''}`)}" title="${tm?escA(`[${z.id}] ${z.top} ${z.left} ${z.width}x${z.height}`):''}">${tm?`<span class="zlabel">${escA(z.id)}</span>`:''}</div>`;}).join('');
-    const bHtml=(c.badges||[]).map(b=>{let animSt='';if(b.animation==='blink')animSt='animation:roc-blink 1s step-end infinite;';else if(b.animation==='pulse'){if(b.animation_color)animSt='--roc-ac:'+b.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else animSt='animation:roc-pulse 2s ease-in-out infinite;';}const _bAct=b.tap_action||b.hold_action||b.double_tap_action;const _bA11y=_bAct?' tabindex="0" role="button" aria-label="'+escA(b.id)+'"':'';return'<div class="badge" data-b="'+escA(b.id)+'"'+_bA11y+' style="'+escA(''+makeBadgePos(tApply(b,_tier))+';cursor:'+(_bAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'')+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
+    const bHtml=(c.badges||[]).map(b=>{const animSt=rocAnimCss(b);const _bAct=b.tap_action||b.hold_action||b.double_tap_action;const _bA11y=_bAct?' tabindex="0" role="button" aria-label="'+escA(b.id)+'"':'';return'<div class="badge" data-b="'+escA(b.id)+'"'+_bA11y+' style="'+escA(''+makeBadgePos(tApply(b,_tier))+';cursor:'+(_bAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;'+animSt+'')+'">'+(b.icon?'<ha-icon data-bi="'+escA(b.id)+'" icon="'+escA(b.icon)+'" style="color:white;--mdc-icon-size:14px;width:14px;height:14px;display:flex;"></ha-icon>':'')+(b.label!==undefined||b.label_template!==undefined?'<span class="blabel" data-bl="'+escA(b.id)+'"></span>':'')+'</div>';}).join('');
     const _cardW=this.offsetWidth||300;
-    const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const isChip=!!ico.chip;const _ibg=isChip?'border-radius:50%;padding:9px;box-sizing:content-box;':(ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'');const _icoAct=ico.tap_action||ico.hold_action||ico.double_tap_action;const a11y=_icoAct?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico'+(isChip?' ico-chip':'')+'" data-ico="'+escA(ico.id)+'"'+a11y+' style="'+escA('position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(_icoAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+'')+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="'+escA('--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;')+'"></ha-icon>'+(rocIcoSection(ico)?'<span class="ico-ring" data-ico-ring></span><span class="ico-badge" data-ico-badge></span>':'')+'</div>';}).join('');
+    const icoHtml=(c.icons||[]).map(ico0=>{const ico=tApply(ico0,_tier);const sz=resolveSize(ico.size||'20px',_cardW);const isChip=!!ico.chip;const _ibg=isChip?'border-radius:50%;padding:9px;box-sizing:content-box;':(ico.background?'background:'+ico.background+';border-radius:50%;padding:7px;box-sizing:content-box;':'');const _icoAct=ico.tap_action||ico.hold_action||ico.double_tap_action;const a11y=_icoAct?' tabindex="0" role="button" aria-label="'+escA(ico.id)+'"':'';return'<div class="ico'+(isChip?' ico-chip':'')+'" data-ico="'+escA(ico.id)+'"'+a11y+' style="'+escA('position:absolute;top:'+ico.top+';left:'+ico.left+';z-index:'+(ico.z_index??6)+';cursor:'+(_icoAct?'pointer':'default')+';-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;'+_ibg+rocAnimCss(ico))+'"><ha-icon data-icoicon="'+escA(ico.id)+'" icon="'+escA(ico.icon||'')+'" style="'+escA('--mdc-icon-size:'+sz+';width:'+sz+';height:'+sz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;')+'"></ha-icon>'+(rocIcoSection(ico)?'<span class="ico-ring" data-ico-ring></span><span class="ico-badge" data-ico-badge></span>':'')+'</div>';}).join('');
     // Overview page markup (OVERVIEW_PLAN.md §3). Dock launchers join c.icons
     // AFTER icoHtml was built, so they get the icon pipeline's listeners and
     // section status (ring, badge) without being drawn on the photo.
@@ -3783,7 +3800,7 @@ class RoomOverlayCard extends HTMLElement{
       const _a=g.anchor==='corner'?'':'transform:translate(-50%,-50%);';
       return'<div class="glow-edit" data-glowedit="'+escA(g0.id)+'" style="'+escA('position:absolute;top:'+(g.top??'50%')+';left:'+(g.left??'50%')+';'+_glowGeom(g)+_a+'z-index:60;border-radius:'+(g.shape==='wash'?'6px':'50%')+';outline:1px dashed rgba(255,214,120,0.95);')+'"><span class="glow-tag">'+escA(g0.id)+'</span></div>';
     }).join(''):'';
-    const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=tApply(lbl0,_tier);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';if(lbl.animation==='blink')st+='animation:roc-blink 1s step-end infinite;';else if(lbl.animation==='pulse'){if(lbl.animation_color)st+='--roc-ac:'+lbl.animation_color+';animation:roc-glow 2s ease-in-out infinite;';else st+='animation:roc-pulse 2s ease-in-out infinite;';}return'<div class="lbl" data-lbl="'+escA(lbl.id)+'" style="'+escA(''+st+'')+'"></div>';}).join('');
+    const lblHtml=(c.labels||[]).map(lbl0=>{const lbl=tApply(lbl0,_tier);const fs=resolveSize(lbl.font_size,_cardW)||'clamp(8px,0.8vw,13px)';const ff=lbl.font_family||'monospace';const fw=lbl.font_weight||'bold';const bg=lbl.background||'';const pad=lbl.padding||'';const br=lbl.border_radius||'';const ts=lbl.text_shadow!==undefined?lbl.text_shadow:'0 1px 3px rgba(0,0,0,0.8)';let st='position:absolute;top:'+lbl.top+';left:'+lbl.left+';z-index:'+(lbl.z_index??6)+';pointer-events:none;font-size:'+fs+';font-family:'+ff+';font-weight:'+fw+';white-space:nowrap;color:var(--roc-label-color,#fff);';if(bg)st+='background:'+bg+';';if(pad)st+='padding:'+pad+';';if(br)st+='border-radius:'+br+';';if(ts)st+='text-shadow:'+ts+';';st+=rocAnimCss(lbl);return'<div class="lbl" data-lbl="'+escA(lbl.id)+'" style="'+escA(''+st+'')+'"></div>';}).join('');
     const grpHtml=(c.groups||[]).filter(g=>g.style).map(g=>{const st=g.style;const vis=this._groupState[g.id]??false;return'<div data-grp-panel="'+escA(g.id)+'" style="'+escA('position:absolute;top:'+(st.top||'0')+';left:'+(st.left||'0')+';width:'+(st.width||'auto')+';height:'+(st.height||'auto')+';z-index:'+(st.z_index||49)+';background:'+(st.background||'transparent')+';border-radius:'+(st.border_radius||'0')+';pointer-events:none;transition:opacity .25s ease,visibility .25s ease;visibility:'+(vis?'visible':'hidden')+';opacity:'+(vis?'1':'0')+';')+'"></div>';}).join('');
     const _wx=c.weather_overlay?(typeof c.weather_overlay==='string'?{entity:c.weather_overlay}:c.weather_overlay):null;
     const wxHtml=_wx?'<div class="layer wx" data-wx style="'+escA('z-index:'+(_wx.z_index??5)+';opacity:0;')+'"></div>':'';
@@ -4026,12 +4043,14 @@ class RoomOverlayCard extends HTMLElement{
     const _wrapBox=this.shadowRoot.querySelector('.wrap');
     if(_wrapBox)this.shadowRoot.querySelectorAll('.content > .badge, .content > .tm-info, .content > .tm-flip, .content > .tm-prof, .content > .tm-studio, .content > .tm-save').forEach(function(el){_wrapBox.appendChild(el);});
     // ---- Nav wiring -------------------------------------------------------
-    let _navReused=false;
+    let _navReused=false,_navScrollTodo=null;
     if(_navOld){
       const _navNew=this.shadowRoot.querySelector('.roc-nav');
       if(_navNew){
         _navNew.replaceWith(_navOld);
-        _navOld.scrollLeft=_navScroll[0];_navOld.scrollTop=_navScroll[1];
+        // The kept strip lost its scroll position on re-insertion. Restored at the end of this render
+        // (7.0.5): setting it here laid out the whole new room once more, mid-render.
+        _navScrollTodo=[_navOld,_navScroll];
         _navReused=true;
         const _nr=this._navRestore;this._navRestore=null;
         if(_nr){
@@ -4338,9 +4357,11 @@ navSelf._navChipInto(chipCont,chCfg,r);
     this._sortedBmFg=c.brightness_model?.filter_gradient?.length?c.brightness_model.filter_gradient.slice().sort((a,b)=>a.value-b.value):null;
     this._gaugeEls={};this._gaugeFills={};this._sortedGrads={};this._blindGaugeCfgs=(c.blinds||[]).map(b=>tApply(b,_tier)).flatMap(blindToGaugeConfig);for(const g of(c.gauges||[])){this._gaugeEls[g.id]=this.shadowRoot.querySelector('[data-gauge="'+escSel(g.id)+'"]');if(this._gaugeEls[g.id])this._gaugeFills[g.id]=this._gaugeEls[g.id].querySelector('.gfill');if(g.color_gradient)this._sortedGrads[g.id]=g.color_gradient.slice().sort((a,b)=>a.value-b.value);}for(const bg of this._blindGaugeCfgs){this._gaugeEls[bg.id]=this.shadowRoot.querySelector('[data-gauge="'+escSel(bg.id)+'"]');if(this._gaugeEls[bg.id])this._gaugeFills[bg.id]=this._gaugeEls[bg.id].querySelector('.gfill');if(bg.color_gradient)this._sortedGrads[bg.id]=bg.color_gradient.slice().sort((a,b)=>a.value-b.value);}
     // Gauges with actions become interactive (default stays pointer-events: none)
+    // 7.0.5: a blind's own actions — except where a float cover control owns the tap (it reveals the controller)
+    const _ccFloat={};for(const cc of(this._ccCfgs||[]))if(cc.placement==='float')_ccFloat['__bl_'+cc.id]=true;
     for(const g of[...(c.gauges||[]),...this._blindGaugeCfgs]){
       const gel=this._gaugeEls[g.id];
-      if(gel&&!_isMini&&(g.tap_action||g.hold_action||g.double_tap_action)){
+      if(gel&&!_isMini&&!_ccFloat[g.id]&&(g.tap_action||g.hold_action||g.double_tap_action)){
         gel.style.pointerEvents='auto';gel.style.cursor='pointer';
         gel.setAttribute('tabindex','0');gel.setAttribute('role','button');
         this._addZoneListeners(gel,g.tap_action,g.hold_action,g.double_tap_action,g.hold_delay,g.entity);
@@ -4965,6 +4986,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     this._updateSectionTiles();
     this._update();
     this._syncRoomState();
+    if(_navScrollTodo){_navScrollTodo[0].scrollLeft=_navScrollTodo[1][0];_navScrollTodo[0].scrollTop=_navScrollTodo[1][1];}
     this._layoutStage();
   }
 
@@ -5351,6 +5373,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const lel=this._blabelEls[b.id];if(!lel)continue;
       sub(b.label_template,function(r){
         const v=r!==undefined&&r!==null?String(r):'';
+        lel._rocTpl=true;
         if(lel.textContent!==v)lel.textContent=v;
       });
     }
@@ -6233,7 +6256,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const iel=this._biconEls[b.id];
       if(iel&&b.icon_color)setSt(iel,'color',resolveVal(b.icon_color,s,'white'));
       const lel=this._blabelEls[b.id];
-      if(lel&&b.label){const t=resolveVal(b.label,s,'');if(lel.textContent!==t)lel.textContent=t;}
+      if(lel&&b.label&&!lel._rocTpl){const t=resolveVal(b.label,s,'');if(lel.textContent!==t)lel.textContent=t;} // 7.0.5: `label` is only the placeholder until a label_template answers
     }
     // Card width is only needed to resolve %-based icon sizes / label font
     // sizes. Reading offsetWidth is a forced layout, so skip it entirely for
@@ -6348,7 +6371,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       if(!gShow)continue;
       const gShow2=g.visible_template!==undefined?(this._tmplVis['g:'+g.id]??true):rocVisOk(g,s);
       this._setVis(el,gShow2,'',g.fade,g.slide);
-      if(g.animation){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
+      if(g.animation&&g.animation!=='none'){const _gActive=g.alert_conditions?evalCond(g.alert_conditions,s):true;if(_gActive){if(g.animation_color)el.style.setProperty('--roc-ac',g.animation_color);else el.style.removeProperty('--roc-ac');el.style.animation=g.animation==='blink'?'roc-border-blink 1s step-end infinite':'roc-border-pulse 2s ease-in-out infinite';}else{el.style.animation='';el.style.removeProperty('--roc-ac');}}else if(el.style.animation){el.style.animation='';el.style.removeProperty('--roc-ac');}
       const ent=s[g.entity];if(!ent)continue;
       let val=parseFloat(g.attribute!==undefined?ent.attributes[g.attribute]:ent.state);
       const mn=g.min??0,mx=g.max??100;
