@@ -125,6 +125,10 @@ const ROC_STUDIO_STR={en:{
   fp_items_h:'Markers and labels',fp_marker:'Marker',fp_label:'Label',fp_marker_n:'Marker {n}',fp_label_n:'Label {n}',g_fp_shows:'Shows',fp_hint_calib:'Click two points on the image whose real distance you know.',
   fp_hint_empty:'The plan is empty — import it from AnyVac, trace an image or draw the rooms.',
   fp_door_nowall:'No wall there — click closer to a room\'s edge.',
+  // 7.1.0 — floor heating: the manifold and the passes through walls
+  fp_tool_manifold:'Place the heating manifold (the feeds start there); click it again to remove it',fp_tool_pass:'Passes through walls for the heating feeds: click a wall to add one, click one to remove it',
+  fp_hint_manifold:'Click inside the room where the heating manifold is.',fp_hint_pass:'Click a wall where the heating pipes pass under it; click a pass to remove it. Esc when done.',
+  fp_manifold_out:'The manifold goes inside a room.',fp_heat_missing:'No feed reaches: {rooms} — add a pass in a wall on the way.',
   fp_page:'Floor plan page',fp_rooms:'Rooms on the plan',fp_doors_h:'Doors',fp_door_n:'Door {n}',fp_room_n:'Room {n}',
   fp_planonly:'plan only (no room)',fp_badlink:'⚠ {r} is not a room of this card',fp_ol_empty:'No rooms yet.',
   fp_imp_none:'No AnyVac map sensor found. AnyVac (a Home Assistant integration for Roborock vacuums) publishes the map as sensor.<vacuum>_anyvac_map — install it, or draw the plan / trace an image instead.',

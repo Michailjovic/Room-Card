@@ -1,5 +1,33 @@
 # Changelog
 
+## [7.1.0] - 2026-11-27
+
+The floor plan draws the floor heating itself: loops, feeds from the manifold, the passes the
+feeds take through walls. Step 1 of HEATING_PLAN.md.
+
+### Added
+
+- **Floor heating loops** on the floor plan page: every room with a `climate` gets a counter-flow
+  spiral in the biggest rectangle that fits it, coloured from supply red to return blue along the
+  pipe. Heating: glowing and flowing, both by `power_percent` (Versatile Thermostat; else
+  `on_percent`); on and not heating: faint; off with a standing heating request
+  (`requested_state`, e.g. VTherm's central mode stopped it): paused, muted and still; off: grey.
+- **Manifold and feeds** (`floorplan.heating.manifold`): every loop gets its feed, routed through
+  the rooms with few bends and side by side where feeds share the way. A feed crosses a wall only
+  at a **pass** (`floorplan.heating.passes`), so the user decides where the pipes run under the
+  walls; a loop no feed reaches is still drawn.
+- **Studio:** *Manifold* and *Passes* tools on the floor plan canvas (click a wall to add a pass,
+  click a pass to remove it); the hint names rooms no feed reaches. Pitch, margin and flow in the
+  floor plan page's Properties.
+- `floorplan.heating: {pitch, margin, flow, manifold, passes}`, a plan room's `loop: false`, theme
+  tokens `pipe.*` (tube / line, `c0` `cm` `c1` `off` `outline`).
+
+### Changed
+
+- The plan themes no longer draw the old per-theme heating patterns (spiral rectangles,
+  serpentines, edges); `thermal` keeps its faint lines. Tests that read `data-rfp-heat` on a plan
+  theme read the loop (`data-rfp-hx`) now.
+
 ## [7.0.5] - 2026-11-25
 
 Two new test tiers, the fixes they found, and a lighter room switch. No new config keys.

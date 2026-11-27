@@ -105,7 +105,7 @@ vacuum or AnyVac is gone.
 | Key | From | Drawn as |
 |---|---|---|
 | `lights` | one or more `light.*` / `switch.*` | a glow in the room: colour from `rgb_color` (or the colour temperature), strength from the brightness; any light on = lit |
-| `climate` | a thermostat | the floor heating loop: glowing and flowing while `hvac_action: heating`, faint while idle, none when off; also the temperature / humidity if the room has no sensors |
+| `climate` | a thermostat | the floor heating loop *(7.1: see [Floor heating](#floor-heating))*; also the temperature / humidity if the room has no sensors |
 | `temperature`, `humidity` | sensors | the values on the room's label |
 | `media` *(6.48)* | one or more `media_player.*` | what plays (app, else source, else title) on the label, ▶ / ❚❚; the room glows softly while playing |
 
@@ -116,6 +116,48 @@ colour, e.g. `'#7a5a43'` for brown vinyl) on top of the material's texture. The 
 room → Properties → Floor, Floor color). The material shows in the `night` and `clay` themes;
 `neon` uses only the colour; `blueprint`, `sketch`, `thermal` and `tiles` draw no floors. The
 theme's colour for a material is `overrides: {'floor.vinyl': '#…'}`.
+
+## Floor heating
+
+*(7.1.0)* Every plan room with a `climate` gets a floor heating loop, drawn by the card — no
+rendered pictures. The loop is a counter-flow spiral (supply in, return out between its laps) in
+the biggest rectangle that fits the room `margin` from its walls; the colour runs along the pipe
+from the supply's red through violet in the middle to the return's blue.
+
+| State of the thermostat | Drawn as |
+|---|---|
+| `hvac_action: heating` | coloured, glowing and flowing; glow and flow speed follow `power_percent` (Versatile Thermostat), else `on_percent`, else full |
+| on, not heating | faintly coloured |
+| `off`, but a heating request still stands (`requested_state.hvac_mode` of Versatile Thermostat — its central mode stopped it, a window is open) | paused: muted colour, no flow |
+| `off` / unavailable | grey pipes |
+
+**Manifold and feeds.** Place the manifold (studio → *Manifold*) and every loop also gets its
+feed: a pair of pipes from the manifold to the loop, routed through the rooms with few bends, side
+by side where they share the way. A feed crosses a wall only at a **pass** — a point on the wall
+you click (studio → *Passes*); it is about 70 cm wide. A loop no feed can reach is still drawn,
+and the studio's hint names its room. Without a manifold the plan shows the loops only. A feed
+takes the state of its loop, so a heating bedroom also lights the pipes in the hall it runs through.
+
+```yaml
+floorplan:
+  heating:
+    pitch: 0.2          # pipe to pipe, m (0.08–0.6)
+    margin: 0.25        # loop to wall, m
+    flow: true          # the moving flow while it heats
+    manifold: [1.72, 6.72]
+    passes:
+      - at: [1.93, 7.0]
+      - at: [2.5, 6.3]
+  rooms:
+    - room: bedroom
+      climate: climate.bedroom
+      loop: false       # a climate that is not floor heating: no loop
+```
+
+The pipes follow the theme: tubes in `night` and `clay`, lines in `neon`, `blueprint` and
+`sketch`; their colours are tokens (`overrides: {'pipe.c0': '#ff5a3c'}` — `c0` supply, `cm`
+middle, `c1` return, `off`, `outline`). `layers: {heating: false}` hides them all. The `thermal`
+theme keeps its faint lines.
 
 ## Across rooms
 

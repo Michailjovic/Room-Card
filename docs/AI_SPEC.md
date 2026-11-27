@@ -1026,6 +1026,7 @@ floorplan {
   clean_mode: "dry"|"wet"|"both" = "dry" @6.50.0;
   trail_mode: "always"|"cleaning" = "always" @6.50.0;
   background: fpBackground @6.50.0;
+  heating: fpHeating @7.1.0;
 }
 fpRoom {
   room: str;
@@ -1040,6 +1041,7 @@ fpRoom {
   temperature: entity;
   humidity: entity;
   media: entity | fpEntity[] @6.48.0;
+  loop: bool = true @7.1.0;
   tap_action: action;
   hold_action: action;
 }
@@ -1090,6 +1092,16 @@ fpTransform {
   y: num;
   rooms: num;
   rms: num;
+}
+fpHeating {
+  pitch: num = 0.2;
+  margin: num = 0.25;
+  flow: bool = true;
+  manifold: num[];
+  passes: fpPass[];
+}
+fpPass {
+  at: num[];
 }
 fpLayers {
   lights: bool = true;

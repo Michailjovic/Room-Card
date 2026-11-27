@@ -23,7 +23,7 @@ every room. Every element type also accepts its own keys under `portrait:` / `la
 - **Navigation:** [`nav`](#t-nav) · [`navMini`](#t-navmini) · [`navChip`](#t-navchip)
 - **Sections (cockpit tiles):** [`section`](#t-section) · [`tile`](#t-tile) · [`quick`](#t-quick) · [`tileOverlay`](#t-tileoverlay)
 - **Overview page:** [`overview`](#t-overview) · [`ovSignals`](#t-ovsignals) · [`ovHeader`](#t-ovheader) · [`ovHeaderItem`](#t-ovheaderitem) · [`ovPill`](#t-ovpill) · [`ovSide`](#t-ovside) · [`ovSideCard`](#t-ovsidecard) · [`ovGrid`](#t-ovgrid) · [`ovDock`](#t-ovdock) · [`overviewTile`](#t-overviewtile) · [`ovChip`](#t-ovchip)
-- **Floor plan page:** [`floorplan`](#t-floorplan) · [`fpRoom`](#t-fproom) · [`fpLight`](#t-fplight) · [`fpOpening`](#t-fpopening) · [`fpItem`](#t-fpitem) · [`fpVacuum`](#t-fpvacuum) · [`fpTransform`](#t-fptransform) · [`fpLayers`](#t-fplayers) · [`fpEntity`](#t-fpentity) · [`fpBackground`](#t-fpbackground) · [`fpThemeBy`](#t-fpthemeby) · [`fpWall`](#t-fpwall) · [`fpSource`](#t-fpsource) · [`fpTrace`](#t-fptrace)
+- **Floor plan page:** [`floorplan`](#t-floorplan) · [`fpRoom`](#t-fproom) · [`fpLight`](#t-fplight) · [`fpOpening`](#t-fpopening) · [`fpItem`](#t-fpitem) · [`fpVacuum`](#t-fpvacuum) · [`fpTransform`](#t-fptransform) · [`fpHeating`](#t-fpheating) · [`fpPass`](#t-fppass) · [`fpLayers`](#t-fplayers) · [`fpEntity`](#t-fpentity) · [`fpBackground`](#t-fpbackground) · [`fpThemeBy`](#t-fpthemeby) · [`fpWall`](#t-fpwall) · [`fpSource`](#t-fpsource) · [`fpTrace`](#t-fptrace)
 
 ## Card and rooms
 
@@ -1252,6 +1252,7 @@ Guide: [FLOORPLAN.md](FLOORPLAN.md).
 | `clean_mode` | `dry` · `wet` · `both` | `"dry"` | since 6.50.0 |
 | `trail_mode` | `always` · `cleaning` | `"always"` | since 6.50.0 |
 | `background` | [`fpBackground`](#t-fpbackground) |  | since 6.50.0 |
+| `heating` | [`fpHeating`](#t-fpheating) |  | since 7.1.0 |
 
 <a id="t-fproom"></a>
 
@@ -1273,6 +1274,7 @@ Guide: [FLOORPLAN.md](FLOORPLAN.md).
 | `temperature` | entity id |  |  |
 | `humidity` | entity id |  |  |
 | `media` | entity id **or** list of [`fpEntity`](#t-fpentity) |  | since 6.48.0 |
+| `loop` | boolean | `true` | since 7.1.0 |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |
 
@@ -1358,6 +1360,30 @@ Guide: [FLOORPLAN.md](FLOORPLAN.md).
 | `y` | number |  |  |
 | `rooms` | number |  |  |
 | `rms` | number |  |  |
+
+<a id="t-fpheating"></a>
+
+### `floorplan.heating` — floor heating loops and feeds — `fpHeating`
+
+Guide: [FLOORPLAN.md](FLOORPLAN.md#floor-heating).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `pitch` | number | `0.2` |  |
+| `margin` | number | `0.25` |  |
+| `flow` | boolean | `true` |  |
+| `manifold` | list of number |  |  |
+| `passes` | list of [`fpPass`](#t-fppass) |  |  |
+
+<a id="t-fppass"></a>
+
+### A pass through a wall (`floorplan.heating.passes` item) — `fpPass`
+
+Guide: [FLOORPLAN.md](FLOORPLAN.md#floor-heating).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `at` | list of number |  |  |
 
 <a id="t-fplayers"></a>
 

@@ -424,3 +424,166 @@ function rfpProposeDoors(rooms,paths,o){
   }
   return doors;
 }
+// ---- Floor heating loops and their feeds (7.1.0, HEATING_PLAN.md) -----------------------------
+// The card draws the loops itself: no rendered images. Every room with a thermostat gets a
+// counter-flow (bifilar) spiral in the biggest rectangle that fits it `margin` from its walls; with
+// a manifold placed, every loop also gets its feed, routed from the manifold through the rooms. A
+// wall can be crossed only at a pass (a point the user clicks on the wall), so the user decides
+// where the pipes go under the walls. Everything in plan metres.
+// The biggest axis-aligned rectangle inside polygon p, at least m from its walls (grid g).
+function rfpMaxRect(p,m,g){
+  g=g||0.05;
+  const b=rfpBBox(p),nx=Math.ceil((b[2]-b[0])/g),ny=Math.ceil((b[3]-b[1])/g);
+  if(!(nx>0&&ny>0)||nx*ny>4e6)return null;
+  const hgt=new Int32Array(nx);let best={a:0};
+  for(let j=0;j<ny;j++){
+    for(let i=0;i<nx;i++){const x=b[0]+(i+0.5)*g,y=b[1]+(j+0.5)*g;hgt[i]=rfpInPoly(x,y,p)&&rfpEdgeDist(x,y,p)>=m?hgt[i]+1:0;}
+    const st=[];
+    for(let i=0;i<=nx;i++){
+      const h=i<nx?hgt[i]:0;let start=i;
+      while(st.length&&st[st.length-1].h>=h){const t=st.pop(),a=t.h*(i-t.i);if(a>best.a)best={a:a,i0:t.i,i1:i,j0:j+1-t.h,j1:j+1};start=t.i;}
+      st.push({i:start,h:h});
+    }
+  }
+  return best.a?[b[0]+best.i0*g,b[1]+best.j0*g,b[0]+best.i1*g,b[1]+best.j1*g]:null;
+}
+// A rectangular spiral into a w×h box, step s between laps: starts at 0,0 along +x, the inside
+// on its right (y down). The loop's return runs back between the laps (rfpOffset by s/2).
+function rfpSpiralIn(w,h,s){
+  let x0=0,y0=0,x1=w,y1=h;const P=[[0,0]];
+  for(let g=0;g<400;g++){
+    P.push([x1,y0]);if(y1-y0<1.5*s)break;
+    P.push([x1,y1]);if(x1-x0<1.5*s)break;
+    P.push([x0,y1]);y0+=s;if(y1-y0<1.5*s)break;
+    P.push([x0,y0]);x0+=s;x1-=s;y1-=s;if(x1-x0<1.5*s)break;
+  }
+  return P;
+}
+// A polyline moved d to its right (y down), mitred at the corners.
+function rfpOffset(P,d){
+  const sg=[];
+  for(let i=0;i<P.length-1;i++){const dx=P[i+1][0]-P[i][0],dy=P[i+1][1]-P[i][1],L=Math.hypot(dx,dy);if(L>1e-9)sg.push({a:P[i],b:P[i+1],n:[-dy/L,dx/L]});}
+  if(!sg.length)return P.slice();
+  const out=[[sg[0].a[0]+sg[0].n[0]*d,sg[0].a[1]+sg[0].n[1]*d]];
+  for(let k=1;k<sg.length;k++){
+    const n1=sg[k-1].n,n2=sg[k].n,q=sg[k].a,dot=n1[0]*n2[0]+n1[1]*n2[1];
+    if(dot<-0.99)continue;
+    out.push(dot>0.99?[q[0]+n1[0]*d,q[1]+n1[1]*d]:[q[0]+(n1[0]+n2[0])*d/(1+dot),q[1]+(n1[1]+n2[1])*d/(1+dot)]);
+  }
+  const l=sg[sg.length-1];out.push([l.b[0]+l.n[0]*d,l.b[1]+l.n[1]*d]);
+  return out;
+}
+function rfpSimplify(P){
+  const q=[];
+  P.forEach(function(p){const l=q[q.length-1];if(!l||Math.hypot(p[0]-l[0],p[1]-l[1])>1e-6)q.push(p);});
+  if(q.length<3)return q;
+  const o=[q[0]];
+  for(let i=1;i<q.length-1;i++){const a=o[o.length-1],b=q[i],c=q[i+1];if(Math.abs((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]))>1e-9)o.push(b);}
+  o.push(q[q.length-1]);return o;
+}
+// The routing grid: each cell belongs to the first room that holds it; cells near a wall and on a
+// loop cost more (feeds run along the loops, not across them); a pass opens the walls within r.
+function rfpHeatGrid(polys,fields,passes,r){
+  const g=0.05;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  polys.forEach(function(p){const b=rfpBBox(p);x0=Math.min(x0,b[0]);y0=Math.min(y0,b[1]);x1=Math.max(x1,b[2]);y1=Math.max(y1,b[3]);});
+  if(!isFinite(x0))return null;
+  x0-=0.4;y0-=0.4;x1+=0.4;y1+=0.4;
+  const nx=Math.ceil((x1-x0)/g),ny=Math.ceil((y1-y0)/g);if(nx*ny>2e6)return null;
+  const room=new Int16Array(nx*ny).fill(-1),cost=new Float32Array(nx*ny),zone=new Uint8Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const x=x0+(i+0.5)*g,y=y0+(j+0.5)*g,c=j*nx+i;
+    for(let k=0;k<polys.length;k++)if(rfpInPoly(x,y,polys[k])){room[c]=k;cost[c]=rfpEdgeDist(x,y,polys[k])<0.1?3:0;break;}
+    if(room[c]<0)continue;
+    fields.forEach(function(f){if(f&&x>f[0]&&x<f[2]&&y>f[1]&&y<f[3])cost[c]+=2;});
+  }
+  const rc=Math.ceil(r/g);
+  (passes||[]).forEach(function(p){
+    const ci=Math.floor((p[0]-x0)/g),cj=Math.floor((p[1]-y0)/g);
+    for(let dj=-rc;dj<=rc;dj++)for(let di=-rc;di<=rc;di++){
+      const i=ci+di,j=cj+dj;if(i<0||j<0||i>=nx||j>=ny)continue;
+      if(Math.hypot(x0+(i+0.5)*g-p[0],y0+(j+0.5)*g-p[1])<=r)zone[j*nx+i]=1;
+    }
+  });
+  return{g:g,x0:x0,y0:y0,nx:nx,ny:ny,room:room,cost:cost,zone:zone};
+}
+function rfpGridCell(G,p){
+  const free=function(c){return G.room[c]>=0||G.zone[c]===1;};
+  const i=Math.max(0,Math.min(G.nx-1,Math.floor((p[0]-G.x0)/G.g))),j=Math.max(0,Math.min(G.ny-1,Math.floor((p[1]-G.y0)/G.g)));
+  if(free(j*G.nx+i))return j*G.nx+i;
+  for(let r=1;r<40;r++)for(let dj=-r;dj<=r;dj++)for(let di=-r;di<=r;di++){
+    if(Math.max(Math.abs(di),Math.abs(dj))!==r)continue;
+    const ii=i+di,jj=j+dj;if(ii<0||jj<0||ii>=G.nx||jj>=G.ny)continue;
+    if(free(jj*G.nx+ii))return jj*G.nx+ii;
+  }
+  return-1;
+}
+// A* over the grid with a heading in the state (a turn costs 8 cells: few bends). A move from one
+// room into another is allowed only inside a pass. occ: extra cost of cells other feeds took.
+function rfpRoute(G,a,b,occ){
+  const s=rfpGridCell(G,a),t=rfpGridCell(G,b);if(s<0||t<0)return null;
+  const nx=G.nx,NS=nx*G.ny*4,dist=new Float32Array(NS).fill(Infinity),prev=new Int32Array(NS).fill(-1),done=new Uint8Array(NS);
+  const hk=[],hv=[];
+  const swap=function(x,y){let q=hk[x];hk[x]=hk[y];hk[y]=q;q=hv[x];hv[x]=hv[y];hv[y]=q;};
+  const push=function(k,v){hk.push(k);hv.push(v);let i=hk.length-1;while(i>0){const p=(i-1)>>1;if(hv[p]<=hv[i])break;swap(p,i);i=p;}};
+  const pop=function(){const k=hk[0],lk=hk.pop(),lv=hv.pop();if(hk.length){hk[0]=lk;hv[0]=lv;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<hk.length&&hv[l]<hv[m])m=l;if(r<hk.length&&hv[r]<hv[m])m=r;if(m===i)break;swap(m,i);i=m;}}return k;};
+  const ti=t%nx,tj=(t-ti)/nx,H=function(c){const i=c%nx,j=(c-i)/nx;return Math.abs(i-ti)+Math.abs(j-tj);};
+  for(let d=0;d<4;d++){dist[s*4+d]=0;push(s*4+d,H(s));}
+  const DI=[1,0,-1,0],DJ=[0,1,0,-1];let end=-1;
+  while(hk.length){
+    const u=pop();if(done[u])continue;done[u]=1;
+    const c=u>>2,d=u&3;if(c===t){end=u;break;}
+    const ci=c%nx,cj=(c-ci)/nx;
+    for(let nd=0;nd<4;nd++){
+      if(nd===((d+2)&3))continue;
+      const ii=ci+DI[nd],jj=cj+DJ[nd];if(ii<0||jj<0||ii>=nx||jj>=G.ny)continue;
+      const nc=jj*nx+ii;if(!(G.room[nc]>=0||G.zone[nc]))continue;
+      if(G.room[c]!==G.room[nc]&&!G.zone[c]&&!G.zone[nc])continue;
+      const v=nc*4+nd,wt=dist[u]+1+(G.zone[nc]?0:G.cost[nc])+(occ?occ[nc]:0)+(nd!==d?8:0);
+      if(wt<dist[v]){dist[v]=wt;prev[v]=u;push(v,wt+H(nc));}
+    }
+  }
+  if(end<0)return null;
+  const cells=[];for(let u=end;u>=0;u=prev[u])cells.push(u>>2);cells.reverse();
+  const pts=cells.map(function(c){const i=c%nx,j=(c-i)/nx;return[G.x0+(i+0.5)*G.g,G.y0+(j+0.5)*G.g];});
+  // exact ends, square to the first and last step
+  const p0=pts[0],pe=pts[pts.length-1];
+  if(pts.length>1&&Math.abs(pts[1][0]-p0[0])<1e-6)pts[0]=[p0[0],a[1]];else pts[0]=[a[0],p0[1]];
+  pts.unshift(a.slice());
+  pts.push(pts.length>1&&Math.abs(pts[pts.length-2][1]-pe[1])<1e-6?[b[0],pe[1]]:[pe[0],b[1]]);pts.push(b.slice());
+  return{cells:cells,pts:rfpSimplify(pts)};
+}
+// The circuits of a plan. polys: every room's polygon; loops: [{k (room index), poly}];
+// o: {pitch (pipe to pipe, m), margin (m), manifold ([x,y] or null), passes ([[x,y]]), passR}.
+// Returns [{k, field, sup (manifold → centre), ret (centre → manifold), routed, missing}].
+function rfpHeatCircuits(polys,loops,o){
+  o=o||{};
+  const p=rfpNum(o.pitch)>=0.08?Math.min(0.6,rfpNum(o.pitch)):0.2,mg=rfpNum(o.margin)>=0?rfpNum(o.margin):0.25,m=o.manifold;
+  const items=loops.map(function(L){
+    const f=rfpMaxRect(L.poly,mg);if(!f||f[2]-f[0]<3*p||f[3]-f[1]<3*p)return null;
+    const cx=m&&Math.abs(m[0]-f[2])<Math.abs(m[0]-f[0])?1:0,cy=m&&Math.abs(m[1]-f[3])<Math.abs(m[1]-f[1])?1:0;
+    const map=function(q){return[cx?f[2]-q[0]:f[0]+q[0],cy?f[3]-q[1]:f[1]+q[1]];};
+    const c0=map([0,0]);
+    return{L:L,f:f,map:map,entry:map([0,p/2]),dist:m?Math.abs(m[0]-c0[0])+Math.abs(m[1]-c0[1]):0};
+  }).filter(Boolean).sort(function(a,b){return a.dist-b.dist;});
+  const G=m?rfpHeatGrid(polys,items.map(function(x){return x.f;}),o.passes,o.passR||0.35):null;
+  const occ=G?new Float32Array(G.nx*G.ny):null;
+  return items.map(function(it){
+    const f=it.f,Sc=rfpSpiralIn(f[2]-f[0],f[3]-f[1],2*p),Rc=rfpOffset(Sc,p);
+    const Sp=Sc.map(it.map),Rp=Rc.map(it.map);
+    let sup=Sp,ret=[Sp[Sp.length-1]].concat(Rp.slice().reverse()),routed=false,missing=false;
+    if(G){
+      const r=rfpRoute(G,m,it.entry,occ);
+      if(!r)missing=true;
+      else{
+        routed=true;
+        const rr=Math.ceil(p*1.15/G.g);
+        r.cells.forEach(function(c){const i=c%G.nx,j=(c-i)/G.nx;
+          for(let dj=-rr;dj<=rr;dj++)for(let di=-rr;di<=rr;di++){const ii=i+di,jj=j+dj;if(ii>=0&&jj>=0&&ii<G.nx&&jj<G.ny)occ[jj*G.nx+ii]+=25;}});
+        const A=rfpOffset(r.pts,p/2),B=rfpOffset(r.pts,-p/2),e=Sp[0];
+        const da=Math.hypot(A[A.length-1][0]-e[0],A[A.length-1][1]-e[1]),db=Math.hypot(B[B.length-1][0]-e[0],B[B.length-1][1]-e[1]);
+        sup=(da<=db?A:B).concat(Sp);ret=ret.concat((da<=db?B:A).slice().reverse());
+      }
+    }
+    return{k:it.L.k,field:f,sup:sup,ret:ret,routed:routed,missing:missing};
+  });
+}

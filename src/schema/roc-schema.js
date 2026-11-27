@@ -199,13 +199,19 @@ const S={
     source:{t:'obj:fpSource'},trace:{t:'obj:fpTrace'},rooms:{t:'list:fpRoom'},openings:{t:'list:fpOpening'},
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'},
     vacuums:{t:'list:fpVacuum',since:'6.50.0'},attention_sections:{t:'list:str',since:'6.50.0'},clean_mode:{t:'enum:dry|wet|both',d:'dry',since:'6.50.0'},trail_mode:{t:'enum:always|cleaning',d:'always',since:'6.50.0'},
-    background:{t:'obj:fpBackground',since:'6.50.0'}}},
+    background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
     rotate:{t:'prof:num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical|both',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
-    background:{t:'obj:fpBackground'}},hide:['rooms','openings','source','items','vacuums']},
+    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'}},hide:['rooms','openings','source','items','vacuums']},
+  // floor heating loops and feeds (7.1.0): pitch = pipe to pipe, margin = loop to wall (m); with a
+  // manifold every loop gets its feed, which crosses a wall only at a pass
+  fpHeating:{keys:{pitch:{t:'num',d:0.2},margin:{t:'num',d:0.25},flow:{t:'bool',d:true},manifold:{t:'list:num'},passes:{t:'list:fpPass'}}},
+  // the same in the studio's form: the manifold and the passes are placed on the canvas
+  fpHeatPage:{keys:{pitch:{t:'num',d:0.2},margin:{t:'num',d:0.25},flow:{t:'bool',d:true}},hide:['manifold','passes']},
+  fpPass:{keys:{at:{t:'list:num'}}},
   // an AnyVac map on the plan; transform = its home frame → plan metres (another frame, set by the studio)
   fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'},color:{t:'color',since:'6.51.0'},mop_color:{t:'color',since:'6.51.0'},mop_opacity:{t:'num',since:'6.51.0'}},scalar:'entity'},
   fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'}}},
@@ -225,7 +231,7 @@ const S={
   fpTrace:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},opacity:{t:'num'}}},
   fpRoom:{keys:{room:{t:'str'},name:{t:'str'},polygon:{t:'list:any'},floor:{t:'enum:wood|vinyl|tile|carpet|concrete|none',d:'wood'},floor_color:{t:'color',since:'6.49.0'},label_at:{t:'list:num',since:'6.50.0'},anyvac_room:{t:'str'},
     lights:{t:'entity|list:fpLight'},climate:{t:'entity'},temperature:{t:'entity'},humidity:{t:'entity'},media:{t:'entity|list:fpEntity',since:'6.48.0'},
-    tap_action:{t:'action'},hold_action:{t:'action'}}},
+    loop:{t:'bool',d:true,since:'7.1.0'},tap_action:{t:'action'},hold_action:{t:'action'}}},
   fpLight:{keys:{entity:{t:'entity'}},scalar:'entity'},
   fpOpening:{keys:{type:{t:'enum:door|window',d:'door'},at:{t:'list:num'},width:{t:'num',d:0.8},
     entity:{t:'entity',since:'6.49.0'},cover:{t:'entity',since:'6.49.0'},blind_type:{t:'enum:roller|venetian|day_night',d:'roller',since:'6.49.0'},invert:{t:'bool',since:'6.49.0'},

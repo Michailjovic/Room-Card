@@ -18,7 +18,11 @@ const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8
   // transform inside the SVG), which no compositor can run: at 60 frames a second the whole plan
   // was restyled, repainted and rastered for every frame, for as long as it was on screen.
   +'.rfp-eco .rfp-flow{animation-timing-function:steps(30)}.rfp-eco .rfp-pulse{animation-timing-function:steps(12)}.rfp-eco .rfp-ping{animation-timing-function:steps(22)}.rfp-eco .rfp-bob{animation-timing-function:steps(7)}'
-  +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
+  // floor heating loops (7.1.0): the state sets the opacities of colour / grey / glow; the flow runs while it heats
+  +'.rfp-hx .rfp-hc,.rfp-hx .rfp-hg,.rfp-hx .rfp-hglow{transition:opacity .9s ease}.rfp-hx .rfp-hf{opacity:0;transition:opacity .9s ease}'
+  +'.rfp-hx.is-flow .rfp-hf{opacity:.7;animation:rfp-hflow var(--rfp-hs,2s) linear infinite}@keyframes rfp-hflow{to{stroke-dashoffset:-.6}}'
+  +'.rfp-hx.is-pause .rfp-hc{filter:saturate(.25)}.rfp-paused .rfp-hf{animation-play-state:paused}.rfp-eco .rfp-hf{animation-timing-function:steps(20)}'
+  +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob,.rfp-hx .rfp-hf{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
 // Markers and labels on the plan (v6.48.0) are HTML over the SVG: they carry ha-icon.
 const RFP_ITEM_CSS='.rfp-items{position:absolute;inset:0;pointer-events:none;overflow:hidden;}'
   +'.rfp-it{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}'
@@ -233,6 +237,7 @@ class RfpView{
     d+='<radialGradient id="'+id+'-mg"><stop offset="0%" stop-color="'+(T.mediaColor||'#8ecbff')+'" stop-opacity=".75"/><stop offset="100%" stop-color="'+(T.mediaColor||'#8ecbff')+'" stop-opacity="0"/></radialGradient>';
     if(T.light==='hatch')d+='<pattern id="'+id+'-hatch" patternUnits="userSpaceOnUse" width="0.18" height="0.18" patternTransform="rotate(45)"><path d="M0 0V0.18" stroke="'+(T.lightColor||'#ffd166')+'" stroke-width="0.03"/></pattern>';
     if(this.fx){
+      if(this.L&&this.L.heating&&M.rooms.some(function(r){return r.climate&&r.cfg.loop!==false;}))d+='<filter id="'+id+'-hblur" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.09"/></filter>';
       if(T.shadow==='soft')d+='<filter id="'+id+'-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="'+rfpN(Math.max(4,F.S*0.18))+'"/></filter>';
       if(T.rough)d+='<filter id="'+id+'-rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="'+rfpN(Math.max(2,F.S*0.05))+'"/></filter>';
       if(T.paper)d+='<filter id="'+id+'-paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="2" result="n"/><feColorMatrix in="n" type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0.07"/></feComponentTransfer></filter>';
@@ -268,8 +273,9 @@ class RfpView{
       else if(T.floorStyle==='sketch')fill='rgba(255,255,255,.35)';
       if(self.bgOn&&!self.bgFloors){fill='none';if(stroke==='none')stroke='rgba(255,255,255,.25)';}
       s+='<polygon points="'+rfpPts(r.poly)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="0.03"/>';
-      s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._heatSvg(T,r,k)+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
+      s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
     });
+    s+=this._heatLayer(T,M);
     s+='</g></g>';
     // the vacuum's trail while it cleans (v6.49.0), in plan metres
     if(this.L.vacuum&&this.L.trail&&this._anyvac().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
@@ -637,6 +643,74 @@ class RfpView{
     const p=r.pole,b=r.bbox,rad=Math.min(1.4,Math.max(0.7,Math.min(b[2]-b[0],b[3]-b[1])*0.3));
     return'<g class="rfp-light" data-rfp-mglow="'+k+'" opacity="0"><circle class="rfp-pulse" cx="'+rfpN(p[0])+'" cy="'+rfpN(p[1])+'" r="'+rfpN(rad)+'" fill="url(#'+this.uid+'-mg)"/></g>';
   }
+  // ---- floor heating (7.1.0): loops and feeds, drawn by the card (rfpHeatCircuits) ----
+  // floorplan.heating: {pitch, margin, flow, manifold: [x, y], passes: [{at: [x, y]}]}; a room with a
+  // climate gets a loop unless its own `loop: false`. Cached: the routing runs only when the
+  // geometry or these settings change, not on every resize.
+  _heatCfg(){const h=this.o.cfg&&this.o.cfg.heating;return h&&typeof h==='object'&&!Array.isArray(h)?h:{};}
+  _heatModel(M){
+    const h=this._heatCfg(),polys=M.rooms.map(function(r){return r.poly;});
+    const loops=[];M.rooms.forEach(function(r,k){if(r.climate&&r.cfg.loop!==false)loops.push({k:k,poly:r.poly});});
+    const man=rfpPoly([h.manifold])[0]||null;
+    const passes=(Array.isArray(h.passes)?h.passes:[]).map(function(x){return rfpPoly([x&&typeof x==='object'&&!Array.isArray(x)?x.at:x])[0];}).filter(Boolean);
+    const pr=rfpNum(h.pitch),o={pitch:pr>=0.08?Math.min(0.6,pr):0.2,margin:h.margin,manifold:man,passes:passes};
+    const sig=JSON.stringify([polys,loops.map(function(l){return l.k;}),o]);
+    if(!this._hx||this._hx.sig!==sig){
+      const c=loops.length?rfpHeatCircuits(polys,loops,o):[];
+      this._hx={sig:sig,c:c,o:o,missing:c.filter(function(x){return x.missing;}).map(function(x){return M.rooms[x.k].name;})};
+    }
+    return this._hx;
+  }
+  _heatLayer(T,M){
+    if(!this.L.heating)return'';
+    const H=this._heatModel(M);if(!H.c.length)return'';
+    const P=T.pipe||{},tw=H.o.pitch*0.5,fx=this.fx,id=this.uid;
+    const D=function(L){return L.map(function(q,i){return(i?'L':'M')+rfpN(q[0])+' '+rfpN(q[1]);}).join('');};
+    const hex=function(c){return/^#[0-9a-f]{6}$/i.test(c||'')?[1,3,5].map(function(i){return parseInt(c.slice(i,i+2),16);}):null;};
+    const mix=function(a,b,t){const A=hex(a),B=hex(b);if(!A||!B)return t<0.5?a:b;return'rgb('+A.map(function(v,i){return Math.round(v+(B[i]-v)*t);}).join(',')+')';};
+    // a polyline cut into n consecutive pieces of equal length: the colour runs along the pipe
+    const pieces=function(L,n){
+      let tot=0;for(let i=0;i<L.length-1;i++)tot+=Math.hypot(L[i+1][0]-L[i][0],L[i+1][1]-L[i][1]);
+      const out=[],e=tot/n;let cur=[L[0]],acc=0,b=0;
+      for(let i=0;i<L.length-1;i++){
+        const a=L[i],c=L[i+1],l=Math.hypot(c[0]-a[0],c[1]-a[1]);if(l<1e-9)continue;let u=0;
+        while(b<n-1&&acc+(l-u)>=e*(b+1)){const need=e*(b+1)-acc;u+=need;acc+=need;const q=[a[0]+(c[0]-a[0])*u/l,a[1]+(c[1]-a[1])*u/l];cur.push(q);out.push(cur);cur=[q];b++;}
+        acc+=l-u;cur.push(c);
+      }
+      out.push(cur);return out;
+    };
+    const at=' fill="none" stroke-linejoin="round" stroke-linecap="round"';
+    const pipe=function(L,c0,c1){
+      const d=D(L),n=14,core=P.tube?tw*0.62:tw*(rfpNum(P.lw)>0?rfpNum(P.lw):0.4);let s='';
+      if(P.tube)s+='<path d="'+d+'" stroke="'+rfpEsc(P.outline||'#0b0e12')+'" stroke-width="'+rfpN(tw)+'"'+at+'/>';
+      s+='<path class="rfp-hg" d="'+d+'" stroke="'+rfpEsc(P.off||'#aab0b8')+'" stroke-width="'+rfpN(core)+'"'+at+'/>';
+      s+='<g class="rfp-hc">'+pieces(L,n).map(function(q,i){return'<path d="'+D(q)+'" stroke="'+rfpEsc(mix(c0,c1,(i+0.5)/n))+'" stroke-width="'+rfpN(core)+'"'+at+'/>';}).join('')+'</g>';
+      if(P.tube)s+='<path d="'+d+'" stroke="rgba(255,255,255,.3)" stroke-width="'+rfpN(tw*0.14)+'"'+at+'/>';
+      return s+'<path class="rfp-hf" d="'+d+'" stroke="rgba(255,255,255,.85)" stroke-width="'+rfpN(tw*0.2)+'" stroke-dasharray="0.1 0.5"'+at+'/>';
+    };
+    const glow=function(L,c0,c1){return pieces(L,5).map(function(q,i){return'<path d="'+D(q)+'" stroke="'+rfpEsc(mix(c0,c1,(i+0.5)/5))+'" stroke-width="'+rfpN(tw*1.9)+'"'+at+'/>';}).join('');};
+    const c0=P.c0||'#ff4a3d',cm=P.cm||'#b45fd8',c1=P.c1||'#3d86ff';
+    let s='<g pointer-events="none" data-rfp-heatlayer>';
+    H.c.forEach(function(c){
+      s+='<g class="rfp-hx" data-rfp-hx="'+c.k+'">'+(fx?'<g class="rfp-hglow" filter="url(#'+id+'-hblur)" opacity="0">'+glow(c.sup,c0,cm)+glow(c.ret,cm,c1)+'</g>':'')
+        +pipe(c.ret,cm,c1)+pipe(c.sup,c0,cm)+'</g>';
+    });
+    const m=H.o.manifold;
+    if(m)s+='<rect data-rfp-manifold x="'+rfpN(m[0]-0.2)+'" y="'+rfpN(m[1]-0.09)+'" width="0.4" height="0.18" rx="0.03" fill="#d5dae1" stroke="#5b6470" stroke-width="0.025"/>';
+    return s+'</g>';
+  }
+  // colour / grey / glow of one loop by its room's state; power (VTherm power_percent) sets the
+  // strength and the speed of the flow
+  _heatApply(el,st){
+    const pw=Math.max(0,Math.min(1,(isFinite(st.pw)?st.pw:0)/100));
+    const o={heat:[0.55+0.45*pw,0,0.08+0.42*pw],pause:[0.55,0.3,0],idle:[0.25,0.75,0],off:[0,1,0]}[st.heat]||[0,1,0];
+    const op=function(sel,v){[].forEach.call(el.querySelectorAll(sel),function(n){n.style.opacity=String(v);});};
+    op('.rfp-hc',o[0]);op('.rfp-hg',o[1]);op('.rfp-hglow',o[2]);
+    el.classList.toggle('is-flow',st.heat==='heat'&&pw>0&&this._heatCfg().flow!==false);
+    el.classList.toggle('is-pause',st.heat==='pause');
+    el.style.setProperty('--rfp-hs',(3.6-2.4*pw).toFixed(2)+'s');
+  }
+  // the thermal theme's faint serpentine (the plan themes draw _heatLayer)
   _heatSvg(T,r,k){
     if(!r.climate||!this.L.heating)return'';
     const h=T.heat,hc=T.heatColor||'#ff7a63';let w='',c='';
@@ -858,7 +932,7 @@ class RfpView{
     const by=function(list,attr){const m={};list.forEach(function(el){const k=el.getAttribute(attr);(m[k]=m[k]||[]).push(el);});return m;};
     this._nodes={
       light:by(q('[data-rfp-light]'),'data-rfp-light'),stop:by(q('[data-rfp-stop]'),'data-rfp-stop'),tint:by(q('[data-rfp-tint]'),'data-rfp-tint'),
-      heat:by(q('[data-rfp-heat]'),'data-rfp-heat'),val:by(q('[data-rfp-val]'),'data-rfp-val'),chip:by(q('[data-rfp-chip]'),'data-rfp-chip'),
+      heat:by(q('[data-rfp-heat]'),'data-rfp-heat'),hx:by(q('[data-rfp-hx]'),'data-rfp-hx'),val:by(q('[data-rfp-val]'),'data-rfp-val'),chip:by(q('[data-rfp-chip]'),'data-rfp-chip'),
       label:by(q('[data-rfp-label]'),'data-rfp-label'),
       thermo:by(q('[data-rfp-thermo]'),'data-rfp-thermo'),tt:by(q('[data-rfp-tt]'),'data-rfp-tt'),th:by(q('[data-rfp-th]'),'data-rfp-th'),tn:by(q('[data-rfp-tn]'),'data-rfp-tn'),
       tile:by(q('[data-rfp-tile]'),'data-rfp-tile'),ticon:by(q('[data-rfp-ticon]'),'data-rfp-ticon'),tbulb:by(q('[data-rfp-tbulb]'),'data-rfp-tbulb'),big:by(q('[data-rfp-big]'),'data-rfp-big'),
@@ -892,7 +966,12 @@ class RfpView{
     const c=r.climate&&S[r.climate];
     if(c){
       const a=c.attributes||{},act=a.hvac_action;
-      st.heat=c.state==='off'||c.state==='unavailable'?'off':(act==='heating'||act==='preheating'?'heat':'idle');
+      // off with a heating request still standing (Versatile Thermostat's requested_state: the central
+      // mode stopped it, a window is open) is a pause, not off (7.1.0)
+      const rq=a.requested_state&&typeof a.requested_state==='object'?a.requested_state.hvac_mode:null;
+      st.heat=c.state==='unavailable'?'off':(c.state==='off'?(rq&&rq!=='off'?'pause':'off'):(act==='heating'||act==='preheating'?'heat':'idle'));
+      const pp=rfpNum(a.power_percent),op=rfpNum(a.on_percent);
+      st.pw=st.heat==='heat'?Math.max(0,Math.min(100,isFinite(pp)?pp:(isFinite(op)?op*100:100))):0;
       if(isFinite(rfpNum(a.current_temperature)))st.t=rfpNum(a.current_temperature);
       if(isFinite(rfpNum(a.current_humidity)))st.h=rfpNum(a.current_humidity);
     }
@@ -967,6 +1046,7 @@ class RfpView{
       set(N.stop[k],function(el){el.setAttribute('stop-color',st.color);});
       set(N.tint[k],function(el){el.setAttribute('fill',st.color);});
       set(N.heat[k],function(el){el.setAttribute('class','rfp-heat'+(st.heat?' is-'+st.heat:''));});
+      set(N.hx[k],function(el){self._heatApply(el,st);});
       // media
       set(N.mglow[k],function(el){el.setAttribute('opacity',st.play?'1':(st.media?'0.45':'0'));});
       set(N.media[k],function(el){el.textContent=st.media?(st.play?'▶ ':'❚❚ ')+st.media:'';});
@@ -1012,7 +1092,7 @@ class RfpView{
         set(N.cbg['light:'+k],function(el){el.setAttribute('fill',st.on?tt.iconOn:tt.icon);});
         set(N.cv['light:'+k],function(el){el.textContent=st.on?rfpT(lang,'on')+(st.bri<0.995?' '+Math.round(st.bri*100)+' %':''):rfpT(lang,'off');el.setAttribute('fill',st.on?tt.inkOn:tt.ink);});
         set(N.cbg['heat:'+k],function(el){el.setAttribute('fill',st.heat==='heat'?tt.heatBg:tt.icon);});
-        set(N.cv['heat:'+k],function(el){el.textContent=st.heat==='heat'?rfpT(lang,'heating'):(st.heat==='off'?rfpT(lang,'off'):rfpT(lang,'idle'));el.setAttribute('fill',st.heat==='heat'?tt.heatInk:tt.ink);});
+        set(N.cv['heat:'+k],function(el){el.textContent=st.heat==='heat'?rfpT(lang,'heating'):(st.heat==='off'?rfpT(lang,'off'):(st.heat==='pause'?rfpT(lang,'paused'):rfpT(lang,'idle')));el.setAttribute('fill',st.heat==='heat'?tt.heatInk:tt.ink);});
       }
     });
     this._applyOpenings(force);

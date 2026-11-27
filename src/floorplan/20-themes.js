@@ -45,6 +45,16 @@ const RFP_THEMES={
     win:{glass:'#5d8fb3',open:'#2a9d8f',blind:'#8c7a5f',door:'#3b3227'}},
 };
 const RFP_THEME_NAMES=Object.keys(RFP_THEMES);
+// Floor heating pipes (7.1.0): tube (a dark outline under the colour, like a pipe) or a line, the
+// colour of an idle / switched-off pipe, and supply → middle → return colours along the loop.
+// Overridable like every token: overrides: {'pipe.c0': '#ff5a3c'}.
+const RFP_PIPES={
+  night:{tube:true,outline:'#0b0e12',off:'#aab0b8',c0:'#ff4a3d',cm:'#b45fd8',c1:'#3d86ff'},
+  clay:{tube:true,outline:'#8a7c6e',off:'#f6f1ea',c0:'#f2553f',cm:'#b97bd0',c1:'#4a8cf2'},
+  neon:{tube:false,lw:0.42,off:'rgba(125,139,189,.5)',c0:'#ff3d6e',cm:'#c24dff',c1:'#2fd0ff'},
+  blueprint:{tube:false,lw:0.36,off:'rgba(230,241,255,.45)',c0:'#ffab94',cm:'#e8c8ff',c1:'#a6d8ff'},
+  sketch:{tube:false,lw:0.42,off:'rgba(59,50,39,.4)',c0:'#d1495b',cm:'#8e5aa8',c1:'#2f6db0'},
+};
 // Floor materials (v6.49.0: + vinyl) and their patterns, in plan metres. `c` is the base colour —
 // the theme's floor.<material>, or a room's own floor_color.
 const RFP_FLOORS=['wood','vinyl','tile','carpet','concrete','none'];
@@ -86,7 +96,7 @@ function rfpThemeName(fp,profile,dark){
 }
 function rfpTheme(fp,profile,dark){
   const name=rfpThemeName(fp,profile,dark);
-  const T=rfpClone(RFP_THEMES[name]);T.name=name;
+  const T=rfpClone(RFP_THEMES[name]);T.name=name;T.pipe=rfpClone(RFP_PIPES[name]||RFP_PIPES.night);
   const ov=fp&&fp.overrides&&typeof fp.overrides==='object'?fp.overrides:{};
   for(const k in ov)rfpSetPath(T,k,ov[k]);
   const wall=fp&&fp.wall&&typeof fp.wall==='object'?fp.wall:{};

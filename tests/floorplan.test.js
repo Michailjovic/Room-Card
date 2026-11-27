@@ -160,9 +160,13 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
   t('lights: brightness sets the strength (kitchen at 50 %)',Math.abs(lo(3)-(0.35+0.65*128/255))<0.01);
   t('lights: rgb_color tints the pool',S.querySelector('[data-rfp-stop="0"]').getAttribute('stop-color')==='rgb(255,180,100)');
   t('lights: colour temperature tints the kitchen',/^rgb\(255,/.test(S.querySelector('[data-rfp-stop="3"]').getAttribute('stop-color')));
-  const hc=k=>S.querySelector('[data-rfp-heat="'+k+'"]').getAttribute('class');
-  t('heating: hvac_action heating → is-heat; idle → is-idle; off → is-off',hc(0)==='rfp-heat is-heat'&&hc(3)==='rfp-heat is-idle'&&hc(4)==='rfp-heat is-off');
-  t('no climate → no heating loop',!S.querySelector('[data-rfp-heat="1"]'));
+  // 7.1.0: the loops are drawn by the heating layer (data-rfp-hx); colour / grey by state
+  const hx=k=>S.querySelector('[data-rfp-hx="'+k+'"]');
+  const hcol=k=>parseFloat(hx(k).querySelector('.rfp-hc').style.opacity),hgr=k=>parseFloat(hx(k).querySelector('.rfp-hg').style.opacity);
+  const hc=k=>hx(k).classList.contains('is-flow')?'heat':(hcol(k)>0?'idle':'off');
+  t('heating: heating → coloured with flow; idle → faint; off → grey',hc(0)==='heat'&&hcol(0)===1&&hc(3)==='idle'&&Math.abs(hcol(3)-0.25)<1e-6&&hc(4)==='off'&&hgr(4)===1);
+  t('no climate → no heating loop',!hx(1)&&!S.querySelector('[data-rfp-heat="1"]'));
+  t('heating: a loop is two pipes (supply + return) inside the room',hx(0).querySelectorAll('.rfp-hg').length===2);
   t('walls are drawn as projected faces (oblique theme default)',S.querySelectorAll('polygon').length>40);
   // state update: only changed rooms are touched
   const before=S.querySelector('[data-rfp-light="0"]');
@@ -170,7 +174,7 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
   h2.states['climate.living']={state:'heat',attributes:{hvac_action:'idle',current_temperature:23.4,current_humidity:53}};
   el.hass=h2;await sleep(20);
   t('update: the bedroom lights up with its colour',lo(4)===1&&S.querySelector('[data-rfp-stop="4"]').getAttribute('stop-color')==='rgb(10,20,30)');
-  t('update: living stops heating, its value follows',hc(0)==='rfp-heat is-idle'&&val(0)==='23.4° · 53 %');
+  t('update: living stops heating, its value follows',hc(0)==='idle'&&val(0)==='23.4° · 53 %');
   t('update: no re-render (same nodes)',S.querySelector('[data-rfp-light="0"]')===before&&el._fpInst===v);
   // tap → the linked room (switch-room through the card's runner); hold → toggle the lights
   calls.length=0;
@@ -251,7 +255,7 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
   {
     const c=clone(BASE);c.rooms[0].floorplan.theme='sketch';
     const e6=mk(c);await sleep(30);
-    t('sketch at auto quality: rough + paper filters',sr(e6).querySelectorAll('filter').length===2);
+    t('sketch at auto quality: rough + paper filters (+ the heating glow)',!!sr(e6).querySelector('filter[id$="-rough"]')&&!!sr(e6).querySelector('filter[id$="-paper"]')&&sr(e6).querySelectorAll('filter').length===3);
     t('7.0.4: auto quality runs the animations in steps too (rfp-eco is the default)',!!sr(e6).querySelector('svg.rfp-eco'));
     e6.remove();
     const ch=clone(BASE);ch.rooms[0].floorplan.quality='high';
@@ -705,6 +709,44 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const an=[{home_px:{x:800,y:752},floor_pct:{x:10,y:10}},{home_px:{x:1600,y:752},floor_pct:{x:90,y:10}},{home_px:{x:800,y:1152},floor_pct:{x:10,y:90}}];
     const af=ST.fpAnchorFit({source:src},an,1000,500);
     t('markers: anchors → scale, rotation and place of the edited image',Math.abs(af.scale-0.0125)<1e-9&&Math.abs(af.rotation)<0.01&&Math.abs(af.x+1.25)<0.01&&Math.abs(af.y+0.625)<0.01);
+  }
+  // ---- floor heating loops and feeds (7.1.0, HEATING_PLAN.md) -----------------------------------
+  {
+    const G=C._rocFloorplan.geom;
+    const A=[[0,0],[4,0],[4,3],[0,3]],B=[[0,3],[4,3],[4,6],[0,6]],Cr=[[4.1,0],[6,0],[6,3],[4.1,3]];
+    const f=G.maxRect(A,0.25);
+    t('loop field: the biggest rectangle 25 cm off the walls',f&&Math.abs(f[0]-0.25)<0.051&&Math.abs(f[2]-3.75)<0.051&&Math.abs(f[3]-2.75)<0.051);
+    const sp=G.spiralIn(3,2,0.4);
+    t('spiral: runs inwards and stays in its box',sp.length>8&&sp.every(q=>q[0]>=-1e-9&&q[0]<=3+1e-9&&q[1]>=-1e-9&&q[1]<=2+1e-9));
+    const loops=[{k:0,poly:A},{k:1,poly:B}];
+    const c0=G.heatCircuits([A,B,Cr],loops,{pitch:0.2,manifold:[1,1],passes:[]});
+    const byK=k=>c0.find(c=>c.k===k);
+    t('feeds: the manifold\'s own room is reached, a room behind a wall without a pass is not',byK(0).routed&&!byK(0).missing&&byK(1).missing&&!byK(1).routed);
+    t('feeds: a loop without a feed still has its supply and return',byK(1).sup.length>4&&byK(1).ret.length>4);
+    const c1=G.heatCircuits([A,B,Cr],loops,{pitch:0.2,manifold:[1,1],passes:[[2,3]]});
+    const r1=c1.find(c=>c.k===1);
+    t('feeds: a pass in the wall opens the way — the pipe crosses the wall at the pass',r1.routed&&!r1.missing);
+    const seg=[];for(let i=1;i<r1.sup.length;i++){const a=r1.sup[i-1],b=r1.sup[i];if((a[1]-3)*(b[1]-3)<=0&&a[1]!==b[1])seg.push(a[0]);}
+    t('feeds: …within 35 cm of the pass',seg.length>0&&seg.every(x=>Math.abs(x-2)<=0.35+0.15));
+    t('feeds: supply starts and return ends at the manifold',Math.hypot(r1.sup[0][0]-1,r1.sup[0][1]-1)<0.2&&Math.hypot(r1.ret[r1.ret.length-1][0]-1,r1.ret[r1.ret.length-1][1]-1)<0.2);
+    const c2=G.heatCircuits([A,B,Cr],loops,{pitch:0.2});
+    t('no manifold → loops only, no routing',c2.length===2&&c2.every(c=>!c.routed&&!c.missing));
+    // the page: power, pause, loop: false, the manifold
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;
+    fp.heating={manifold:[C0.Living[0][0]+1,C0.Living[0][1]+1],passes:[{at:[5.98,2.25]}],pitch:0.25};
+    fp.rooms[4].loop=false;
+    const h=mkHass();
+    h.states['climate.living']={state:'heat',attributes:{hvac_action:'heating',current_temperature:23.1,power_percent:40}};
+    h.states['climate.kitchen']={state:'off',attributes:{hvac_action:'off',current_temperature:22.6,requested_state:{hvac_mode:'heat'}}};
+    const e=mk(c,h);await sleep(30);const S=sr(e);
+    const X=k=>S.querySelector('[data-rfp-hx="'+k+'"]');
+    t('loop: false → that room gets no loop',!!X(0)&&!!X(3)&&!X(4));
+    t('power 40 %: flow runs, glow at 0.08 + 0.42 × 0.4',X(0).classList.contains('is-flow')&&Math.abs(parseFloat(X(0).querySelector('.rfp-hglow').style.opacity)-0.248)<1e-6&&X(0).style.getPropertyValue('--rfp-hs')==='2.64s');
+    t('off with a standing heat request (VTherm central mode) → paused, not off',X(3).classList.contains('is-pause')&&!X(3).classList.contains('is-flow')&&parseFloat(X(3).querySelector('.rfp-hc').style.opacity)===0.55);
+    t('the manifold is drawn where it was placed',!!S.querySelector('[data-rfp-manifold]'));
+    const hl=c.rooms[0].floorplan;hl.layers={heating:false};
+    const e2=mk(c,h);await sleep(30);
+    t('layers.heating: false → no loops at all',!sr(e2).querySelector('[data-rfp-hx]')&&!sr(e2).querySelector('[data-rfp-heatlayer]'));
   }
   console.log(fails?'\n'+fails+' FAILED':'\nall floor plan tests passed');
   process.exit(fails?1:0);

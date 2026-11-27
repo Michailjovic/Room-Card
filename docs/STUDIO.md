@@ -271,6 +271,11 @@ edits the plan instead of elements, with a toolbar above it:
 - **Window** (v6.49.0) — click a wall to place a window (1 m wide). It gets the room's unused window
   sensor and blind from the Home Assistant area; check them in Properties (type, width, sensor,
   blind, blind type, invert; doors also mirror / outward).
+- **Manifold** (7.1.0) — click inside the room where the floor heating manifold is; every loop
+  gets its feed from there. Click it again with the tool to remove it.
+- **Passes** (7.1.0) — click a wall where the heating pipes pass under it; click a pass to remove
+  it. The tool stays on for the next wall (Esc ends it). Feeds cross walls only at passes; the
+  hint names a room no feed reaches.
 - **Marker** (v6.48.0) — click where a marker goes, then pick its entity in Properties. Select
   a marker to drag it (snapping like corners; Alt = free); Delete removes it. Set *type* to
   `label` for a text with a live value.

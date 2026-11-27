@@ -98,6 +98,8 @@ const CHAPTERS=[
     ['fpItem','A marker or label (`floorplan.items` item)',FP],
     ['fpVacuum','A vacuum (`floorplan.vacuums` item)',FP],
     ['fpTransform','`transform:` of a vacuum',FP],
+    ['fpHeating','`floorplan.heating` — floor heating loops and feeds',FP+'#floor-heating'],
+    ['fpPass','A pass through a wall (`floorplan.heating.passes` item)',FP+'#floor-heating'],
     ['fpLayers','`floorplan.layers`',FP],
     ['fpEntity','A presence / media entity',FP],
     ['fpBackground','`floorplan.background` — the photo background',FP],
@@ -107,7 +109,7 @@ const CHAPTERS=[
     ['fpTrace','`floorplan.trace` — the image traced in the studio',FP],
   ]],
 ];
-const SKIP=new Set(['fpPage']); // the studio's view of `floorplan`, not a config shape of its own
+const SKIP=new Set(['fpPage','fpHeatPage']); // the studio's view of `floorplan`, not a config shape of its own
 { // every schema type is documented exactly once
   const listed=CHAPTERS.flatMap(c=>c[1].map(t=>t[0]));
   const missing=Object.keys(S).filter(t=>!SKIP.has(t)&&!listed.includes(t));

@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='7.0.5';
+const ROC_FP_VERSION='7.1.0';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -30,9 +30,9 @@ function rfpN(v){return Math.round(v*100)/100;}
 function rfpNum(v){if(v===null||v===undefined||v==='')return NaN;const n=typeof v==='number'?v:parseFloat(v);return isFinite(n)?n:NaN;}
 // Strings the plan itself draws (labels, empty state). The studio has its own table.
 const RFP_STR={
-  en:{empty:'No floor plan yet',empty2:'Open the Studio to import it from AnyVac or draw it',heating:'heating',light:'Light',heat:'Heating',on:'on',off:'off',idle:'idle',none:'—',
+  en:{empty:'No floor plan yet',empty2:'Open the Studio to import it from AnyVac or draw it',heating:'heating',light:'Light',heat:'Heating',on:'on',off:'off',idle:'idle',paused:'paused',none:'—',
     vac:'vacuumed',mop:'mopped',cleaning:'cleaning',min:'{n} min',hr:'{n} h',day:'{n} d',clean:'Clean {room}',clean_q:'Start cleaning {room}?'},
-  cs:{empty:'Půdorys zatím není',empty2:'Otevři Studio a naimportuj ho z AnyVac nebo ho nakresli',heating:'topí',light:'Světlo',heat:'Topení',on:'zap.',off:'vyp.',idle:'stojí',none:'—',
+  cs:{empty:'Půdorys zatím není',empty2:'Otevři Studio a naimportuj ho z AnyVac nebo ho nakresli',heating:'topí',light:'Světlo',heat:'Topení',on:'zap.',off:'vyp.',idle:'stojí',paused:'pozastaveno',none:'—',
     vac:'vysáto',mop:'vytřeno',cleaning:'uklízí',min:'{n} min',hr:'{n} h',day:'{n} d',clean:'Uklidit: {room}',clean_q:'Spustit úklid: {room}?'},
 };
 function rfpT(lang,k){const t=RFP_STR[lang]||RFP_STR.en;return t[k]!==undefined?t[k]:RFP_STR.en[k];}
@@ -462,6 +462,169 @@ function rfpProposeDoors(rooms,paths,o){
   }
   return doors;
 }
+// ---- Floor heating loops and their feeds (7.1.0, HEATING_PLAN.md) -----------------------------
+// The card draws the loops itself: no rendered images. Every room with a thermostat gets a
+// counter-flow (bifilar) spiral in the biggest rectangle that fits it `margin` from its walls; with
+// a manifold placed, every loop also gets its feed, routed from the manifold through the rooms. A
+// wall can be crossed only at a pass (a point the user clicks on the wall), so the user decides
+// where the pipes go under the walls. Everything in plan metres.
+// The biggest axis-aligned rectangle inside polygon p, at least m from its walls (grid g).
+function rfpMaxRect(p,m,g){
+  g=g||0.05;
+  const b=rfpBBox(p),nx=Math.ceil((b[2]-b[0])/g),ny=Math.ceil((b[3]-b[1])/g);
+  if(!(nx>0&&ny>0)||nx*ny>4e6)return null;
+  const hgt=new Int32Array(nx);let best={a:0};
+  for(let j=0;j<ny;j++){
+    for(let i=0;i<nx;i++){const x=b[0]+(i+0.5)*g,y=b[1]+(j+0.5)*g;hgt[i]=rfpInPoly(x,y,p)&&rfpEdgeDist(x,y,p)>=m?hgt[i]+1:0;}
+    const st=[];
+    for(let i=0;i<=nx;i++){
+      const h=i<nx?hgt[i]:0;let start=i;
+      while(st.length&&st[st.length-1].h>=h){const t=st.pop(),a=t.h*(i-t.i);if(a>best.a)best={a:a,i0:t.i,i1:i,j0:j+1-t.h,j1:j+1};start=t.i;}
+      st.push({i:start,h:h});
+    }
+  }
+  return best.a?[b[0]+best.i0*g,b[1]+best.j0*g,b[0]+best.i1*g,b[1]+best.j1*g]:null;
+}
+// A rectangular spiral into a w×h box, step s between laps: starts at 0,0 along +x, the inside
+// on its right (y down). The loop's return runs back between the laps (rfpOffset by s/2).
+function rfpSpiralIn(w,h,s){
+  let x0=0,y0=0,x1=w,y1=h;const P=[[0,0]];
+  for(let g=0;g<400;g++){
+    P.push([x1,y0]);if(y1-y0<1.5*s)break;
+    P.push([x1,y1]);if(x1-x0<1.5*s)break;
+    P.push([x0,y1]);y0+=s;if(y1-y0<1.5*s)break;
+    P.push([x0,y0]);x0+=s;x1-=s;y1-=s;if(x1-x0<1.5*s)break;
+  }
+  return P;
+}
+// A polyline moved d to its right (y down), mitred at the corners.
+function rfpOffset(P,d){
+  const sg=[];
+  for(let i=0;i<P.length-1;i++){const dx=P[i+1][0]-P[i][0],dy=P[i+1][1]-P[i][1],L=Math.hypot(dx,dy);if(L>1e-9)sg.push({a:P[i],b:P[i+1],n:[-dy/L,dx/L]});}
+  if(!sg.length)return P.slice();
+  const out=[[sg[0].a[0]+sg[0].n[0]*d,sg[0].a[1]+sg[0].n[1]*d]];
+  for(let k=1;k<sg.length;k++){
+    const n1=sg[k-1].n,n2=sg[k].n,q=sg[k].a,dot=n1[0]*n2[0]+n1[1]*n2[1];
+    if(dot<-0.99)continue;
+    out.push(dot>0.99?[q[0]+n1[0]*d,q[1]+n1[1]*d]:[q[0]+(n1[0]+n2[0])*d/(1+dot),q[1]+(n1[1]+n2[1])*d/(1+dot)]);
+  }
+  const l=sg[sg.length-1];out.push([l.b[0]+l.n[0]*d,l.b[1]+l.n[1]*d]);
+  return out;
+}
+function rfpSimplify(P){
+  const q=[];
+  P.forEach(function(p){const l=q[q.length-1];if(!l||Math.hypot(p[0]-l[0],p[1]-l[1])>1e-6)q.push(p);});
+  if(q.length<3)return q;
+  const o=[q[0]];
+  for(let i=1;i<q.length-1;i++){const a=o[o.length-1],b=q[i],c=q[i+1];if(Math.abs((b[0]-a[0])*(c[1]-b[1])-(b[1]-a[1])*(c[0]-b[0]))>1e-9)o.push(b);}
+  o.push(q[q.length-1]);return o;
+}
+// The routing grid: each cell belongs to the first room that holds it; cells near a wall and on a
+// loop cost more (feeds run along the loops, not across them); a pass opens the walls within r.
+function rfpHeatGrid(polys,fields,passes,r){
+  const g=0.05;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  polys.forEach(function(p){const b=rfpBBox(p);x0=Math.min(x0,b[0]);y0=Math.min(y0,b[1]);x1=Math.max(x1,b[2]);y1=Math.max(y1,b[3]);});
+  if(!isFinite(x0))return null;
+  x0-=0.4;y0-=0.4;x1+=0.4;y1+=0.4;
+  const nx=Math.ceil((x1-x0)/g),ny=Math.ceil((y1-y0)/g);if(nx*ny>2e6)return null;
+  const room=new Int16Array(nx*ny).fill(-1),cost=new Float32Array(nx*ny),zone=new Uint8Array(nx*ny);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const x=x0+(i+0.5)*g,y=y0+(j+0.5)*g,c=j*nx+i;
+    for(let k=0;k<polys.length;k++)if(rfpInPoly(x,y,polys[k])){room[c]=k;cost[c]=rfpEdgeDist(x,y,polys[k])<0.1?3:0;break;}
+    if(room[c]<0)continue;
+    fields.forEach(function(f){if(f&&x>f[0]&&x<f[2]&&y>f[1]&&y<f[3])cost[c]+=2;});
+  }
+  const rc=Math.ceil(r/g);
+  (passes||[]).forEach(function(p){
+    const ci=Math.floor((p[0]-x0)/g),cj=Math.floor((p[1]-y0)/g);
+    for(let dj=-rc;dj<=rc;dj++)for(let di=-rc;di<=rc;di++){
+      const i=ci+di,j=cj+dj;if(i<0||j<0||i>=nx||j>=ny)continue;
+      if(Math.hypot(x0+(i+0.5)*g-p[0],y0+(j+0.5)*g-p[1])<=r)zone[j*nx+i]=1;
+    }
+  });
+  return{g:g,x0:x0,y0:y0,nx:nx,ny:ny,room:room,cost:cost,zone:zone};
+}
+function rfpGridCell(G,p){
+  const free=function(c){return G.room[c]>=0||G.zone[c]===1;};
+  const i=Math.max(0,Math.min(G.nx-1,Math.floor((p[0]-G.x0)/G.g))),j=Math.max(0,Math.min(G.ny-1,Math.floor((p[1]-G.y0)/G.g)));
+  if(free(j*G.nx+i))return j*G.nx+i;
+  for(let r=1;r<40;r++)for(let dj=-r;dj<=r;dj++)for(let di=-r;di<=r;di++){
+    if(Math.max(Math.abs(di),Math.abs(dj))!==r)continue;
+    const ii=i+di,jj=j+dj;if(ii<0||jj<0||ii>=G.nx||jj>=G.ny)continue;
+    if(free(jj*G.nx+ii))return jj*G.nx+ii;
+  }
+  return-1;
+}
+// A* over the grid with a heading in the state (a turn costs 8 cells: few bends). A move from one
+// room into another is allowed only inside a pass. occ: extra cost of cells other feeds took.
+function rfpRoute(G,a,b,occ){
+  const s=rfpGridCell(G,a),t=rfpGridCell(G,b);if(s<0||t<0)return null;
+  const nx=G.nx,NS=nx*G.ny*4,dist=new Float32Array(NS).fill(Infinity),prev=new Int32Array(NS).fill(-1),done=new Uint8Array(NS);
+  const hk=[],hv=[];
+  const swap=function(x,y){let q=hk[x];hk[x]=hk[y];hk[y]=q;q=hv[x];hv[x]=hv[y];hv[y]=q;};
+  const push=function(k,v){hk.push(k);hv.push(v);let i=hk.length-1;while(i>0){const p=(i-1)>>1;if(hv[p]<=hv[i])break;swap(p,i);i=p;}};
+  const pop=function(){const k=hk[0],lk=hk.pop(),lv=hv.pop();if(hk.length){hk[0]=lk;hv[0]=lv;let i=0;for(;;){const l=2*i+1,r=l+1;let m=i;if(l<hk.length&&hv[l]<hv[m])m=l;if(r<hk.length&&hv[r]<hv[m])m=r;if(m===i)break;swap(m,i);i=m;}}return k;};
+  const ti=t%nx,tj=(t-ti)/nx,H=function(c){const i=c%nx,j=(c-i)/nx;return Math.abs(i-ti)+Math.abs(j-tj);};
+  for(let d=0;d<4;d++){dist[s*4+d]=0;push(s*4+d,H(s));}
+  const DI=[1,0,-1,0],DJ=[0,1,0,-1];let end=-1;
+  while(hk.length){
+    const u=pop();if(done[u])continue;done[u]=1;
+    const c=u>>2,d=u&3;if(c===t){end=u;break;}
+    const ci=c%nx,cj=(c-ci)/nx;
+    for(let nd=0;nd<4;nd++){
+      if(nd===((d+2)&3))continue;
+      const ii=ci+DI[nd],jj=cj+DJ[nd];if(ii<0||jj<0||ii>=nx||jj>=G.ny)continue;
+      const nc=jj*nx+ii;if(!(G.room[nc]>=0||G.zone[nc]))continue;
+      if(G.room[c]!==G.room[nc]&&!G.zone[c]&&!G.zone[nc])continue;
+      const v=nc*4+nd,wt=dist[u]+1+(G.zone[nc]?0:G.cost[nc])+(occ?occ[nc]:0)+(nd!==d?8:0);
+      if(wt<dist[v]){dist[v]=wt;prev[v]=u;push(v,wt+H(nc));}
+    }
+  }
+  if(end<0)return null;
+  const cells=[];for(let u=end;u>=0;u=prev[u])cells.push(u>>2);cells.reverse();
+  const pts=cells.map(function(c){const i=c%nx,j=(c-i)/nx;return[G.x0+(i+0.5)*G.g,G.y0+(j+0.5)*G.g];});
+  // exact ends, square to the first and last step
+  const p0=pts[0],pe=pts[pts.length-1];
+  if(pts.length>1&&Math.abs(pts[1][0]-p0[0])<1e-6)pts[0]=[p0[0],a[1]];else pts[0]=[a[0],p0[1]];
+  pts.unshift(a.slice());
+  pts.push(pts.length>1&&Math.abs(pts[pts.length-2][1]-pe[1])<1e-6?[b[0],pe[1]]:[pe[0],b[1]]);pts.push(b.slice());
+  return{cells:cells,pts:rfpSimplify(pts)};
+}
+// The circuits of a plan. polys: every room's polygon; loops: [{k (room index), poly}];
+// o: {pitch (pipe to pipe, m), margin (m), manifold ([x,y] or null), passes ([[x,y]]), passR}.
+// Returns [{k, field, sup (manifold → centre), ret (centre → manifold), routed, missing}].
+function rfpHeatCircuits(polys,loops,o){
+  o=o||{};
+  const p=rfpNum(o.pitch)>=0.08?Math.min(0.6,rfpNum(o.pitch)):0.2,mg=rfpNum(o.margin)>=0?rfpNum(o.margin):0.25,m=o.manifold;
+  const items=loops.map(function(L){
+    const f=rfpMaxRect(L.poly,mg);if(!f||f[2]-f[0]<3*p||f[3]-f[1]<3*p)return null;
+    const cx=m&&Math.abs(m[0]-f[2])<Math.abs(m[0]-f[0])?1:0,cy=m&&Math.abs(m[1]-f[3])<Math.abs(m[1]-f[1])?1:0;
+    const map=function(q){return[cx?f[2]-q[0]:f[0]+q[0],cy?f[3]-q[1]:f[1]+q[1]];};
+    const c0=map([0,0]);
+    return{L:L,f:f,map:map,entry:map([0,p/2]),dist:m?Math.abs(m[0]-c0[0])+Math.abs(m[1]-c0[1]):0};
+  }).filter(Boolean).sort(function(a,b){return a.dist-b.dist;});
+  const G=m?rfpHeatGrid(polys,items.map(function(x){return x.f;}),o.passes,o.passR||0.35):null;
+  const occ=G?new Float32Array(G.nx*G.ny):null;
+  return items.map(function(it){
+    const f=it.f,Sc=rfpSpiralIn(f[2]-f[0],f[3]-f[1],2*p),Rc=rfpOffset(Sc,p);
+    const Sp=Sc.map(it.map),Rp=Rc.map(it.map);
+    let sup=Sp,ret=[Sp[Sp.length-1]].concat(Rp.slice().reverse()),routed=false,missing=false;
+    if(G){
+      const r=rfpRoute(G,m,it.entry,occ);
+      if(!r)missing=true;
+      else{
+        routed=true;
+        const rr=Math.ceil(p*1.15/G.g);
+        r.cells.forEach(function(c){const i=c%G.nx,j=(c-i)/G.nx;
+          for(let dj=-rr;dj<=rr;dj++)for(let di=-rr;di<=rr;di++){const ii=i+di,jj=j+dj;if(ii>=0&&jj>=0&&ii<G.nx&&jj<G.ny)occ[jj*G.nx+ii]+=25;}});
+        const A=rfpOffset(r.pts,p/2),B=rfpOffset(r.pts,-p/2),e=Sp[0];
+        const da=Math.hypot(A[A.length-1][0]-e[0],A[A.length-1][1]-e[1]),db=Math.hypot(B[B.length-1][0]-e[0],B[B.length-1][1]-e[1]);
+        sup=(da<=db?A:B).concat(Sp);ret=ret.concat((da<=db?B:A).slice().reverse());
+      }
+    }
+    return{k:it.L.k,field:f,sup:sup,ret:ret,routed:routed,missing:missing};
+  });
+}
 // ----- Themes (V7_PLAN §6.2, the 2026-10-21 proposals) -------------------------------------------
 // A theme is a set of tokens, not code: projection, background, floor materials, walls, how a lit
 // room and a heating room are drawn, labels. `floorplan.overrides` replaces single tokens by dotted
@@ -509,6 +672,16 @@ const RFP_THEMES={
     win:{glass:'#5d8fb3',open:'#2a9d8f',blind:'#8c7a5f',door:'#3b3227'}},
 };
 const RFP_THEME_NAMES=Object.keys(RFP_THEMES);
+// Floor heating pipes (7.1.0): tube (a dark outline under the colour, like a pipe) or a line, the
+// colour of an idle / switched-off pipe, and supply → middle → return colours along the loop.
+// Overridable like every token: overrides: {'pipe.c0': '#ff5a3c'}.
+const RFP_PIPES={
+  night:{tube:true,outline:'#0b0e12',off:'#aab0b8',c0:'#ff4a3d',cm:'#b45fd8',c1:'#3d86ff'},
+  clay:{tube:true,outline:'#8a7c6e',off:'#f6f1ea',c0:'#f2553f',cm:'#b97bd0',c1:'#4a8cf2'},
+  neon:{tube:false,lw:0.42,off:'rgba(125,139,189,.5)',c0:'#ff3d6e',cm:'#c24dff',c1:'#2fd0ff'},
+  blueprint:{tube:false,lw:0.36,off:'rgba(230,241,255,.45)',c0:'#ffab94',cm:'#e8c8ff',c1:'#a6d8ff'},
+  sketch:{tube:false,lw:0.42,off:'rgba(59,50,39,.4)',c0:'#d1495b',cm:'#8e5aa8',c1:'#2f6db0'},
+};
 // Floor materials (v6.49.0: + vinyl) and their patterns, in plan metres. `c` is the base colour —
 // the theme's floor.<material>, or a room's own floor_color.
 const RFP_FLOORS=['wood','vinyl','tile','carpet','concrete','none'];
@@ -550,7 +723,7 @@ function rfpThemeName(fp,profile,dark){
 }
 function rfpTheme(fp,profile,dark){
   const name=rfpThemeName(fp,profile,dark);
-  const T=rfpClone(RFP_THEMES[name]);T.name=name;
+  const T=rfpClone(RFP_THEMES[name]);T.name=name;T.pipe=rfpClone(RFP_PIPES[name]||RFP_PIPES.night);
   const ov=fp&&fp.overrides&&typeof fp.overrides==='object'?fp.overrides:{};
   for(const k in ov)rfpSetPath(T,k,ov[k]);
   const wall=fp&&fp.wall&&typeof fp.wall==='object'?fp.wall:{};
@@ -577,7 +750,11 @@ const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8
   // transform inside the SVG), which no compositor can run: at 60 frames a second the whole plan
   // was restyled, repainted and rastered for every frame, for as long as it was on screen.
   +'.rfp-eco .rfp-flow{animation-timing-function:steps(30)}.rfp-eco .rfp-pulse{animation-timing-function:steps(12)}.rfp-eco .rfp-ping{animation-timing-function:steps(22)}.rfp-eco .rfp-bob{animation-timing-function:steps(7)}'
-  +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
+  // floor heating loops (7.1.0): the state sets the opacities of colour / grey / glow; the flow runs while it heats
+  +'.rfp-hx .rfp-hc,.rfp-hx .rfp-hg,.rfp-hx .rfp-hglow{transition:opacity .9s ease}.rfp-hx .rfp-hf{opacity:0;transition:opacity .9s ease}'
+  +'.rfp-hx.is-flow .rfp-hf{opacity:.7;animation:rfp-hflow var(--rfp-hs,2s) linear infinite}@keyframes rfp-hflow{to{stroke-dashoffset:-.6}}'
+  +'.rfp-hx.is-pause .rfp-hc{filter:saturate(.25)}.rfp-paused .rfp-hf{animation-play-state:paused}.rfp-eco .rfp-hf{animation-timing-function:steps(20)}'
+  +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob,.rfp-hx .rfp-hf{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
 // Markers and labels on the plan (v6.48.0) are HTML over the SVG: they carry ha-icon.
 const RFP_ITEM_CSS='.rfp-items{position:absolute;inset:0;pointer-events:none;overflow:hidden;}'
   +'.rfp-it{position:absolute;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;}'
@@ -792,6 +969,7 @@ class RfpView{
     d+='<radialGradient id="'+id+'-mg"><stop offset="0%" stop-color="'+(T.mediaColor||'#8ecbff')+'" stop-opacity=".75"/><stop offset="100%" stop-color="'+(T.mediaColor||'#8ecbff')+'" stop-opacity="0"/></radialGradient>';
     if(T.light==='hatch')d+='<pattern id="'+id+'-hatch" patternUnits="userSpaceOnUse" width="0.18" height="0.18" patternTransform="rotate(45)"><path d="M0 0V0.18" stroke="'+(T.lightColor||'#ffd166')+'" stroke-width="0.03"/></pattern>';
     if(this.fx){
+      if(this.L&&this.L.heating&&M.rooms.some(function(r){return r.climate&&r.cfg.loop!==false;}))d+='<filter id="'+id+'-hblur" x="-10%" y="-10%" width="120%" height="120%"><feGaussianBlur stdDeviation="0.09"/></filter>';
       if(T.shadow==='soft')d+='<filter id="'+id+'-soft" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="'+rfpN(Math.max(4,F.S*0.18))+'"/></filter>';
       if(T.rough)d+='<filter id="'+id+'-rough"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="'+rfpN(Math.max(2,F.S*0.05))+'"/></filter>';
       if(T.paper)d+='<filter id="'+id+'-paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="2" result="n"/><feColorMatrix in="n" type="saturate" values="0"/><feComponentTransfer><feFuncA type="table" tableValues="0 0.07"/></feComponentTransfer></filter>';
@@ -827,8 +1005,9 @@ class RfpView{
       else if(T.floorStyle==='sketch')fill='rgba(255,255,255,.35)';
       if(self.bgOn&&!self.bgFloors){fill='none';if(stroke==='none')stroke='rgba(255,255,255,.25)';}
       s+='<polygon points="'+rfpPts(r.poly)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="0.03"/>';
-      s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._heatSvg(T,r,k)+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
+      s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
     });
+    s+=this._heatLayer(T,M);
     s+='</g></g>';
     // the vacuum's trail while it cleans (v6.49.0), in plan metres
     if(this.L.vacuum&&this.L.trail&&this._anyvac().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
@@ -1196,6 +1375,74 @@ class RfpView{
     const p=r.pole,b=r.bbox,rad=Math.min(1.4,Math.max(0.7,Math.min(b[2]-b[0],b[3]-b[1])*0.3));
     return'<g class="rfp-light" data-rfp-mglow="'+k+'" opacity="0"><circle class="rfp-pulse" cx="'+rfpN(p[0])+'" cy="'+rfpN(p[1])+'" r="'+rfpN(rad)+'" fill="url(#'+this.uid+'-mg)"/></g>';
   }
+  // ---- floor heating (7.1.0): loops and feeds, drawn by the card (rfpHeatCircuits) ----
+  // floorplan.heating: {pitch, margin, flow, manifold: [x, y], passes: [{at: [x, y]}]}; a room with a
+  // climate gets a loop unless its own `loop: false`. Cached: the routing runs only when the
+  // geometry or these settings change, not on every resize.
+  _heatCfg(){const h=this.o.cfg&&this.o.cfg.heating;return h&&typeof h==='object'&&!Array.isArray(h)?h:{};}
+  _heatModel(M){
+    const h=this._heatCfg(),polys=M.rooms.map(function(r){return r.poly;});
+    const loops=[];M.rooms.forEach(function(r,k){if(r.climate&&r.cfg.loop!==false)loops.push({k:k,poly:r.poly});});
+    const man=rfpPoly([h.manifold])[0]||null;
+    const passes=(Array.isArray(h.passes)?h.passes:[]).map(function(x){return rfpPoly([x&&typeof x==='object'&&!Array.isArray(x)?x.at:x])[0];}).filter(Boolean);
+    const pr=rfpNum(h.pitch),o={pitch:pr>=0.08?Math.min(0.6,pr):0.2,margin:h.margin,manifold:man,passes:passes};
+    const sig=JSON.stringify([polys,loops.map(function(l){return l.k;}),o]);
+    if(!this._hx||this._hx.sig!==sig){
+      const c=loops.length?rfpHeatCircuits(polys,loops,o):[];
+      this._hx={sig:sig,c:c,o:o,missing:c.filter(function(x){return x.missing;}).map(function(x){return M.rooms[x.k].name;})};
+    }
+    return this._hx;
+  }
+  _heatLayer(T,M){
+    if(!this.L.heating)return'';
+    const H=this._heatModel(M);if(!H.c.length)return'';
+    const P=T.pipe||{},tw=H.o.pitch*0.5,fx=this.fx,id=this.uid;
+    const D=function(L){return L.map(function(q,i){return(i?'L':'M')+rfpN(q[0])+' '+rfpN(q[1]);}).join('');};
+    const hex=function(c){return/^#[0-9a-f]{6}$/i.test(c||'')?[1,3,5].map(function(i){return parseInt(c.slice(i,i+2),16);}):null;};
+    const mix=function(a,b,t){const A=hex(a),B=hex(b);if(!A||!B)return t<0.5?a:b;return'rgb('+A.map(function(v,i){return Math.round(v+(B[i]-v)*t);}).join(',')+')';};
+    // a polyline cut into n consecutive pieces of equal length: the colour runs along the pipe
+    const pieces=function(L,n){
+      let tot=0;for(let i=0;i<L.length-1;i++)tot+=Math.hypot(L[i+1][0]-L[i][0],L[i+1][1]-L[i][1]);
+      const out=[],e=tot/n;let cur=[L[0]],acc=0,b=0;
+      for(let i=0;i<L.length-1;i++){
+        const a=L[i],c=L[i+1],l=Math.hypot(c[0]-a[0],c[1]-a[1]);if(l<1e-9)continue;let u=0;
+        while(b<n-1&&acc+(l-u)>=e*(b+1)){const need=e*(b+1)-acc;u+=need;acc+=need;const q=[a[0]+(c[0]-a[0])*u/l,a[1]+(c[1]-a[1])*u/l];cur.push(q);out.push(cur);cur=[q];b++;}
+        acc+=l-u;cur.push(c);
+      }
+      out.push(cur);return out;
+    };
+    const at=' fill="none" stroke-linejoin="round" stroke-linecap="round"';
+    const pipe=function(L,c0,c1){
+      const d=D(L),n=14,core=P.tube?tw*0.62:tw*(rfpNum(P.lw)>0?rfpNum(P.lw):0.4);let s='';
+      if(P.tube)s+='<path d="'+d+'" stroke="'+rfpEsc(P.outline||'#0b0e12')+'" stroke-width="'+rfpN(tw)+'"'+at+'/>';
+      s+='<path class="rfp-hg" d="'+d+'" stroke="'+rfpEsc(P.off||'#aab0b8')+'" stroke-width="'+rfpN(core)+'"'+at+'/>';
+      s+='<g class="rfp-hc">'+pieces(L,n).map(function(q,i){return'<path d="'+D(q)+'" stroke="'+rfpEsc(mix(c0,c1,(i+0.5)/n))+'" stroke-width="'+rfpN(core)+'"'+at+'/>';}).join('')+'</g>';
+      if(P.tube)s+='<path d="'+d+'" stroke="rgba(255,255,255,.3)" stroke-width="'+rfpN(tw*0.14)+'"'+at+'/>';
+      return s+'<path class="rfp-hf" d="'+d+'" stroke="rgba(255,255,255,.85)" stroke-width="'+rfpN(tw*0.2)+'" stroke-dasharray="0.1 0.5"'+at+'/>';
+    };
+    const glow=function(L,c0,c1){return pieces(L,5).map(function(q,i){return'<path d="'+D(q)+'" stroke="'+rfpEsc(mix(c0,c1,(i+0.5)/5))+'" stroke-width="'+rfpN(tw*1.9)+'"'+at+'/>';}).join('');};
+    const c0=P.c0||'#ff4a3d',cm=P.cm||'#b45fd8',c1=P.c1||'#3d86ff';
+    let s='<g pointer-events="none" data-rfp-heatlayer>';
+    H.c.forEach(function(c){
+      s+='<g class="rfp-hx" data-rfp-hx="'+c.k+'">'+(fx?'<g class="rfp-hglow" filter="url(#'+id+'-hblur)" opacity="0">'+glow(c.sup,c0,cm)+glow(c.ret,cm,c1)+'</g>':'')
+        +pipe(c.ret,cm,c1)+pipe(c.sup,c0,cm)+'</g>';
+    });
+    const m=H.o.manifold;
+    if(m)s+='<rect data-rfp-manifold x="'+rfpN(m[0]-0.2)+'" y="'+rfpN(m[1]-0.09)+'" width="0.4" height="0.18" rx="0.03" fill="#d5dae1" stroke="#5b6470" stroke-width="0.025"/>';
+    return s+'</g>';
+  }
+  // colour / grey / glow of one loop by its room's state; power (VTherm power_percent) sets the
+  // strength and the speed of the flow
+  _heatApply(el,st){
+    const pw=Math.max(0,Math.min(1,(isFinite(st.pw)?st.pw:0)/100));
+    const o={heat:[0.55+0.45*pw,0,0.08+0.42*pw],pause:[0.55,0.3,0],idle:[0.25,0.75,0],off:[0,1,0]}[st.heat]||[0,1,0];
+    const op=function(sel,v){[].forEach.call(el.querySelectorAll(sel),function(n){n.style.opacity=String(v);});};
+    op('.rfp-hc',o[0]);op('.rfp-hg',o[1]);op('.rfp-hglow',o[2]);
+    el.classList.toggle('is-flow',st.heat==='heat'&&pw>0&&this._heatCfg().flow!==false);
+    el.classList.toggle('is-pause',st.heat==='pause');
+    el.style.setProperty('--rfp-hs',(3.6-2.4*pw).toFixed(2)+'s');
+  }
+  // the thermal theme's faint serpentine (the plan themes draw _heatLayer)
   _heatSvg(T,r,k){
     if(!r.climate||!this.L.heating)return'';
     const h=T.heat,hc=T.heatColor||'#ff7a63';let w='',c='';
@@ -1417,7 +1664,7 @@ class RfpView{
     const by=function(list,attr){const m={};list.forEach(function(el){const k=el.getAttribute(attr);(m[k]=m[k]||[]).push(el);});return m;};
     this._nodes={
       light:by(q('[data-rfp-light]'),'data-rfp-light'),stop:by(q('[data-rfp-stop]'),'data-rfp-stop'),tint:by(q('[data-rfp-tint]'),'data-rfp-tint'),
-      heat:by(q('[data-rfp-heat]'),'data-rfp-heat'),val:by(q('[data-rfp-val]'),'data-rfp-val'),chip:by(q('[data-rfp-chip]'),'data-rfp-chip'),
+      heat:by(q('[data-rfp-heat]'),'data-rfp-heat'),hx:by(q('[data-rfp-hx]'),'data-rfp-hx'),val:by(q('[data-rfp-val]'),'data-rfp-val'),chip:by(q('[data-rfp-chip]'),'data-rfp-chip'),
       label:by(q('[data-rfp-label]'),'data-rfp-label'),
       thermo:by(q('[data-rfp-thermo]'),'data-rfp-thermo'),tt:by(q('[data-rfp-tt]'),'data-rfp-tt'),th:by(q('[data-rfp-th]'),'data-rfp-th'),tn:by(q('[data-rfp-tn]'),'data-rfp-tn'),
       tile:by(q('[data-rfp-tile]'),'data-rfp-tile'),ticon:by(q('[data-rfp-ticon]'),'data-rfp-ticon'),tbulb:by(q('[data-rfp-tbulb]'),'data-rfp-tbulb'),big:by(q('[data-rfp-big]'),'data-rfp-big'),
@@ -1451,7 +1698,12 @@ class RfpView{
     const c=r.climate&&S[r.climate];
     if(c){
       const a=c.attributes||{},act=a.hvac_action;
-      st.heat=c.state==='off'||c.state==='unavailable'?'off':(act==='heating'||act==='preheating'?'heat':'idle');
+      // off with a heating request still standing (Versatile Thermostat's requested_state: the central
+      // mode stopped it, a window is open) is a pause, not off (7.1.0)
+      const rq=a.requested_state&&typeof a.requested_state==='object'?a.requested_state.hvac_mode:null;
+      st.heat=c.state==='unavailable'?'off':(c.state==='off'?(rq&&rq!=='off'?'pause':'off'):(act==='heating'||act==='preheating'?'heat':'idle'));
+      const pp=rfpNum(a.power_percent),op=rfpNum(a.on_percent);
+      st.pw=st.heat==='heat'?Math.max(0,Math.min(100,isFinite(pp)?pp:(isFinite(op)?op*100:100))):0;
       if(isFinite(rfpNum(a.current_temperature)))st.t=rfpNum(a.current_temperature);
       if(isFinite(rfpNum(a.current_humidity)))st.h=rfpNum(a.current_humidity);
     }
@@ -1526,6 +1778,7 @@ class RfpView{
       set(N.stop[k],function(el){el.setAttribute('stop-color',st.color);});
       set(N.tint[k],function(el){el.setAttribute('fill',st.color);});
       set(N.heat[k],function(el){el.setAttribute('class','rfp-heat'+(st.heat?' is-'+st.heat:''));});
+      set(N.hx[k],function(el){self._heatApply(el,st);});
       // media
       set(N.mglow[k],function(el){el.setAttribute('opacity',st.play?'1':(st.media?'0.45':'0'));});
       set(N.media[k],function(el){el.textContent=st.media?(st.play?'▶ ':'❚❚ ')+st.media:'';});
@@ -1571,7 +1824,7 @@ class RfpView{
         set(N.cbg['light:'+k],function(el){el.setAttribute('fill',st.on?tt.iconOn:tt.icon);});
         set(N.cv['light:'+k],function(el){el.textContent=st.on?rfpT(lang,'on')+(st.bri<0.995?' '+Math.round(st.bri*100)+' %':''):rfpT(lang,'off');el.setAttribute('fill',st.on?tt.inkOn:tt.ink);});
         set(N.cbg['heat:'+k],function(el){el.setAttribute('fill',st.heat==='heat'?tt.heatBg:tt.icon);});
-        set(N.cv['heat:'+k],function(el){el.textContent=st.heat==='heat'?rfpT(lang,'heating'):(st.heat==='off'?rfpT(lang,'off'):rfpT(lang,'idle'));el.setAttribute('fill',st.heat==='heat'?tt.heatInk:tt.ink);});
+        set(N.cv['heat:'+k],function(el){el.textContent=st.heat==='heat'?rfpT(lang,'heating'):(st.heat==='off'?rfpT(lang,'off'):(st.heat==='pause'?rfpT(lang,'paused'):rfpT(lang,'idle')));el.setAttribute('fill',st.heat==='heat'?tt.heatInk:tt.ink);});
       }
     });
     this._applyOpenings(force);
@@ -1713,7 +1966,8 @@ function rfpRegister(){
     mount:function(host,opts){return new RfpView(host,opts);},
     View:RfpView,themes:RFP_THEMES,themeNames:RFP_THEME_NAMES,theme:rfpTheme,themeName:rfpThemeName,
     geom:{poly:rfpPoly,area:rfpArea,bbox:rfpBBox,inPoly:rfpInPoly,distSeg:rfpDistSeg,pole:rfpPole,wallSegs:rfpWallSegs,wallNet:rfpWallNet,openingEdge:rfpOpeningEdge,
-      proj:RFP_PROJ,fit:rfpFit,P:rfpP,inv:rfpInv,viewDir:rfpViewDir,clean:rfpCleanOutline,doors:rfpProposeDoors,kelvin:rfpKelvin}};
+      proj:RFP_PROJ,fit:rfpFit,P:rfpP,inv:rfpInv,viewDir:rfpViewDir,clean:rfpCleanOutline,doors:rfpProposeDoors,kelvin:rfpKelvin,
+      maxRect:rfpMaxRect,spiralIn:rfpSpiralIn,offset:rfpOffset,route:rfpRoute,heatGrid:rfpHeatGrid,heatCircuits:rfpHeatCircuits}};
 }
 if(customElements.get('room-overlay-card'))rfpRegister();
 else customElements.whenDefined('room-overlay-card').then(rfpRegister);

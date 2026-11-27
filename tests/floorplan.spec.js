@@ -61,10 +61,10 @@ test('live state: lights glow, heating pipes, labels sized to their text',async(
   await page.goto(base+'/');await plan(page);
   const r=await page.evaluate(()=>{const S=window.__h.card.shadowRoot;const o=k=>parseFloat(S.querySelector('[data-rfp-light="'+k+'"]').getAttribute('opacity'));
     const chip=S.querySelector('[data-rfp-chip="0"]'),name=S.querySelector('[data-rfp-name="0"]');
-    return{living:o(0),bed:o(4),heat:S.querySelector('[data-rfp-heat="0"]').getAttribute('class'),idle:S.querySelector('[data-rfp-heat="3"]').getAttribute('class'),
+    return{living:o(0),bed:o(4),heat:S.querySelector('[data-rfp-hx="0"]').classList.contains('is-flow'),idle:S.querySelector('[data-rfp-hx="3"] .rfp-hc').style.opacity,
       chipW:parseFloat(chip.getAttribute('width')),textW:name.getComputedTextLength(),val:S.querySelector('[data-rfp-val="0"]').textContent};});
   expect(r.living).toBeGreaterThan(0.9);expect(r.bed).toBe(0);
-  expect(r.heat).toBe('rfp-heat is-heat');expect(r.idle).toBe('rfp-heat is-idle');
+  expect(r.heat).toBe(true);expect(r.idle).toBe('0.25'); // 7.1.0: the loops of the heating layer
   expect(r.chipW).toBeGreaterThan(r.textW);expect(r.chipW).toBeLessThan(r.textW+60);
   expect(r.val).toBe('23.1° · 53 %');
   await page.evaluate(()=>{const h=window.__h.hass,c=window.__h.card;const st=Object.assign({},h.states);st['light.bed']={state:'on',attributes:{brightness:255}};c.hass=Object.assign({},h,{states:st});});
@@ -308,4 +308,28 @@ test('studio: import an empty floor plan from the AnyVac map',async({page})=>{
   await page.waitForFunction(SG=>eval(SG)._card.shadowRoot.querySelectorAll('[data-rfp-hit]').length===5,SG);
   await page.keyboard.press('Control+z');
   expect((await fpc(page)).rooms).toBeUndefined();
+});
+
+test('studio: heating manifold and passes through walls (7.1.0)',async({page})=>{
+  await page.goto(base+'/');await plan(page);await openStudio(page);
+  // the manifold: a click inside a room places it, the tool goes back to select
+  await page.evaluate(SG=>eval(SG)._fpTool('manifold'),SG);
+  let q=await ptStudio(page,2.5,3.5);await page.mouse.click(q.x,q.y);
+  let f=await fpc(page);
+  const m=f.heating.manifold; // snapped like every placement (5 cm grid, nearby edges)
+  expect(Math.hypot(m[0]-2.5,m[1]-3.5)).toBeLessThan(0.11);
+  expect(await page.evaluate(SG=>eval(SG).fp.tool,SG)).toBe('select');
+  // a pass: a click on a wall adds one (snapped onto the wall), the tool stays on
+  const P=f.rooms[0].polygon,a=P[0],b=P[1],mid=[Math.round((a[0]+b[0])/2*100)/100,Math.round((a[1]+b[1])/2*100)/100];
+  await page.evaluate(SG=>eval(SG)._fpTool('pass'),SG);
+  q=await ptStudio(page,mid[0],mid[1]);await page.mouse.click(q.x,q.y);
+  f=await fpc(page);
+  expect(f.heating.passes).toEqual([{at:mid}]);
+  expect(await page.evaluate(SG=>[eval(SG).fp.tool,eval(SG)._fpView.edit.querySelectorAll('[data-fp-pass]').length],SG)).toEqual(['pass',1]);
+  // a click on the pass removes it; a click on the manifold with its tool removes it
+  await page.mouse.click(q.x,q.y);
+  expect((await fpc(page)).heating.passes).toBeUndefined();
+  await page.evaluate(SG=>eval(SG)._fpTool('manifold'),SG);
+  q=await ptStudio(page,m[0],m[1]);await page.mouse.click(q.x,q.y);
+  expect((await fpc(page)).heating).toBeUndefined();
 });

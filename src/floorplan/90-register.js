@@ -7,7 +7,8 @@ function rfpRegister(){
     mount:function(host,opts){return new RfpView(host,opts);},
     View:RfpView,themes:RFP_THEMES,themeNames:RFP_THEME_NAMES,theme:rfpTheme,themeName:rfpThemeName,
     geom:{poly:rfpPoly,area:rfpArea,bbox:rfpBBox,inPoly:rfpInPoly,distSeg:rfpDistSeg,pole:rfpPole,wallSegs:rfpWallSegs,wallNet:rfpWallNet,openingEdge:rfpOpeningEdge,
-      proj:RFP_PROJ,fit:rfpFit,P:rfpP,inv:rfpInv,viewDir:rfpViewDir,clean:rfpCleanOutline,doors:rfpProposeDoors,kelvin:rfpKelvin}};
+      proj:RFP_PROJ,fit:rfpFit,P:rfpP,inv:rfpInv,viewDir:rfpViewDir,clean:rfpCleanOutline,doors:rfpProposeDoors,kelvin:rfpKelvin,
+      maxRect:rfpMaxRect,spiralIn:rfpSpiralIn,offset:rfpOffset,route:rfpRoute,heatGrid:rfpHeatGrid,heatCircuits:rfpHeatCircuits}};
 }
 if(customElements.get('room-overlay-card'))rfpRegister();
 else customElements.whenDefined('room-overlay-card').then(rfpRegister);

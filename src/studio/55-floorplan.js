@@ -4,7 +4,7 @@
 // slide doors along walls. Geometry comes from AnyVac (import), a drawing, or a traced image.
 // Everything is plan metres in `floorplan.rooms[].polygon`; the renderer (room-overlay-card-
 // floorplan.js) draws it and lends its projection, so editing works in every projection.
-const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['window','mdi:window-closed-variant'],['marker','mdi:map-marker-plus']];
+const RS_FP_TOOLS=[['select','mdi:cursor-default-outline'],['rect','mdi:vector-rectangle'],['poly','mdi:vector-polygon'],['door','mdi:door'],['window','mdi:window-closed-variant'],['marker','mdi:map-marker-plus'],['manifold','mdi:pipe-valve'],['pass','mdi:wall']];
 const RS_FP_ACCENT='#03a9f4';
 function rsFpR(v){return Math.round(v*100)/100;}
 function rsFpNorm(s){return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');}
@@ -270,7 +270,9 @@ RocStudio.prototype._fpChrome=function(){
   for(const k in this._fpToolBtns)this._fpToolBtns[k].setAttribute('aria-pressed',String(st.tool===k));
   this._fpDelBtn.disabled=st.sel==null&&st.door==null&&st.item==null;
   const fp=this._fpCfg();
-  this._fpHint.textContent=this.t('fp_hint_'+st.tool,{n:Array.isArray(fp.rooms)?fp.rooms.length:0})+(st.tool==='select'&&!(Array.isArray(fp.rooms)&&fp.rooms.length)?' '+this.t('fp_hint_empty'):'');
+  const miss=this._fpView&&this._fpView._hx&&this._fpView._hx.missing||[];
+  this._fpHint.textContent=this.t('fp_hint_'+st.tool,{n:Array.isArray(fp.rooms)?fp.rooms.length:0})+(st.tool==='select'&&!(Array.isArray(fp.rooms)&&fp.rooms.length)?' '+this.t('fp_hint_empty'):'')
+    +(miss.length&&(st.tool==='select'||st.tool==='pass'||st.tool==='manifold')?' '+this.t('fp_heat_missing',{rooms:miss.join(', ')}):'');
 };
 RocStudio.prototype._fpTool=function(k){
   const st=this._fpState();st.tool=k;st.draft=null;
@@ -350,6 +352,16 @@ RocStudio.prototype._fpDraw=function(){
     const q=v.toLocal(at[0],at[1],0),sel=st.door===k,win=o.type==='window';
     s+='<rect x="'+rsFpR(q[0]-(win?8:6))+'" y="'+rsFpR(q[1]-(win?4:6))+'" width="'+(win?16:12)+'" height="'+(win?8:12)+'" rx="'+(win?2:3)+'" fill="'+(sel?RS_FP_ACCENT:(win?'#bfe3ff':'#fff'))+'" stroke="#0b0e12" stroke-width="1.5" pointer-events="none"/>';
   });
+  // the heating manifold and the passes through walls (7.1.0)
+  const hh=fp.heating&&typeof fp.heating==='object'?fp.heating:null;
+  if(hh){
+    (Array.isArray(hh.passes)?hh.passes:[]).forEach(function(x){
+      const at=G.poly([x&&typeof x==='object'&&!Array.isArray(x)?x.at:x])[0];if(!at)return;const q=v.toLocal(at[0],at[1],0);
+      s+='<rect data-fp-pass x="'+rsFpR(q[0]-7)+'" y="'+rsFpR(q[1]-7)+'" width="14" height="14" rx="4" fill="rgba(255,122,92,.3)" stroke="#ff7a5c" stroke-width="2" pointer-events="none"/>';
+    });
+    const hm=G.poly([hh.manifold])[0];
+    if(hm){const q=v.toLocal(hm[0],hm[1],0);s+='<circle data-fp-manifold cx="'+rsFpR(q[0])+'" cy="'+rsFpR(q[1])+'" r="11" fill="rgba(213,218,225,.2)" stroke="#d5dae1" stroke-width="2" pointer-events="none"/>';}
+  }
   (Array.isArray(fp.items)?fp.items:[]).forEach(function(it,k){
     const at=G.poly([it&&it.at])[0];if(!at)return;
     const q=v.toLocal(at[0],at[1],0),sel=st.item===k;
@@ -454,6 +466,25 @@ RocStudio.prototype._fpDown=function(e){
     const op=Object.assign({type:type,at:w.at,width:type==='window'?1:0.8},rsFpOpeningGuess(this.hass,this.work,fp,w.room,type));
     this._fpEdit(function(f){if(!Array.isArray(f.openings))f.openings=[];f.openings.push(op);k=f.openings.length-1;});
     st.tool='select';self._fpSelect('door',k);return;
+  }
+  // 7.1.0 — floor heating: the manifold (inside a room; a click on it removes it) and the passes
+  // (a click on a wall adds one, on a pass removes it; the tool stays on for the next wall)
+  if(st.tool==='manifold'){
+    const hm=fp.heating&&G.poly([fp.heating.manifold])[0];
+    if(hm&&near(hm,16)){this._fpEdit(function(f){if(f.heating){delete f.heating.manifold;if(!Object.keys(f.heating).length)delete f.heating;}});st.tool='select';this._fpChrome();this._fpDraw();return;}
+    const p=this._fpSnap(a.p,e);
+    if(!(fp.rooms||[]).some(function(r){return G.inPoly(p[0],p[1],G.poly(r&&r.polygon));})){this._fpFlash('fp_manifold_out');return;}
+    this._fpEdit(function(f){f.heating=Object.assign({},f.heating&&typeof f.heating==='object'?f.heating:{},{manifold:[rsFpR(p[0]),rsFpR(p[1])]});});
+    st.tool='select';this._fpChrome();this._fpDraw();return;
+  }
+  if(st.tool==='pass'){
+    const ps=fp.heating&&Array.isArray(fp.heating.passes)?fp.heating.passes:[];
+    const hit=ps.findIndex(function(x){const at=G.poly([x&&typeof x==='object'&&!Array.isArray(x)?x.at:x])[0];return at&&near(at,14);});
+    if(hit>=0){this._fpEdit(function(f){f.heating.passes.splice(hit,1);if(!f.heating.passes.length)delete f.heating.passes;});this._fpChrome();this._fpDraw();return;}
+    const w=this._fpWallAt(a.p,fp);
+    if(!w||w.d>0.6){this._fpFlash('fp_door_nowall');return;}
+    this._fpEdit(function(f){f.heating=Object.assign({},f.heating&&typeof f.heating==='object'?f.heating:{});f.heating.passes=(Array.isArray(f.heating.passes)?f.heating.passes:[]).concat([{at:w.at}]);});
+    this._fpChrome();this._fpDraw();return;
   }
   if(st.tool==='marker'){
     const p=this._fpSnap(a.p,e),self=this;let k=-1;
