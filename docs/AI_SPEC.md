@@ -1049,6 +1049,7 @@ hcLog {
   cooking: hcEnt[];
   overload: hcEnt[];
   phases: hcEnt[];
+  boiler_phases: hcEnt[] @7.5.1;
   breaker: num;
   boiler_amps: num;
   entities: hcEnt[];

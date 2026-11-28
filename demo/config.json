@@ -2352,6 +2352,11 @@
     "sensor.main_phase_l2",
     "sensor.main_phase_l3"
    ],
+   "boiler_phases": [
+    "sensor.boiler_phase_l1",
+    "sensor.boiler_phase_l2",
+    "sensor.boiler_phase_l3"
+   ],
    "breaker": 25,
    "boiler_amps": 12.8
   },

@@ -1,5 +1,31 @@
 # Changelog
 
+## [7.5.1] - 2026-11-28
+
+### Added
+
+- **Meters on top of the event log:** the main supply per phase — the boiler's share in orange,
+  everything else in blue, the main breaker as a dashed line, the highest phase against it — and
+  beside it the heating boiler's own meter (`heating.log.boiler_phases`, its three phase
+  currents), live.
+
+### Changed
+
+- **The heating controller's second button** opens the event log (and the settings check) for
+  admins — *Log & check*; everyone else keeps *Details* (Home Assistant's more-info).
+- **No duration is lit while a time-limited target runs** (*Keep* read as if it were kept for
+  good) until one is picked.
+- **The event log leaves out short outages:** a thermostat counts as unavailable from 5 minutes
+  on. A restart of Home Assistant or a reload of Versatile Thermostat made every room
+  unavailable for a second and filled the log with *unavailable* / *back*; an outage is now one
+  event with how long it lasted.
+
+### Fixed
+
+- **The 24 h chart during a time-limited temperature** drew the target VTherm goes back to (its
+  requested target stays the old one while a timed preset runs), not the one it held. The chart
+  now takes the requested target only in a pause and in the safety mode.
+
 ## [7.5.0] - 2026-11-28
 
 ### Added

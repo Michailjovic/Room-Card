@@ -107,6 +107,12 @@ const CFG={type:'custom:room-overlay-card',base_image:'/x.png',heating:{quick:[2
     const dashed=(svg.match(/stroke-dasharray="4 3"[^>]*>|d="([^"]*)"[^>]*stroke-dasharray/)||[''])[0];
     const gPath=(/<path d="([^"]*)" fill="none" stroke="#9aa3ad"/.exec(svg)||[])[1]||'';
     const ys=gPath.match(/ ([\d.]+)H/g)||[];
+    {const rows2=[{s:'heat',lu:n-7200,a:{current_temperature:21.1,temperature:10,hvac_action:'idle',power_percent:0,requested_state:{hvac_mode:'heat',target_temperature:10},preset_mode:'none'}},
+        {s:'heat',lu:n-3600,a:{current_temperature:21.2,temperature:22,hvac_action:'heating',power_percent:100,requested_state:{hvac_mode:'heat',target_temperature:10},preset_mode:'boost'}}];
+      const h4=mkHass();h4.callWS=function(){return Promise.resolve({'climate.bed':rows2});};
+      el.hass=h4;el._execAct({action:'heating',entity:'climate.bed'});await sleep(30);
+      t('chart: a timed preset draws the target it holds (22 °C), not the requested one it goes back to',q('[data-hc-yhi]').textContent==='22,5°'||q('[data-hc-yhi]').textContent==='23,0°');
+      S.querySelector('.roc-hc-bd').click();el.hass=h3;el._execAct({action:'heating',entity:'climate.bed'});await sleep(30);}
     t('chart: the target is the wanted 22 °C throughout — no dive to 10 °C in the safety mode or the pause',ys.length>=3&&new Set(ys.map(x=>x.trim())).size===1);
     t('chart: the range follows the temperature and the target (at least 2 °C, not down to 10)',q('[data-hc-ylo]').textContent==='20,5°'&&q('[data-hc-yhi]').textContent==='22,5°');
     t('chart: power as bars, the pause and the safety mode as strips, named in the legend',/fill="#ff7a5c"/.test(svg)&&/fill="#6d7480"/.test(svg)&&/fill="#f5b041"/.test(svg)
@@ -129,10 +135,11 @@ const CFG={type:'custom:room-overlay-card',base_image:'/x.png',heating:{quick:[2
       'climate.liv':vtx({friendly_name:'Living',temperature:22.5,current_temperature:22.6,power_percent:22,hvac_action:'heating',is_heating_failure_detection_configured:true,
         specific_states:Object.assign({},vtx().attributes.specific_states,{last_temperature_datetime:iso(now-3*3600000),auto_tpi_learning:{coeff_indoor_heat:0.79,coeff_outdoor_heat:0.013,total_cycles:44,last_learning_status:'ok'}})}),
       'select.central_mode':{state:'Heat only',attributes:{options:['Auto','Stopped','Heat only','Cool only','Frost protection']}},'switch.hdo':{state:'on',attributes:{}},
-      'binary_sensor.cook':{state:'off',attributes:{friendly_name:'Cooking'}}};
+      'binary_sensor.cook':{state:'off',attributes:{friendly_name:'Cooking'}},
+      'sensor.l1':{state:'6.1',attributes:{}},'sensor.l2':{state:'4.7',attributes:{}},'sensor.l3':{state:'23',attributes:{}},'sensor.b1':{state:'4.2',attributes:{}},'sensor.b2':{state:'4.3',attributes:{}},'sensor.b3':{state:'4.1',attributes:{}}};
     const ent={'climate.bed':{device_id:'d1'},'number.bed_preset_boost_temp':{device_id:'d1'},'climate.liv':{device_id:'d3'},'select.central_mode':{platform:'versatile_thermostat'}};
     const C2={type:'custom:room-overlay-card',base_image:'/x.png',heating:{central_mode:'select.central_mode',tariff:{entity:'switch.hdo',high_state:'off'},simple:'always',normal:21.5,
-      rooms:[{climate:'climate.bed',name:'Ložnice',normal:21},{climate:'climate.liv',name:'Obývák'}],log:{cooking:['binary_sensor.cook'],phases:['sensor.l1','sensor.l2','sensor.l3'],breaker:25,boiler_amps:12.8}}};
+      rooms:[{climate:'climate.bed',name:'Ložnice',normal:21},{climate:'climate.liv',name:'Obývák'}],log:{cooking:['binary_sensor.cook'],phases:['sensor.l1','sensor.l2','sensor.l3'],boiler_phases:['sensor.b1','sensor.b2','sensor.b3'],breaker:25,boiler_amps:12.8}}};
     const ck=pure('rocAdCheck')({states:st,entities:ent,user:{is_admin:true}},C2,'cs',now);
     const titles=ck.checks.map(c=>c.lvl+':'+c.title);
     t('check: the presets left at 10 °C, the stuck learning, no failure detection, a silent sensor — named per room',
@@ -157,14 +164,15 @@ const CFG={type:'custom:room-overlay-card',base_image:'/x.png',heating:{quick:[2
       {entity_id:'binary_sensor.cook',state:'on',when:s0+3600},
       Object.assign({entity_id:'select.central_mode',state:'Stopped',when:s0+3602},src('binary_sensor.cook')),
       Object.assign({entity_id:'select.central_mode',name:'Topení',message:'začalo vaření → pozastaveno (vaří se) · kuchyň 2,4 kW · L1 3,1 A · L2 6,3 A · L3 16,8 A',when:s0+3602.01},src('binary_sensor.cook')),
-      {entity_id:'climate.liv',state:'unavailable',when:s0+4000},{entity_id:'climate.liv',state:'heat',when:s0+4100},
+      {entity_id:'climate.liv',state:'unavailable',when:s0+4000},{entity_id:'climate.liv',state:'heat',when:s0+4900},{entity_id:'climate.bed',state:'unavailable',when:s0+4950},{entity_id:'climate.bed',state:'off',when:s0+4951},
       {entity_id:'select.central_mode',state:'Frost protection',when:s0+5000,context_user_id:'u1'}];
     const ctx={mode:'select.central_mode',tariff:'switch.hdo',cooking:['binary_sensor.cook'],overload:[],rooms:{'climate.bed':'Ložnice','climate.liv':'Obývák'}};
     const ev=pure('rocHlBuild')(LB,ctx);
-    t('log: one event per pause, newest first; its cause from the triggering entity',ev.length===4&&ev.map(e=>e.type).join(',')==='sensor,sensor,cooking,tariff'&&ev[3].steps.length===7);
-    t('log: the pause by hand into Frost protection ends the cooking pause (no separate mode event)',ev[2].kind==='pause'&&Math.round(ev[2].min)===23);
-    t('log: duration, reaction, kW and phase currents out of the message',Math.round(ev[3].min)===40&&Math.round(ev[2].react)===2&&ev[2].kw===2.4&&ev[2].ph.join()==='3.1,6.3,16.8');
-    t('log: titles and subs',pure('rocHlTitle')('cs',ev[2])==='Vaří se → kotel pozastaven'&&pure('rocHlSub')('cs',ev[2])==='pauza 23 min · reakce 2 s · kuchyň 2,4 kW'&&pure('rocHlTitle')('cs',ev[1])==='Obývák: termostat nedostupný'&&pure('rocHlTitle')('cs',ev[0])==='Obývák: termostat znovu hlásí');
+    t('log: one event per pause, newest first; its cause from the triggering entity',ev.length===3&&ev.map(e=>e.type).join(',')==='sensor,cooking,tariff'&&ev[2].steps.length===7);
+    t('log: the pause by hand into Frost protection ends the cooking pause (no separate mode event)',ev[1].kind==='pause'&&Math.round(ev[1].min)===23);
+    t('log: duration, reaction, kW and phase currents out of the message',Math.round(ev[2].min)===40&&Math.round(ev[1].react)===2&&ev[1].kw===2.4&&ev[1].ph.join()==='3.1,6.3,16.8');
+    t('log: titles and subs',pure('rocHlTitle')('cs',ev[1])==='Vaří se → kotel pozastaven'&&pure('rocHlSub')('cs',ev[1])==='pauza 23 min · reakce 2 s · kuchyň 2,4 kW'&&pure('rocHlTitle')('cs',ev[0])==='Obývák: termostat nedostupný'&&pure('rocHlSub')('cs',ev[0])==='na 15 min');
+    t('log: a thermostat unavailable for a second (a restart, a reload) is no event',!ev.some(e=>e.room==='Ložnice'));
     const k=pure('rocHlKpi')(ev,now);
     t('log: KPIs over the pauses',k.n===2&&Math.round(k.sum)===63&&Math.round(k.max)===40);
     const ev2=pure('rocHlBuild')(LB.slice(0,-1).concat([{entity_id:'select.central_mode',state:'Heat only',when:s0+5000},{entity_id:'select.central_mode',state:'Frost protection',when:s0+5100,context_user_id:'u1'}]),ctx);
@@ -187,7 +195,10 @@ const CFG={type:'custom:room-overlay-card',base_image:'/x.png',heating:{quick:[2
     t('the log tab reads the logbook once, of 7 days, for the house entities',ws.filter(m=>m.type==='logbook/get_events').length===1&&ws[0].entity_ids.includes('binary_sensor.cook')
       &&Math.round((Date.parse(ws[0].end_time)-Date.parse(ws[0].start_time))/86400000)===7);
     t('the log: KPIs, filters by what happened, a list by day',AD().querySelectorAll('.hl-kpi div').length===3&&[...AD().querySelectorAll('[data-ad="filter"]')].map(b=>b.getAttribute('data-v')).join()==='all,cooking,tariff,sensor'
-      &&AD().querySelectorAll('.hl-ev').length===4&&!!AD().querySelector('.hl-day'));
+      &&AD().querySelectorAll('.hl-ev').length===3&&!!AD().querySelector('.hl-day'));
+    {const mt=AD().querySelector('.hl-mt'),cs=mt?mt.querySelectorAll('.mt-c'):[];
+      t('7.5.1: the meters on top — the main supply with the boiler\'s share and the breaker, the boiler beside it',cs.length===2&&/Hlavní přívod/.test(cs[0].textContent)&&/nejvíc 23,0 A z 25 A/.test(cs[0].textContent)
+        &&cs[0].querySelectorAll('.mt-b').length===3&&!!cs[0].querySelector('.mt-o.hot')&&cs[0].querySelectorAll('.mt-br').length===3&&/Kotel/.test(cs[1].textContent)&&/12,6 A na třech fázích/.test(cs[1].textContent));}
     AD().querySelector('[data-ad="filter"][data-v="cooking"]').click();await sleep(5);
     t('a filter keeps its events',AD().querySelectorAll('.hl-ev').length===1);
     AD().querySelector('.hl-ev').click();await sleep(30);
@@ -204,6 +215,20 @@ const CFG={type:'custom:room-overlay-card',base_image:'/x.png',heating:{quick:[2
     HP.querySelector('[data-hp="admin"][data-v="log"]').click();await sleep(20);
     t('…which opens the administration on that tab',!e2.shadowRoot.querySelector('.roc-hp')&&AD().querySelector('[data-v="log"]').classList.contains('on'));
     AD().querySelector('[data-ad="close"]').click();
+    // 7.5.1: in the controller, admins find the log under the footer's second button; Keep is not lit during a timed target
+    e2.hass=Object.assign({},hA,{states:Object.assign({},st,{'climate.bed':vtx({timed_preset_manager:{is_active:true,end_time:iso(now+3600000)}})})});
+    e2._execAct({action:'heating',entity:'climate.bed',view:'controller'});await sleep(10);
+    const HC=()=>e2.shadowRoot.querySelector('.roc-hc');
+    t('7.5.1: a running time-limited target lights no duration; the second button says Záznam a kontrola',!HC().querySelector('[data-hc="d"].on')&&HC().querySelector('[data-hc="more"]').textContent==='Záznam a kontrola');
+    HC().querySelector('[data-hc="d"][data-v="2h"]').click();await sleep(10);
+    t('…a picked duration is lit',HC().querySelector('[data-hc="d"].on').getAttribute('data-v')==='2h');
+    HC().querySelector('[data-hc="more"]').click();await sleep(20);
+    t('…which opens the event log for an admin',!HC()&&!!AD()&&AD().querySelector('[data-v="log"]').classList.contains('on'));
+    AD().querySelector('[data-ad="close"]').click();e2.hass=hA;
+    {const got=[];e2.addEventListener('hass-more-info',x=>got.push(x.detail.entityId));e2.hass=Object.assign({},hA,{user:{is_admin:false}});
+      e2._execAct({action:'heating',entity:'climate.bed',view:'controller'});await sleep(10);
+      t('…and for everyone else Podrobnosti is Home Assistant\'s more-info',HC().querySelector('[data-hc="more"]').textContent==='Podrobnosti'&&(HC().querySelector('[data-hc="more"]').click(),got[0]==='climate.bed')&&!AD());
+      e2.hass=hA;}
     // ---- B
     const c=pure('rocHsCfg')(C2,'climate.bed'),c2=pure('rocHsCfg')(C2,'climate.liv'),c3=pure('rocHsCfg')({},'climate.x');
     t('B: the answers from the room\'s usual temperature',c.normal===21&&c.warm===22&&c.eco===19.5&&c.guard===16&&c2.normal===21.5&&c3.show==='never'&&c3.normal===21.5);

@@ -10,11 +10,11 @@
 const ROC_HC_STR={
   en:{close:'Close',target:'target',heat:'Heating',heat_pw:'Heating · {pw} %',eta:'target in ~{t}',hold:'Holding {t}',wait:'Not heating now',
     pause:'Paused',pause_central:'Paused by the central mode',pause_window:'Paused — window open',off:'Off',na:'Unavailable',safety:'Sensor silent — running at {pw} %',
-    always:'Keep',h2:'For 2 h',evening:'Until {t}',morning:'Until morning',timed:'Temporarily until {t}',cancel:'Cancel',turn_off:'Turn off',turn_on:'Turn on',more:'Details',
+    always:'Keep',h2:'For 2 h',evening:'Until {t}',morning:'Until morning',timed:'Temporarily until {t}',cancel:'Cancel',turn_off:'Turn off',turn_on:'Turn on',more:'Details',more_ad:'Log & check',
     ago:'24 h ago',now:'now',lg_t:'temperature',lg_g:'target',lg_p:'heating power',lg_z:'paused',lg_s:'safety mode',quick:'Quick temperatures',ruler:'Target temperature',dur:'How long',min:'{n} min',hr:'{h} h {m} min',hr0:'{h} h'},
   cs:{close:'Zavřít',target:'cíl',heat:'Topí',heat_pw:'Topí · {pw} %',eta:'cíl za ~{t}',hold:'Drží {t}',wait:'Teď netopí',
     pause:'Pozastaveno',pause_central:'Pozastaveno centrálním režimem',pause_window:'Pozastaveno – otevřené okno',off:'Vypnuto',na:'Nedostupné',safety:'Čidlo mlčí – nouzový chod {pw} %',
-    always:'Trvale',h2:'Na 2 h',evening:'Do {t}',morning:'Do rána',timed:'Dočasně do {t}',cancel:'Zrušit',turn_off:'Vypnout',turn_on:'Zapnout',more:'Podrobnosti',
+    always:'Trvale',h2:'Na 2 h',evening:'Do {t}',morning:'Do rána',timed:'Dočasně do {t}',cancel:'Zrušit',turn_off:'Vypnout',turn_on:'Zapnout',more:'Podrobnosti',more_ad:'Záznam a kontrola',
     ago:'před 24 h',now:'teď',lg_t:'teplota',lg_g:'cíl',lg_p:'výkon topení',lg_z:'pauza',lg_s:'nouzový režim',quick:'Rychlé teploty',ruler:'Cílová teplota',dur:'Jak dlouho',min:'{n} min',hr:'{h} h {m} min',hr0:'{h} h'},
 };
 function rocHcLang(h){return String((h&&((h.locale&&h.locale.language)||h.language))||'en').split('-')[0];}
@@ -161,10 +161,12 @@ function rocHcMount(card){
     if(k==='close')rocHcClose(card);
     else if(k==='minus'||k==='plus')rocHcSet(card,(isFinite(cur)?cur:cfg.quick[0])+(k==='plus'?cfg.step:-cfg.step));
     else if(k==='q')rocHcSet(card,rocHcNum(b.getAttribute('data-v')));
-    else if(k==='d'){H.dur=b.getAttribute('data-v');rocHcSet(card,isFinite(cur)?cur:cfg.quick[0],true);}
+    else if(k==='d'){H.dur=b.getAttribute('data-v');H.durSet=true;rocHcSet(card,isFinite(cur)?cur:cfg.quick[0],true);}
     else if(k==='cancel')card._hass.callService('versatile_thermostat','cancel_timed_preset',{entity_id:H.entity});
     else if(k==='power')card._hass.callService('climate','set_hvac_mode',{entity_id:H.entity,hvac_mode:m.on||m.pause?'off':'heat'});
-    else if(k==='more'){const ev=new Event('hass-more-info',{bubbles:true,composed:true});ev.detail={entityId:H.entity};card.dispatchEvent(ev);rocHcClose(card);}
+    else if(k==='more'){
+      if(rocAdAllowed(card._hass,card._config)){rocHcClose(card);rocAdOpen(card,'log');return;} // 7.5.1: admins get the event log and the settings check here
+      const ev=new Event('hass-more-info',{bubbles:true,composed:true});ev.detail={entityId:H.entity};card.dispatchEvent(ev);rocHcClose(card);}
   });
   const rng=el.querySelector('[data-hc-rng]');
   rng.addEventListener('input',function(){rocHcSet(card,rocHcNum(rng.value));});
@@ -205,7 +207,9 @@ function rocHcUpdate(card){
   const rng=q('[data-hc-rng]');if(isFinite(tgt)&&card.shadowRoot.activeElement!==rng)rng.value=String(tgt);
   const boost=rocHcBoost(card._hass,H.entity);
   q('[data-hc-durw]').style.display=boost?'':'none';
-  [].forEach.call(el.querySelectorAll('[data-hc="d"]'),function(b){b.classList.toggle('on',b.getAttribute('data-v')===H.dur);});
+  // 7.5.1: while a time-limited target runs, "Keep" is not lit (it would read as kept for good) until a duration is picked
+  [].forEach.call(el.querySelectorAll('[data-hc="d"]'),function(b){b.classList.toggle('on',b.getAttribute('data-v')===H.dur&&!(m.timed&&!H.durSet));});
+  const mb=q('[data-hc="more"]'),ml=rocHcT(lang,rocAdAllowed(card._hass,card._config)?'more_ad':'more');if(mb.textContent!==ml)mb.textContent=ml;
   const tm=q('[data-hc-timed]');
   if(m.timed){const d=new Date(m.timed);tm.innerHTML='<span>'+rocHcEsc(rocHcT(lang,'timed',{t:isNaN(d)?'':d.toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'})}))+'</span><button data-hc="cancel">'+rocHcEsc(rocHcT(lang,'cancel'))+'</button>';}
   else tm.innerHTML='';
@@ -229,7 +233,8 @@ function rocHcHistory(card){
       const pw=st==='off'||st==='unavailable'?0:(isFinite(pp)?pp:(isFinite(op)?op*100:(a.hvac_action==='heating'?100:0)));
       const on=st!=='off'&&st!=='unavailable'&&st!=='unknown';
       return{t:(x.lu||x.last_updated||0)*(typeof x.lu==='number'?1000:1),c:rocHcNum(a.current_temperature),
-        g:rq&&isFinite(rocHcNum(rq.target_temperature))?rocHcNum(rq.target_temperature):(on?rocHcNum(a.temperature):NaN),
+        // 7.5.0: heating normally (a timed preset too — its requested target stays the old one) → the target it holds
+        g:on&&a.preset_mode!=='safety'&&isFinite(rocHcNum(a.temperature))?rocHcNum(a.temperature):(rq&&isFinite(rocHcNum(rq.target_temperature))?rocHcNum(rq.target_temperature):NaN),
         wants:on||!!(rq&&rq.hvac_mode&&rq.hvac_mode!=='off'),pw:Math.max(0,Math.min(100,pw)),
         z:st==='off'&&!!(rq&&rq.hvac_mode&&rq.hvac_mode!=='off'),sf:a.preset_mode==='safety'};
     }).filter(function(p){return p.t;});

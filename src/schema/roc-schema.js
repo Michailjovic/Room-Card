@@ -105,7 +105,7 @@ const S={
     // 7.5.0: the quick mode (B) and the administration (admins only: settings check, event log)
     simple:{t:'enum:never|phone|always',d:'never',since:'7.5.0'},normal:{t:'num',d:21.5,since:'7.5.0'},guard:{t:'num',d:16,since:'7.5.0'},away:{t:'bool',d:true,since:'7.5.0'},
     admin:{t:'bool',d:true,since:'7.5.0'},log:{t:'obj:hcLog',since:'7.5.0'}}},
-  hcLog:{keys:{days:{t:'num',d:7},cooking:{t:'list:hcEnt'},overload:{t:'list:hcEnt'},phases:{t:'list:hcEnt'},breaker:{t:'num'},boiler_amps:{t:'num'},entities:{t:'list:hcEnt'}}},
+  hcLog:{keys:{days:{t:'num',d:7},cooking:{t:'list:hcEnt'},overload:{t:'list:hcEnt'},phases:{t:'list:hcEnt'},boiler_phases:{t:'list:hcEnt',since:'7.5.1'},breaker:{t:'num'},boiler_amps:{t:'num'},entities:{t:'list:hcEnt'}}},
   hcEnt:{keys:{entity:{t:'entity'}},scalar:'entity'},
   hcTariff:{keys:{entity:{t:'entity'},high_state:{t:'str',d:'on'}},scalar:'entity'},
   hcSupply:{keys:{entity:{t:'entity'},name:{t:'str'}},scalar:'entity'},

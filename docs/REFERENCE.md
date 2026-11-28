@@ -1304,6 +1304,7 @@ Guide: [HEATING.md](HEATING.md#event-log).
 | `cooking` | list of [`hcEnt`](#t-hcent) |  |  |
 | `overload` | list of [`hcEnt`](#t-hcent) |  |  |
 | `phases` | list of [`hcEnt`](#t-hcent) |  |  |
+| `boiler_phases` | list of [`hcEnt`](#t-hcent) |  | since 7.5.1 |
 | `breaker` | number |  |  |
 | `boiler_amps` | number |  |  |
 | `entities` | list of [`hcEnt`](#t-hcent) |  |  |

@@ -49,4 +49,4 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.5.0';
+const ROC_STUDIO_VERSION='7.5.1';

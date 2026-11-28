@@ -32,7 +32,8 @@ temperature for a while.
 - **24 hours** — temperature, the target you set (dashed; VTherm's own drops to 10 °C in its safety
   mode and in a pause, the chart keeps yours), the heating power per quarter hour (bars), pauses
   (grey) and the safety mode (amber) as strips under them, the °C range on the side.
-- **Turn off / on** and **Details** (Home Assistant's more-info).
+- **Turn off / on** and **Details** (Home Assistant's more-info). *(7.5.1)* For admins the second
+  button is **Log & check** and opens the [administration](#administration) on the event log.
 
 ## Settings
 
@@ -174,8 +175,13 @@ went to *Stopped* is one event, until it left *Stopped*:
 - the **highest current of each phase** during the pause (history of `log.phases`), with what the
   boiler would add (`log.boiler_amps`, dashed) and the main breaker (`log.breaker`).
 
-A room's thermostat becoming unavailable or back, a thermostat or the house mode switched by hand,
-are events of their own. KPIs (pauses, stopped in total, the longest) and filters by cause sit on
+A room's thermostat unavailable for 5 minutes or more (one event, with how long), a thermostat or
+the house mode switched by hand, are events of their own; a thermostat gone for a second (a
+restart, a reload of Versatile Thermostat) is not.
+
+*(7.5.1)* **Meters** on top, live: the main supply per phase (`log.phases`) with the boiler's share
+in orange, the rest in blue and the breaker (`log.breaker`) as a dashed line; beside it the heating
+boiler's own meter (`log.boiler_phases`) per phase. KPIs (pauses, stopped in total, the longest) and filters by cause sit on
 top; on a wide card the list and the detail side by side.
 
 ```yaml
@@ -186,6 +192,7 @@ heating:
     cooking: [binary_sensor.kitchen_cooking, sensor.oven_operation_state]
     overload: [binary_sensor.main_supply_overload]
     phases: [sensor.l1_current, sensor.l2_current, sensor.l3_current]
+    boiler_phases: [sensor.boiler_l1_current, sensor.boiler_l2_current, sensor.boiler_l3_current]   # 7.5.1
     breaker: 25                       # A
     boiler_amps: 12.8                 # A per phase the boiler adds
     entities: [switch.boiler_relay]   # more entities whose changes are steps

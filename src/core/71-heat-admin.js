@@ -42,7 +42,8 @@ const ROC_AD_STR={
     today:'Today',loading:'Loading…',err:'The logbook could not be read: {e}',empty:'Nothing in the last {n} days.',pick:'Pick an event.',
     e_cooking:'Cooking → boiler paused',e_overload:'Supply overload → boiler off',e_tariff:'High tariff → heating stopped',e_manual:'Stopped by hand',e_other:'Heating paused',
     e_mode:'House mode → {m}',e_by_hand:'by hand',e_na:'{r}: thermostat unavailable',e_back:'{r}: thermostat back',e_off_hand:'{r}: turned off by hand',e_on_hand:'{r}: turned on by hand',
-    pause:'pause {d}',lasts:'lasts {d}',react:'reaction {s} s',kw:'kitchen {v} kW',
+    pause:'pause {d}',lasts:'lasts {d}',out_for:'for {d}',react:'reaction {s} s',kw:'kitchen {v} kW',
+    m_main:'Main supply',m_boiler:'Heating boiler',m_of:'highest {v} of {b}',m_boiler_part:'boiler',m_rest:'everything else',m_load:'current',m_sum:'{v} A over the three phases',
     steps:'Steps',phases:'Highest phase current during the pause',ph_msg:'Phase currents when it was written',ph_load:'Reading the currents…',with_b:'With the boiler running the highest phase would be ~{v} A.',breaker:'breaker {v} A',
     s_on:'on',s_off:'off',s_unavailable:'unavailable',s_heat:'heats',s_idle:'idle'},
   cs:{title:'Topení · správa',t_check:'Kontrola nastavení',t_log:'Záznam událostí',close:'Zavřít',back:'Zpět',reload:'Načíst znovu',
@@ -73,7 +74,8 @@ const ROC_AD_STR={
     today:'Dnes',loading:'Načítám…',err:'Logbook se nepodařilo načíst: {e}',empty:'Za posledních {n} dní nic.',pick:'Vyber událost.',
     e_cooking:'Vaří se → kotel pozastaven',e_overload:'Přetížení přívodu → kotel vypnut',e_tariff:'VT → topení stojí',e_manual:'Zastaveno ručně',e_other:'Topení pozastaveno',
     e_mode:'Režim domu → {m}',e_by_hand:'ručně',e_na:'{r}: termostat nedostupný',e_back:'{r}: termostat znovu hlásí',e_off_hand:'{r}: vypnuto ručně',e_on_hand:'{r}: zapnuto ručně',
-    pause:'pauza {d}',lasts:'trvá {d}',react:'reakce {s} s',kw:'kuchyň {v} kW',
+    pause:'pauza {d}',lasts:'trvá {d}',out_for:'na {d}',react:'reakce {s} s',kw:'kuchyň {v} kW',
+    m_main:'Hlavní přívod',m_boiler:'Kotel',m_of:'nejvíc {v} z {b}',m_boiler_part:'kotel',m_rest:'ostatní',m_load:'proud',m_sum:'{v} A na třech fázích',
     steps:'Průběh',phases:'Nejvyšší proud fází během pauzy',ph_msg:'Proudy fází v okamžiku zápisu',ph_load:'Načítám proudy…',with_b:'Kdyby běžel kotel, měla by nejvyšší fáze ~{v} A.',breaker:'jistič {v} A',
     s_on:'zapnuto',s_off:'vypnuto',s_unavailable:'nedostupné',s_heat:'topí',s_idle:'nečinný'},
 };
@@ -87,7 +89,7 @@ function rocAdLog(cAll){
   const H=cAll&&cAll.heating&&typeof cAll.heating==='object'?cAll.heating:{},L=H.log&&typeof H.log==='object'?H.log:{};
   const ents=function(v){return(Array.isArray(v)?v:(v?[v]:[])).map(function(x){return String(x&&typeof x==='object'?x.entity||'':x);}).filter(function(x){return/^[a-z_]+\.[a-z0-9_]+$/.test(x);});};
   const n=rocHcNum(L.days);
-  return{days:n>0?Math.min(30,Math.round(n)):7,cooking:ents(L.cooking),overload:ents(L.overload),phases:ents(L.phases),entities:ents(L.entities),
+  return{days:n>0?Math.min(30,Math.round(n)):7,cooking:ents(L.cooking),overload:ents(L.overload),phases:ents(L.phases),boilerPhases:ents(L.boiler_phases),entities:ents(L.entities),
     breaker:rocHcNum(L.breaker)>0?rocHcNum(L.breaker):NaN,boilerA:rocHcNum(L.boiler_amps)>0?rocHcNum(L.boiler_amps):NaN};
 }
 // "{n} min / h / days ago" for a time in ms
@@ -216,9 +218,10 @@ function rocHlParse(msg){
 function rocHlCause(e){const m=/^state of ([a-z_]+\.[a-z0-9_]+)/.exec(String(e&&e.context_source||''));return m?m[1]:'';}
 function rocHlWhen(e){const w=e&&e.when;return typeof w==='number'?w*1000:Date.parse(w||'');}
 // Logbook entries → events, newest first (pure). ctx: {mode, tariff, cooking, overload, rooms:{entity: name}}
+const ROC_HL_NA_MIN=5;
 function rocHlBuild(entries,ctx){
   const E=(Array.isArray(entries)?entries:[]).map(function(e){return Object.assign({t:rocHlWhen(e)},e);}).filter(function(e){return isFinite(e.t);}).sort(function(a,b){return a.t-b.t||((a.message!=null&&a.state==null)-(b.message!=null&&b.state==null));}); // same time: the state change before the message written with it
-  const out=[],recent=[];let open=null,last=null,mode=null,id=0,pendNote=null;
+  const out=[],recent=[],roomNa={};let open=null,last=null,mode=null,id=0,pendNote=null;
   const rooms=ctx.rooms||{},roomSt={};
   const step=function(ev,e){ev.steps.push(e);};
   const typeOf=function(e){
@@ -257,8 +260,11 @@ function rocHlBuild(entries,ctx){
     // a room: unavailable / back and a change by hand are events of their own, also inside a pause
     if(rooms[e.entity_id]!=null){
       const s=String(e.state),prev=roomSt[e.entity_id];roomSt[e.entity_id]=s;
-      if(s==='unavailable'&&prev!=='unavailable')out.push({id:'e'+(++id),kind:'room',type:'sensor',t:e.t,end:NaN,steps:[e],msg:'',room:rooms[e.entity_id],what:'na'});
-      else if(prev==='unavailable'&&s!=='unavailable')out.push({id:'e'+(++id),kind:'room',type:'sensor',t:e.t,end:NaN,steps:[e],msg:'',room:rooms[e.entity_id],what:'back'});
+      // 7.5.1: an outage is an event only from 5 min on — a restart or a reload of Versatile
+      // Thermostat makes every thermostat unavailable for a second
+      if(s==='unavailable'&&prev!=='unavailable')roomNa[e.entity_id]=e;
+      else if(prev==='unavailable'&&s!=='unavailable'){const na=roomNa[e.entity_id];delete roomNa[e.entity_id];
+        if(na&&e.t-na.t>=ROC_HL_NA_MIN*60000)out.push({id:'e'+(++id),kind:'room',type:'sensor',t:na.t,end:e.t,steps:[na,e],msg:'',room:rooms[e.entity_id],what:'na'});}
       else if(e.context_user_id&&(s==='off'||prev==='off'))out.push({id:'e'+(++id),kind:'room',type:'manual',t:e.t,end:NaN,steps:[e],msg:'',room:rooms[e.entity_id],what:s==='off'?'off':'on'});
       else if(open)step(open,e);
       else if(last&&e.t-last.end<=120000)step(last,e);
@@ -269,6 +275,8 @@ function rocHlBuild(entries,ctx){
     if(last&&e.t-last.end<=120000){step(last,e);return;}
     recent.push(e);if(recent.length>20)recent.shift();
   });
+  const now=ctx.now||Date.now();
+  Object.keys(roomNa).forEach(function(k){const na=roomNa[k];if(now-na.t>=ROC_HL_NA_MIN*60000)out.push({id:'e'+(++id),kind:'room',type:'sensor',t:na.t,end:NaN,steps:[na],msg:'',room:rooms[k],what:'na'});});
   out.forEach(function(ev){
     const p=rocHlParse(ev.msg||(ev.steps.find(function(s){return s.message;})||{}).message);
     ev.kw=p.kw;ev.ph=p.ph;
@@ -295,7 +303,8 @@ function rocHlSub(lang,ev,now){
     p.push(isFinite(ev.min)?T('pause',{d:rocAdDur(lang,ev.min)}):T('lasts',{d:rocAdDur(lang,((now||Date.now())-ev.t)/60000)}));
     if(isFinite(ev.react))p.push(T('react',{s:Math.round(ev.react)}));
     if(isFinite(ev.kw)&&ev.kw>0.05)p.push(T('kw',{v:rocHcFmt(lang,ev.kw)}));
-  }else if(ev.kind==='note'&&ev.name)p.push(ev.name);
+  }else if(ev.kind==='room'&&ev.what==='na')p.push(isFinite(ev.min)?rocAdT(lang,'out_for',{d:rocAdDur(lang,ev.min)}):rocAdT(lang,'lasts',{d:rocAdDur(lang,((now||Date.now())-ev.t)/60000)}));
+  else if(ev.kind==='note'&&ev.name)p.push(ev.name);
   return p.join(' · ');
 }
 // One step's line: the time, what happened, where it came from
@@ -325,6 +334,37 @@ function rocHlPhaseSvg(lang,ph,L){
   if(isFinite(L.breaker)){const bx=x(L.breaker).toFixed(1);s+='<line x1="'+bx+'" x2="'+bx+'" y1="0" y2="'+(row*3+2)+'" stroke="#ff6b5c" stroke-dasharray="4 3"/><text x="'+bx+'" y="'+(H-2)+'" text-anchor="middle" class="hl-tx r">'+rocHcEsc(rocAdT(lang,'breaker',{v:rocHcFmt(lang,L.breaker,0)}))+'</text>';}
   return'<svg viewBox="0 0 '+W+' '+H+'" aria-hidden="true">'+s+'</svg>';
 }
+// 7.5.1: the meters on top of the log, live — the main supply per phase (the boiler's share in
+// its colour, the rest in blue, the breaker as a line) and beside it the boiler's own meter (pure).
+function rocHlMeters(lang,hass,L,house){
+  const S=(hass&&hass.states)||{},T=function(k,v){return rocHcEsc(rocAdT(lang,k,v));};
+  const val=function(id){const s=id&&S[id];const v=s?rocHcNum(s.state):NaN;return isFinite(v)?Math.max(0,v):NaN;};
+  const M=L.phases.slice(0,3).map(val),B=L.boilerPhases.slice(0,3).map(val);
+  if(!M.some(isFinite)&&!B.some(isFinite))return'';
+  const hasB=B.some(isFinite),br=L.breaker;
+  const top=Math.max(isFinite(br)?br*1.1:0,Math.max.apply(null,M.concat(B).map(function(x){return isFinite(x)?x:0;})),1);
+  const pc=function(v){return Math.min(100,v/top*100).toFixed(1)+'%';};
+  const A=function(v){return isFinite(v)?rocHcEsc(rocHcFmt(lang,v))+' A':'—';};
+  const line=isFinite(br)?'<i class="mt-br" style="left:'+pc(br)+'"></i>':'';
+  let h='<div class="hl-mt">';
+  if(M.some(isFinite)){
+    const peak=Math.max.apply(null,M.map(function(x){return isFinite(x)?x:0;}));
+    h+='<div class="mt-c"><div class="mt-h"><b>'+T('m_main')+'</b><span>'+(isFinite(br)?T('m_of',{v:A(peak),b:rocHcFmt(lang,br,0)+' A'}):A(peak))+'</span></div>';
+    M.forEach(function(m,i){
+      const b=hasB&&isFinite(B[i])?Math.min(B[i],isFinite(m)?m:0):0,o=isFinite(m)?m-b:0,hot=isFinite(br)&&m>=br*0.9;
+      h+='<div class="mt-r"><span>L'+(i+1)+'</span><div class="mt-t">'+line+'<i class="mt-b" style="width:'+pc(b)+'"></i><i class="mt-o'+(hot?' hot':'')+'" style="left:'+pc(b)+';width:'+pc(o)+'"></i></div><em>'+A(m)+'</em></div>';
+    });
+    h+='<div class="mt-lg">'+(hasB?'<span><i class="b"></i>'+T('m_boiler_part')+'</span>':'')+'<span><i class="o"></i>'+T(hasB?'m_rest':'m_load')+'</span>'+(isFinite(br)?'<span><i class="r"></i>'+T('breaker',{v:rocHcFmt(lang,br,0)})+'</span>':'')+'</div></div>';
+  }
+  if(hasB){
+    const bs=house&&house.boiler&&S[house.boiler],on=bs?bs.state==='on':B.some(function(x){return x>0.5;});
+    const sum=B.reduce(function(a,x){return a+(isFinite(x)?x:0);},0);
+    h+='<div class="mt-c"><div class="mt-h"><b>'+T('m_boiler')+'</b><span class="'+(on?'on':'')+'">'+rocHcEsc(rocHpT(lang,on?'b_on':'b_off'))+'</span></div>';
+    B.forEach(function(b,i){h+='<div class="mt-r"><span>L'+(i+1)+'</span><div class="mt-t"><i class="mt-b" style="width:'+pc(isFinite(b)?b:0)+'"></i></div><em>'+A(b)+'</em></div>';});
+    h+='<div class="mt-lg"><span>'+T('m_sum',{v:rocHcFmt(lang,sum)})+'</span></div></div>';
+  }
+  return h+'</div>';
+}
 // ---- the sheet ----
 const ROC_AD_CSS='.roc-ad-bd{position:absolute;inset:0;z-index:412;background:rgba(0,0,0,.4);}'
   +'.roc-ad{position:absolute;z-index:413;left:0;right:0;bottom:0;max-height:92%;height:92%;box-sizing:border-box;background:var(--card-background-color,#1c1f24);color:var(--primary-text-color,#f2f3f5);border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.45);display:flex;flex-direction:column;font:14px/1.4 var(--paper-font-body1_-_font-family,system-ui,sans-serif);}'
@@ -352,6 +392,12 @@ const ROC_AD_CSS='.roc-ad-bd{position:absolute;inset:0;z-index:412;background:rg
   +'.hl-ph svg{display:block;width:100%;max-width:440px;height:auto}.hl-tx{font-size:11px;fill:var(--primary-text-color,#f2f3f5)}.hl-tx.in{fill:#0b1a33;font-weight:600}.hl-tx.r{fill:#ff7a6c}'
   +'.hl-back{align-self:flex-start;background:none;border:1px solid rgba(255,255,255,.2);border-radius:8px;color:inherit;font:inherit;padding:5px 10px;cursor:pointer;min-height:32px}'
   +'.ad-msg{color:var(--secondary-text-color,#9aa3ad);padding:16px 0}'
+  +'.hl-mt{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}.mt-c{border-radius:12px;background:rgba(255,255,255,.04);padding:10px 12px;display:flex;flex-direction:column;gap:6px}'
+  +'.mt-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.mt-h b{font-weight:600}.mt-h span{font-size:12px;color:var(--secondary-text-color,#9aa3ad);font-variant-numeric:tabular-nums}.mt-h span.on{color:#ffb35c}'
+  +'.mt-r{display:grid;grid-template-columns:22px 1fr 54px;align-items:center;gap:8px;font-size:12px}.mt-r span{color:var(--secondary-text-color,#9aa3ad)}.mt-r em{font-style:normal;text-align:right;font-variant-numeric:tabular-nums}'
+  +'.mt-t{position:relative;height:12px;border-radius:6px;background:rgba(255,255,255,.07);overflow:hidden}.mt-t i{position:absolute;top:0;bottom:0;left:0;transition:width .6s ease,left .6s ease}'
+  +'.mt-b{background:#ffa24c}.mt-o{background:#6aa8ff}.mt-o.hot{background:#ff6b5c}.mt-br{width:0;border-left:2px dashed #ff6b5c;z-index:1}'
+  +'.mt-lg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--secondary-text-color,#9aa3ad)}.mt-lg i{display:inline-block;width:10px;height:8px;border-radius:2px;margin-right:4px;vertical-align:middle}.mt-lg i.b{background:#ffa24c}.mt-lg i.o{background:#6aa8ff}.mt-lg i.r{width:0;height:10px;border-left:2px dashed #ff6b5c;border-radius:0}'
   +'.roc-ad button:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
 const ROC_HL_C={cooking:'#ffc97a',overload:'#ff9b7a',tariff:'#6aa8ff',sensor:'#ffb877',manual:'#a3afbf',other:'#7d8590'};
 function rocAdOpen(card,tab){
@@ -441,10 +487,11 @@ function rocAdUpdate(card){
 function rocHlHtml(card){
   const A=card._ad,lang=A.lang,hass=card._hass,T=function(k,v){return rocHcEsc(rocAdT(lang,k,v));};
   const L=rocAdLog(card._config);
-  if(A.err)return'<div class="ad-msg">'+T('err',{e:A.err})+'</div><button class="hl-back" data-ad="reload">'+T('reload')+'</button>';
-  if(!A.log)return'<div class="ad-msg">'+T('loading')+'</div>';
+  const mt=rocHlMeters(lang,hass,L,rocHpHouse(hass,card._config)); // 7.5.1: live meters on top
+  if(A.err)return mt+'<div class="ad-msg">'+T('err',{e:A.err})+'</div><button class="hl-back" data-ad="reload">'+T('reload')+'</button>';
+  if(!A.log)return mt+'<div class="ad-msg">'+T('loading')+'</div>';
   const now=Date.now(),k=rocHlKpi(A.log,now);
-  let h='<div class="hl-kpi"><div><span>'+T('k_n')+'</span><b>'+k.n+'</b></div><div><span>'+T('k_sum')+'</span><b>'+rocHcEsc(rocAdDur(lang,k.sum))+'</b></div><div><span>'+T('k_max')+'</span><b>'+rocHcEsc(rocAdDur(lang,k.max))+'</b></div></div>';
+  let h=mt+'<div class="hl-kpi"><div><span>'+T('k_n')+'</span><b>'+k.n+'</b></div><div><span>'+T('k_sum')+'</span><b>'+rocHcEsc(rocAdDur(lang,k.sum))+'</b></div><div><span>'+T('k_max')+'</span><b>'+rocHcEsc(rocAdDur(lang,k.max))+'</b></div></div>';
   const cnt={};A.log.forEach(function(e){cnt[e.type]=(cnt[e.type]||0)+1;});
   h+='<div class="hl-f">'+['all','cooking','overload','tariff','sensor','manual','other'].filter(function(f){return f==='all'||cnt[f];}).map(function(f){
     return'<button class="ad-chip'+(A.filter===f?' on':'')+'" data-ad="filter" data-v="'+f+'" aria-pressed="'+(A.filter===f)+'">'+T('f_'+f)+'<small>'+(f==='all'?A.log.length:cnt[f])+'</small></button>';}).join('')

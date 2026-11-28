@@ -29,7 +29,8 @@ let states=SCN.states;
   o('climate.versatile_bedroom',vt(2,{coeff_indoor_heat:1.1,coeff_outdoor_heat:0.06,total_cycles:6,learning_start_date:iso(1440),last_learning_status:'power_out_of_range(100.0% vs Saturation 100.0%)',autolearn_enabled:true},
     {is_heating_failure_detection_configured:false,ss:{temperature_slope:0.6}}));
   o('climate.versatile_kitchen',vt(0,{coeff_indoor_heat:0.6,coeff_outdoor_heat:0.01,total_cycles:5,learning_start_date:iso(2880),last_learning_status:'ok',autolearn_enabled:true},{power_manager:{device_power:0.01},ss:{temperature_slope:0}}));
-  [['l1',3.4],['l2',5.1],['l3',2.7]].forEach(([k,v])=>{states['sensor.main_phase_'+k]={entity_id:'sensor.main_phase_'+k,state:String(v),attributes:{friendly_name:'Main supply '+k.toUpperCase(),unit_of_measurement:'A',device_class:'current'}};});
+  [['l1',7.4],['l2',9.1],['l3',6.8]].forEach(([k,v])=>{states['sensor.main_phase_'+k]={entity_id:'sensor.main_phase_'+k,state:String(v),attributes:{friendly_name:'Main supply '+k.toUpperCase(),unit_of_measurement:'A',device_class:'current'}};});
+  [['l1',4.2],['l2',4.3],['l3',4.1]].forEach(([k,v])=>{states['sensor.boiler_phase_'+k]={entity_id:'sensor.boiler_phase_'+k,state:String(v),attributes:{friendly_name:'Boiler '+k.toUpperCase(),unit_of_measurement:'A',device_class:'current'}};});
   states['binary_sensor.kitchen_cooking']={entity_id:'binary_sensor.kitchen_cooking',state:'off',attributes:{friendly_name:'Kitchen cooking'}};
   states['binary_sensor.main_supply_overload']={entity_id:'binary_sensor.main_supply_overload',state:'off',attributes:{friendly_name:'Main supply overload'}};}
 // the logbook of the last days: what an automation running the central mode writes (7.5.0 demo)
