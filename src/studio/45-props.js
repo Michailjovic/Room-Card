@@ -294,7 +294,8 @@ function rsActionWidget(ctx,value,onChange,o){
     const a=A(),same=rsActType(ctx,cur)===t;
     if(t==='more-info'||t==='toggle')field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:(o&&o.entity)||'',null,function(v){set(t,'entity',v);}));
     else if(t==='lights'){field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:'',['light','switch'],function(v){set(t,'entity',v);}));const rw=rsSimpleWidget(ctx,'str',same?a.room:'',function(v){set(t,'room',v);},{choices:(ctx.choices&&ctx.choices('rooms'))||null});field(ctx.t('f_room'),rw);} // 7.4.0: a light, or a room's light controls
-    else if(t==='heating')field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:'',['climate'],function(v){set(t,'entity',v);})); // 7.2.0: the heating controller of this thermostat
+    else if(t==='heating'){field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:'',['climate'],function(v){set(t,'entity',v);})); // 7.2.0: the heating controller of this thermostat
+      field(ctx.t('f_view'),opts([['controller',ctx.t('hv_controller')],['simple',ctx.t('hv_simple')],['check',ctx.t('hv_check')],['log',ctx.t('hv_log')]],same?a.view:'',function(v){set(t,'view',v);}));} // 7.5.0: what it opens
     else if(t==='navigate'){const i=rsSimpleWidget(ctx,'str',same?(a.navigation_path!==undefined?a.navigation_path:a.path):'',function(v){const n=base(t);delete n.path;if(v)n.navigation_path=v;else delete n.navigation_path;commit(n);});i.placeholder='/lovelace/0';field(ctx.t('f_path'),i);}
     else if(t==='url'){const i=rsSimpleWidget(ctx,'str',same?(a.url_path!==undefined?a.url_path:a.url):'',function(v){const n=base(t);delete n.url;if(v)n.url_path=v;else delete n.url_path;commit(n);});i.placeholder='https://…';field('URL',i);}
     else if(t==='perform-action'){

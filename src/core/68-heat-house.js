@@ -196,10 +196,11 @@ const ROC_HP_CSS='.roc-hp-bd{position:absolute;inset:0;z-index:408;background:rg
   +'.hp-room .n{font-size:12px;font-weight:600;color:var(--secondary-text-color,#9aa3ad)}.hp-room .t{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}.hp-room .t small{font-size:13px;font-weight:400;color:var(--secondary-text-color,#9aa3ad);margin-left:6px}'
   +'.hp-room .s{display:flex;align-items:center;gap:6px;font-size:12px}.hp-room .s i{width:8px;height:8px;border-radius:50%;background:#7d8590;flex:none}'
   +'.hp-room.heat{border-color:rgba(255,122,92,.55)}.hp-room.heat .s i{background:#ff7a5c;box-shadow:0 0 6px #ff7a5c}.hp-room.pause .s i,.hp-room.warn .s i{background:#f5b041}.hp-room.off .s i,.hp-room.na .s i{background:#4b5260}'
+  +'.hp-ad{display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.08);padding-top:12px}.hp-ad button{flex:1;min-height:40px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:none;color:inherit;font:inherit;cursor:pointer}.hp-ad b{display:inline-block;min-width:18px;margin-left:6px;border-radius:9px;background:#f5b041;color:#1c1f24;font-size:11px;line-height:18px}'
   +'.roc-hp button:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
 function rocHpOpen(card){
   if(!card||!card._hass)return;
-  rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card);
+  rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card);if(card._hs)rocHsClose(card);if(card._ad)rocAdClose(card);
   const sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
   const lang=rocHcLang(card._hass),T=function(k,v){return rocHcEsc(rocHpT(lang,k,v));};
   const bd=document.createElement('div');bd.className='roc-hp-bd';bd.addEventListener('click',function(){rocHpClose(card);});
@@ -207,13 +208,15 @@ function rocHpOpen(card){
   el.innerHTML='<style>'+ROC_HP_CSS+'</style><div class="hp-hd"><h3>'+T('house')+'</h3><button class="hp-x" data-hp="close" aria-label="'+T('close')+'">×</button></div>'
     +'<div data-hp-modew><div class="hp-lbl">'+T('mode')+'</div><div class="hp-modes" data-hp-modes style="margin-top:14px"></div></div>'
     +'<div class="hp-facts" data-hp-facts></div>'
-    +'<div class="hp-lbl">'+T('rooms')+'</div><div class="hp-rooms" data-hp-rooms></div>';
+    +'<div class="hp-lbl">'+T('rooms')+'</div><div class="hp-rooms" data-hp-rooms></div>'
+    +(rocAdAllowed(card._hass,card._config)?'<div class="hp-ad"><button data-hp="admin" data-v="check" data-hp-ck>'+rocHcEsc(rocAdT(lang,'t_check'))+'</button><button data-hp="admin" data-v="log">'+rocHcEsc(rocAdT(lang,'t_log'))+'</button></div>':''); // 7.5.0: admins only
   el.addEventListener('click',function(e){
     const b=e.target.closest&&e.target.closest('[data-hp]');if(!b)return;
     const k=b.getAttribute('data-hp');
     if(k==='close')rocHpClose(card);
     else if(k==='mode'){const P=card._hp;if(P&&P.house.mode)card._hass.callService('select','select_option',{entity_id:P.house.mode,option:b.getAttribute('data-v')});}
-    else if(k==='room'){const ent=b.getAttribute('data-v');rocHpClose(card);rocHcOpen(card,ent);}
+    else if(k==='room'){const ent=b.getAttribute('data-v');rocHpClose(card);rocHeatOpen(card,ent);} // 7.5.0: B on a phone when heating.simple says so
+    else if(k==='admin'){const v=b.getAttribute('data-v');rocHpClose(card);rocAdOpen(card,v);} // 7.5.0: the administration
   });
   wrap.appendChild(bd);wrap.appendChild(el);
   card._hp={el:el,bd:bd,lang:lang,sig:''};
@@ -264,4 +267,7 @@ function rocHpUpdate(card){
       +'<span class="s"><i></i>'+rocHcEsc(s.text)+'</span></button>';
   }).join('');
   if(q('[data-hp-rooms]').innerHTML!==rh)q('[data-hp-rooms]').innerHTML=rh;
+  // 7.5.0: how many findings the settings check has (admins)
+  const ckb=q('[data-hp-ck]');
+  if(ckb){const n=rocAdCheck(hass,cAll,lang).checks.filter(function(c){return c.lvl==='warn'||c.lvl==='alert';}).length,ch=rocHcEsc(rocAdT(lang,'t_check'))+(n?'<b>'+n+'</b>':'');if(ckb.innerHTML!==ch)ckb.innerHTML=ch;}
 }

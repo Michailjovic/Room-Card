@@ -23,7 +23,7 @@ every room. Every element type also accepts its own keys under `portrait:` / `la
 - **Navigation:** [`nav`](#t-nav) · [`navMini`](#t-navmini) · [`navChip`](#t-navchip)
 - **Sections (cockpit tiles):** [`section`](#t-section) · [`tile`](#t-tile) · [`quick`](#t-quick) · [`tileOverlay`](#t-tileoverlay)
 - **Overview page:** [`overview`](#t-overview) · [`ovSignals`](#t-ovsignals) · [`ovHeader`](#t-ovheader) · [`ovHeaderItem`](#t-ovheaderitem) · [`ovPill`](#t-ovpill) · [`ovSide`](#t-ovside) · [`ovSideCard`](#t-ovsidecard) · [`ovGrid`](#t-ovgrid) · [`ovDock`](#t-ovdock) · [`overviewTile`](#t-overviewtile) · [`ovChip`](#t-ovchip)
-- **Heating controller:** [`heating`](#t-heating) · [`hcRoom`](#t-hcroom) · [`hcTariff`](#t-hctariff) · [`hcSupply`](#t-hcsupply)
+- **Heating controller:** [`heating`](#t-heating) · [`hcRoom`](#t-hcroom) · [`hcTariff`](#t-hctariff) · [`hcSupply`](#t-hcsupply) · [`hcLog`](#t-hclog) · [`hcEnt`](#t-hcent)
 - **Floor plan page:** [`floorplan`](#t-floorplan) · [`fpRoom`](#t-fproom) · [`fpLight`](#t-fplight) · [`fpOpening`](#t-fpopening) · [`fpItem`](#t-fpitem) · [`fpVacuum`](#t-fpvacuum) · [`fpTransform`](#t-fptransform) · [`fpHeating`](#t-fpheating) · [`fpPass`](#t-fppass) · [`fpLayers`](#t-fplayers) · [`fpEntity`](#t-fpentity) · [`fpBackground`](#t-fpbackground) · [`fpThemeBy`](#t-fpthemeby) · [`fpWall`](#t-fpwall) · [`fpSource`](#t-fpsource) · [`fpTrace`](#t-fptrace)
 
 ## Card and rooms
@@ -263,6 +263,7 @@ With `action: fire-dom-event` the other keys are passed through unchecked. Guide
 | `room` | string **or** number |  |  |
 | `entities` | list of string |  | since 7.4.0 |
 | `name` | string |  | since 7.4.0 |
+| `view` | `controller` · `simple` · `check` · `log` |  | since 7.5.0 |
 | `section` | string |  |  |
 | `group` | string |  |  |
 | `confirmation` | boolean **or** object |  |  |
@@ -1245,6 +1246,12 @@ Guide: [HEATING.md](HEATING.md).
 | `boiler` | entity id **or** boolean |  | since 7.3.0 |
 | `tariff` | [`hcTariff`](#t-hctariff) |  | since 7.3.0 |
 | `supply` | list of [`hcSupply`](#t-hcsupply) |  | since 7.3.0 |
+| `simple` | `never` · `phone` · `always` | `"never"` | since 7.5.0 |
+| `normal` | number | `21.5` | since 7.5.0 |
+| `guard` | number | `16` | since 7.5.0 |
+| `away` | boolean | `true` | since 7.5.0 |
+| `admin` | boolean | `true` | since 7.5.0 |
+| `log` | [`hcLog`](#t-hclog) |  | since 7.5.0 |
 
 <a id="t-hcroom"></a>
 
@@ -1261,6 +1268,7 @@ A bare `climate` string is accepted as the short form (`- light.kitchen`). Guide
 | `range` | list of number |  |  |
 | `evening` | string |  |  |
 | `morning` | string |  |  |
+| `normal` | number |  | since 7.5.0 |
 
 <a id="t-hctariff"></a>
 
@@ -1283,6 +1291,32 @@ A bare `entity` string is accepted as the short form (`- light.kitchen`). Guide:
 |---|---|---|---|
 | `entity` | entity id |  |  |
 | `name` | string |  |  |
+
+<a id="t-hclog"></a>
+
+### `heating.log` — the event log (7.5.0, admins) — `hcLog`
+
+Guide: [HEATING.md](HEATING.md#event-log).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `days` | number | `7` |  |
+| `cooking` | list of [`hcEnt`](#t-hcent) |  |  |
+| `overload` | list of [`hcEnt`](#t-hcent) |  |  |
+| `phases` | list of [`hcEnt`](#t-hcent) |  |  |
+| `breaker` | number |  |  |
+| `boiler_amps` | number |  |  |
+| `entities` | list of [`hcEnt`](#t-hcent) |  |  |
+
+<a id="t-hcent"></a>
+
+### An entity of `heating.log` (a plain entity id, or `{entity}`) — `hcEnt`
+
+A bare `entity` string is accepted as the short form (`- light.kitchen`). Guide: [HEATING.md](HEATING.md#event-log).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `entity` | entity id |  |  |
 
 ## Floor plan page
 

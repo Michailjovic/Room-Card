@@ -133,6 +133,7 @@ class RoomOverlayCard extends HTMLElement{
     if(this._heat)rocHcUpdate(this); // the heating controller (7.2.0) follows its thermostat
     if(this._hp)rocHpUpdate(this); // …and the house panel (7.3.0)
     if(this._lc)rocLcUpdate(this);if(this._xp)rocXpUpdate(this); // …the light controller and the lens panels (7.4.0)
+    if(this._hs)rocHsUpdate(this);if(this._ad)rocAdUpdate(this); // …the quick mode and the administration (7.5.0)
     if(!this._rendered){this._render();return;}
     // Embedded cards do their own change detection — always forward hass
     // (even while off-screen, so they're current the moment the card scrolls back)
@@ -3480,6 +3481,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._heat)rocHcClose(this); // …and so does the heating controller (7.2.0)
     if(this._hp)rocHpClose(this); // …and the house panel (7.3.0)
     if(this._lc)rocLcClose(this);if(this._xp)rocXpClose(this);
+    if(this._hs)rocHsClose(this);if(this._ad)rocAdClose(this);
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
     // Editor preview instance (see _mountPreview): tell the editor GUI so its
@@ -4905,7 +4907,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
         break;
       case'follow-room':this._followNow();break;
       case'open-section':if(a.section)this._openSection(a.section);break;
-      case'heating':rocHcOpen(this,a.entity||a.entity_id);break; // 7.2.0: the heating controller
+      case'heating':rocHeatOpen(this,a.entity||a.entity_id,a.view);break; // 7.2.0: the heating controller; 7.5.0: view simple | controller | check | log
       case'fp-lens':rocFpLensTap(this,a.lens);break; // 7.3.0: a lens button in the floor plan's dock
       case'lights':rocLcOpen(this,a);break; // 7.4.0: the light controller
       // Standard Lovelace hook (browser_mod 2 popups, custom actions): HA's own
@@ -4955,6 +4957,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._heat)rocHcClose(this);
     if(this._hp)rocHpClose(this);
     if(this._lc)rocLcClose(this);if(this._xp)rocXpClose(this);
+    if(this._hs)rocHsClose(this);if(this._ad)rocAdClose(this);
     if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart

@@ -280,6 +280,10 @@ edits the plan instead of elements, with a toolbar above it:
   *Lens* (the one the page opens in), *Dock* (section launchers next to them) and *Pause banner*.
   The house panel's entities are in Card settings → *Heating controller*; the central mode and
   boiler fields show what the card found by itself. See [Lenses](FLOORPLAN.md#lenses).
+  Since 7.5.0 the same place has *Simple* (when the quick mode opens), *Normal*, *Guard*, *Away*,
+  *Admin* and *Log* (cooking / overload / phase entities, breaker, the boiler's amps); a heating
+  action's form has *Opens* (controller, quick mode, settings check, event log). See
+  [HEATING.md](HEATING.md#the-quick-mode-b).
 - **Marker** (v6.48.0) — click where a marker goes, then pick its entity in Properties. Select
   a marker to drag it (snapping like corners; Alt = free); Delete removes it. Set *type* to
   `label` for a text with a live value.

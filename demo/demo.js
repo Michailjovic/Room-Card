@@ -17,6 +17,50 @@ const C=customElements.get('room-overlay-card');
 const [CFG,SCN]=await Promise.all([fetch('config.json').then(r=>r.json()),fetch('scenario.json').then(r=>r.json())]);
 
 let states=SCN.states;
+// 7.5.0: what Versatile Thermostat reports about its settings (for the settings check), with the
+// times relative to now; the phase currents and the cooking sensor of the event log
+{const N=Date.now(),iso=m=>new Date(N-m*60000).toISOString(),o=(id,a)=>{states[id]={...states[id],attributes:{...states[id].attributes,...a}};};
+  const vt=(age,tpi,extra)=>Object.assign({configuration:{type:'over_switch',cycle_min:45,is_controlled_by_central_mode:true,is_used_by_central_boiler:true},
+    preset_temperatures:{frost_temp:10,eco_temp:10,comfort_temp:10,boost_temp:10},is_safety_configured:true,safety_manager:{safety_state:'off',safety_delay_min:60,safety_default_on_percent:0.25},
+    is_heating_failure_detection_configured:true,heating_failure_detection_manager:{heating_failure_state:'off',detection_delay_min:150},
+    is_window_configured:true,window_manager:{window_state:'off'},power_manager:{device_power:1.2}},extra||{},
+    {specific_states:Object.assign({},extra&&extra.ss,{hvac_off_reason:null,last_temperature_datetime:iso(age),ext_current_temperature:-1.1,unavailable_underlying_entities:[],messages:[],auto_tpi_state:'on',auto_tpi_learning:tpi})});
+  o('climate.versatile_living_room',vt(1,{coeff_indoor_heat:0.79,coeff_outdoor_heat:0.013,total_cycles:44,last_learning_status:'ok',autolearn_enabled:true},{ss:{temperature_slope:0.4}}));
+  o('climate.versatile_bedroom',vt(2,{coeff_indoor_heat:1.1,coeff_outdoor_heat:0.06,total_cycles:6,learning_start_date:iso(1440),last_learning_status:'power_out_of_range(100.0% vs Saturation 100.0%)',autolearn_enabled:true},
+    {is_heating_failure_detection_configured:false,ss:{temperature_slope:0.6}}));
+  o('climate.versatile_kitchen',vt(0,{coeff_indoor_heat:0.6,coeff_outdoor_heat:0.01,total_cycles:5,learning_start_date:iso(2880),last_learning_status:'ok',autolearn_enabled:true},{power_manager:{device_power:0.01},ss:{temperature_slope:0}}));
+  [['l1',3.4],['l2',5.1],['l3',2.7]].forEach(([k,v])=>{states['sensor.main_phase_'+k]={entity_id:'sensor.main_phase_'+k,state:String(v),attributes:{friendly_name:'Main supply '+k.toUpperCase(),unit_of_measurement:'A',device_class:'current'}};});
+  states['binary_sensor.kitchen_cooking']={entity_id:'binary_sensor.kitchen_cooking',state:'off',attributes:{friendly_name:'Kitchen cooking'}};
+  states['binary_sensor.main_supply_overload']={entity_id:'binary_sensor.main_supply_overload',state:'off',attributes:{friendly_name:'Main supply overload'}};}
+// the logbook of the last days: what an automation running the central mode writes (7.5.0 demo)
+function demoLogbook(){
+  const N=Date.now()/1000,out=[],ctx=e=>({context_event_type:'automation_triggered',context_source:'state of '+e,context_entity_id:'automation.heating_central_mode',context_name:'Heating: central mode'});
+  const day=86400,at=(d,h,m)=>{const t=new Date();t.setDate(t.getDate()-d);t.setHours(h,m,0,0);return t.getTime()/1000;};
+  const pause=(t,cause,dur,why,kw,ph)=>{if(t>N)return;
+    out.push({entity_id:cause,state:cause.startsWith('switch.hdo')?'off':'on',when:t-2},Object.assign({entity_id:'select.central_mode',state:'Stopped',when:t},ctx(cause)),
+      Object.assign({entity_id:'select.central_mode',name:'Heating',message:why+' → paused · kitchen '+kw+' kW · L1 '+ph[0]+' A · L2 '+ph[1]+' A · L3 '+ph[2]+' A',when:t+0.01},ctx(cause)),
+      {entity_id:'climate.versatile_living_room',state:'off',when:t+1},{entity_id:'climate.versatile_bedroom',state:'off',when:t+1});
+    const e=t+dur*60;if(e>N)return;
+    out.push({entity_id:cause,state:cause.startsWith('switch.hdo')?'on':'off',when:e-300},Object.assign({entity_id:'select.central_mode',state:'Heat only',when:e},ctx(cause)),
+      Object.assign({entity_id:'select.central_mode',name:'Heating',message:'resumed · kitchen 0.1 kW',when:e+0.01},ctx(cause)),
+      {entity_id:'climate.versatile_living_room',state:'heat',when:e+30},{entity_id:'climate.versatile_bedroom',state:'heat',when:e+30});};
+  for(let d=6;d>=0;d--){
+    pause(at(d,9,20),'switch.hdo',40,'tariff change',0,[4.3,0.9,6.1]);
+    pause(at(d,13,0),'switch.hdo',40,'tariff change',0.2,[3.8,1.2,5.4]);
+    pause(at(d,18,42),'binary_sensor.kitchen_cooking',25,'cooking started',2.4,[3.1,6.3,16.8]);
+    if(d===1)pause(at(d,11,5),'binary_sensor.kitchen_cooking',69,'oven on',1.9,[2.8,15.2,3.4]);
+  }
+  const ov=at(1,20,51);if(ov<N)pause(ov,'binary_sensor.main_supply_overload',7,'supply overload',3.1,[4.0,5.1,24.1]);
+  const nb=at(2,5,4);if(nb<N)out.push({entity_id:'climate.versatile_bedroom',state:'unavailable',when:nb},{entity_id:'climate.versatile_bedroom',state:'heat',when:nb+3600*6});
+  return out.filter(e=>e.when<=N).sort((a,b)=>a.when-b.when);
+}
+// the phase currents during a pause: a short peak where the log says so
+function demoPhases(m){
+  const t0=Date.parse(m.start_time)/1000,t1=Date.parse(m.end_time||new Date().toISOString())/1000,lb=demoLogbook().filter(e=>e.message&&e.when>=t0&&e.when<=t1+1);
+  const ph=lb.length?(/L1 ([\d.]+) A · L2 ([\d.]+) A · L3 ([\d.]+) A/.exec(lb[0].message)||[]).slice(1).map(Number):[3,4,5];
+  const r={};(m.entity_ids||[]).forEach((id,i)=>{const v=ph[i]||3;r[id]=[{s:String(Math.round(v*0.6*10)/10),lu:t0},{s:String(v),lu:(t0+t1)/2},{s:String(Math.round(v*0.7*10)/10),lu:t1}];});
+  return r;
+}
 const $=id=>document.getElementById(id);
 let toastT=0;
 function toast(t){const el=$('toast');el.textContent=t;el.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{el.hidden=true;},2200);}
@@ -83,6 +127,8 @@ async function callWS(m){
   if(m.type==='lovelace/config')return JSON.parse(JSON.stringify(host.lovelace.config));
   if(m.type==='lovelace/config/save'){await host.lovelace.saveConfig(m.config);return null;}
   if(m.type==='call_service'){await callService(m.domain,m.service,m.service_data,m.target);return{response:{}};}
+  if(m.type==='logbook/get_events')return demoLogbook();
+  if(m.type==='history/history_during_period'&&(m.entity_ids||[]).every(id=>id.startsWith('sensor.main_phase_')))return demoPhases(m);
   throw new Error(m.type+' is not available in the demo');
 }
 const connection={sendMessagePromise:callWS,subscribeMessage:(cb,m)=>{if(m&&m.type==='render_template')cb({result:''});return Promise.resolve(()=>{});},

@@ -1,5 +1,35 @@
 # Changelog
 
+## [7.5.0] - 2026-11-28
+
+### Added
+
+- **Quick heating mode (B)** — one question per room, how warm: *warmer for 3 hours* (usual
+  + 1 °C through VTherm's timed preset), *usual* (`heating.normal` / `rooms[].normal`, 21.5 °C),
+  *saving* (− 1.5 °C), *no heating, only guarding* (`heating.guard`, 16 °C). A sentence says what the
+  floor does now (warm as it should be, heating up, saving, waiting for the central mode, on an
+  estimate while the thermometer is silent — with when it last reported) and a line what the loop
+  does (open *n* of every *cycle* minutes). *We are leaving* puts the central mode on Frost
+  protection (a second tap confirms) and back; *More* opens the full controller. `heating.simple:
+  never | phone | always` decides when the `heating` action opens B; `view: simple | controller`
+  on an action wins.
+- **Heating administration** for admins (`hass.user.is_admin`, `heating.admin: false` hides it):
+  from the house panel (*Settings check* with its warning count, *Event log*) or `view: check |
+  log`.
+  - *Settings check*: Versatile Thermostat's regulation (auto-TPI), sensors, safety / heating
+    failure detection / window and the house per room, then findings — alerts, warnings (silent
+    thermometer, presets all at one temperature, learning standing still, no failure detection,
+    no safety mode, not following the central mode, an unavailable switch), what is fine, notes.
+  - *Event log*: the logbook of the last `log.days` (7): each stop of the central mode is one event
+    with its cause (tariff, `log.cooking`, `log.overload`, by hand — from the logbook's context),
+    duration, reaction time, steps and the message an automation wrote (kW and phase currents read
+    out of it); the detail draws the highest current of each phase in the pause from the history
+    of `log.phases`, with the boiler's share (`log.boiler_amps`) and the breaker (`log.breaker`).
+    A thermostat unavailable / back and changes by hand are events too. KPIs and filters.
+- Schema: `heating.simple / normal / guard / away / admin / log` (`hcLog`, `hcEnt`),
+  `rooms[].normal`, the action's `view`. Studio: the keys in Card settings → Heating controller,
+  *Opens* in the heating action's form. Demo: VTherm's settings, a week of logbook, phase currents.
+
 ## [7.4.2] - 2026-11-28
 
 ### Fixed

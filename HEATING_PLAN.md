@@ -43,12 +43,12 @@ heating where it is: on the floor plan.
 
 | Version | Content | Status |
 |---|---|---|
-| — | **HA preparation** (not card code): logbook entries (reason, kitchen kW, phase currents) in `automation.topeni_centralni_rezim`; VTherm heating-failure detection (2–3 h); a preset slot for the time-limited temperature; the bedroom target | waiting for the author |
+| — | **HA preparation** (not card code): logbook entries (reason, kitchen kW, phase currents) in `automation.topeni_centralni_rezim`; VTherm heating-failure detection (2–3 h); a preset slot for the time-limited temperature; the bedroom target | logbook entries done (V4, 2026-11-28); the rest is what the settings check reports |
 | 7.1.0 | **Loops on the floor plan**: counter-flow loops per climate room, manifold + feeds routed through passes, states (heat by `power_percent` / idle / paused by `requested_state` / off), theme tokens `pipe.*`, Studio tools *Manifold* and *Passes* | done |
 | 7.2.0 | **Room controller (A)** — the `heating` action opens it from anything with a tap action; any `climate`, VTherm extras when present: status with power / pause reason / ETA, quick °C, ± step, ruler, duration (keep / 2 h / until evening / until morning via VTherm's timed preset on the boost preset number), 24 h chart from history; settings in `heating:` (Studio: Card settings → Heating controller) | done |
 | 7.3.0 | **Lenses on the plan** (decision 10) with *Overview* and *Heating*: dock buttons with ring + badge (heating count, `II` pause, `VT`, `!` sensor); the Heating lens dims other layers, shows target chips, a tap on a room opens A beside it; the pause banner; the bottom panel (C): rooms, house mode (VTherm central mode), boiler, main supply | done |
 | 7.4.0 | **Lights lens** with the light controller (L), **cleaning lens** (AnyVac's shared selection, the cleaning panel), the AnyVac vacuums fitted to the plan's rooms after AnyVac's shared home frame, hot water in the house panel | done |
-| 7.5.0 | **Administration + phone**: settings check from VTherm attributes, event log from the HA logbook (filters, detail), simple mode (B) for phones | |
+| 7.5.0 | **Administration + phone**: settings check from VTherm attributes, event log from the HA logbook (filters, detail), simple mode (B) for phones | done — B by `heating.simple` / `view: simple`; the administration from the house panel or `view: check / log`; the log groups each stop of the central mode into one event, its cause from the logbook's context |
 
 Every phase ships with its GUI (the larger part of the work), demo scenario, tests, AI_SPEC,
 CHANGELOG and English release notes.

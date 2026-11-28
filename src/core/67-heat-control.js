@@ -69,7 +69,7 @@ function rocHcStatus(lang,m,target){
 // Minutes until `kind` ('2h' | 'evening' | 'morning') from `now` (a Date); evening / morning are HH:MM.
 function rocHcUntil(kind,cfg,now){
   now=now||new Date();
-  if(kind==='2h')return 120;
+  const mh=/^(\d+)h$/.exec(String(kind));if(mh)return Math.min(1440,+mh[1]*60); // '2h'; B's '3h' (7.5.0)
   const hm=String(kind==='evening'?cfg.evening:cfg.morning).split(':'),d=new Date(now.getTime());
   d.setHours(+hm[0],+hm[1],0,0);
   if(d.getTime()<=now.getTime()+60000)d.setDate(d.getDate()+1);
@@ -119,6 +119,7 @@ function rocHcOpen(card,entity){
   rocHcClose(card);
   if(card._hp)rocHpClose(card); // 7.3.0: the house panel gives way to the room
   if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card); // 7.4.0: and so do the light controller and the lens panels
+  if(card._hs)rocHsClose(card);if(card._ad)rocAdClose(card); // 7.5.0: the quick mode and the administration
   card._heat={entity:entity,dur:'always',pend:NaN,pendT:0,hist:null,histAt:0};
   if(!card._heatKey){card._heatKey=function(e){if(e.key==='Escape'&&card._heat)rocHcClose(card);};document.addEventListener('keydown',card._heatKey);}
   rocHcMount(card);rocHcUpdate(card);rocHcHistory(card);

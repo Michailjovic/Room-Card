@@ -95,6 +95,8 @@ const CHAPTERS=[
     ['hcRoom','A thermostat (`heating.rooms` item)',HC],
     ['hcTariff','`heating.tariff` — the high / low tariff (house panel)',HC+'#the-house-panel'],
     ['hcSupply','A main supply row (`heating.supply` item)',HC+'#the-house-panel'],
+    ['hcLog','`heating.log` — the event log (7.5.0, admins)',HC+'#event-log'],
+    ['hcEnt','An entity of `heating.log` (a plain entity id, or `{entity}`)',HC+'#event-log'],
   ]],
   ['Floor plan page',[
     ['floorplan','`floorplan:` of a room',FP],

@@ -155,7 +155,9 @@ and it zooms open; hold it to switch its lights.
 Since 7.3.0 a dock under the plan switches **lenses**: the lights lens opens a room's
 [light controller](docs/LIGHTS.md), the heating lens its [heating controller](docs/HEATING.md) and
 the house panel (house mode, boiler, hot water, tariff, every room), the cleaning lens queues rooms
-for AnyVac's vacuums.
+for AnyVac's vacuums. Since 7.5.0 the heating has a [quick mode](docs/HEATING.md#the-quick-mode-b)
+for phones (how warm, in four answers) and, for admins, a settings check and an event log of every
+heating pause.
 
 - **From your robot vacuum:** in the studio, *Add a floor plan page* → **AnyVac** reads the room
   outlines from the vacuum's map, straightens the walls, links each room to your card's rooms,

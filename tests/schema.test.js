@@ -136,6 +136,11 @@ const HA_NAMES=new Set(['navigation_replace','browser_id','browser_mod','color_t
   'min_color_temp_kelvin','max_color_temp_kelvin','selected_rooms','status_state','vacuum_error','dock_status','dock_error',
   // …the 24 h chart (7.4.1): VTherm's requested target and its safety preset
   'preset_mode','target_temperature',
+  // …the settings check and the event log (7.5.0): VTherm's diagnostic attributes, the logbook's context
+  'auto_tpi_learning','auto_tpi_state','autolearn_enabled','coeff_indoor_heat','coeff_outdoor_heat','cycle_min','detection_delay_min','device_power','ext_current_temperature',
+  'is_controlled_by_central_mode','is_heating_failure_detection_configured','is_safety_configured','is_window_configured','last_learning_status','last_temperature_datetime',
+  'learning_start_date','power_manager','preset_temperatures','safety_default_on_percent','safety_delay_min','total_cycles','tpi_coef_ext','tpi_coef_int',
+  'unavailable_underlying_entities','vtherm_over_switch','window_manager','window_state','context_source','context_user_id',
   // AnyVac's map sensor attributes (the integration's contract, V7_PLAN §7a)
   'home_frame','home_room_id','in_cleaning','schema_version','vacuum_room_name','view_layers','base_points','path_points','progress_pct','last_dry','last_wet','frame_id','home_anchors']);
 const cardCode=src.slice(0,src.indexOf('class RoomOverlayCardEditor'));

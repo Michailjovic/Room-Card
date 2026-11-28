@@ -396,6 +396,7 @@ action {
   room: str | num;
   entities: str[] @7.4.0;
   name: str @7.4.0;
+  view: "controller"|"simple"|"check"|"log" @7.5.0;
   section: str;
   group: str;
   confirmation: bool | map;
@@ -1018,6 +1019,12 @@ heating {
   boiler: entity | bool @7.3.0;
   tariff: hcTariff @7.3.0;
   supply: hcSupply[] @7.3.0;
+  simple: "never"|"phone"|"always" = "never" @7.5.0;
+  normal: num = 21.5 @7.5.0;
+  guard: num = 16 @7.5.0;
+  away: bool = true @7.5.0;
+  admin: bool = true @7.5.0;
+  log: hcLog @7.5.0;
 }
 hcRoom (or a bare climate string) {
   climate: entity;
@@ -1027,6 +1034,7 @@ hcRoom (or a bare climate string) {
   range: num[];
   evening: str;
   morning: str;
+  normal: num @7.5.0;
 }
 hcTariff (or a bare entity string) {
   entity: entity;
@@ -1035,6 +1043,18 @@ hcTariff (or a bare entity string) {
 hcSupply (or a bare entity string) {
   entity: entity;
   name: str;
+}
+hcLog {
+  days: num = 7;
+  cooking: hcEnt[];
+  overload: hcEnt[];
+  phases: hcEnt[];
+  breaker: num;
+  boiler_amps: num;
+  entities: hcEnt[];
+}
+hcEnt (or a bare entity string) {
+  entity: entity;
 }
 
 // ---- Floor plan page

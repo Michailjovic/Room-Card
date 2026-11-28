@@ -16,6 +16,8 @@
         "core/67-heat-control.js",
         "core/68-heat-house.js",
         "core/69-lights-clean.js",
+        "core/71-heat-admin.js",
+        "core/72-heat-simple.js",
         "core/70-format.js",
         "core/80-light-controls.js",
         "core/85-nav-live-blinds.js",

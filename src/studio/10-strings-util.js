@@ -61,7 +61,7 @@ const ROC_STUDIO_STR={en:{
   props_card_hint:'Select an element on the canvas or in the outline to edit it here. Layout, sections and the rest of the card settings are in All settings.',
   props_global_hint:'These are the defaults every room falls back to. Select an element, or a room in the outline, to edit it here.',
   ent_missing:'Not found in Home Assistant',dflt:'default',not_set:'not set',choose:'choose',
-  f_entity:'Entity',f_room:'Room (its light controls)',f_path:'Path',f_service:'Action',f_target:'Target entity',f_data:'Data (YAML)',f_section:'Section',f_group:'Group',
+  f_entity:'Entity',f_room:'Room (its light controls)',f_view:'Opens',hv_controller:'the controller (A)',hv_simple:'the quick mode (B)',hv_check:'the settings check (admins)',hv_log:'the event log (admins)',f_path:'Path',f_service:'Action',f_target:'Target entity',f_data:'Data (YAML)',f_section:'Section',f_group:'Group',
   one_value:'One value for both profiles',as_simple:'Use a single value',per_profile:'Different per profile (portrait / landscape)',as_conditions:'Depends on a state…',
   g_main:'General',g_position:'Position & size',g_actions:'Actions',g_visibility:'Visibility',g_advanced:'Advanced (YAML)',g_room_more:'More (YAML)',
   adv_hint:'Profile overrides (portrait / landscape) and keys the form does not list — kept exactly as they are',

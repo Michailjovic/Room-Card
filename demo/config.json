@@ -2338,6 +2338,23 @@
     "entity": "sensor.main_supply_power",
     "name": "Main supply"
    }
-  ]
+  ],
+  "simple": "phone",
+  "log": {
+   "cooking": [
+    "binary_sensor.kitchen_cooking"
+   ],
+   "overload": [
+    "binary_sensor.main_supply_overload"
+   ],
+   "phases": [
+    "sensor.main_phase_l1",
+    "sensor.main_phase_l2",
+    "sensor.main_phase_l3"
+   ],
+   "breaker": 25,
+   "boiler_amps": 12.8
+  },
+  "normal": 22
  }
 }

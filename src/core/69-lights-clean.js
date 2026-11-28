@@ -64,7 +64,7 @@ const ROC_LC_COLORS=[[255,183,107],[255,110,80],[255,60,120],[170,90,255],[70,14
 function rocLcOpen(card,a){
   if(!card||!card._hass||!a)return;
   const R=rocLcResolve(card._config,a);if(!R.entities.length)return;
-  rocLcClose(card);if(card._heat)rocHcClose(card);if(card._hp)rocHpClose(card);if(card._xp)rocXpClose(card);
+  rocLcClose(card);if(card._heat)rocHcClose(card);if(card._hp)rocHpClose(card);if(card._xp)rocXpClose(card);if(card._hs)rocHsClose(card);if(card._ad)rocAdClose(card);
   card._lc={ents:R.entities,names:R.names,name:R.name};
   if(!card._lcKey){card._lcKey=function(e){if(e.key==='Escape'&&card._lc)rocLcClose(card);};document.addEventListener('keydown',card._lcKey);}
   rocLcMount(card);rocLcUpdate(card);
@@ -185,7 +185,7 @@ const ROC_XP_CSS=ROC_HP_CSS.replace(/roc-hp/g,'roc-xp').replace(/hp-/g,'xp-')
 // one bottom panel at a time for the lights and cleaning lenses (the house panel has its own)
 function rocXpOpen(card,kind){
   if(!card||!card._hass)return;
-  rocXpClose(card);if(card._hp)rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);
+  rocXpClose(card);if(card._hp)rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);if(card._hs)rocHsClose(card);if(card._ad)rocAdClose(card);
   const sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
   const lang=rocHcLang(card._hass),T=function(k,v){return rocHcEsc(rocLcT(lang,k,v));};
   const bd=document.createElement('div');bd.className='roc-xp-bd';bd.addEventListener('click',function(){rocXpClose(card);});
