@@ -99,7 +99,11 @@ const S={
     light_controls:{t:'obj:lightControls',room:true},
   }},
   // the heating controller (7.2.0): defaults for every thermostat, and per-room settings
-  heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'}}},
+  heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'},
+    // the house panel (7.3.0): VTherm's central mode and central boiler are found by themselves; false hides one
+    central_mode:{t:'entity|bool',since:'7.3.0'},boiler:{t:'entity|bool',since:'7.3.0'},tariff:{t:'obj:hcTariff',since:'7.3.0'},supply:{t:'list:hcSupply',since:'7.3.0'}}},
+  hcTariff:{keys:{entity:{t:'entity'},high_state:{t:'str',d:'on'}},scalar:'entity'},
+  hcSupply:{keys:{entity:{t:'entity'},name:{t:'str'}},scalar:'entity'},
   hcRoom:{keys:{climate:{t:'entity'},name:{t:'str'},quick:{t:'list:num'},step:{t:'num'},range:{t:'list:num'},evening:{t:'str'},morning:{t:'str'}},scalar:'climate'},
   baseImageCond:{keys:{condition:{t:'cond'},image:{t:'url'}}}, // 7.0.5: `value` was never read — the image is `image`
   filterCond:{keys:{condition:{t:'cond'},filter:{t:'str'}}},
@@ -203,13 +207,14 @@ const S={
     source:{t:'obj:fpSource'},trace:{t:'obj:fpTrace'},rooms:{t:'list:fpRoom'},openings:{t:'list:fpOpening'},
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'},
     vacuums:{t:'list:fpVacuum',since:'6.50.0'},attention_sections:{t:'list:str',since:'6.50.0'},clean_mode:{t:'enum:dry|wet|both',d:'dry',since:'6.50.0'},trail_mode:{t:'enum:always|cleaning',d:'always',since:'6.50.0'},
-    background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'}}},
+    background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'},
+    lenses:{t:'list:str',since:'7.3.0'},lens:{t:'enum:overview|heating',d:'overview',since:'7.3.0'},dock:{t:'bool|obj:ovDock',since:'7.3.0'},pause_banner:{t:'bool',d:true,since:'7.3.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
     rotate:{t:'prof:num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical|both',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
-    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'}},hide:['rooms','openings','source','items','vacuums']},
+    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'},lenses:{t:'list:str'},lens:{t:'enum:overview|heating',d:'overview'},dock:{t:'bool|obj:ovDock'},pause_banner:{t:'bool',d:true}},hide:['rooms','openings','source','items','vacuums']},
   // floor heating loops and feeds (7.1.0): pitch = pipe to pipe, margin = loop to wall (m); with a
   // manifold every loop gets its feed, which crosses a wall only at a pass
   fpHeating:{keys:{pitch:{t:'num',d:0.2},margin:{t:'num',d:0.25},flow:{t:'bool',d:true},manifold:{t:'list:num'},passes:{t:'list:fpPass'}}},

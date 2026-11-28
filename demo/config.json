@@ -1129,7 +1129,46 @@
       ],
       "width": 0.9
      }
-    ]
+    ],
+    "heating": {
+     "manifold": [
+      1.15,
+      6.3
+     ],
+     "passes": [
+      {
+       "at": [
+        1.9,
+        6.72
+       ]
+      },
+      {
+       "at": [
+        2.62,
+        8.95
+       ]
+      },
+      {
+       "at": [
+        4.01,
+        11.95
+       ]
+      },
+      {
+       "at": [
+        2.95,
+        6.2
+       ]
+      }
+     ]
+    },
+    "dock": {
+     "sections": [
+      "appliances",
+      "climate",
+      "cleaning"
+     ]
+    }
    }
   },
   {
@@ -2288,5 +2327,17 @@
  },
  "image_align": "top",
  "zoom": true,
- "url_sync": true
+ "url_sync": true,
+ "heating": {
+  "tariff": {
+   "entity": "switch.hdo",
+   "high_state": "off"
+  },
+  "supply": [
+   {
+    "entity": "sensor.main_supply_power",
+    "name": "Main supply"
+   }
+  ]
+ }
 }

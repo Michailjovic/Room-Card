@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.2.0';
+const ROC_VERSION='7.3.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -1280,7 +1280,7 @@ function rocHcCommit(hass,entity,t,dur,cfg,model){
   const first=model&&model.timed?call('versatile_thermostat','cancel_timed_preset',{entity_id:entity}):Promise.resolve();
   return first.then(function(){return call('climate','set_temperature',{entity_id:entity,temperature:t});});
 }
-const ROC_HC_CSS='.roc-hc-bd{position:absolute;inset:0;z-index:410;background:rgba(0,0,0,.4);}'
+const ROC_HC_CSS='.roc-hc-bd{position:absolute;inset:0;z-index:410;background:rgba(0,0,0,.4);}.roc-hc-bd.hc-lite{background:rgba(0,0,0,.12);}'
   +'.roc-hc{position:absolute;z-index:411;top:0;right:0;bottom:0;width:min(380px,92%);box-sizing:border-box;overflow-y:auto;background:var(--card-background-color,#1c1f24);color:var(--primary-text-color,#f2f3f5);border-radius:14px 0 0 14px;box-shadow:0 8px 30px rgba(0,0,0,.5);padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;font:14px/1.4 var(--paper-font-body1_-_font-family,system-ui,sans-serif);}'
   +'.roc-hc.hc-bottom{top:auto;left:0;width:auto;max-height:88%;border-radius:14px 14px 0 0;}'
   +'.hc-hd{display:flex;align-items:flex-start;gap:10px}.hc-hd>div{flex:1;min-width:0}.hc-room{font-size:13px;color:var(--secondary-text-color,#9aa3ad);font-weight:600}'
@@ -1304,9 +1304,11 @@ function rocHcEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
 function rocHcOpen(card,entity){
   if(!card||!entity||!card._hass)return;
   rocHcClose(card);
+  if(card._hp)rocHpClose(card); // 7.3.0: the house panel gives way to the room
   card._heat={entity:entity,dur:'always',pend:NaN,pendT:0,hist:null,histAt:0};
   if(!card._heatKey){card._heatKey=function(e){if(e.key==='Escape'&&card._heat)rocHcClose(card);};document.addEventListener('keydown',card._heatKey);}
   rocHcMount(card);rocHcUpdate(card);rocHcHistory(card);
+  if(card._fpInst&&card._fpInst.setFocus)card._fpInst.setFocus(entity); // 7.3.0: outlined on the plan
 }
 function rocHcClose(card){
   const H=card&&card._heat;if(!H)return;
@@ -1314,12 +1316,13 @@ function rocHcClose(card){
   if(H.el&&H.el.parentNode)H.el.parentNode.removeChild(H.el);
   if(H.bd&&H.bd.parentNode)H.bd.parentNode.removeChild(H.bd);
   card._heat=null;
+  if(card._fpInst&&card._fpInst.setFocus)card._fpInst.setFocus('');
   if(card._heatKey){document.removeEventListener('keydown',card._heatKey);card._heatKey=null;}
 }
 function rocHcMount(card){
   const H=card._heat,sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
   const lang=rocHcLang(card._hass),cfg=rocHcCfg(card._config,H.entity);
-  const bd=document.createElement('div');bd.className='roc-hc-bd';bd.addEventListener('click',function(){rocHcClose(card);});
+  const bd=document.createElement('div');bd.className='roc-hc-bd'+(card._fpActive?' hc-lite':'');bd.addEventListener('click',function(){rocHcClose(card);});
   const el=document.createElement('div');el.className='roc-hc'+(wrap.clientWidth&&wrap.clientWidth<600?' hc-bottom':'');
   el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
   const T=function(k,v){return rocHcEsc(rocHcT(lang,k,v));};
@@ -1422,6 +1425,247 @@ function rocHcChart(card){
   tl+='H300';
   svg.innerHTML=bands+'<path d="'+gl+'" fill="none" stroke="#9aa3ad" stroke-width="1.2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>'
     +'<path d="'+tl+'" fill="none" stroke="#ffb35c" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';
+}
+// ---- Lenses on the floor plan + the house heating panel (7.3.0, HEATING_PLAN.md decision 10) -----
+// The floor plan page is the hub: one plan, switchable lenses. A lens is a preset over the plan's
+// layers — what is emphasised, what a tap on a room does, which panel its dock button opens:
+//   overview (default) — the plan as it always was, a tap switches to the room;
+//   heating — loops and thermostats in front, now → target on every label, a tap opens the room's
+//             heating controller (A, 67-heat-control.js) beside the plan.
+// The lenses sit in a dock under the plan, next to optional section launchers (floorplan.dock).
+// Every lens button carries a badge in every lens, so an event is seen without switching; a lens
+// never switches by itself. A tap on the active lens's button opens its panel — for heating the
+// house panel (C): rooms, the house mode (Versatile Thermostat's central mode), the boiler, the
+// tariff and the main supply. A banner on the plan says when the central mode stopped the heating.
+// Config: floorplan.lenses / lens / dock / pause_banner; the house entities in the card's
+// `heating:` block (central_mode, boiler, tariff, supply), the VTherm ones found by themselves.
+const ROC_LENSES={overview:{icon:'mdi:floor-plan'},heating:{icon:'mdi:heating-coil'}};
+const ROC_HP_STR={
+  en:{lens_overview:'Overview',lens_heating:'Heating',house:'Heating · house',mode:'House mode',boiler:'Boiler',b_on:'running',b_off:'off',
+    tariff:'Tariff',high:'high (VT)',low:'low (NT)',supply:'Main supply',rooms:'Rooms',close:'Close',
+    ban_central:'Heating paused by the central mode',ban_mode:'mode: {m}',since:'since {t}',
+    heat_n:'{n} heating',none_heat:'Nothing heats',warn:'Check: {r}',
+    m_Auto:'Auto','m_Stopped':'Stopped','m_Heat only':'Heat only','m_Cool only':'Cool only','m_Frost protection':'Frost protection'},
+  cs:{lens_overview:'Přehled',lens_heating:'Topení',house:'Topení · dům',mode:'Režim domu',boiler:'Kotel',b_on:'běží',b_off:'stojí',
+    tariff:'Tarif',high:'vysoký (VT)',low:'nízký (NT)',supply:'Hlavní přívod',rooms:'Místnosti',close:'Zavřít',
+    ban_central:'Topení pozastaveno centrálním režimem',ban_mode:'režim: {m}',since:'od {t}',
+    heat_n:'Topí {n}',none_heat:'Nic netopí',warn:'Zkontroluj: {r}',
+    m_Auto:'Automaticky','m_Stopped':'Zastaveno','m_Heat only':'Jen topení','m_Cool only':'Jen chlazení','m_Frost protection':'Proti mrazu'},
+};
+function rocHpT(lang,k,v){const t=ROC_HP_STR[lang]||ROC_HP_STR.en;let s=t[k]!=null?t[k]:(ROC_HP_STR.en[k]!=null?ROC_HP_STR.en[k]:k);if(v)for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s;}
+// The lenses of a plan page: floorplan.lenses (known names, in order), else overview + heating when a
+// plan room has a thermostat. One lens = no lens buttons.
+function rocFpLenses(def){
+  if(!def)return[];
+  let l=Array.isArray(def.lenses)?def.lenses.map(String).filter(function(x,i,a){return ROC_LENSES[x]&&a.indexOf(x)===i;}):null;
+  if(!l){l=['overview'];if((Array.isArray(def.rooms)?def.rooms:[]).some(function(r){return r&&r.climate;}))l.push('heating');}
+  return l;
+}
+// The lens shown now: the one picked on this page, else floorplan.lens, else the first. Null on a
+// page with fewer than two lenses (the plan then draws as before 7.3.0).
+function rocFpLensCur(card,def,idx){
+  const l=rocFpLenses(def);if(l.length<2)return null;
+  const by=card._fpLensBy||{},k=idx==null?card._roomIdx:idx;
+  if(by[k]&&l.indexOf(by[k])>=0)return by[k];
+  return l.indexOf(def.lens)>=0?def.lens:l[0];
+}
+// The thermostats the house panel lists: the plan's rooms (of this page, else the first plan in the
+// card), then heating.rooms; each with the name the user knows the room by.
+function rocHpRooms(cAll,def){
+  const rooms=Array.isArray(cAll&&cAll.rooms)?cAll.rooms:[];
+  if(!def){const r=rooms.find(function(x){return x&&x.floorplan&&!x.overview&&typeof x.floorplan==='object';});def=r?r.floorplan:null;}
+  const out=[],seen={};
+  const add=function(e,nm){if(!e||seen[e])return;seen[e]=1;const c=rocHcCfg(cAll,e);out.push({entity:e,name:c.name||nm||''});};
+  (def&&Array.isArray(def.rooms)?def.rooms:[]).forEach(function(r){
+    if(!r||!r.climate)return;
+    const cr=r.room!=null?rooms.find(function(x){return x&&String(x.id)===String(r.room);}):null;
+    add(String(r.climate),r.name||(cr&&cr.overview_tile&&cr.overview_tile.name)||(cr&&cr.name)||'');
+  });
+  const H=cAll&&cAll.heating&&typeof cAll.heating==='object'?cAll.heating:{};
+  (Array.isArray(H.rooms)?H.rooms:[]).forEach(function(r){if(r&&r.climate)add(String(r.climate),r.name);});
+  return out;
+}
+function rocHpName(hass,r){const st=hass&&hass.states[r.entity];return r.name||(st&&st.attributes&&st.attributes.friendly_name)||r.entity;}
+// House entities: the card's heating.central_mode / boiler, else Versatile Thermostat's own (its
+// central configuration: a select with Auto / Stopped, the central boiler binary sensor).
+function rocHpHouse(hass,cAll){
+  const H=cAll&&cAll.heating&&typeof cAll.heating==='object'?cAll.heating:{},E=(hass&&hass.entities)||{},S=(hass&&hass.states)||{};
+  const vt=function(test){return Object.keys(E).find(function(id){return E[id]&&E[id].platform==='versatile_thermostat'&&S[id]&&test(id,S[id],E[id]);})||'';};
+  const mode=typeof H.central_mode==='string'?H.central_mode:(H.central_mode===false?'':vt(function(id,st){const o=st.attributes&&st.attributes.options;return id.indexOf('select.')===0&&Array.isArray(o)&&o.indexOf('Auto')>=0&&o.indexOf('Stopped')>=0;}));
+  const boiler=typeof H.boiler==='string'?H.boiler:(H.boiler===false?'':vt(function(id,st,e){return id.indexOf('binary_sensor.')===0&&(e.translation_key==='central_boiler_state'||/central_boiler/.test(id));}));
+  const tf=H.tariff&&typeof H.tariff==='object'&&H.tariff.entity?{entity:String(H.tariff.entity),high:String(H.tariff.high_state!=null?H.tariff.high_state:'on')}:null;
+  const sup=(Array.isArray(H.supply)?H.supply:[]).map(function(x){return x&&typeof x==='object'?{entity:String(x.entity||''),name:x.name||''}:{entity:String(x||''),name:''};}).filter(function(x){return x.entity;});
+  return{mode:mode,boiler:boiler,tariff:tf,supply:sup};
+}
+// What the heating lens's badge and the banner say, from the thermostats' states (pure).
+function rocHeatSum(hass,rooms,house){
+  const S=(hass&&hass.states)||{};
+  const o={heat:0,pw:0,pause:false,since:'',warn:[],high:false};
+  rooms.forEach(function(r){
+    const st=S[r.entity],m=rocHcModel(st);
+    const a=(st&&st.attributes)||{},hf=a.heating_failure_detection_manager&&typeof a.heating_failure_detection_manager==='object'?a.heating_failure_detection_manager:null;
+    if(!st||m.na||m.safety||(hf&&hf.heating_failure_state==='on'))o.warn.push(rocHpName(hass,r));
+    if(m.on&&(m.action==='heating'||m.action==='preheating')){o.heat++;if(isFinite(m.pw))o.pw=Math.max(o.pw,m.pw);}
+    if(m.pause&&/central/.test(m.reason)){o.pause=true;const lc=st.last_changed||'';if(lc&&(!o.since||lc<o.since))o.since=lc;}
+  });
+  if(house&&house.tariff){const t=S[house.tariff.entity];o.high=!!t&&String(t.state)===house.tariff.high;}
+  // one badge: ! (a thermostat to check) > ❚❚ (paused) > VT (high tariff) > how many heat
+  o.badge=o.warn.length?{t:'!',c:'var(--roc-alert-c)'}:(o.pause?{t:'II',c:'#f5b041'}:(o.high?{t:'VT',c:'#9aa3ad'}:(o.heat?{t:String(o.heat),c:''}:null)));
+  return o;
+}
+const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:var(--roc-fpd-h,60px);display:flex;align-items:center;justify-content:center;gap:var(--roc-ov-dgap,14px);z-index:2;}'
+  +'.roc-fp-dk .ico{position:relative!important;}.roc-fp-dk .ico.roc-lens-on{box-shadow:0 0 0 2px var(--roc-active-c);}'
+  +'.roc-fp-sep{width:1px;height:26px;background:rgba(255,255,255,.18);}'
+  +'.roc-fp-ban{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:3;max-width:calc(100% - 24px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:16px;background:rgba(40,30,10,.82);border:1px solid #f5b041;color:#ffe2b0;font:600 13px/1.3 var(--paper-font-body1_-_font-family,system-ui,sans-serif);cursor:pointer;flex-wrap:wrap;justify-content:center;text-align:center;-webkit-tap-highlight-color:transparent;}'
+  +'.roc-fp-ban[hidden]{display:none;}.roc-fp-ban b{font-weight:800;letter-spacing:1px;}.roc-fp-ban span{opacity:.8;font-weight:500;}';
+// The dock under the plan: lens buttons, then (floorplan.dock) section launchers. Its buttons go
+// through the card's icon pipeline (listeners, section ring and badge), like the overview's dock.
+function rocFpDockBuild(card,cAll,def){
+  const lenses=rocFpLenses(def),lang=rocHcLang(card._hass),icons=[];
+  const cur=rocFpLensCur(card,def);
+  const dk=def.dock&&typeof def.dock==='object'?def.dock:(def.dock===true?{}:null);
+  const isz=(dk&&dk.size)||'24px';
+  const btn=function(id,ic,ttl,extra){
+    return'<div class="ico ico-chip'+(extra||'')+'" data-ico="'+escA(id)+'" tabindex="0" role="button" aria-label="'+escA(ttl)+'" title="'+escA(ttl)+'" style="position:relative;cursor:pointer;-webkit-tap-highlight-color:transparent;display:flex;align-items:center;justify-content:center;border-radius:50%;padding:9px;box-sizing:content-box;">'
+      +'<ha-icon data-icoicon="'+escA(id)+'" icon="'+escA(ic)+'" style="'+escA('--mdc-icon-size:'+isz+';width:'+isz+';height:'+isz+';display:flex;color:var(--roc-icon-color,#fff);pointer-events:none;position:relative;z-index:2;')+'"></ha-icon>'
+      +'<span class="ico-ring" data-ico-ring></span><span class="ico-badge" data-ico-badge></span></div>';
+  };
+  let h='';
+  if(lenses.length>1)lenses.forEach(function(l){
+    const id='__fplens_'+l,ttl=rocHpT(lang,'lens_'+l);
+    icons.push({id:id,icon:ROC_LENSES[l].icon,size:isz,chip:true,tap_action:{action:'fp-lens',lens:l},_ovDock:true,_fpLens:l});
+    h+=btn(id,ROC_LENSES[l].icon,ttl,l===cur?' roc-lens-on':'').replace('role="button"','role="button" aria-pressed="'+(l===cur)+'"');
+  });
+  if(dk){
+    const all=card._getSections(cAll).map(function(sx){return sx.def;});
+    const list=Array.isArray(dk.sections)?dk.sections.map(function(id){return all.find(function(d){return d.id===id;});}).filter(Boolean):all;
+    if(h&&list.length)h+='<span class="roc-fp-sep" aria-hidden="true"></span>';
+    list.forEach(function(d){
+      const id='__fpdock_'+d.id,ic=d.icon||'mdi:view-dashboard';
+      icons.push({id:id,icon:ic,size:isz,chip:true,tap_action:{action:'open-section',section:d.id},_ovDock:true});
+      h+=btn(id,ic,d.title||d.id);
+    });
+  }
+  const ban=def.pause_banner!==false&&lenses.indexOf('heating')>=0?'<div class="roc-fp-ban" data-fp-ban role="status" hidden></div>':'';
+  return{html:(h?'<div class="roc-fp-dk" data-fp-dock>'+h+'</div>':'')+ban,icons:icons,dock:!!h};
+}
+// Badges, ring, the active lens and the banner — every state update while the plan page shows.
+function rocFpDockUpdate(card){
+  const sr=card.shadowRoot,cAll=card._config,hass=card._hass;if(!sr||!hass)return;
+  const def=rocFpCfg(cAll,card._roomIdx);if(!def)return;
+  const lenses=rocFpLenses(def),cur=rocFpLensCur(card,def),lang=rocHcLang(hass);
+  if(lenses.indexOf('heating')<0)return;
+  const rooms=rocHpRooms(cAll,def),house=rocHpHouse(hass,cAll),sum=rocHeatSum(hass,rooms,house);
+  lenses.forEach(function(l){
+    const el=sr.querySelector('[data-ico="__fplens_'+l+'"]');if(!el)return;
+    el.classList.toggle('roc-lens-on',l===cur);el.setAttribute('aria-pressed',String(l===cur));
+    if(l!=='heating')return;
+    const b=el.querySelector('[data-ico-badge]'),ring=el.querySelector('[data-ico-ring]'),ic=el.querySelector('ha-icon');
+    const bt=sum.badge?sum.badge.t:'';
+    if(b){if(b.textContent!==bt)b.textContent=bt;b.style.background=sum.badge&&sum.badge.c?sum.badge.c:'';b.style.color=sum.badge&&sum.badge.c&&sum.badge.t!=='!'?'#1a1206':'';}
+    if(ring){ring.style.display=sum.heat?'block':'none';ring.style.setProperty('--p',Math.round(sum.pw||0)+'%');}
+    if(ic)ic.style.color=sum.heat?'var(--roc-active-c)':'';
+    const ttl=rocHpT(lang,'lens_heating')+' · '+(sum.heat?rocHpT(lang,'heat_n',{n:sum.heat}):rocHpT(lang,'none_heat'))+(sum.warn.length?' · '+rocHpT(lang,'warn',{r:sum.warn.join(', ')}):'');
+    el.setAttribute('title',ttl);el.setAttribute('aria-label',ttl);
+  });
+  const ban=sr.querySelector('[data-fp-ban]');
+  if(ban){
+    if(!sum.pause){ban.hidden=true;return;}
+    const ms=house.mode&&hass.states[house.mode],d=sum.since?new Date(sum.since):null;
+    const parts=[ms?rocHpT(lang,'ban_mode',{m:rocHpT(lang,'m_'+ms.state)}):'',d&&!isNaN(d)?rocHpT(lang,'since',{t:d.toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit'})}):''].filter(Boolean);
+    const html='<b>II</b>'+rocHcEsc(rocHpT(lang,'ban_central'))+(parts.length?'<span>· '+rocHcEsc(parts.join(' · '))+'</span>':'');
+    if(ban.innerHTML!==html)ban.innerHTML=html;
+    ban.hidden=false;
+  }
+}
+// A lens button: another lens → switch to it; the active one → open its panel.
+function rocFpLensTap(card,lens){
+  const def=rocFpCfg(card._config,card._roomIdx);if(!def)return;
+  const cur=rocFpLensCur(card,def);
+  if(lens===cur){if(lens==='heating')rocHpOpen(card);return;}
+  if(rocFpLenses(def).indexOf(lens)<0)return;
+  card._fpLensBy=Object.assign({},card._fpLensBy||{});card._fpLensBy[card._roomIdx]=lens;
+  if(card._fpInst&&card._fpInst.setOptions)card._fpInst.setOptions({lens:lens});
+  rocFpDockUpdate(card);
+}
+// ---- the house panel (C) ----
+const ROC_HP_CSS='.roc-hp-bd{position:absolute;inset:0;z-index:408;background:rgba(0,0,0,.35);}'
+  +'.roc-hp{position:absolute;z-index:409;left:0;right:0;bottom:0;max-height:78%;overflow-y:auto;box-sizing:border-box;background:var(--card-background-color,#1c1f24);color:var(--primary-text-color,#f2f3f5);border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.45);padding:14px 18px 18px;display:flex;flex-direction:column;gap:14px;font:14px/1.4 var(--paper-font-body1_-_font-family,system-ui,sans-serif);}'
+  +'.hp-hd{display:flex;align-items:center;gap:10px}.hp-hd h3{flex:1;margin:0;font-size:16px;font-weight:600}.hp-x{background:none;border:0;color:inherit;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1}'
+  +'.hp-lbl{font-size:11px;color:var(--secondary-text-color,#9aa3ad);margin-bottom:-8px;text-transform:uppercase;letter-spacing:.04em}'
+  +'.hp-modes{display:flex;flex-wrap:wrap;gap:8px}.hp-modes button{flex:1 1 0;min-width:84px;min-height:40px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:inherit;font:inherit;cursor:pointer}'
+  +'.hp-modes button.on{background:rgba(255,122,92,.18);border-color:#ff7a5c;color:#ffd6cb}'
+  +'.hp-facts{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px}.hp-facts span{color:var(--secondary-text-color,#9aa3ad)}.hp-facts b{font-weight:600}.hp-facts b.hot{color:#ffb35c}.hp-facts:empty{display:none}'
+  +'.hp-rooms{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}'
+  +'.hp-room{text-align:left;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.04);color:inherit;font:inherit;padding:10px 12px;cursor:pointer;display:flex;flex-direction:column;gap:2px;min-height:44px}'
+  +'.hp-room .n{font-size:12px;font-weight:600;color:var(--secondary-text-color,#9aa3ad)}.hp-room .t{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}.hp-room .t small{font-size:13px;font-weight:400;color:var(--secondary-text-color,#9aa3ad);margin-left:6px}'
+  +'.hp-room .s{display:flex;align-items:center;gap:6px;font-size:12px}.hp-room .s i{width:8px;height:8px;border-radius:50%;background:#7d8590;flex:none}'
+  +'.hp-room.heat{border-color:rgba(255,122,92,.55)}.hp-room.heat .s i{background:#ff7a5c;box-shadow:0 0 6px #ff7a5c}.hp-room.pause .s i,.hp-room.warn .s i{background:#f5b041}.hp-room.off .s i,.hp-room.na .s i{background:#4b5260}'
+  +'.roc-hp button:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
+function rocHpOpen(card){
+  if(!card||!card._hass)return;
+  rocHpClose(card);if(card._heat)rocHcClose(card);
+  const sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
+  const lang=rocHcLang(card._hass),T=function(k,v){return rocHcEsc(rocHpT(lang,k,v));};
+  const bd=document.createElement('div');bd.className='roc-hp-bd';bd.addEventListener('click',function(){rocHpClose(card);});
+  const el=document.createElement('div');el.className='roc-hp';el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');el.setAttribute('aria-label',rocHpT(lang,'house'));
+  el.innerHTML='<style>'+ROC_HP_CSS+'</style><div class="hp-hd"><h3>'+T('house')+'</h3><button class="hp-x" data-hp="close" aria-label="'+T('close')+'">×</button></div>'
+    +'<div data-hp-modew><div class="hp-lbl">'+T('mode')+'</div><div class="hp-modes" data-hp-modes style="margin-top:14px"></div></div>'
+    +'<div class="hp-facts" data-hp-facts></div>'
+    +'<div class="hp-lbl">'+T('rooms')+'</div><div class="hp-rooms" data-hp-rooms></div>';
+  el.addEventListener('click',function(e){
+    const b=e.target.closest&&e.target.closest('[data-hp]');if(!b)return;
+    const k=b.getAttribute('data-hp');
+    if(k==='close')rocHpClose(card);
+    else if(k==='mode'){const P=card._hp;if(P&&P.house.mode)card._hass.callService('select','select_option',{entity_id:P.house.mode,option:b.getAttribute('data-v')});}
+    else if(k==='room'){const ent=b.getAttribute('data-v');rocHpClose(card);rocHcOpen(card,ent);}
+  });
+  wrap.appendChild(bd);wrap.appendChild(el);
+  card._hp={el:el,bd:bd,lang:lang,sig:''};
+  if(!card._hpKey){card._hpKey=function(e){if(e.key==='Escape'&&card._hp)rocHpClose(card);};document.addEventListener('keydown',card._hpKey);}
+  rocHpUpdate(card);
+  const x=el.querySelector('[data-hp="close"]');if(x)try{x.focus();}catch(_){}
+}
+function rocHpClose(card){
+  const P=card&&card._hp;if(!P)return;
+  if(P.el&&P.el.parentNode)P.el.parentNode.removeChild(P.el);
+  if(P.bd&&P.bd.parentNode)P.bd.parentNode.removeChild(P.bd);
+  card._hp=null;
+  if(card._hpKey){document.removeEventListener('keydown',card._hpKey);card._hpKey=null;}
+}
+function rocHpUpdate(card){
+  const P=card._hp;if(!P)return;
+  if(!P.el.isConnected){rocHpClose(card);return;} // the card re-rendered: the panel goes with the old DOM
+  const hass=card._hass,S=hass.states,lang=P.lang,cAll=card._config;
+  const rooms=rocHpRooms(cAll,rocFpCfg(cAll,card._roomIdx)),house=rocHpHouse(hass,cAll);P.house=house;
+  const q=function(s){return P.el.querySelector(s);};
+  // house mode
+  const ms=house.mode&&S[house.mode],opts=ms&&Array.isArray(ms.attributes&&ms.attributes.options)?ms.attributes.options:[];
+  const cool=rooms.some(function(r){const st=S[r.entity];return st&&Array.isArray(st.attributes.hvac_modes)&&st.attributes.hvac_modes.indexOf('cool')>=0;});
+  q('[data-hp-modew]').style.display=opts.length?'':'none';
+  const mh=opts.filter(function(o){return o!=='Cool only'||cool;}).map(function(o){return'<button data-hp="mode" data-v="'+rocHcEsc(o)+'"'+(ms.state===o?' class="on" aria-pressed="true"':' aria-pressed="false"')+'>'+rocHcEsc(rocHpT(lang,'m_'+o))+'</button>';}).join('');
+  if(q('[data-hp-modes]').innerHTML!==mh)q('[data-hp-modes]').innerHTML=mh;
+  // boiler · tariff · main supply
+  const facts=[];
+  const bs=house.boiler&&S[house.boiler];
+  if(bs)facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'boiler'))+'</span> <b'+(bs.state==='on'?' class="hot"':'')+'>'+rocHcEsc(rocHpT(lang,bs.state==='on'?'b_on':'b_off'))+'</b></div>');
+  const ts=house.tariff&&S[house.tariff.entity];
+  if(ts){const hi=String(ts.state)===house.tariff.high;facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'tariff'))+'</span> <b'+(hi?' class="hot"':'')+'>'+rocHcEsc(rocHpT(lang,hi?'high':'low'))+'</b></div>');}
+  house.supply.forEach(function(x){
+    const st=S[x.entity];if(!st)return;
+    const nm=x.name||(st.attributes&&st.attributes.friendly_name)||x.entity;
+    const n=rocHcNum(st.state),u=(st.attributes&&st.attributes.unit_of_measurement)||'';
+    facts.push('<div><span>'+rocHcEsc(nm)+'</span> <b>'+rocHcEsc(isFinite(n)?n.toLocaleString(lang,{maximumFractionDigits:n<10?1:0}):st.state)+(u?' '+rocHcEsc(u):'')+'</b></div>');
+  });
+  const fh=facts.join('');if(q('[data-hp-facts]').innerHTML!==fh)q('[data-hp-facts]').innerHTML=fh;
+  // the rooms: now, target, status — a tap opens the room's controller
+  const rh=rooms.map(function(r){
+    const st=S[r.entity],m=rocHcModel(st),s=rocHcStatus(lang,m,m.target);
+    return'<button class="hp-room '+s.cls+'" data-hp="room" data-v="'+rocHcEsc(r.entity)+'"><span class="n">'+rocHcEsc(rocHpName(hass,r))+'</span>'
+      +'<span class="t">'+rocHcEsc(rocHcFmt(lang,m.cur))+'°'+(isFinite(m.target)?'<small>→ '+rocHcEsc(rocHcFmt(lang,m.target))+'°</small>':'')+'</span>'
+      +'<span class="s"><i></i>'+rocHcEsc(s.text)+'</span></button>';
+  }).join('');
+  if(q('[data-hp-rooms]').innerHTML!==rh)q('[data-hp-rooms]').innerHTML=rh;
 }
 // ----- Value formatting (v6.16.0) ---------------------------------------------
 // One formatter for every place that prints an entity value: labels, nav
@@ -2132,6 +2376,7 @@ class RoomOverlayCard extends HTMLElement{
   set hass(h){
     this._hass=h;if(!this._config)return;
     if(this._heat)rocHcUpdate(this); // the heating controller (7.2.0) follows its thermostat
+    if(this._hp)rocHpUpdate(this); // …and the house panel (7.3.0)
     if(!this._rendered){this._render();return;}
     // Embedded cards do their own change detection — always forward hass
     // (even while off-screen, so they're current the moment the card scrolls back)
@@ -3439,6 +3684,7 @@ class RoomOverlayCard extends HTMLElement{
       host.innerHTML='';
       try{
         self._fpInst=F.mount(host,{cfg:def,cAll:cAll,hass:self._hass,profile:self._profile||'landscape',studio:!!cAll._roc_studio,
+          lens:rocFpLensCur(self,def), // 7.3.0
           interactive:!(cAll._roc_studio&&cAll.test_mode), // the studio's Arrange mode edits the plan instead
           exec:function(a,e){self._exec(a,e);},
           // v6.48.0 cross-room signals: who is where, attention per card room, AnyVac vacuums
@@ -3447,6 +3693,7 @@ class RoomOverlayCard extends HTMLElement{
           attention:function(){return rocRoomSignals(cAll,(self._hass&&self._hass.states)||{},{sections:self._fpSections(def,cAll),presence:false,vacuum:false});},
           roomMatch:function(v){return roomMatch(cAll,v);},
           onRender:function(v){if(typeof self._rocFpSink==='function')try{self._rocFpSink(v);}catch(_){}}});
+        if(self._heat&&self._fpInst&&self._fpInst.setFocus)self._fpInst.setFocus(self._heat.entity); // 7.3.0: the room whose controller is open
       }catch(e){console.warn('[room-overlay-card] floor plan:',e);host.innerHTML='<div class="roc-fp-msg">'+escA(e&&e.message||String(e))+'</div>';}
     };
     const C=customElements.get('room-overlay-card');
@@ -3996,7 +4243,12 @@ class RoomOverlayCard extends HTMLElement{
     let _ovHtml='',_ovMeta=null;
     if(_ovOn){const _ob=this._ovBuild(cAll,_ovDef,_rt);_ovHtml=_ob.html;_ovMeta=_ob.meta;c.icons=_ovMeta.dockIcons;}
     else if(_ovPh)_ovHtml='<div class="roc-ov-ph"><ha-icon icon="'+escA(((cAll.rooms||[])[this._roomIdx]||{}).icon||'mdi:view-dashboard')+'"></ha-icon></div>';
-    else if(_fpOn)_ovHtml='<div class="roc-fp" data-fp-root></div>';
+    else if(_fpOn){
+      // 7.3.0: lenses + section launchers in a dock under the plan (68-heat-house.js)
+      const _fd=rocFpDockBuild(this,cAll,_fpDef);
+      _ovHtml='<div class="roc-fp" data-fp-root'+(_fd.dock?' style="bottom:var(--roc-fpd-h,60px)"':'')+'></div>'+_fd.html;
+      c.icons=_fd.icons;
+    }
     else if(_fpPh)_ovHtml='<div class="roc-ov-ph"><ha-icon icon="'+escA(((cAll.rooms||[])[this._roomIdx]||{}).icon||'mdi:floor-plan')+'"></ha-icon></div>';
 
     const vwHtml=(_isGhost||_isMini)?'':(c.vacuum_widgets||[]).map(vw0=>{
@@ -4261,7 +4513,7 @@ class RoomOverlayCard extends HTMLElement{
       _navOld=this._navStash.el;_navScroll=this._navStash.scroll||[0,0];this._navRestore=this._navStash;this._navStash=null;
     }
     this._navKey=_navKey;
-    this.shadowRoot.innerHTML='<style>:host{display:block;--roc-active-c:var(--roc-active,#ffb35c);--roc-cold-c:var(--roc-cold,#6cb8ff);--roc-alert-c:var(--roc-alert,#ff7a6e);--roc-surface-c:var(--roc-surface,rgba(20,22,26,.85));--roc-border-c:var(--roc-border,rgba(255,255,255,.08));--roc-text-c:var(--roc-text,#f2f3f5);--roc-text-2-c:var(--roc-text-2,#9aa3ad);--roc-chip-bg-c:var(--roc-chip-bg,rgba(10,12,15,.55));}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}[data-roc-na="1"]{filter:grayscale(1) brightness(.55);}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}.ico.ico-ring{display:none;position:absolute;inset:-3px;border-radius:50%;z-index:3;pointer-events:none;background:conic-gradient(var(--roc-active-c) 0 var(--p,0%),rgba(255,255,255,.14) var(--p,0%) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}.ico-badge{position:absolute;top:-4px;right:-4px;z-index:4;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none;}.ico-badge:empty{display:none;}.roc-lcp-cell{min-width:0;container-type:inline-size;}.roc-lcp{position:relative;box-sizing:border-box;width:100%;border-radius:999px;border:2px solid var(--roc-border-c);background:var(--lcp-bg,#16191d);overflow:hidden;display:flex;align-items:center;gap:8px;padding:0 12px 0 3px;color:var(--roc-text-c);font-size:13px;line-height:1;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .6s ease-in-out;}.roc-lcp.unavailable{opacity:.5;}.roc-lcp-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lcp-col,rgba(255,179,92,.55));transition:width .3s ease,background-color .4s ease;pointer-events:none;}.roc-lcp.dragging .roc-lcp-fill{transition:none;}.roc-lcp-ic{position:relative;flex:none;width:calc(min(var(--lcp-h,30px) - 8px,34px));height:calc(min(var(--lcp-h,30px) - 8px,34px));border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);color:var(--roc-text-2-c);box-sizing:border-box;--mdc-icon-size:calc(min(var(--lcp-h,30px) - 8px,34px) * .6);}.roc-lcp.on .roc-lcp-ic{background:var(--lcp-solid,#ffb35c);border-color:transparent;color:#1a1206;}.roc-lcp-nm{position:relative;flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-lcp-val{position:relative;flex:none;font-variant-numeric:tabular-nums;color:var(--roc-text-2-c);}.roc-lcp.on .roc-lcp-val{color:var(--roc-text-c);font-weight:500;}.roc-lcp:focus-visible{outline:2px solid var(--roc-text-c);outline-offset:2px;}@container (max-width:120px){.roc-lcp-nm{display:none;}.roc-lcp{justify-content:space-between;}}.roc-navchip{background:var(--roc-chip-bg-c);border-radius:4px;padding:1px 5px;}.roc-nav.roc-dim .roc-thumb:not([data-act]){opacity:.8;}.roc-nav.roc-dim .roc-thumb:hover{opacity:1;}.ico-chip{box-shadow:0 3px 8px rgba(0,0,0,.4);}.ico.ico-chip::before{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);}.ico.ico-chip::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}@media (prefers-reduced-motion:reduce){*:not(.roc-hold):not(.roc-hold *){animation:none!important;}.roc-panel,.roc-panel-backdrop,.content{transition:none!important;}.roc-panel.pl-sheet-right,.roc-panel.pl-sheet-bottom{transform:none!important;}}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.roc-pm[data-section-panel]{position:fixed;inset:0;width:auto;height:auto;max-height:none;border-radius:0;transform:translateY(14px);padding-bottom:env(safe-area-inset-bottom,0px);}.roc-panel.roc-pm.open[data-section-panel]{transform:none;}.roc-panel-backdrop.roc-pm{position:fixed;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel:not(.roc-cols-set) .roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:12px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:var(--roc-active-c);font-weight:500;}.roc-tile.is-active{box-shadow:inset 0 0 0 1px var(--roc-active-c);}.roc-tile.is-active .roc-tile-progress-bar{background:var(--roc-active-c);}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-img .roc-tile-quick{flex-direction:row;flex-wrap:wrap;justify-content:center;margin-top:2px;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}'+(_ovAny||_fpAny?ROC_OV_CSS:'')+(_fpAny?ROC_FP_CSS:'')+(_ovAny&&rocSigAny(cAll)?ROC_SIG_CSS:'')+'</style>'+(this._rocExtraCss?'<style class="roc-xcss">'+this._rocExtraCss+'</style>':'')+'<ha-card style="'+escA('height:'+_rootH+';')+'"><div class="roc-grid" style="'+escA(''+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"'+(_ovOn||_fpOn?' style="position:absolute;inset:0;"':'')+'><div class="layer base" style="'+escA(''+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);')+'"></div>'+_ovHtml+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this._vpW())+'&#215;'+Math.round(this._vpH())+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="'+escA('position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;')+'">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_studio?'':'<button class="tm-prof" style="'+escA('position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;')+'">&#8645; '+_rt.toUpperCase()+'</button>')+''+(c._roc_preview||c._roc_studio?'':'<button class="tm-studio" title="Open the full-screen Room Card Studio" style="position:absolute;top:38px;right:96px;z-index:200;background:rgba(40,70,140,0.88);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#9998; Studio</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
+    this.shadowRoot.innerHTML='<style>:host{display:block;--roc-active-c:var(--roc-active,#ffb35c);--roc-cold-c:var(--roc-cold,#6cb8ff);--roc-alert-c:var(--roc-alert,#ff7a6e);--roc-surface-c:var(--roc-surface,rgba(20,22,26,.85));--roc-border-c:var(--roc-border,rgba(255,255,255,.08));--roc-text-c:var(--roc-text,#f2f3f5);--roc-text-2-c:var(--roc-text-2,#9aa3ad);--roc-chip-bg-c:var(--roc-chip-bg,rgba(10,12,15,.55));}@keyframes roc-pulse{0%,100%{opacity:1}50%{opacity:.25}}@keyframes roc-glow{0%,100%{opacity:1;filter:drop-shadow(0 0 0px var(--roc-ac,transparent))}50%{opacity:.7;filter:drop-shadow(0 0 8px var(--roc-ac,rgba(255,0,0,.6)))}}@keyframes roc-blink{0%,49.9%{opacity:1}50%,100%{opacity:0}}@keyframes roc-gw-flicker{0%,100%{opacity:1}8%{opacity:.72}14%{opacity:.96}22%{opacity:.62}30%{opacity:1}44%{opacity:.8}52%{opacity:.98}66%{opacity:.7}78%{opacity:.93}90%{opacity:.78}}@keyframes roc-gw-pulse{0%,100%{opacity:1}50%{opacity:.62}}@keyframes roc-tf-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}@keyframes roc-tf-spin-x{from{transform:rotateX(0deg)}to{transform:rotateX(360deg)}}@keyframes roc-tf-spin-y{from{transform:rotateY(0deg)}to{transform:rotateY(360deg)}}.glow{pointer-events:none;will-change:opacity;}.glow-fx{pointer-events:none;}.glow-edit{pointer-events:auto;box-sizing:border-box;overflow:visible;-webkit-tap-highlight-color:transparent;}.glow-tag{position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);color:#ffd67a;font:600 10px/1.5 monospace;padding:1px 6px;border-radius:6px;white-space:nowrap;pointer-events:none;}@keyframes roc-vac-drive{0%,100%{transform:translateX(0) rotate(0deg)}25%{transform:translateX(-9%) rotate(-7deg)}75%{transform:translateX(9%) rotate(7deg)}}@keyframes roc-vac-ripple{0%{transform:scale(.55);opacity:.9}100%{transform:scale(1.5);opacity:0}}@keyframes roc-vac-duo{0%,40%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}50%,90%{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.6)}100%{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.6)}}@keyframes roc-vac-mop{0%,100%{transform:translateX(0)}30%{transform:translateX(-11%)}70%{transform:translateX(11%)}}@keyframes roc-vac-duo-icon{0%,100%{transform:translateX(0) rotate(0deg)}10%{transform:translateX(-9%) rotate(-7deg)}30%{transform:translateX(9%) rotate(7deg)}40%,50%{transform:translateX(0) rotate(0deg)}65%{transform:translateX(-11%) rotate(0deg)}85%{transform:translateX(11%) rotate(0deg)}}@keyframes roc-border-pulse{0%,100%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8)),inset 0 0 8px var(--roc-ac,rgba(255,0,0,.3))}50%{box-shadow:inset 0 0 0 2px transparent,inset 0 0 0 transparent}}@keyframes roc-border-blink{0%,49.9%{box-shadow:inset 0 0 0 2px var(--roc-ac,rgba(255,0,0,.8))}50%,100%{box-shadow:none}}@keyframes roc-rain{from{background-position:0 0,0 0}to{background-position:-60px 240px,-30px 120px}}@keyframes roc-snow{0%{background-position:0 0,40px 60px,20px 30px}100%{background-position:90px 280px,-50px 340px,110px 240px}}@keyframes roc-snow-heavy{0%{background-position:0 0,30px 40px,15px 20px}100%{background-position:70px 220px,-40px 250px,70px 160px}}@keyframes roc-fog{0%{background-position:0 0,0 0}100%{background-position:340px 0,-260px 0}}@keyframes roc-flash{0%,91.5%,94.2%,100%{opacity:0}92%,92.6%{opacity:.85}93.4%{opacity:.35}}.wx{transition:opacity 1.5s ease;}.wx-rain{background-image:repeating-linear-gradient(var(--roc-rain-angle,105deg),rgba(255,255,255,0.16) 0px,rgba(255,255,255,0.16) 1px,transparent 1px,transparent 26px),repeating-linear-gradient(calc(var(--roc-rain-angle,105deg) - 5deg),rgba(255,255,255,0.10) 0px,rgba(255,255,255,0.10) 1px,transparent 1px,transparent 17px);background-size:60px 240px,30px 120px;animation:roc-rain 0.55s linear infinite;}.wx-rain.wx-heavy{background-size:42px 200px,22px 100px;animation-duration:0.32s;}.wx-snow{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.2px,rgba(255,255,255,0.35) 3px,transparent 4.2px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 1.7px,rgba(255,255,255,0.3) 2.4px,transparent 3.4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.2px,transparent 2.4px);background-size:90px 140px,90px 140px,90px 105px;animation:roc-snow 9s linear infinite;}.wx-snow.wx-heavy{background-image:radial-gradient(circle at 50% 50%,rgba(255,255,255,0.95) 0 2.6px,rgba(255,255,255,0.4) 3.6px,transparent 5px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.85) 0 2px,rgba(255,255,255,0.32) 2.8px,transparent 4px),radial-gradient(circle at 50% 50%,rgba(255,255,255,0.65) 0 1.4px,transparent 2.8px);background-size:70px 110px,70px 105px,55px 70px;animation:roc-snow-heavy 5.5s linear infinite;}.wx-fog{background-image:radial-gradient(ellipse 60% 40% at 30% 55%,rgba(255,255,255,0.22) 0%,transparent 70%),radial-gradient(ellipse 70% 45% at 75% 40%,rgba(255,255,255,0.16) 0%,transparent 70%);background-size:340px 100%,420px 100%;background-repeat:repeat-x;animation:roc-fog 60s linear infinite;}.wx-lightning::after{content:"";position:absolute;inset:0;background:rgba(255,255,255,0.95);opacity:0;animation:roc-flash 7s linear infinite;pointer-events:none;}@keyframes roc-holdfill{to{stroke-dashoffset:0;}}@keyframes roc-holdpop{0%{transform:rotate(-90deg) scale(1);}45%{transform:rotate(-90deg) scale(1.18);}100%{transform:rotate(-90deg) scale(1);}}[data-roc-na="1"]{filter:grayscale(1) brightness(.55);}.roc-hold{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px;z-index:300;pointer-events:none;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.55));}.roc-hold svg{width:100%;height:100%;transform:rotate(-90deg);}.roc-hold circle{fill:none;stroke-width:3;}.roc-hold-trk{stroke:rgba(255,255,255,0.22);}.roc-hold-bar{stroke:var(--roc-hold-color,var(--primary-color,#03a9f4));stroke-linecap:round;stroke-dasharray:100.53;stroke-dashoffset:100.53;animation:roc-holdfill var(--roc-hold-dur,500ms) linear forwards;}.roc-hold.done svg{animation:roc-holdpop 0.3s ease;}.roc-hold.done .roc-hold-bar{stroke-dashoffset:0;stroke:var(--roc-hold-done-color,#37d67a);}.roc-gd{position:absolute;background:var(--primary-color,#03a9f4);z-index:998;display:none;pointer-events:none;}.roc-gd-h{left:0;right:0;height:1px;}.roc-gd-v{top:0;bottom:0;width:1px;}.zone,.badge,.ico,.lbl,.gauge,.elcont{transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}ha-card{overflow:hidden;padding:0!important;background:transparent;border-radius:'+br+';display:block;transition:none;}.roc-reg{box-sizing:border-box;}.roc-regtag{position:absolute;top:2px;left:2px;z-index:400;background:rgba(190,45,45,0.85);color:#fff;font:bold 10px monospace;padding:1px 5px;border-radius:4px;pointer-events:none;}.roc-ccdock{display:flex;gap:8px;width:100%;height:100%;padding:6px;box-sizing:border-box;}.roc-ccdock.ccd-h{flex-direction:column;}.wrap{position:relative;width:100%;height:100%;overflow:hidden;}.content{position:absolute;inset:0;overflow:hidden;}.layer{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.zone{position:absolute;outline:none;}.zone:focus-visible,.ico:focus-visible,.lbl:focus-visible,.gauge:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px;}.zlabel{position:absolute;top:2px;left:4px;font-size:10px;color:red;font-weight:bold;pointer-events:none;text-shadow:0 0 3px white;white-space:nowrap;}.badge{position:absolute;z-index:100;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,0.2);border-radius:12px;padding:4px 10px;white-space:nowrap;user-select:none;}.blabel{font-size:12px;color:white;font-weight:500;}.elcont{position:absolute;pointer-events:auto;}.elcont>*{width:100%!important;height:100%!important;display:block;}.vw{display:flex;align-items:center;justify-content:center;border-radius:50%;user-select:none;transition:transform .15s ease;transform:translateZ(0);}.vw:active{transform:scale(.92) translateZ(0);}.vw-bg{position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);box-shadow:0 3px 8px rgba(0,0,0,.4);transition:background .6s ease,box-shadow .6s ease;}.vw-bg::before{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);transform:translateZ(0);}.vw-rest .vw-bg{background:rgba(255,255,255,.16);}.vw-rest .vw-icon{opacity:.7;}.vw-dry .vw-bg{background:#f5a623;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(245,166,35,.55);}.vw-dry .vw-icon{animation:roc-vac-drive 1.1s ease-in-out infinite;}.vw-wet .vw-bg{background:#03a9f4;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.55);}.vw-wet .vw-bg::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid rgba(3,169,244,.65);animation:roc-vac-ripple 1.6s ease-out infinite;}.vw-wet .vw-icon{animation:roc-vac-mop 1.8s ease-in-out infinite;}.vw-both .vw-bg{animation:roc-vac-duo 2.4s ease-in-out infinite;}.vw-both .vw-icon{animation:roc-vac-duo-icon 2.4s ease-in-out infinite;}.vw-active .vw-bg{background:rgba(3,169,244,.55);--roc-ac:rgba(3,169,244,.55);animation:roc-glow 2.2s ease-in-out infinite;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 10px rgba(3,169,244,.4);}.vw-error .vw-bg{background:#e74c3c;box-shadow:0 3px 8px rgba(0,0,0,.4),0 0 12px rgba(231,76,60,.65);}.vw-error .vw-icon{animation:roc-blink 1s step-end infinite;}.vw-count{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:#e74c3c;color:#fff;font:bold 10px/16px sans-serif;text-align:center;z-index:3;pointer-events:none;box-shadow:0 0 0 2px rgba(0,0,0,.6);}.ico.ico-ring{display:none;position:absolute;inset:-3px;border-radius:50%;z-index:3;pointer-events:none;background:conic-gradient(var(--roc-active-c) 0 var(--p,0%),rgba(255,255,255,.14) var(--p,0%) 100%);-webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));mask:radial-gradient(farthest-side,transparent calc(100% - 3px),#000 calc(100% - 3px));}.ico-badge{position:absolute;top:-4px;right:-4px;z-index:4;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:700;line-height:18px;text-align:center;pointer-events:none;}.ico-badge:empty{display:none;}.roc-lcp-cell{min-width:0;container-type:inline-size;}.roc-lcp{position:relative;box-sizing:border-box;width:100%;border-radius:999px;border:2px solid var(--roc-border-c);background:var(--lcp-bg,#16191d);overflow:hidden;display:flex;align-items:center;gap:8px;padding:0 12px 0 3px;color:var(--roc-text-c);font-size:13px;line-height:1;cursor:pointer;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;transition:border-color .6s ease-in-out;}.roc-lcp.unavailable{opacity:.5;}.roc-lcp-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--lcp-col,rgba(255,179,92,.55));transition:width .3s ease,background-color .4s ease;pointer-events:none;}.roc-lcp.dragging .roc-lcp-fill{transition:none;}.roc-lcp-ic{position:relative;flex:none;width:calc(min(var(--lcp-h,30px) - 8px,34px));height:calc(min(var(--lcp-h,30px) - 8px,34px));border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.18);color:var(--roc-text-2-c);box-sizing:border-box;--mdc-icon-size:calc(min(var(--lcp-h,30px) - 8px,34px) * .6);}.roc-lcp.on .roc-lcp-ic{background:var(--lcp-solid,#ffb35c);border-color:transparent;color:#1a1206;}.roc-lcp-nm{position:relative;flex:1;min-width:0;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-lcp-val{position:relative;flex:none;font-variant-numeric:tabular-nums;color:var(--roc-text-2-c);}.roc-lcp.on .roc-lcp-val{color:var(--roc-text-c);font-weight:500;}.roc-lcp:focus-visible{outline:2px solid var(--roc-text-c);outline-offset:2px;}@container (max-width:120px){.roc-lcp-nm{display:none;}.roc-lcp{justify-content:space-between;}}.roc-navchip{background:var(--roc-chip-bg-c);border-radius:4px;padding:1px 5px;}.roc-nav.roc-dim .roc-thumb:not([data-act]){opacity:.8;}.roc-nav.roc-dim .roc-thumb:hover{opacity:1;}.ico-chip{box-shadow:0 3px 8px rgba(0,0,0,.4);}.ico.ico-chip::before{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(255,255,255,.16);}.ico.ico-chip::after{content:"";position:absolute;inset:3px;border-radius:50%;background:rgba(25,25,28,.62);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border:1px solid rgba(255,255,255,.16);box-shadow:inset 0 1px 1px rgba(255,255,255,.14),inset 0 -2px 4px rgba(0,0,0,.25);}'+CC_CSS+'.roc-panel-backdrop{position:absolute;inset:0;z-index:400;background:rgba(0,0,0,0.45);opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease;}@media (prefers-reduced-motion:reduce){*:not(.roc-hold):not(.roc-hold *){animation:none!important;}.roc-panel,.roc-panel-backdrop,.content{transition:none!important;}.roc-panel.pl-sheet-right,.roc-panel.pl-sheet-bottom{transform:none!important;}}.roc-panel-backdrop.open{opacity:1;visibility:visible;}.roc-panel{position:absolute;z-index:401;background:var(--card-background-color,#1c1c1c);color:var(--primary-text-color,#fff);box-shadow:0 8px 30px rgba(0,0,0,0.5);display:flex;flex-direction:column;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease,visibility .25s ease,transform .25s ease;}.roc-panel.open{opacity:1;visibility:visible;pointer-events:auto;}.roc-panel.roc-pm[data-section-panel]{position:fixed;inset:0;width:auto;height:auto;max-height:none;border-radius:0;transform:translateY(14px);padding-bottom:env(safe-area-inset-bottom,0px);}.roc-panel.roc-pm.open[data-section-panel]{transform:none;}.roc-panel-backdrop.roc-pm{position:fixed;}.roc-panel.pl-sheet-right{top:0;right:0;bottom:0;width:min(var(--roc-panel-size,420px),92%);border-radius:12px 0 0 12px;transform:translateX(14px);}.roc-panel.pl-sheet-right.open{transform:translateX(0);}.roc-panel.pl-sheet-bottom{left:0;right:0;bottom:0;max-height:min(var(--roc-panel-size,80%),86%);border-radius:12px 12px 0 0;transform:translateY(14px);}.roc-panel.pl-sheet-bottom.open{transform:translateY(0);}.roc-panel.pl-full{inset:0;border-radius:0;}.roc-panel.pl-dialog{top:50%;left:50%;width:min(var(--roc-panel-size,620px),92%);max-height:80%;border-radius:12px;transform:translate(-50%,-46%);}.roc-panel.pl-dialog.open{transform:translate(-50%,-50%);}.roc-panel-hd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--divider-color,rgba(255,255,255,0.12));flex:none;}.roc-panel-hd>ha-icon{--mdc-icon-size:22px;color:var(--primary-color,#03a9f4);flex:none;}.roc-panel-hd-txt{flex:1;min-width:0;}.roc-panel-title{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-subtitle{font-size:12px;color:var(--secondary-text-color);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-panel-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--roc-active-c);color:#1a1206;font-size:11px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;flex:none;}.roc-panel-badge:empty{display:none;}.roc-panel-close{background:none;border:none;color:var(--primary-text-color,#fff);cursor:pointer;padding:4px;flex:none;border-radius:50%;display:flex;-webkit-tap-highlight-color:transparent;}.roc-panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:grid;gap:10px;grid-template-columns:repeat(var(--roc-panel-cols,2),minmax(0,1fr));align-content:start;}@media (max-width:640px){.roc-panel:not(.roc-cols-set) .roc-panel-body{grid-template-columns:1fr;}}.roc-panel-empty,.roc-panel-notice{grid-column:1/-1;font-size:13px;color:var(--secondary-text-color);text-align:center;padding:22px 8px;}.roc-panel-notice{border:1px dashed var(--divider-color,rgba(255,255,255,0.2));border-radius:8px;}.roc-panel-notice a{color:var(--primary-color,#03a9f4);}.roc-tile{position:relative;display:flex;gap:10px;align-items:center;background:var(--secondary-background-color,rgba(255,255,255,0.06));border-radius:10px;padding:10px;cursor:pointer;-webkit-tap-highlight-color:transparent;text-align:left;}.roc-tile.unavailable{opacity:0.55;}.roc-tile:not([data-tappable]){cursor:default;}.roc-tile-icon-wrap{flex:none;width:38px;height:38px;border-radius:50%;background:rgba(127,127,127,0.16);display:flex;align-items:center;justify-content:center;}.roc-tile-icon-wrap ha-icon{--mdc-icon-size:20px;color:var(--roc-icon-color,inherit);}.roc-tile-img{flex-direction:column;align-items:stretch;}.roc-tile-img-stage{position:relative;width:100%;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:rgba(127,127,127,0.12);flex:none;}.roc-tile-img-base{position:absolute;inset:0;background-size:cover;background-position:center;}.roc-tile-ov{position:absolute;inset:0;background-size:cover;background-position:center;pointer-events:none;}.roc-tile-icon.tia-spin{animation:roc-tf-spin 2.2s linear infinite;}.roc-tile-icon.tia-pulse{animation:roc-pulse 2s ease-in-out infinite;}.roc-tile-icon.tia-blink{animation:roc-blink 1s step-end infinite;}.roc-tile-body{min-width:0;flex:1;}.roc-tile-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.roc-tile-state{font-size:12px;color:var(--secondary-text-color);min-height:14px;}.roc-tile-state.ts-run{color:var(--roc-active-c);font-weight:500;}.roc-tile.is-active{box-shadow:inset 0 0 0 1px var(--roc-active-c);}.roc-tile.is-active .roc-tile-progress-bar{background:var(--roc-active-c);}.roc-tile-state.ts-done{color:#37d67a;}.roc-tile-value{font-size:12px;margin-top:2px;}.roc-tile-value:empty{display:none;}.roc-tile-progress{height:4px;border-radius:2px;background:rgba(127,127,127,0.25);margin-top:6px;overflow:hidden;}.roc-tile-progress-bar{height:100%;background:var(--primary-color,#03a9f4);width:0%;transition:width .5s ease;}.roc-tile-quick{display:flex;flex-direction:column;gap:4px;flex:none;}.roc-tile-img .roc-tile-quick{flex-direction:row;flex-wrap:wrap;justify-content:center;margin-top:2px;}.roc-tile-quick button{background:rgba(127,127,127,0.18);border:none;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:inherit;cursor:pointer;--mdc-icon-size:15px;}.roc-card-tile-host{border-radius:10px;overflow:hidden;grid-column:1/-1;}'+(_ovAny||_fpAny?ROC_OV_CSS:'')+(_fpAny?ROC_FP_CSS+ROC_FPD_CSS:'')+(_ovAny&&rocSigAny(cAll)?ROC_SIG_CSS:'')+'</style>'+(this._rocExtraCss?'<style class="roc-xcss">'+this._rocExtraCss+'</style>':'')+'<ha-card style="'+escA('height:'+_rootH+';')+'"><div class="roc-grid" style="'+escA(''+rocGridCss(_lp,(cAll.layout&&cAll.layout.gap)||'')+'')+'">'+_regPre+'<div class="wrap"'+_wrapAspect+'><div class="content"'+(_ovOn||_fpOn?' style="position:absolute;inset:0;"':'')+'><div class="layer base" style="'+escA(''+(c.base_image?'background-image:url(\''+escUrl(c.base_image)+'\');':'')+'transition:filter '+(c.filter_transition??'2s ease')+';will-change:filter,transform;transform:translateZ(0);')+'"></div>'+_ovHtml+glowHtml+ovHtml+wxHtml+grpHtml+zHtml+bHtml+icoHtml+vwHtml+glowEditHtml+lblHtml+gaugeHtml+_ccPop+(tm?'<div class="tm-info" style="position:absolute;top:6px;left:6px;z-index:200;background:rgba(0,0,0,0.72);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:bold;font-family:monospace;line-height:1.35;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;pointer-events:none;">&#128208; '+Math.round(this._vpW())+'&#215;'+Math.round(this._vpH())+'<br><span style="font-weight:normal;opacity:0.85;">profile: '+_rt+'</span></div><button class="tm-flip" style="'+escA('position:absolute;top:6px;right:6px;z-index:200;background:'+(this._testFlipped?'rgba(220,80,0,0.9)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;')+'">&#8644; '+(this._testFlipped?'FLIPPED':'FLIP')+'</button>'+(c._roc_studio?'':'<button class="tm-prof" style="'+escA('position:absolute;top:6px;right:96px;z-index:200;background:'+(this._profFlipped?'rgba(30,90,160,0.92)':'rgba(0,0,0,0.72)')+';color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;')+'">&#8645; '+_rt.toUpperCase()+'</button>')+''+(c._roc_preview||c._roc_studio?'':'<button class="tm-studio" title="Open the full-screen Room Card Studio" style="position:absolute;top:38px;right:96px;z-index:200;background:rgba(40,70,140,0.88);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#9998; Studio</button><button class="tm-save" style="position:absolute;top:38px;right:6px;z-index:200;background:rgba(20,100,20,0.82);color:#fff;border:1px solid rgba(255,255,255,0.35);border-radius:6px;padding:4px 12px;font-size:11px;font-weight:bold;cursor:pointer;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);user-select:none;letter-spacing:0.04em;">&#128190; Save</button>'):'')+'</div>'+secPanelHtml+'</div>'+(tm?'<div class="roc-regtag">image</div>':'')+'</div>'+_regPost+'</div></ha-card>';
 
     // Structural refs the layout engine measures every pass — cached here
     // (see _elWrap/_elContent/_elCard) instead of re-queried per call.
@@ -4396,6 +4648,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(_ovOn&&_ovMeta)this._ovWire(_ovMeta,_gen);
     else{this._ovTiles=null;this._ovSig=null;this._ovPills=null;this._ovThumbs=null;this._ovCardEls=[];this._ovMiniEls={};if(this._ovMiniRo){this._ovMiniRo.disconnect();this._ovMiniRo=null;}}
     if(_fpOn)this._fpMount(_gen);else this._fpDrop();
+    if(_fpOn){const _fb=this.shadowRoot.querySelector('[data-fp-ban]'),_self=this;if(_fb)_fb.addEventListener('click',function(){rocHpOpen(_self);});} // 7.3.0: the pause banner opens the house panel
     // Mount companion strip cards (above/below the image)
     this._stripCardEls=[];
     const stSelf=this;
@@ -5110,11 +5363,17 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(_fpOn&&_fpDef&&Array.isArray(_fpDef.rooms))for(const _fr of _fpDef.rooms){
       if(!_fr||typeof _fr!=='object')continue;
       (Array.isArray(_fr.lights)?_fr.lights:(_fr.lights?[_fr.lights]:[])).forEach(function(x){const id=x&&typeof x==='object'?x.entity:x;if(id){_ex.ids.add(String(id));['brightness','rgb_color','color_temp_kelvin'].forEach(function(at){_ex.attrs.add(id+' '+at);});}});
-      if(_fr.climate){_ex.ids.add(String(_fr.climate));['hvac_action','current_temperature','current_humidity'].forEach(function(at){_ex.attrs.add(_fr.climate+' '+at);});}
+      if(_fr.climate){_ex.ids.add(String(_fr.climate));['hvac_action','current_temperature','current_humidity','temperature','power_percent'].forEach(function(at){_ex.attrs.add(_fr.climate+' '+at);});}
       if(_fr.temperature)_ex.ids.add(String(_fr.temperature));
       if(_fr.humidity)_ex.ids.add(String(_fr.humidity));
       // v6.48.0: media players (what plays)
       (Array.isArray(_fr.media)?_fr.media:(_fr.media?[_fr.media]:[])).forEach(function(x){const id=x&&typeof x==='object'?x.entity:x;if(id){_ex.ids.add(String(id));['app_name','source','media_title'].forEach(function(at){_ex.attrs.add(id+' '+at);});}});
+    }
+    // 7.3.0: what the heating lens's badge, the pause banner and the house panel read
+    if(_fpOn&&_fpDef&&rocFpLenses(_fpDef).indexOf('heating')>=0&&this._hass){
+      const _hh=rocHpHouse(this._hass,cAll);
+      [_hh.mode,_hh.boiler,_hh.tariff&&_hh.tariff.entity].concat(_hh.supply.map(function(x){return x.entity;})).forEach(function(id){if(id)_ex.ids.add(id);});
+      rocHpRooms(cAll,_fpDef).forEach(function(r){_ex.ids.add(r.entity);_ex.attrs.add(r.entity+' hvac_action');});
     }
     // v6.48.0: markers on the plan, presence, AnyVac vacuums, collected section tiles (attention)
     if(_fpOn&&_fpDef){
@@ -5460,6 +5719,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     }
     if(this._sectionOpen)this._closeSection(); // COCKPIT_PLAN.md kap.7: panel closes on room switch
     if(this._heat)rocHcClose(this); // …and so does the heating controller (7.2.0)
+    if(this._hp)rocHpClose(this); // …and the house panel (7.3.0)
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
     // Editor preview instance (see _mountPreview): tell the editor GUI so its
@@ -6533,6 +6793,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
         if(haicon&&!ico.color)setSt(haicon,'color',_act.count>0?'var(--roc-active-c)':'');
       }
     }
+    if(this._fpActive)rocFpDockUpdate(this); // 7.3.0: lens badges, the active lens, the pause banner
     for(const vw of(c.vacuum_widgets||[])){
       const el=this._vwEls[vw.id];if(!el)continue;
       const gShow=!vw.group||(this._groupState[vw.group]??true);
@@ -6881,6 +7142,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       case'follow-room':this._followNow();break;
       case'open-section':if(a.section)this._openSection(a.section);break;
       case'heating':rocHcOpen(this,a.entity||a.entity_id);break; // 7.2.0: the heating controller
+      case'fp-lens':rocFpLensTap(this,a.lens);break; // 7.3.0: a lens button in the floor plan's dock
       // Standard Lovelace hook (browser_mod 2 popups, custom actions): HA's own
       // cards dispatch the whole action config as an `ll-custom` event.
       case'fire-dom-event':this.dispatchEvent(new CustomEvent('ll-custom',{bubbles:true,composed:true,detail:a}));break;
@@ -6926,6 +7188,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._tmKeyHandler)document.removeEventListener('keydown',this._tmKeyHandler);
     if(this._secKeyHandler)document.removeEventListener('keydown',this._secKeyHandler);
     if(this._heat)rocHcClose(this);
+    if(this._hp)rocHpClose(this);
     if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart

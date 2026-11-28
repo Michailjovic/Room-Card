@@ -130,6 +130,8 @@ const HA_NAMES=new Set(['navigation_replace','browser_id','browser_mod','color_t
   // climate attributes the heating controller reads (7.2.0): Home Assistant's and Versatile Thermostat's
   'current_humidity','hvac_mode','device_id','last_updated','on_percent','power_percent','requested_state','specific_states','hvac_off_reason','temperature_slope',
   'timed_preset_manager','is_active','end_time','safety_manager','safety_state',
+  // …and the house panel (7.3.0): heating failure, the modes a thermostat has, the entity registry's display fields
+  'heating_failure_detection_manager','heating_failure_state','hvac_modes','last_changed','translation_key',
   // AnyVac's map sensor attributes (the integration's contract, V7_PLAN §7a)
   'home_frame','home_room_id','in_cleaning','schema_version','vacuum_room_name','view_layers','base_points','path_points','progress_pct','last_dry','last_wet','frame_id','home_anchors']);
 const cardCode=src.slice(0,src.indexOf('class RoomOverlayCardEditor'));

@@ -90,7 +90,7 @@ function rocHcCommit(hass,entity,t,dur,cfg,model){
   const first=model&&model.timed?call('versatile_thermostat','cancel_timed_preset',{entity_id:entity}):Promise.resolve();
   return first.then(function(){return call('climate','set_temperature',{entity_id:entity,temperature:t});});
 }
-const ROC_HC_CSS='.roc-hc-bd{position:absolute;inset:0;z-index:410;background:rgba(0,0,0,.4);}'
+const ROC_HC_CSS='.roc-hc-bd{position:absolute;inset:0;z-index:410;background:rgba(0,0,0,.4);}.roc-hc-bd.hc-lite{background:rgba(0,0,0,.12);}'
   +'.roc-hc{position:absolute;z-index:411;top:0;right:0;bottom:0;width:min(380px,92%);box-sizing:border-box;overflow-y:auto;background:var(--card-background-color,#1c1f24);color:var(--primary-text-color,#f2f3f5);border-radius:14px 0 0 14px;box-shadow:0 8px 30px rgba(0,0,0,.5);padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;font:14px/1.4 var(--paper-font-body1_-_font-family,system-ui,sans-serif);}'
   +'.roc-hc.hc-bottom{top:auto;left:0;width:auto;max-height:88%;border-radius:14px 14px 0 0;}'
   +'.hc-hd{display:flex;align-items:flex-start;gap:10px}.hc-hd>div{flex:1;min-width:0}.hc-room{font-size:13px;color:var(--secondary-text-color,#9aa3ad);font-weight:600}'
@@ -114,9 +114,11 @@ function rocHcEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){
 function rocHcOpen(card,entity){
   if(!card||!entity||!card._hass)return;
   rocHcClose(card);
+  if(card._hp)rocHpClose(card); // 7.3.0: the house panel gives way to the room
   card._heat={entity:entity,dur:'always',pend:NaN,pendT:0,hist:null,histAt:0};
   if(!card._heatKey){card._heatKey=function(e){if(e.key==='Escape'&&card._heat)rocHcClose(card);};document.addEventListener('keydown',card._heatKey);}
   rocHcMount(card);rocHcUpdate(card);rocHcHistory(card);
+  if(card._fpInst&&card._fpInst.setFocus)card._fpInst.setFocus(entity); // 7.3.0: outlined on the plan
 }
 function rocHcClose(card){
   const H=card&&card._heat;if(!H)return;
@@ -124,12 +126,13 @@ function rocHcClose(card){
   if(H.el&&H.el.parentNode)H.el.parentNode.removeChild(H.el);
   if(H.bd&&H.bd.parentNode)H.bd.parentNode.removeChild(H.bd);
   card._heat=null;
+  if(card._fpInst&&card._fpInst.setFocus)card._fpInst.setFocus('');
   if(card._heatKey){document.removeEventListener('keydown',card._heatKey);card._heatKey=null;}
 }
 function rocHcMount(card){
   const H=card._heat,sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
   const lang=rocHcLang(card._hass),cfg=rocHcCfg(card._config,H.entity);
-  const bd=document.createElement('div');bd.className='roc-hc-bd';bd.addEventListener('click',function(){rocHcClose(card);});
+  const bd=document.createElement('div');bd.className='roc-hc-bd'+(card._fpActive?' hc-lite':'');bd.addEventListener('click',function(){rocHcClose(card);});
   const el=document.createElement('div');el.className='roc-hc'+(wrap.clientWidth&&wrap.clientWidth<600?' hc-bottom':'');
   el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
   const T=function(k,v){return rocHcEsc(rocHcT(lang,k,v));};

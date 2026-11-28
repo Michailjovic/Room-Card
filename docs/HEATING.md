@@ -2,7 +2,8 @@
 
 *(7.2.0)* A controller for one room's thermostat, in degrees: no presets to learn. It opens over
 the card from anything with a tap action — a temperature label on the room photo, an icon, a zone,
-a room of the floor plan:
+a section tile — and, since 7.3.0, from a tap on a room in the floor plan's
+[heating lens](FLOORPLAN.md#lenses), beside the plan with the room outlined:
 
 ```yaml
 tap_action:
@@ -48,3 +49,33 @@ heating:
 ```
 
 In the Studio: Card settings → *Heating controller*.
+
+## The house panel
+
+*(7.3.0)* The heating lens's dock button, tapped while the lens is on (or the pause banner), opens
+the house panel at the bottom:
+
+- **House mode** — Versatile Thermostat's central mode (*Auto*, *Stopped*, *Heat only*,
+  *Frost protection*; *Cool only* only when a thermostat can cool). A tap sets it. An automation
+  that drives the central mode (by the tariff, say) keeps doing so — the panel shows what it set.
+- **Boiler** — running / off, from VTherm's central boiler.
+- **Tariff** — high (VT) / low (NT), with `tariff`.
+- **Main supply** — the sensors in `supply`, one row each.
+- **Rooms** — every thermostat of the plan (then `heating.rooms`): now → target and its status; a
+  tap opens its controller.
+
+The central mode and the central boiler are found by themselves (VTherm's central configuration);
+the Studio shows what it found. Set them to use other entities, or `false` to leave one out:
+
+```yaml
+heating:
+  central_mode: select.central_mode            # found by itself; false = no house mode
+  boiler: binary_sensor.central_configuration_central_boiler
+  tariff:
+    entity: switch.hdo                         # the HDO signal
+    high_state: 'off'                          # its state in the high tariff (default 'on')
+  supply:
+    - entity: sensor.main_power
+      name: Main supply
+```
+

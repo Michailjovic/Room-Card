@@ -52,6 +52,14 @@ function callService(domain,service,data,target){data=data||{};const L=ids(data,
       const s={turn_on:'on',turn_off:'off',media_play:'playing',media_pause:'paused',media_play_pause:o.state==='playing'?'paused':'playing',toggle:ON.includes(o.state)?'off':'playing'}[service];if(s)put(id,s);});break;
     case'climate':L.forEach(id=>{if(service==='set_hvac_mode')put(id,data.hvac_mode,{hvac_action:data.hvac_mode==='off'?'off':'heating'});if(service==='set_temperature')put(id,null,{temperature:data.temperature});
       if(service==='turn_off')put(id,'off',{hvac_action:'off'});if(service==='turn_on')put(id,'heat',{hvac_action:'heating'});});break;
+    case'number':L.forEach(id=>{if(service==='set_value')put(id,data.value);});break;
+    // Versatile Thermostat (7.3.0 demo): the central mode stops / restores every thermostat; a timed preset holds the boost °C
+    case'select':L.forEach(id=>{if(service!=='select_option')return;put(id,data.option);
+      if(id==='select.central_mode')Object.keys(states).filter(k=>k.startsWith('climate.versatile_')).forEach(k=>{const a=states[k].attributes,stop=data.option==='Stopped';
+        put(k,stop?'off':'heat',{hvac_action:stop?'off':(a.current_temperature<a.temperature?'heating':'idle'),power_percent:stop?0:(a.current_temperature<a.temperature?45:0),specific_states:Object.assign({},a.specific_states,{hvac_off_reason:stop?'hvac_off_central_mode':null})});});});break;
+    case'versatile_thermostat':L.forEach(id=>{const n=states[id.replace('climate.','number.')+'_preset_boost_temp'];
+      if(service==='set_timed_preset')put(id,null,{temperature:n?+n.state:states[id].attributes.temperature,timed_preset_manager:{is_active:true,end_time:new Date(Date.now()+(+data.duration_minutes||60)*60000).toISOString()}});
+      if(service==='cancel_timed_preset')put(id,null,{timed_preset_manager:{is_active:false}});});break;
     case'vacuum':L.forEach(id=>{const st=id.replace('vacuum.','sensor.')+'_status';
       if(service==='start'){put(id,'cleaning');if(states[st])put(st,'cleaning');}
       else{put(id,'returning');if(states[st])put(st,'returning');setTimeout(()=>{put(id,'docked');if(states[st])put(st,'docked');push();},3000);}});break;

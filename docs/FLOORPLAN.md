@@ -159,6 +159,39 @@ The pipes follow the theme: tubes in `night` and `clay`, lines in `neon`, `bluep
 middle, `c1` return, `off`, `outline`). `layers: {heating: false}` hides them all. The `thermal`
 theme keeps its faint lines.
 
+## Lenses
+
+*(7.3.0)* The plan is the hub for everything that happens across the home, seen through **lenses**:
+the same plan, with one topic in front. A dock under the plan switches them.
+
+| Lens | What is in front | Tap on a room | Its dock button, tapped again |
+|---|---|---|---|
+| **Overview** (`mdi:floor-plan`) | everything, as the plan always looked | opens the room | — |
+| **Heating** (`mdi:heating-coil`) | loops, feeds and thermostats; every label says *now → target*, outlined in the state's colour (heating, paused, idle); rooms without a thermostat step back; lights, media, people, vacuums and cleaning are hidden | opens the room's [heating controller](HEATING.md) beside the plan, the room outlined | the [house panel](HEATING.md#the-house-panel) |
+
+A plan with at least one `climate` room gets both lenses by itself; a plan without one has only the
+overview and draws no dock. Every lens button carries a **badge in every lens**, so you see an
+event without switching — the heating button shows `!` (a thermostat is unavailable, VTherm's
+safety mode, a heating failure), `II` (paused by the central mode), `VT` (high tariff, with
+`heating.tariff`) or how many rooms heat, and a ring with the strongest heating power. A lens
+never switches by itself; the one you picked stays until you pick another.
+
+When the central mode stops the heating, a **banner** at the top of the plan says so — with the
+mode and since when; a tap on it opens the house panel.
+
+```yaml
+floorplan:
+  lenses: [overview, heating]    # which lenses, in this order (default: both when a room has a climate)
+  lens: overview                 # the one the page opens in
+  dock:                          # section launchers next to the lenses (like overview.dock)
+    sections: [appliances, climate]
+  pause_banner: true
+```
+
+`lenses: [overview]` turns the lenses off (the plan as before 7.3.0). A tablet that should show
+only the heating — a hall thermostat panel — is another floor plan page with `lens: heating`; the
+geometry is the same block, copied or shared through YAML anchors.
+
 ## Across rooms
 
 *Since v6.48.0.* The plan shows the "relationships across rooms" a strip of photos cannot:
@@ -281,7 +314,8 @@ sets the lit colour, `size` the chip size (`34px`). In the studio the **Marker**
 `layers:` switches parts of the plan off — `lights`, `heating`, `labels`, `presence`, `media`,
 `attention`, `vacuum`, `items`, `openings` (all `true` by default). A layer that is off is
 neither drawn nor watched for changes (with `openings: false` the windows are still drawn, without
-their state).
+their state). The heating lens hides `lights`, `media`, `presence`, `attention`, `vacuum` and `cleaning` and
+shows `heating` whatever `layers:` says.
 
 ## Doors and windows
 
@@ -369,7 +403,7 @@ rooms:
 
 Coordinates are metres, x to the right and y down, as on the vacuum's map. Default actions:
 tap → the linked room (else more-info of the thermostat or the first light); hold → toggle the
-room's lights.
+room's lights. In the heating lens a room with a thermostat: tap → its heating controller, hold → more-info.
 
 ## Coming next
 

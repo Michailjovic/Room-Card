@@ -1011,6 +1011,10 @@ heating {
   evening: str = "22:00";
   morning: str = "06:00";
   rooms: hcRoom[];
+  central_mode: entity | bool @7.3.0;
+  boiler: entity | bool @7.3.0;
+  tariff: hcTariff @7.3.0;
+  supply: hcSupply[] @7.3.0;
 }
 hcRoom (or a bare climate string) {
   climate: entity;
@@ -1020,6 +1024,14 @@ hcRoom (or a bare climate string) {
   range: num[];
   evening: str;
   morning: str;
+}
+hcTariff (or a bare entity string) {
+  entity: entity;
+  high_state: str = "on";
+}
+hcSupply (or a bare entity string) {
+  entity: entity;
+  name: str;
 }
 
 // ---- Floor plan page
@@ -1048,6 +1060,10 @@ floorplan {
   trail_mode: "always"|"cleaning" = "always" @6.50.0;
   background: fpBackground @6.50.0;
   heating: fpHeating @7.1.0;
+  lenses: str[] @7.3.0;
+  lens: "overview"|"heating" = "overview" @7.3.0;
+  dock: bool | ovDock @7.3.0;
+  pause_banner: bool = true @7.3.0;
 }
 fpRoom {
   room: str;

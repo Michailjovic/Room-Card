@@ -23,7 +23,7 @@ every room. Every element type also accepts its own keys under `portrait:` / `la
 - **Navigation:** [`nav`](#t-nav) · [`navMini`](#t-navmini) · [`navChip`](#t-navchip)
 - **Sections (cockpit tiles):** [`section`](#t-section) · [`tile`](#t-tile) · [`quick`](#t-quick) · [`tileOverlay`](#t-tileoverlay)
 - **Overview page:** [`overview`](#t-overview) · [`ovSignals`](#t-ovsignals) · [`ovHeader`](#t-ovheader) · [`ovHeaderItem`](#t-ovheaderitem) · [`ovPill`](#t-ovpill) · [`ovSide`](#t-ovside) · [`ovSideCard`](#t-ovsidecard) · [`ovGrid`](#t-ovgrid) · [`ovDock`](#t-ovdock) · [`overviewTile`](#t-overviewtile) · [`ovChip`](#t-ovchip)
-- **Heating controller:** [`heating`](#t-heating) · [`hcRoom`](#t-hcroom)
+- **Heating controller:** [`heating`](#t-heating) · [`hcRoom`](#t-hcroom) · [`hcTariff`](#t-hctariff) · [`hcSupply`](#t-hcsupply)
 - **Floor plan page:** [`floorplan`](#t-floorplan) · [`fpRoom`](#t-fproom) · [`fpLight`](#t-fplight) · [`fpOpening`](#t-fpopening) · [`fpItem`](#t-fpitem) · [`fpVacuum`](#t-fpvacuum) · [`fpTransform`](#t-fptransform) · [`fpHeating`](#t-fpheating) · [`fpPass`](#t-fppass) · [`fpLayers`](#t-fplayers) · [`fpEntity`](#t-fpentity) · [`fpBackground`](#t-fpbackground) · [`fpThemeBy`](#t-fpthemeby) · [`fpWall`](#t-fpwall) · [`fpSource`](#t-fpsource) · [`fpTrace`](#t-fptrace)
 
 ## Card and rooms
@@ -1238,6 +1238,10 @@ Guide: [HEATING.md](HEATING.md).
 | `evening` | string | `"22:00"` |  |
 | `morning` | string | `"06:00"` |  |
 | `rooms` | list of [`hcRoom`](#t-hcroom) |  |  |
+| `central_mode` | entity id **or** boolean |  | since 7.3.0 |
+| `boiler` | entity id **or** boolean |  | since 7.3.0 |
+| `tariff` | [`hcTariff`](#t-hctariff) |  | since 7.3.0 |
+| `supply` | list of [`hcSupply`](#t-hcsupply) |  | since 7.3.0 |
 
 <a id="t-hcroom"></a>
 
@@ -1254,6 +1258,28 @@ A bare `climate` string is accepted as the short form (`- light.kitchen`). Guide
 | `range` | list of number |  |  |
 | `evening` | string |  |  |
 | `morning` | string |  |  |
+
+<a id="t-hctariff"></a>
+
+### `heating.tariff` — the high / low tariff (house panel) — `hcTariff`
+
+A bare `entity` string is accepted as the short form (`- light.kitchen`). Guide: [HEATING.md](HEATING.md#the-house-panel).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `entity` | entity id |  |  |
+| `high_state` | string | `"on"` |  |
+
+<a id="t-hcsupply"></a>
+
+### A main supply row (`heating.supply` item) — `hcSupply`
+
+A bare `entity` string is accepted as the short form (`- light.kitchen`). Guide: [HEATING.md](HEATING.md#the-house-panel).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `entity` | entity id |  |  |
+| `name` | string |  |  |
 
 ## Floor plan page
 
@@ -1289,6 +1315,10 @@ Guide: [FLOORPLAN.md](FLOORPLAN.md).
 | `trail_mode` | `always` · `cleaning` | `"always"` | since 6.50.0 |
 | `background` | [`fpBackground`](#t-fpbackground) |  | since 6.50.0 |
 | `heating` | [`fpHeating`](#t-fpheating) |  | since 7.1.0 |
+| `lenses` | list of string |  | since 7.3.0 |
+| `lens` | `overview` · `heating` | `"overview"` | since 7.3.0 |
+| `dock` | boolean **or** [`ovDock`](#t-ovdock) |  | since 7.3.0 |
+| `pause_banner` | boolean | `true` | since 7.3.0 |
 
 <a id="t-fproom"></a>
 

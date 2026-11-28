@@ -1,5 +1,43 @@
 # Changelog
 
+## [7.3.0] - 2026-11-28
+
+Lenses on the floor plan: the plan becomes the hub, with a heating lens, a house panel and a pause
+banner. Step 3 of HEATING_PLAN.md (decision 10).
+
+### Added
+
+- **Lenses** on the floor plan page — the same plan with one topic in front, switched from a dock
+  under the plan. *Overview* is the plan as before. *Heating* puts the loops and thermostats in
+  front: every label reads *now → target*, outlined in the state's colour; rooms without a
+  thermostat step back; lights, media, people, vacuums and cleaning are hidden; a tap on a room
+  opens its heating controller beside the plan with the room outlined (hold = more-info).
+  `floorplan.lenses` (which, in order; default overview + heating when a plan room has a
+  `climate`), `floorplan.lens` (the starting one). One lens = no dock, the plan as in 7.2.0.
+- **The dock under the plan:** lens buttons with a badge in every lens — `!` (a thermostat
+  unavailable, in safety mode or with a heating failure), `II` (paused by the central mode), `VT`
+  (high tariff) or how many rooms heat — and a ring with the strongest heating power; the active
+  lens's button, tapped again, opens its panel. `floorplan.dock: {sections, size}` adds section
+  launchers, as on the overview.
+- **The house panel** (the heating lens's panel): the house mode (Versatile Thermostat's central
+  mode, a tap sets it), the boiler, the tariff, the main supply, and every thermostat with now →
+  target and status (a tap opens its controller). Card `heating:` gains `central_mode` and `boiler`
+  (found by themselves from VTherm's central configuration; `false` leaves one out), `tariff:
+  {entity, high_state}` and `supply: [{entity, name}]`.
+- **The pause banner:** when the central mode stops the heating, the plan says so — the mode and
+  since when; a tap opens the house panel. `floorplan.pause_banner: false` hides it.
+- **Studio:** the floor plan page's form has *Lenses* (with the lens names to pick), *Lens*,
+  *Dock* and *Pause banner*; Card settings → *Heating controller* has the house entities, and the
+  central mode and boiler fields show what the card found.
+- The demo's floor plan has the loops, the lenses, the house panel and a working central mode.
+
+### Changed
+
+- The heating controller closes the house panel when it opens; on the floor plan page its backdrop
+  is lighter, so the plan stays visible beside it.
+- The floor plan page updates on a thermostat's target and power, not only on its action and
+  temperature.
+
 ## [7.2.0] - 2026-11-28
 
 The heating controller: one room's thermostat in degrees. Step 2 of HEATING_PLAN.md.

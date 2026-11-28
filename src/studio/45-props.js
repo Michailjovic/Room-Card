@@ -450,7 +450,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
   const inh=o.inherit;
   const kd=RS_KEY_DOMAINS[(o.schema||'')+'.'+key];
   const wo={dflt:def.d,domains:kd||(key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null)),icon:iconKey,choices:choices,
-    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):null};
+    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):(RS_AUTO_ENT[(o.schema||'')+'.'+key]?rsAutoPh(ctx,(o.schema||'')+'.'+key):null)};
   const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
   const canDeep=depth<RS_MAX_DEPTH;
   const asObj=!yamlMode&&canDeep&&objName&&(rsIsObj(value)||(value===undefined&&!simple));
@@ -523,7 +523,16 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
+const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'heating.central_mode':['select'],'heating.boiler':['binary_sensor','switch'],'hcTariff.entity':['binary_sensor','switch','input_boolean','sensor'],'hcSupply.entity':['sensor'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
+// Keys the card fills by itself when left empty (7.3.0): the placeholder names what it found
+const RS_AUTO_ENT={
+  'heating.central_mode':function(id,st,e){const o=st.attributes&&st.attributes.options;return e.platform==='versatile_thermostat'&&id.indexOf('select.')===0&&Array.isArray(o)&&o.indexOf('Auto')>=0&&o.indexOf('Stopped')>=0;},
+  'heating.boiler':function(id,st,e){return e.platform==='versatile_thermostat'&&id.indexOf('binary_sensor.')===0&&(e.translation_key==='central_boiler_state'||/central_boiler/.test(id));}};
+function rsAutoPh(ctx,k){
+  const h=ctx.hass||{},E=h.entities||{},S=h.states||{},f=RS_AUTO_ENT[k];
+  const id=Object.keys(E).find(function(x){return E[x]&&S[x]&&f(x,S[x],E[x]);});
+  return id?ctx.t('auto_ph',{v:id}):ctx.t('auto_none');
+}
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;

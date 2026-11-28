@@ -52,7 +52,24 @@
 ],
 "hvac_action": "heating",
 "current_temperature": 21.3,
-"temperature": 22
+"temperature": 22,
+"min_temp": 10,
+"max_temp": 30,
+"power_percent": 62,
+"on_percent": 0.62,
+"specific_states": {
+"hvac_off_reason": null,
+"temperature_slope": 0.6
+},
+"requested_state": {
+"hvac_mode": "heat"
+},
+"timed_preset_manager": {
+"is_active": false
+},
+"safety_manager": {
+"safety_state": "off"
+}
 }
 },
 "climate.versatile_kitchen": {
@@ -65,7 +82,24 @@
 ],
 "hvac_action": "idle",
 "current_temperature": 22.1,
-"temperature": 22
+"temperature": 22,
+"min_temp": 10,
+"max_temp": 30,
+"power_percent": 0,
+"on_percent": 0.0,
+"specific_states": {
+"hvac_off_reason": null,
+"temperature_slope": 0
+},
+"requested_state": {
+"hvac_mode": "heat"
+},
+"timed_preset_manager": {
+"is_active": false
+},
+"safety_manager": {
+"safety_state": "off"
+}
 }
 },
 "climate.versatile_living_room": {
@@ -77,8 +111,25 @@
 "off"
 ],
 "hvac_action": "heating",
-"current_temperature": 22.4,
-"temperature": 22
+"current_temperature": 21.6,
+"temperature": 22.5,
+"min_temp": 10,
+"max_temp": 30,
+"power_percent": 38,
+"on_percent": 0.38,
+"specific_states": {
+"hvac_off_reason": null,
+"temperature_slope": 0.4
+},
+"requested_state": {
+"hvac_mode": "heat"
+},
+"timed_preset_manager": {
+"is_active": false
+},
+"safety_manager": {
+"safety_state": "off"
+}
 }
 },
 "cover.roller_motor_bedroom": {
@@ -650,6 +701,60 @@
 "humidity": 81,
 "temperature_unit": "°C"
 }
+},
+"number.versatile_bedroom_preset_boost_temp": {
+"state": "22",
+"attributes": {
+"friendly_name": "Boost",
+"min": 7,
+"max": 35,
+"step": 0.1
+}
+},
+"number.versatile_kitchen_preset_boost_temp": {
+"state": "22",
+"attributes": {
+"friendly_name": "Boost",
+"min": 7,
+"max": 35,
+"step": 0.1
+}
+},
+"number.versatile_living_room_preset_boost_temp": {
+"state": "22",
+"attributes": {
+"friendly_name": "Boost",
+"min": 7,
+"max": 35,
+"step": 0.1
+}
+},
+"select.central_mode": {
+"state": "Auto",
+"attributes": {
+"friendly_name": "Central Mode",
+"options": [
+"Auto",
+"Stopped",
+"Heat only",
+"Cool only",
+"Frost protection"
+]
+}
+},
+"switch.hdo": {
+"state": "on",
+"attributes": {
+"friendly_name": "HDO (low tariff)"
+}
+},
+"sensor.main_supply_power": {
+"state": "2480",
+"attributes": {
+"friendly_name": "Main supply",
+"unit_of_measurement": "W",
+"device_class": "power"
+}
 }
 },
 "areas": {
@@ -694,7 +799,10 @@
 },
 "binary_sensor.central_configuration_central_boiler": {
 "entity_id": "binary_sensor.central_configuration_central_boiler",
-"area_id": null
+"area_id": null,
+"platform": "versatile_thermostat",
+"translation_key": "central_boiler_state",
+"device_id": "vt_central"
 },
 "binary_sensor.versatile_bedroom_window_state": {
 "entity_id": "binary_sensor.versatile_bedroom_window_state",
@@ -710,15 +818,21 @@
 },
 "climate.versatile_bedroom": {
 "entity_id": "climate.versatile_bedroom",
-"area_id": "bedroom"
+"area_id": "bedroom",
+"device_id": "vt_bedroom",
+"platform": "versatile_thermostat"
 },
 "climate.versatile_kitchen": {
 "entity_id": "climate.versatile_kitchen",
-"area_id": "kitchen"
+"area_id": "kitchen",
+"device_id": "vt_kitchen",
+"platform": "versatile_thermostat"
 },
 "climate.versatile_living_room": {
 "entity_id": "climate.versatile_living_room",
-"area_id": "living_room"
+"area_id": "living_room",
+"device_id": "vt_living_room",
+"platform": "versatile_thermostat"
 },
 "cover.roller_motor_bedroom": {
 "entity_id": "cover.roller_motor_bedroom",
@@ -999,6 +1113,26 @@
 "weather.weather_google": {
 "entity_id": "weather.weather_google",
 "area_id": null
+},
+"number.versatile_bedroom_preset_boost_temp": {
+"entity_id": "number.versatile_bedroom_preset_boost_temp",
+"device_id": "vt_bedroom",
+"platform": "versatile_thermostat"
+},
+"number.versatile_kitchen_preset_boost_temp": {
+"entity_id": "number.versatile_kitchen_preset_boost_temp",
+"device_id": "vt_kitchen",
+"platform": "versatile_thermostat"
+},
+"number.versatile_living_room_preset_boost_temp": {
+"entity_id": "number.versatile_living_room_preset_boost_temp",
+"device_id": "vt_living_room",
+"platform": "versatile_thermostat"
+},
+"select.central_mode": {
+"entity_id": "select.central_mode",
+"device_id": "vt_central",
+"platform": "versatile_thermostat"
 }
 }
 }

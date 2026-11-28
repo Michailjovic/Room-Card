@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.2.0';
+const ROC_STUDIO_VERSION='7.3.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -155,7 +155,11 @@ const S={
     light_controls:{t:'obj:lightControls',room:true},
   }},
   // the heating controller (7.2.0): defaults for every thermostat, and per-room settings
-  heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'}}},
+  heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'},
+    // the house panel (7.3.0): VTherm's central mode and central boiler are found by themselves; false hides one
+    central_mode:{t:'entity|bool',since:'7.3.0'},boiler:{t:'entity|bool',since:'7.3.0'},tariff:{t:'obj:hcTariff',since:'7.3.0'},supply:{t:'list:hcSupply',since:'7.3.0'}}},
+  hcTariff:{keys:{entity:{t:'entity'},high_state:{t:'str',d:'on'}},scalar:'entity'},
+  hcSupply:{keys:{entity:{t:'entity'},name:{t:'str'}},scalar:'entity'},
   hcRoom:{keys:{climate:{t:'entity'},name:{t:'str'},quick:{t:'list:num'},step:{t:'num'},range:{t:'list:num'},evening:{t:'str'},morning:{t:'str'}},scalar:'climate'},
   baseImageCond:{keys:{condition:{t:'cond'},image:{t:'url'}}}, // 7.0.5: `value` was never read — the image is `image`
   filterCond:{keys:{condition:{t:'cond'},filter:{t:'str'}}},
@@ -259,13 +263,14 @@ const S={
     source:{t:'obj:fpSource'},trace:{t:'obj:fpTrace'},rooms:{t:'list:fpRoom'},openings:{t:'list:fpOpening'},
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'},
     vacuums:{t:'list:fpVacuum',since:'6.50.0'},attention_sections:{t:'list:str',since:'6.50.0'},clean_mode:{t:'enum:dry|wet|both',d:'dry',since:'6.50.0'},trail_mode:{t:'enum:always|cleaning',d:'always',since:'6.50.0'},
-    background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'}}},
+    background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'},
+    lenses:{t:'list:str',since:'7.3.0'},lens:{t:'enum:overview|heating',d:'overview',since:'7.3.0'},dock:{t:'bool|obj:ovDock',since:'7.3.0'},pause_banner:{t:'bool',d:true,since:'7.3.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
     rotate:{t:'prof:num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical|both',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
-    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'}},hide:['rooms','openings','source','items','vacuums']},
+    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'},lenses:{t:'list:str'},lens:{t:'enum:overview|heating',d:'overview'},dock:{t:'bool|obj:ovDock'},pause_banner:{t:'bool',d:true}},hide:['rooms','openings','source','items','vacuums']},
   // floor heating loops and feeds (7.1.0): pitch = pipe to pipe, margin = loop to wall (m); with a
   // manifold every loop gets its feed, which crosses a wall only at a pass
   fpHeating:{keys:{pitch:{t:'num',d:0.2},margin:{t:'num',d:0.25},flow:{t:'bool',d:true},manifold:{t:'list:num'},passes:{t:'list:fpPass'}}},
@@ -519,7 +524,7 @@ const ROC_STUDIO_STR={en:{
   sec_members:'In this section: {n}',sec_members_none:'Nothing yet — set an element\'s Section field (Visibility) to this id.',
   move_up:'Move up',move_down:'Move down',remove:'Remove',add_item:'Add',add_value:'Add…',
   n_options:'Options ({n})',as_yaml:'Edit as YAML',as_form:'Edit as a form',more_options:'More options…',other_keys:'Other keys (kept as they are)',
-  shared_ph:'shared: {v}',inh_shared:'Uses the shared setting from Global.',inh_edit:'Edit it in Global',inh_copy:'Give this room its own copy',
+  shared_ph:'shared: {v}',auto_ph:'found: {v}',auto_none:'none found — set one',inh_shared:'Uses the shared setting from Global.',inh_edit:'Edit it in Global',inh_copy:'Give this room its own copy',
   g_defaults:'Room defaults',g_image:'Image & weather',g_lights:'Light controls',g_cards:'Cards above / below',g_room_tap:'Tap on the image',
   g_room_nav:'Navigation',g_overview:'Overview page',g_card:'Card',g_panel:'Panel',g_content:'Content',g_behaviour:'Behaviour',
   g_nav_chips:'Chips',g_nav_cards:'Cards in the nav',g_nav_mini:'Mini previews',
@@ -1515,7 +1520,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
   const inh=o.inherit;
   const kd=RS_KEY_DOMAINS[(o.schema||'')+'.'+key];
   const wo={dflt:def.d,domains:kd||(key==='base_camera'?['camera']:(key==='entity'||/entity$/.test(key)?ctx.domains:null)),icon:iconKey,choices:choices,
-    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):null};
+    ph:inh!==undefined&&inh!==null&&typeof inh!=='object'?ctx.t('shared_ph',{v:rsShort(ctx,inh)}):(RS_AUTO_ENT[(o.schema||'')+'.'+key]?rsAutoPh(ctx,(o.schema||'')+'.'+key):null)};
   const yamlMode=ctx.yamlKeys&&ctx.yamlKeys.has(rel);
   const canDeep=depth<RS_MAX_DEPTH;
   const asObj=!yamlMode&&canDeep&&objName&&(rsIsObj(value)||(value===undefined&&!simple));
@@ -1588,7 +1593,16 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
+const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'heating.central_mode':['select'],'heating.boiler':['binary_sensor','switch'],'hcTariff.entity':['binary_sensor','switch','input_boolean','sensor'],'hcSupply.entity':['sensor'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
+// Keys the card fills by itself when left empty (7.3.0): the placeholder names what it found
+const RS_AUTO_ENT={
+  'heating.central_mode':function(id,st,e){const o=st.attributes&&st.attributes.options;return e.platform==='versatile_thermostat'&&id.indexOf('select.')===0&&Array.isArray(o)&&o.indexOf('Auto')>=0&&o.indexOf('Stopped')>=0;},
+  'heating.boiler':function(id,st,e){return e.platform==='versatile_thermostat'&&id.indexOf('binary_sensor.')===0&&(e.translation_key==='central_boiler_state'||/central_boiler/.test(id));}};
+function rsAutoPh(ctx,k){
+  const h=ctx.hass||{},E=h.entities||{},S=h.states||{},f=RS_AUTO_ENT[k];
+  const id=Object.keys(E).find(function(x){return E[x]&&S[x]&&f(x,S[x],E[x]);});
+  return id?ctx.t('auto_ph',{v:id}):ctx.t('auto_none');
+}
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;
@@ -2701,6 +2715,7 @@ class RocStudio{
         const pair=function(l){return l.map(function(x){return[x,x];});};
         if(key==='section'||(key==='sections'&&schema==='ovDock'))return pair(ids(w.sections));
         if(key==='group')return pair(ids([].concat((room&&room.groups)||[],w.groups||[])));
+        if(key==='lenses'&&(schema==='fpPage'||schema==='floorplan'))return[['Overview','overview'],['Heating','heating']]; // 7.3.0
         if(key==='room'&&schema==='fpRoom')return rsFpPageRooms(w).map(function(x){return[String((x.r.overview_tile&&x.r.overview_tile.name)||x.r.name||x.r.id)+' ('+x.r.id+')',String(x.r.id)];});
         if(key==='rooms'||key==='focus')return pair(ids(self._rooms()));
         if(key==='area_match'){const a=(self.hass&&self.hass.areas)||{};return Object.keys(a).map(function(k){return[String(a[k].name||k),k];});}

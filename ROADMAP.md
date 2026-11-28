@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.2.0** (2026-11-28). Verified against Home Assistant 2026.11.3, installed from
+Current release: **7.3.0** (2026-11-28). Verified against Home Assistant 2026.11.3, installed from
 its Marketplace.
 
 The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in
@@ -26,7 +26,13 @@ Left over from Phase 10:
   by name in the default catalog, all three files installed, the dashboard resource added by
   itself, *⋮ → Install another version* lists every release)
 
-## 🎯 Next — 7.1
+## 🎯 Floor heating and the plan as the hub — 7.1–7.4
+
+Plan: [`HEATING_PLAN.md`](HEATING_PLAN.md). ✅ 7.1.0 loops and feeds on the plan · ✅ 7.2.0 the
+heating controller · ✅ 7.3.0 lenses (overview, heating), the house panel, the pause banner ·
+7.3.x the cleaning lens (and the AnyVac fix on the plan) · 7.4.0 administration and the phone mode.
+
+## 🎯 Next — 7.x
 
 - **The Classic editor goes.** The 6.x tabbed editor stays behind *Classic editor* for one minor
   release after 7.0.0 (V7_PLAN §8), then is removed. `src/editor/` is about half of the main

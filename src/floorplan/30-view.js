@@ -2,7 +2,8 @@
 // One instance per mounted floor plan page. render() rebuilds the static SVG (geometry, theme,
 // size); _apply() only touches the nodes that show state, and only when a room's state changed.
 // opts: {cfg (the floorplan block), cAll (the card config), hass, profile, lang, studio,
-//        interactive (default true), exec(action) (the card's action runner), onRender(view)}
+//        interactive (default true), exec(action) (the card's action runner), onRender(view),
+//        lens (7.3.0: 'overview' | 'heating', null when the page has no lenses)}
 const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8s ease}'
   +'.rfp-heat.is-heat .rfp-w{opacity:1}.rfp-heat.is-idle .rfp-c{opacity:.35}.rfp-heat.is-heat .rfp-c{opacity:.4}'
   +'.rfp-flow{animation:rfp-flow 3s linear infinite}@keyframes rfp-flow{to{stroke-dashoffset:-1.5}}'
@@ -22,6 +23,9 @@ const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8
   +'.rfp-hx .rfp-hc,.rfp-hx .rfp-hg,.rfp-hx .rfp-hglow{transition:opacity .9s ease}.rfp-hx .rfp-hf{opacity:0;transition:opacity .9s ease}'
   +'.rfp-hx.is-flow .rfp-hf{opacity:.7;animation:rfp-hflow var(--rfp-hs,2s) linear infinite}@keyframes rfp-hflow{to{stroke-dashoffset:-.6}}'
   +'.rfp-hx.is-pause .rfp-hc{filter:saturate(.25)}.rfp-paused .rfp-hf{animation-play-state:paused}.rfp-eco .rfp-hf{animation-timing-function:steps(20)}'
+  // lenses (7.3.0): the room whose controller is open is outlined; the heating lens greys the
+  // floors of rooms without a thermostat
+  +'.rfp-focus{transition:opacity .35s ease}.rfp-lens-dim{transition:opacity .5s ease}'
   +'@media (prefers-reduced-motion:reduce){.rfp-flow,.rfp-pulse,.rfp-ping,.rfp-bob,.rfp-hx .rfp-hf{animation:none}.rfp-light,.rfp-heat .rfp-w,.rfp-heat .rfp-c,.rfp-person,.rfp-sig,.rfp-robot{transition:none}}';
 // Markers and labels on the plan (v6.48.0) are HTML over the SVG: they carry ha-icon.
 const RFP_ITEM_CSS='.rfp-items{position:absolute;inset:0;pointer-events:none;overflow:hidden;}'
@@ -127,6 +131,9 @@ class RfpView{
     const l=this.o.cfg&&this.o.cfg.layers&&typeof this.o.cfg.layers==='object'?this.o.cfg.layers:{};
     const o={};['lights','heating','labels','presence','media','attention','vacuum','items','openings','trail'].forEach(function(k){o[k]=l[k]!==false;});
     o.cleaning=l.cleaning===true; // v6.50.0: last cleaned + the clean button, opt-in
+    // the heating lens (7.3.0) shows the loops and the thermostats; what belongs to other topics
+    // (light pools, media, vacuums, people, attention, cleaning) steps back
+    if(this.o.lens==='heating'){o.heating=true;o.lights=o.media=o.vacuum=o.trail=o.cleaning=o.attention=o.presence=false;}
     return o;
   }
   // ---- static render ----
@@ -142,6 +149,8 @@ class RfpView{
     this.svg.classList.toggle('rfp-eco',q!=='high');
     const M=this.M=this._model();
     this.L=this._layers();
+    this.svg.setAttribute('data-rfp-lens',this.o.lens||'');
+    this.items.style.opacity=this.o.lens==='heating'?'0.35':'';
     this._st={};this._os={};this._og={};this._nodes=null;this._pSig='';
     if(!(W>2&&H>2)){this.svg.innerHTML='';this.items.innerHTML='';return;}
     this.svg.setAttribute('viewBox','0 0 '+rfpN(W)+' '+rfpN(H));
@@ -275,7 +284,7 @@ class RfpView{
       s+='<polygon points="'+rfpPts(r.poly)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="0.03"/>';
       s+='<g clip-path="url(#'+id+'-c'+k+')">'+self._lightSvg(T,r,k)+self._mediaSvg(r,k)+'</g>';
     });
-    s+=this._heatLayer(T,M);
+    s+=this._lensSvg(T,M,'dim')+this._heatLayer(T,M)+this._lensSvg(T,M,'focus');
     s+='</g></g>';
     // the vacuum's trail while it cleans (v6.49.0), in plan metres
     if(this.L.vacuum&&this.L.trail&&this._anyvac().length)s+='<g transform="'+mat+'" pointer-events="none" data-rfp-trail></g>';
@@ -699,6 +708,23 @@ class RfpView{
     if(m)s+='<rect data-rfp-manifold x="'+rfpN(m[0]-0.2)+'" y="'+rfpN(m[1]-0.09)+'" width="0.4" height="0.18" rx="0.03" fill="#d5dae1" stroke="#5b6470" stroke-width="0.025"/>';
     return s+'</g>';
   }
+  // Lenses (7.3.0): the outline of the room whose controller is open (setFocus), and in the heating
+  // lens a veil over the floors of rooms without a thermostat. Only on a page with lenses.
+  _lensSvg(T,M,part){
+    if(!this.o.lens)return'';
+    const hl=this.o.lens==='heating';let s='<g pointer-events="none">';
+    M.rooms.forEach(function(r,k){
+      if(part==='dim'){if(hl&&!r.climate)s+='<polygon class="rfp-lens-dim" points="'+rfpPts(r.poly)+'" fill="'+rfpEsc(T.bg||'#000')+'" opacity=".45"/>';}
+      else if(r.climate)s+='<polygon class="rfp-focus" data-rfp-focus="'+k+'" points="'+rfpPts(r.poly)+'" fill="none" stroke="'+rfpEsc((T.pipe&&T.pipe.c0)||'#ff7a5c')+'" stroke-width="0.07" stroke-linejoin="round" opacity="0"/>';
+    });
+    return s+'</g>';
+  }
+  // the room of this climate outlined ('' for none) — the card calls it while the controller is open
+  setFocus(entity){this._focus=entity||'';this._applyFocus();}
+  _applyFocus(){
+    const N=this._nodes,M=this.M,f=this._focus||'';if(!N||!N.focus||!M)return;
+    Object.keys(N.focus).forEach(function(k){const on=!!f&&M.rooms[+k]&&M.rooms[+k].climate===f;N.focus[k].forEach(function(el){el.setAttribute('opacity',on?'1':'0');});});
+  }
   // colour / grey / glow of one loop by its room's state; power (VTherm power_percent) sets the
   // strength and the speed of the flow
   _heatApply(el,st){
@@ -932,7 +958,7 @@ class RfpView{
     const by=function(list,attr){const m={};list.forEach(function(el){const k=el.getAttribute(attr);(m[k]=m[k]||[]).push(el);});return m;};
     this._nodes={
       light:by(q('[data-rfp-light]'),'data-rfp-light'),stop:by(q('[data-rfp-stop]'),'data-rfp-stop'),tint:by(q('[data-rfp-tint]'),'data-rfp-tint'),
-      heat:by(q('[data-rfp-heat]'),'data-rfp-heat'),hx:by(q('[data-rfp-hx]'),'data-rfp-hx'),val:by(q('[data-rfp-val]'),'data-rfp-val'),chip:by(q('[data-rfp-chip]'),'data-rfp-chip'),
+      heat:by(q('[data-rfp-heat]'),'data-rfp-heat'),hx:by(q('[data-rfp-hx]'),'data-rfp-hx'),focus:by(q('[data-rfp-focus]'),'data-rfp-focus'),val:by(q('[data-rfp-val]'),'data-rfp-val'),chip:by(q('[data-rfp-chip]'),'data-rfp-chip'),
       label:by(q('[data-rfp-label]'),'data-rfp-label'),
       thermo:by(q('[data-rfp-thermo]'),'data-rfp-thermo'),tt:by(q('[data-rfp-tt]'),'data-rfp-tt'),th:by(q('[data-rfp-th]'),'data-rfp-th'),tn:by(q('[data-rfp-tn]'),'data-rfp-tn'),
       tile:by(q('[data-rfp-tile]'),'data-rfp-tile'),ticon:by(q('[data-rfp-ticon]'),'data-rfp-ticon'),tbulb:by(q('[data-rfp-tbulb]'),'data-rfp-tbulb'),big:by(q('[data-rfp-big]'),'data-rfp-big'),
@@ -972,7 +998,8 @@ class RfpView{
       st.heat=c.state==='unavailable'?'off':(c.state==='off'?(rq&&rq!=='off'?'pause':'off'):(act==='heating'||act==='preheating'?'heat':'idle'));
       const pp=rfpNum(a.power_percent),op=rfpNum(a.on_percent);
       st.pw=st.heat==='heat'?Math.max(0,Math.min(100,isFinite(pp)?pp:(isFinite(op)?op*100:100))):0;
-      if(isFinite(rfpNum(a.current_temperature)))st.t=rfpNum(a.current_temperature);
+      st.tg=rfpNum(a.temperature); // the target, for the heating lens's label (7.3.0)
+      if(isFinite(rfpNum(a.current_temperature)))st.t=st.ct=rfpNum(a.current_temperature); // ct: what the thermostat regulates by
       if(isFinite(rfpNum(a.current_humidity)))st.h=rfpNum(a.current_humidity);
     }
     const ts=r.temp&&S[r.temp];if(ts&&isFinite(rfpNum(ts.state)))st.t=rfpNum(ts.state);
@@ -1039,7 +1066,12 @@ class RfpView{
       if(!force&&self._st[k]===sig)return;
       self._st[k]=sig;
       const set=function(list,fn){(list||[]).forEach(fn);};
-      const val=[isFinite(st.t)?self._fmt(st.t,1)+'°':'',isFinite(st.h)?self._fmt(st.h,0)+' %':''].filter(Boolean).join(' · ');
+      let val=[isFinite(st.t)?self._fmt(st.t,1)+'°':'',isFinite(st.h)?self._fmt(st.h,0)+' %':''].filter(Boolean).join(' · ');
+      // the heating lens (7.3.0): now → target, ❚❚ while paused, off; the label's outline in the state's colour
+      const hl=self.o.lens==='heating';
+      const tn=isFinite(st.ct)?st.ct:st.t; // the thermostat's own reading, as in its controller
+      if(hl&&r.climate)val=(isFinite(tn)?self._fmt(tn,1)+'°':'—')+(st.heat==='pause'?'  ❚❚':(st.heat==='off'?' · '+rfpT(lang,'off'):(isFinite(st.tg)?' → '+self._fmt(st.tg,st.tg%1?1:0)+'°':'')));
+      else if(hl)val=isFinite(st.t)?self._fmt(st.t,1)+'°':'';
       // lights
       const str=st.on?(0.35+0.65*st.bri):0;
       set(N.light[k],function(el){el.setAttribute('opacity',rfpN(str));});
@@ -1063,7 +1095,10 @@ class RfpView{
         // the clean button sits at the label's right edge
         const cb=self.items.querySelector('[data-rfp-cleanbtn="'+r.i+'"]');
         if(cb&&r.lp){cb.style.left=rfpN(r.lp[0]+w/2+18)+'px';cb.style.top=rfpN(r.lp[1]+y0+h/2)+'px';}
-        set(N.chip[k],function(el){el.setAttribute('x',rfpN(-w/2));el.setAttribute('y',rfpN(y0));el.setAttribute('width',rfpN(w));el.setAttribute('height',rfpN(h));});
+        set(N.chip[k],function(el){el.setAttribute('x',rfpN(-w/2));el.setAttribute('y',rfpN(y0));el.setAttribute('width',rfpN(w));el.setAttribute('height',rfpN(h));
+          const sc=hl&&r.climate?({heat:(T.pipe&&T.pipe.c0)||'#ff7a5c',pause:'#f5b041',idle:'rgba(255,255,255,.4)'}[st.heat]||''):'';
+          if(sc){el.setAttribute('stroke',sc);el.setAttribute('stroke-width','2');}else{el.removeAttribute('stroke');el.removeAttribute('stroke-width');}});
+        g.setAttribute('opacity',hl&&!r.climate?'0.6':'1');
         set(N.att[k],function(el){if(!el.hasAttribute('data-rfp-fixed'))el.setAttribute('transform','translate('+rfpN(w/2)+','+rfpN(y0)+')');});
         set(N.vac[k],function(el){if(!el.hasAttribute('data-rfp-fixed'))el.setAttribute('transform','translate('+rfpN(-w/2)+','+rfpN(y0)+')');});
       }
@@ -1096,6 +1131,7 @@ class RfpView{
       }
     });
     this._applyOpenings(force);
+    this._applyFocus();
     if(force)this._trailSig=null;
     this._applyRobots();
     this._applyPersons(SG);
@@ -1166,6 +1202,8 @@ class RfpView{
   // Default actions; a plan room's own tap_action / hold_action wins.
   _actionFor(r,kind){
     const c=r.cfg||{};
+    // the heating lens (7.3.0): a room with a thermostat opens the heating controller; hold = its details
+    if(this.o.lens==='heating'&&r.climate)return kind==='tap'?{action:'heating',entity:r.climate}:{action:'more-info',entity:r.climate};
     if(kind==='tap'&&c.tap_action)return c.tap_action;
     if(kind==='hold'&&c.hold_action)return c.hold_action;
     if(kind==='tap'){

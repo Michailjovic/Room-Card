@@ -748,6 +748,96 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const e2=mk(c,h);await sleep(30);
     t('layers.heating: false → no loops at all',!sr(e2).querySelector('[data-rfp-hx]')&&!sr(e2).querySelector('[data-rfp-heatlayer]'));
   }
+  // ---- lenses on the plan + the house panel (7.3.0) -----------------------------------------
+  {
+    const vt=(o,a)=>Object.assign({state:'heat',attributes:Object.assign({hvac_modes:['heat','off'],hvac_action:'heating',current_temperature:21.4,temperature:22,power_percent:55,
+      specific_states:{hvac_off_reason:null},requested_state:{hvac_mode:'heat'},safety_manager:{safety_state:'off'}},a||{})},o||{});
+    const hs=()=>{const st=states();
+      st['climate.living']=vt();
+      st['climate.kitchen']=vt({},{hvac_action:'idle',current_temperature:22.1,power_percent:0});
+      st['climate.bed']=vt({},{hvac_action:'heating',current_temperature:20.2,temperature:21.5,power_percent:80});
+      st['select.central_mode']={state:'Auto',attributes:{options:['Auto','Stopped','Heat only','Cool only','Frost protection']}};
+      st['binary_sensor.central_configuration_central_boiler']={state:'on',attributes:{}};
+      st['switch.hdo']={state:'on',attributes:{}};
+      st['sensor.supply_power']={state:'3250',attributes:{unit_of_measurement:'W',friendly_name:'Supply'}};
+      return st;};
+    const mkH=st=>Object.assign(mkHass(st||hs()),{language:'cs',locale:{language:'cs'},
+      entities:{'select.central_mode':{platform:'versatile_thermostat'},'binary_sensor.central_configuration_central_boiler':{platform:'versatile_thermostat',translation_key:'central_boiler_state'}}});
+    const L=w.eval('rocFpLenses');
+    t('lenses: a plan with thermostats gets overview + heating; without one only overview; floorplan.lenses picks and orders',
+      L(PLAN).join()==='overview,heating'&&L({rooms:[{polygon:[]}]}).join()==='overview'&&L({lenses:['heating','overview','x','heating']}).join()==='heating,overview');
+    const c=clone(BASE);c.heating={tariff:{entity:'switch.hdo',high_state:'off'},supply:[{entity:'sensor.supply_power',name:'Přívod'}]};
+    c.rooms[0].floorplan.dock={sections:['s1']};c.sections=[{id:'s1',title:'Spotřebiče',icon:'mdi:washing-machine',tiles:[]}];
+    const h=mkH();calls.length=0;
+    const e=mk(c,h);await sleep(40);const S=sr(e),v=()=>e._fpInst;
+    const btn=l=>S.querySelector('[data-ico="__fplens_'+l+'"]');
+    t('the dock under the plan: two lens buttons, then the section launchers',!!S.querySelector('[data-fp-dock]')&&!!btn('overview')&&!!btn('heating')&&!!S.querySelector('[data-ico="__fpdock_s1"]')&&!!S.querySelector('.roc-fp-sep')
+      &&S.querySelector('[data-fp-root]').style.bottom!=='');
+    t('the default lens is overview: its button is on, the plan draws as before',btn('overview').classList.contains('roc-lens-on')&&v().o.lens==='overview'&&v().svg.getAttribute('data-rfp-lens')==='overview'&&v().L.lights===true);
+    const badge=()=>btn('heating').querySelector('[data-ico-badge]').textContent;
+    t('the heating button\'s badge counts the rooms that heat (in every lens), its ring is on',badge()==='2'&&btn('heating').querySelector('[data-ico-ring]').style.display==='block'&&/Topí 2/.test(btn('heating').getAttribute('title')));
+    // a room tap in the overview lens still switches rooms
+    btn('heating').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));await sleep(20); // the dock button through the icon pipeline
+    t('a lens button switches the lens: heating on, layers of other topics off (no panel yet)',!S.querySelector('.roc-hp')&&v().o.lens==='heating'&&btn('heating').classList.contains('roc-lens-on')&&!btn('overview').classList.contains('roc-lens-on')
+      &&v().L.lights===false&&v().L.heating===true&&v().svg.getAttribute('data-rfp-lens')==='heating');
+    const val=k=>S.querySelector('[data-rfp-val="'+k+'"]').textContent;
+    t('the heating lens labels say now → target; a room without a thermostat only its temperature',/21,4° → 22°/.test(val(0))&&/20,2° → 21,5°/.test(val(4))&&!/→/.test(val(1)));
+    t('…the label is outlined in the state\'s colour; a room without a thermostat steps back',S.querySelector('[data-rfp-chip="0"]').getAttribute('stroke')!==null&&S.querySelector('[data-rfp-label="1"]').getAttribute('opacity')==='0.6'
+      &&S.querySelectorAll('.rfp-lens-dim').length===2);
+    // a tap on a room opens its controller beside the plan, the room outlined
+    const hit=S.querySelector('[data-rfp-hit="4"]');ev(hit,'pointerdown');ev(hit,'pointerup');await sleep(30);
+    const hc=S.querySelector('.roc-hc');
+    t('heating lens: a tap on a room opens its heating controller, the room is outlined, the plan stays visible',!!hc&&e._heat&&e._heat.entity==='climate.bed'
+      &&S.querySelector('[data-rfp-focus="4"]').getAttribute('opacity')==='1'&&S.querySelector('[data-rfp-focus="0"]').getAttribute('opacity')==='0'&&S.querySelector('.roc-hc-bd').classList.contains('hc-lite'));
+    hc.querySelector('[data-hc="close"]').click();await sleep(10);
+    t('closing it clears the outline',!e._heat&&S.querySelector('[data-rfp-focus="4"]').getAttribute('opacity')==='0');
+    // the active lens's button opens the house panel
+    btn('heating').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));await sleep(20);
+    const P=S.querySelector('.roc-hp');
+    t('the active heating button opens the house panel (C)',!!P&&P.getAttribute('role')==='dialog'&&v().o.lens==='heating');
+    const modes=[...P.querySelectorAll('[data-hp="mode"]')].map(b=>b.textContent);
+    t('house mode from VTherm\'s central mode (found by itself; no cooling without a cooling thermostat), the current one marked',modes.join('|')==='Automaticky|Zastaveno|Jen topení|Proti mrazu'&&P.querySelector('[data-hp="mode"].on').getAttribute('data-v')==='Auto');
+    const facts=P.querySelector('[data-hp-facts]').textContent;
+    t('boiler, tariff and the main supply as rows',/Kotel běží/.test(facts)&&/Tarif nízký \(NT\)/.test(facts)&&/Přívod 3[\s ]?250 W/.test(facts));
+    const rooms=[...P.querySelectorAll('[data-hp="room"]')];
+    t('every thermostat of the plan, with now → target and its status',rooms.length===3&&rooms[0].querySelector('.n').textContent==='T0'&&/21,4°/.test(rooms[0].textContent)&&/→ 22,0°/.test(rooms[0].textContent)
+      &&rooms[0].classList.contains('heat')&&/Topí · 55 %/.test(rooms[0].textContent)&&rooms[2].querySelector('.n').textContent==='Sleep');
+    calls.length=0;P.querySelector('[data-hp="mode"][data-v="Frost protection"]').click();
+    t('a house mode sets the central mode',calls.length===1&&calls[0][0]==='select'&&calls[0][1]==='select_option'&&calls[0][2].option==='Frost protection'&&calls[0][2].entity_id==='select.central_mode');
+    rooms[1].click();await sleep(20);
+    t('a room in the panel opens its controller instead',!S.querySelector('.roc-hp')&&e._heat&&e._heat.entity==='climate.kitchen');
+    S.querySelector('.roc-hc [data-hc="close"]').click();
+    // the central mode stops the heating → banner + badge
+    const st=hs();
+    ['climate.living','climate.kitchen','climate.bed'].forEach(id=>{st[id]=vt({state:'off',last_changed:'2026-11-28T01:59:36+01:00'},{hvac_action:'off',power_percent:0,specific_states:{hvac_off_reason:'hvac_off_central_mode'}});});
+    st['select.central_mode']={state:'Stopped',attributes:st['select.central_mode'].attributes};st['switch.hdo']={state:'off',attributes:{}};
+    e.hass=mkH(st);await sleep(30);
+    const ban=S.querySelector('[data-fp-ban]');
+    t('paused by the central mode: a banner on the plan with the mode and since when',!!ban&&!ban.hidden&&/Topení pozastaveno centrálním režimem/.test(ban.textContent)&&/režim: Zastaveno/.test(ban.textContent)&&/od /.test(ban.textContent));
+    t('…and the heating button shows II (before VT), no ring',badge()==='II'&&btn('heating').querySelector('[data-ico-ring]').style.display==='none');
+    ban.click();await sleep(10);
+    t('the banner opens the house panel',!!S.querySelector('.roc-hp'));
+    S.querySelector('.roc-hp [data-hp="close"]').click();
+    const st2=hs();st2['switch.hdo']={state:'off',attributes:{}};st2['climate.kitchen']={state:'unavailable',attributes:{}};
+    e.hass=mkH(st2);await sleep(30);
+    t('a silent thermostat → ! (before everything else); the banner goes',badge()==='!'&&S.querySelector('[data-fp-ban]').hidden&&/Zkontroluj/.test(btn('heating').getAttribute('title')));
+    const st3=hs();st3['switch.hdo']={state:'off',attributes:{}};['climate.living','climate.bed'].forEach(id=>{st3[id]=vt({},{hvac_action:'idle',power_percent:0});});
+    e.hass=mkH(st3);await sleep(30);
+    t('nothing heats in the high tariff → VT',badge()==='VT');
+    // the lens is kept for the page; the overview lens taps switch rooms again
+    e._execAct({action:'fp-lens',lens:'overview'});await sleep(20);
+    t('back to overview: the plan as before',v().o.lens==='overview'&&v().L.lights===true);
+    e.remove();
+    // floorplan.lenses: [overview] → no lens buttons; floorplan.lens: heating → starts there
+    const c1=clone(BASE);c1.rooms[0].floorplan.lenses=['overview'];
+    const e1=mk(c1,mkH());await sleep(30);
+    t('one lens: no dock, the plan draws as before 7.3.0',!sr(e1).querySelector('[data-fp-dock]')&&e1._fpInst.o.lens===null&&!e1._fpInst.svg.getAttribute('data-rfp-lens')&&!sr(e1).querySelector('[data-fp-ban]'));
+    e1.remove();
+    const c2=clone(BASE);c2.rooms[0].floorplan.lens='heating';
+    const e2=mk(c2,mkH());await sleep(30);
+    t('floorplan.lens: heating → the page opens in the heating lens',e2._fpInst.o.lens==='heating'&&sr(e2).querySelector('[data-ico="__fplens_heating"]').classList.contains('roc-lens-on'));
+    e2.remove();
+  }
   console.log(fails?'\n'+fails+' FAILED':'\nall floor plan tests passed');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

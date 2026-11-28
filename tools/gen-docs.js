@@ -93,6 +93,8 @@ const CHAPTERS=[
   ['Heating controller',[
     ['heating','`heating:` — the heating controller',HC],
     ['hcRoom','A thermostat (`heating.rooms` item)',HC],
+    ['hcTariff','`heating.tariff` — the high / low tariff (house panel)',HC+'#the-house-panel'],
+    ['hcSupply','A main supply row (`heating.supply` item)',HC+'#the-house-panel'],
   ]],
   ['Floor plan page',[
     ['floorplan','`floorplan:` of a room',FP],
