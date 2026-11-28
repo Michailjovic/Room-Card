@@ -15,7 +15,7 @@ const {ROC_SCHEMA:S}=require(path.join(ROOT,'src/schema/roc-schema.js'));
 const CHECK=process.argv.includes('--check');
 
 // ---- chapters: every schema type in reading order, with its title and the hand-written guide
-const CFG='CONFIGURATION.md',OV='OVERVIEW.md',FP='FLOORPLAN.md',LAY='../LAYOUT.md';
+const CFG='CONFIGURATION.md',OV='OVERVIEW.md',FP='FLOORPLAN.md',HC='HEATING.md',LAY='../LAYOUT.md';
 const CHAPTERS=[
   ['Card and rooms',[
     ['card','The card (top level)',CFG+'#top-level'],
@@ -89,6 +89,10 @@ const CHAPTERS=[
     ['ovDock','`overview.dock`',OV],
     ['overviewTile','`overview_tile:` of a room',OV+'#room-tiles'],
     ['ovChip','An overview tile chip',OV+'#room-tiles'],
+  ]],
+  ['Heating controller',[
+    ['heating','`heating:` — the heating controller',HC],
+    ['hcRoom','A thermostat (`heating.rooms` item)',HC],
   ]],
   ['Floor plan page',[
     ['floorplan','`floorplan:` of a room',FP],

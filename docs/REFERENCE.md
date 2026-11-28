@@ -23,6 +23,7 @@ every room. Every element type also accepts its own keys under `portrait:` / `la
 - **Navigation:** [`nav`](#t-nav) · [`navMini`](#t-navmini) · [`navChip`](#t-navchip)
 - **Sections (cockpit tiles):** [`section`](#t-section) · [`tile`](#t-tile) · [`quick`](#t-quick) · [`tileOverlay`](#t-tileoverlay)
 - **Overview page:** [`overview`](#t-overview) · [`ovSignals`](#t-ovsignals) · [`ovHeader`](#t-ovheader) · [`ovHeaderItem`](#t-ovheaderitem) · [`ovPill`](#t-ovpill) · [`ovSide`](#t-ovside) · [`ovSideCard`](#t-ovsidecard) · [`ovGrid`](#t-ovgrid) · [`ovDock`](#t-ovdock) · [`overviewTile`](#t-overviewtile) · [`ovChip`](#t-ovchip)
+- **Heating controller:** [`heating`](#t-heating) · [`hcRoom`](#t-hcroom)
 - **Floor plan page:** [`floorplan`](#t-floorplan) · [`fpRoom`](#t-fproom) · [`fpLight`](#t-fplight) · [`fpOpening`](#t-fpopening) · [`fpItem`](#t-fpitem) · [`fpVacuum`](#t-fpvacuum) · [`fpTransform`](#t-fptransform) · [`fpHeating`](#t-fpheating) · [`fpPass`](#t-fppass) · [`fpLayers`](#t-fplayers) · [`fpEntity`](#t-fpentity) · [`fpBackground`](#t-fpbackground) · [`fpThemeBy`](#t-fpthemeby) · [`fpWall`](#t-fpwall) · [`fpSource`](#t-fpsource) · [`fpTrace`](#t-fptrace)
 
 ## Card and rooms
@@ -47,6 +48,7 @@ Every **room-scoped** key of [`room`](#t-room) is also valid here, as the defaul
 | `rooms` | list of [`room`](#t-room) |  |  |
 | `nav` | [`nav`](#t-nav) |  |  |
 | `sections` | list of [`section`](#t-section) |  |  |
+| `heating` | [`heating`](#t-heating) |  | since 7.2.0 |
 | `room_entity` | entity id **or** [`roomEntity`](#t-roomentity) |  |  |
 | `room_state_entity` | entity id **or** [`roomEntity`](#t-roomentity) |  |  |
 | `follow_mode` | `always` · `initial` · `manual` | `"always"` |  |
@@ -241,7 +243,7 @@ With `action: fire-dom-event` the other keys are passed through unchecked. Guide
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `action` | `none` · `navigate` · `url` · `more-info` · `toggle` · `call-service` · `perform-action` · `browser-mod-popup` · `toggle-group` · `show-group` · `hide-group` · `switch-room` · `next-room` · `prev-room` · `follow-room` · `open-section` · `close-section` · `fire-dom-event` |  |  |
+| `action` | `none` · `navigate` · `url` · `more-info` · `toggle` · `call-service` · `perform-action` · `browser-mod-popup` · `toggle-group` · `show-group` · `hide-group` · `switch-room` · `next-room` · `prev-room` · `follow-room` · `open-section` · `close-section` · `fire-dom-event` · `heating` |  |  |
 | `entity` | entity id |  |  |
 | `entity_id` | entity id |  |  |
 | `navigation_path` | string |  |  |
@@ -1218,6 +1220,40 @@ A bare `entity` string is accepted as the short form (`- light.kitchen`). Guide:
 | `active_state` | any |  |  |
 | `tap_action` | [action](#t-action) |  |  |
 | `hold_action` | [action](#t-action) |  |  |
+
+## Heating controller
+
+<a id="t-heating"></a>
+
+### `heating:` — the heating controller — `heating`
+
+Guide: [HEATING.md](HEATING.md).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `quick` | list of number |  |  |
+| `step` | number | `0.5` |  |
+| `range` | list of number |  |  |
+| `durations` | list of string |  |  |
+| `evening` | string | `"22:00"` |  |
+| `morning` | string | `"06:00"` |  |
+| `rooms` | list of [`hcRoom`](#t-hcroom) |  |  |
+
+<a id="t-hcroom"></a>
+
+### A thermostat (`heating.rooms` item) — `hcRoom`
+
+A bare `climate` string is accepted as the short form (`- light.kitchen`). Guide: [HEATING.md](HEATING.md).
+
+| Key | Type | Default | Notes |
+|---|---|---|---|
+| `climate` | entity id |  |  |
+| `name` | string |  |  |
+| `quick` | list of number |  |  |
+| `step` | number |  |  |
+| `range` | list of number |  |  |
+| `evening` | string |  |  |
+| `morning` | string |  |  |
 
 ## Floor plan page
 

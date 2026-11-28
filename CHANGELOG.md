@@ -1,5 +1,29 @@
 # Changelog
 
+## [7.2.0] - 2026-11-28
+
+The heating controller: one room's thermostat in degrees. Step 2 of HEATING_PLAN.md.
+
+### Added
+
+- **`heating` action** (`tap_action: {action: heating, entity: climate.x}`) opens the heating
+  controller over the card — from a temperature label on the room photo, an icon, a zone, a room of
+  the floor plan. It closes with ×, Escape, a tap beside it or a room switch.
+- **The controller** works with any `climate`: the room's temperature and humidity, the status
+  (heating with power and the time to the target, holding, not heating, paused by Versatile
+  Thermostat's central mode or an open window, off, sensor silent), the target with − / + by
+  `step`, quick temperatures, a ruler over `range`, turn off / on, Details (more-info), and a 24 h
+  chart (temperature, target, when it heated) from Home Assistant's history. A run of taps is sent
+  as one change.
+- **How long** (Versatile Thermostat): keep, for 2 h, until the evening or until the morning. A
+  time-limited target goes into the thermostat's boost preset number and runs as VTherm's timed
+  preset, which brings back the previous target when it ends; a running one shows until when, with
+  Cancel. Shown only for thermostats with a boost preset number.
+- **`heating:`** at the card's top level — `quick`, `step`, `range`, `durations`, `evening`,
+  `morning`, and `rooms: [{climate, name, quick, step, range, evening, morning}]`. Studio: Card
+  settings → *Heating controller*; the action form offers the thermostat for `heating`.
+- docs/HEATING.md.
+
 ## [7.1.0] - 2026-11-27
 
 The floor plan draws the floor heating itself: loops, feeds from the manifold, the passes the

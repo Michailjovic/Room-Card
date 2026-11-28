@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.1.0';
+const ROC_STUDIO_VERSION='7.2.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -103,6 +103,7 @@ const S={
     rooms:{t:'list:room'},
     nav:{t:'obj:nav'},
     sections:{t:'list:section'},
+    heating:{t:'obj:heating',since:'7.2.0'},
     room_entity:{t:'entity|obj:roomEntity'},
     room_state_entity:{t:'entity|obj:roomEntity'},
     follow_mode:{t:'enum:always|initial|manual',d:'always'},
@@ -153,6 +154,9 @@ const S={
     cards_above:{t:'list:companion',room:true},cards_below:{t:'list:companion',room:true},
     light_controls:{t:'obj:lightControls',room:true},
   }},
+  // the heating controller (7.2.0): defaults for every thermostat, and per-room settings
+  heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'}}},
+  hcRoom:{keys:{climate:{t:'entity'},name:{t:'str'},quick:{t:'list:num'},step:{t:'num'},range:{t:'list:num'},evening:{t:'str'},morning:{t:'str'}},scalar:'climate'},
   baseImageCond:{keys:{condition:{t:'cond'},image:{t:'url'}}}, // 7.0.5: `value` was never read — the image is `image`
   filterCond:{keys:{condition:{t:'cond'},filter:{t:'str'}}},
   weather:{keys:{entity:{t:'entity'},effect:{t:'enum:auto|rain|snow|fog|lightning'},opacity:{t:'num'},z_index:{t:'num'},angle:{t:'num|str'}}},
@@ -165,7 +169,7 @@ const S={
     operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},above:{t:'num',since:'7.0.0'},below:{t:'num',since:'7.0.0'},and:{t:'cond'},or:{t:'cond'}}},
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
-  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event'},
+  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event|heating'},
     entity:{t:'entity'},entity_id:{t:'entity'},navigation_path:{t:'str'},navigation_replace:{t:'bool',since:'7.0.0'},path:{t:'str'},url:{t:'str'},url_path:{t:'str'},new_tab:{t:'bool'},
     service:{t:'str'},perform_action:{t:'str'},data:{t:'map'},service_data:{t:'map'},target:{t:'map'},
     title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},section:{t:'str'},group:{t:'str'},
@@ -509,7 +513,7 @@ const ROC_STUDIO_STR={en:{
   room_more_hint:'The room\'s elements are on the canvas and in the outline; the card layout (rows, columns, regions) is in All settings.',
   mark_err:'Has errors',mark_warn:'Has warnings',
   // Phase 4b (v6.45.0) — card-level forms, sub-forms and lists
-  card_h:'Card',card_settings:'Card settings',nav_form:'Navigation',sections_h:'Sections',t_section:'Section',
+  card_h:'Card',card_settings:'Card settings',g_heating:'Heating controller',nav_form:'Navigation',sections_h:'Sections',t_section:'Section',
   sec_add:'Add a section',sec_add_body:'A section is a panel that opens over the card (appliances, media, heating…). Start blank or from a recipe — the same ones as the editor\'s.',
   sec_blank:'Blank',sec_needs:'Needs its card to be installed',sec_del:'Delete this section (Undo brings it back)',
   sec_members:'In this section: {n}',sec_members_none:'Nothing yet — set an element\'s Section field (Visibility) to this id.',
@@ -1354,6 +1358,7 @@ function rsActionWidget(ctx,value,onChange,o){
     body.innerHTML='';
     const a=A(),same=rsActType(ctx,cur)===t;
     if(t==='more-info'||t==='toggle')field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:(o&&o.entity)||'',null,function(v){set(t,'entity',v);}));
+    else if(t==='heating')field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:'',['climate'],function(v){set(t,'entity',v);})); // 7.2.0: the heating controller of this thermostat
     else if(t==='navigate'){const i=rsSimpleWidget(ctx,'str',same?(a.navigation_path!==undefined?a.navigation_path:a.path):'',function(v){const n=base(t);delete n.path;if(v)n.navigation_path=v;else delete n.navigation_path;commit(n);});i.placeholder='/lovelace/0';field(ctx.t('f_path'),i);}
     else if(t==='url'){const i=rsSimpleWidget(ctx,'str',same?(a.url_path!==undefined?a.url_path:a.url):'',function(v){const n=base(t);delete n.url;if(v)n.url_path=v;else delete n.url_path;commit(n);});i.placeholder='https://…';field('URL',i);}
     else if(t==='perform-action'){
@@ -1583,7 +1588,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
+const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
 const RS_CARD_ONLY=['aspect_ratio','border_radius','image_fit','image_align','filter_transition','room_entity','room_state_entity','follow_mode','follow_hold','url_sync','zoom','parallax','haptic','hold_feedback','hold_color','weather_nav_mini'];
 function rsFormSpec(ctx,target){
   const S=RocSchema.ROC_SCHEMA;
@@ -1634,7 +1639,7 @@ function rsFormSpec(ctx,target){
     const multi=Array.isArray(ctx.work.rooms)&&ctx.work.rooms.length>0;
     const cardKeys=RS_CARD_ONLY.filter(function(k){return multi||['room_entity','room_state_entity','follow_mode','follow_hold','url_sync','weather_nav_mini'].indexOf(k)<0;});
     return{keys:keys,title:ctx.t(target.settings?'card_settings':(ctx.global?'global':'card_form')),icon:target.settings?'mdi:cog-outline':(ctx.global?'mdi:earth':'mdi:image-outline'),type:'',rest:null,
-      groups:[[multi?'defaults':'main',RS_CARD_KEYS]].concat(roomGroups).concat([['card',cardKeys]])};
+      groups:[[multi?'defaults':'main',RS_CARD_KEYS]].concat(roomGroups).concat([['card',cardKeys],['heating',['heating']]])};
   }
   if(target.kind==='section'){
     return{keys:S.section.keys,title:String(item.title||item.id),icon:item.icon&&/^mdi:/.test(item.icon)?item.icon:'mdi:view-dashboard-outline',type:ctx.t('t_section'),idRow:true,rest:'object',groups:[

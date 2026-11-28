@@ -261,6 +261,7 @@ card {
   rooms: room[];
   nav: nav;
   sections: section[];
+  heating: heating @7.2.0;
   room_entity: entity | roomEntity;
   room_state_entity: entity | roomEntity;
   follow_mode: "always"|"initial"|"manual" = "always";
@@ -375,7 +376,7 @@ condVal {
   value: any;
 }
 action {
-  action: "none"|"navigate"|"url"|"more-info"|"toggle"|"call-service"|"perform-action"|"browser-mod-popup"|"toggle-group"|"show-group"|"hide-group"|"switch-room"|"next-room"|"prev-room"|"follow-room"|"open-section"|"close-section"|"fire-dom-event";
+  action: "none"|"navigate"|"url"|"more-info"|"toggle"|"call-service"|"perform-action"|"browser-mod-popup"|"toggle-group"|"show-group"|"hide-group"|"switch-room"|"next-room"|"prev-room"|"follow-room"|"open-section"|"close-section"|"fire-dom-event"|"heating";
   entity: entity;
   entity_id: entity;
   navigation_path: str;
@@ -999,6 +1000,26 @@ ovChip (or a bare entity string) {
   active_state: any;
   tap_action: action;
   hold_action: action;
+}
+
+// ---- Heating controller
+heating {
+  quick: num[];
+  step: num = 0.5;
+  range: num[];
+  durations: str[];
+  evening: str = "22:00";
+  morning: str = "06:00";
+  rooms: hcRoom[];
+}
+hcRoom (or a bare climate string) {
+  climate: entity;
+  name: str;
+  quick: num[];
+  step: num;
+  range: num[];
+  evening: str;
+  morning: str;
 }
 
 // ---- Floor plan page

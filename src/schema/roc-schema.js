@@ -47,6 +47,7 @@ const S={
     rooms:{t:'list:room'},
     nav:{t:'obj:nav'},
     sections:{t:'list:section'},
+    heating:{t:'obj:heating',since:'7.2.0'},
     room_entity:{t:'entity|obj:roomEntity'},
     room_state_entity:{t:'entity|obj:roomEntity'},
     follow_mode:{t:'enum:always|initial|manual',d:'always'},
@@ -97,6 +98,9 @@ const S={
     cards_above:{t:'list:companion',room:true},cards_below:{t:'list:companion',room:true},
     light_controls:{t:'obj:lightControls',room:true},
   }},
+  // the heating controller (7.2.0): defaults for every thermostat, and per-room settings
+  heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'}}},
+  hcRoom:{keys:{climate:{t:'entity'},name:{t:'str'},quick:{t:'list:num'},step:{t:'num'},range:{t:'list:num'},evening:{t:'str'},morning:{t:'str'}},scalar:'climate'},
   baseImageCond:{keys:{condition:{t:'cond'},image:{t:'url'}}}, // 7.0.5: `value` was never read — the image is `image`
   filterCond:{keys:{condition:{t:'cond'},filter:{t:'str'}}},
   weather:{keys:{entity:{t:'entity'},effect:{t:'enum:auto|rain|snow|fog|lightning'},opacity:{t:'num'},z_index:{t:'num'},angle:{t:'num|str'}}},
@@ -109,7 +113,7 @@ const S={
     operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},above:{t:'num',since:'7.0.0'},below:{t:'num',since:'7.0.0'},and:{t:'cond'},or:{t:'cond'}}},
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
-  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event'},
+  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event|heating'},
     entity:{t:'entity'},entity_id:{t:'entity'},navigation_path:{t:'str'},navigation_replace:{t:'bool',since:'7.0.0'},path:{t:'str'},url:{t:'str'},url_path:{t:'str'},new_tab:{t:'bool'},
     service:{t:'str'},perform_action:{t:'str'},data:{t:'map'},service_data:{t:'map'},target:{t:'map'},
     title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},section:{t:'str'},group:{t:'str'},

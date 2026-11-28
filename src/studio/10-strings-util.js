@@ -69,7 +69,7 @@ const ROC_STUDIO_STR={en:{
   room_more_hint:'The room\'s elements are on the canvas and in the outline; the card layout (rows, columns, regions) is in All settings.',
   mark_err:'Has errors',mark_warn:'Has warnings',
   // Phase 4b (v6.45.0) — card-level forms, sub-forms and lists
-  card_h:'Card',card_settings:'Card settings',nav_form:'Navigation',sections_h:'Sections',t_section:'Section',
+  card_h:'Card',card_settings:'Card settings',g_heating:'Heating controller',nav_form:'Navigation',sections_h:'Sections',t_section:'Section',
   sec_add:'Add a section',sec_add_body:'A section is a panel that opens over the card (appliances, media, heating…). Start blank or from a recipe — the same ones as the editor\'s.',
   sec_blank:'Blank',sec_needs:'Needs its card to be installed',sec_del:'Delete this section (Undo brings it back)',
   sec_members:'In this section: {n}',sec_members_none:'Nothing yet — set an element\'s Section field (Visibility) to this id.',

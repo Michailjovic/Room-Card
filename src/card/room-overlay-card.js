@@ -130,6 +130,7 @@ class RoomOverlayCard extends HTMLElement{
 
   set hass(h){
     this._hass=h;if(!this._config)return;
+    if(this._heat)rocHcUpdate(this); // the heating controller (7.2.0) follows its thermostat
     if(!this._rendered){this._render();return;}
     // Embedded cards do their own change detection — always forward hass
     // (even while off-screen, so they're current the moment the card scrolls back)
@@ -3457,6 +3458,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       ghost.style.transition='transform .3s ease,opacity .3s ease';
     }
     if(this._sectionOpen)this._closeSection(); // COCKPIT_PLAN.md kap.7: panel closes on room switch
+    if(this._heat)rocHcClose(this); // …and so does the heating controller (7.2.0)
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
     // Editor preview instance (see _mountPreview): tell the editor GUI so its
@@ -4877,6 +4879,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
         break;
       case'follow-room':this._followNow();break;
       case'open-section':if(a.section)this._openSection(a.section);break;
+      case'heating':rocHcOpen(this,a.entity||a.entity_id);break; // 7.2.0: the heating controller
       // Standard Lovelace hook (browser_mod 2 popups, custom actions): HA's own
       // cards dispatch the whole action config as an `ll-custom` event.
       case'fire-dom-event':this.dispatchEvent(new CustomEvent('ll-custom',{bubbles:true,composed:true,detail:a}));break;
@@ -4921,6 +4924,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._confirmDone)this._confirmDone(false); // a confirmation is cancelled when the card leaves the page
     if(this._tmKeyHandler)document.removeEventListener('keydown',this._tmKeyHandler);
     if(this._secKeyHandler)document.removeEventListener('keydown',this._secKeyHandler);
+    if(this._heat)rocHcClose(this);
     if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart

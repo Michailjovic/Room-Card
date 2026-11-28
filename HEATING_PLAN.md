@@ -26,6 +26,18 @@ heating where it is: on the floor plan.
 8. **Administration is admin-only** (`hass.user.is_admin`): settings check and the event log of
    the cooking / overload protection.
 9. Do not merge the electricity-panel-card; the panel shows the main supply as simple rows.
+10. **The floor plan is the hub (2026-11-27).** Everything spatial is centralised on ONE floor plan
+    page with switchable **lenses**, not separate specialised pages (one geometry, edited once;
+    cross-topic context stays visible). A lens is a preset over the existing `layers`: what is
+    emphasised, what is dimmed, what a tap on a room does, which panel the dock opens.
+    - *Overview* (default): everything subtle, tap = switch to the room (as today).
+    - *Heating*: loops and feeds full, temperature / target chips, tap = room controller (A).
+    - *Cleaning*: vacuums, trails, last cleaned, tap = clean this room (fix the AnyVac bug then).
+    - later *Lights & windows*.
+    Lenses are switched from the dock (the same button opens the lens's panel); dock badges show
+    events in every lens; a lens never switches by itself. Config stays small: which lenses, their
+    order, the default. A page that wants one lens only (a hall tablet) is another page with a
+    different default lens on the same plan — no copied geometry.
 
 ## Phases
 
@@ -33,8 +45,9 @@ heating where it is: on the floor plan.
 |---|---|---|
 | — | **HA preparation** (not card code): logbook entries (reason, kitchen kW, phase currents) in `automation.topeni_centralni_rezim`; VTherm heating-failure detection (2–3 h); a preset slot for the time-limited temperature; the bedroom target | waiting for the author |
 | 7.1.0 | **Loops on the floor plan**: counter-flow loops per climate room, manifold + feeds routed through passes, states (heat by `power_percent` / idle / paused by `requested_state` / off), theme tokens `pipe.*`, Studio tools *Manifold* and *Passes* | done |
-| 7.2.0 | **Studio heating module + room controller (A)**: one component for any `climate` (VTherm extras when present) — status line with ETA, quick °C, ± 0.5, ruler, duration (always / 2 h / until 22:00 / until morning), 24 h chart from history; first shown from a room photo's temperature | next |
-| 7.3.0 | **Heating mode of the plan**: a dock button with ring + badge (heating count, `II` pause, `VT`, `!` sensor); the plan dims other layers, shows target chips, a tap on a room opens A beside it; the pause banner; the bottom panel (C): rooms, house mode (VTherm central mode), boiler, main supply | |
+| 7.2.0 | **Room controller (A)** — the `heating` action opens it from anything with a tap action; any `climate`, VTherm extras when present: status with power / pause reason / ETA, quick °C, ± step, ruler, duration (keep / 2 h / until evening / until morning via VTherm's timed preset on the boost preset number), 24 h chart from history; settings in `heating:` (Studio: Card settings → Heating controller) | done |
+| 7.3.0 | **Lenses on the plan** (decision 10) with *Overview* and *Heating*: dock buttons with ring + badge (heating count, `II` pause, `VT`, `!` sensor); the Heating lens dims other layers, shows target chips, a tap on a room opens A beside it; the pause banner; the bottom panel (C): rooms, house mode (VTherm central mode), boiler, main supply | |
+| 7.3.x | **Cleaning lens** + the AnyVac bug on the plan | |
 | 7.4.0 | **Administration + phone**: settings check from VTherm attributes, event log from the HA logbook (filters, detail), simple mode (B) for phones | |
 
 Every phase ships with its GUI (the larger part of the work), demo scenario, tests, AI_SPEC,
@@ -42,13 +55,13 @@ CHANGELOG and English release notes.
 
 ## Risks to check first
 
-- **Time-limited temperature (7.2.0):** the card cannot run a timer (the browser may be closed).
-  Plan: write the °C into a VTherm preset slot (its number entity) and call `set_timed_preset`.
-  Verify on VTherm 10.6 before building the UI.
+- **Time-limited temperature (7.2.0):** verified on VTherm 10.6 (2026-11-28, kitchen): the °C in
+  `number.<vtherm>_preset_boost_temp`, `set_timed_preset boost`; at the end VTherm restored preset
+  `none` with the previous manual target. Shipped that way.
 - **L-shaped rooms (7.1.0):** a loop fills the biggest rectangle; the rest of an L stays empty. A
   hand-drawn loop field in the Studio would fix it if anyone needs it.
-- **The dock on the plan page (7.3.0):** check the plan page carries the section dock the way the
-  photo cockpit does.
+- **The dock on the plan page (7.3.0):** the lenses need a dock on the plan page; check it can
+  carry the section dock the way the photo cockpit does.
 
 ## Data the card reads (VTherm 10.6, verified on the author's system)
 

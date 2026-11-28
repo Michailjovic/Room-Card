@@ -46,6 +46,7 @@ const ALLOW={
     lock_aspect:GEOM,aspect_ratio:GEOM,image_fit:GEOM,image_align:GEOM,
     room_entity:RUNTIME,room_state_entity:RUNTIME,follow_mode:RUNTIME,follow_hold:RUNTIME,url_sync:RUNTIME,zoom:RUNTIME,
     haptic:RUNTIME,hold_feedback:GESTURE,hold_color:GESTURE,weather_nav_mini:MINI,rooms:'the room list itself — every tier',nav:'its keys are checked as type nav',
+    heating:'read when the heating action opens the controller — tests/heat.test.js',
     },
   layout:{portrait:'the portrait profile — e2e geometry tests'},
   zone:{hold_action:GESTURE,hold_delay:GESTURE,tile:TAG,nav_mini:MINI},
