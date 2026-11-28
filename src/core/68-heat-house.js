@@ -11,26 +11,35 @@
 // tariff and the main supply. A banner on the plan says when the central mode stopped the heating.
 // Config: floorplan.lenses / lens / dock / pause_banner; the house entities in the card's
 // `heating:` block (central_mode, boiler, tariff, supply), the VTherm ones found by themselves.
-const ROC_LENSES={overview:{icon:'mdi:floor-plan'},heating:{icon:'mdi:heating-coil'}};
+const ROC_LENSES={overview:{icon:'mdi:floor-plan'},lights:{icon:'mdi:lightbulb-group'},heating:{icon:'mdi:heating-coil'},cleaning:{icon:'mdi:broom'}}; // 7.4.0: lights, cleaning (69-lights-clean.js)
 const ROC_HP_STR={
-  en:{lens_overview:'Overview',lens_heating:'Heating',house:'Heating · house',mode:'House mode',boiler:'Boiler',b_on:'running',b_off:'off',
+  en:{lens_overview:'Overview',lens_heating:'Heating',house:'Heating · house',mode:'House mode',boiler:'Heating boiler',b_on:'running',b_off:'off',
+    hot_water:'Hot water',hw_heat:'heating',hw_target:'target {t}',
     tariff:'Tariff',high:'high (VT)',low:'low (NT)',supply:'Main supply',rooms:'Rooms',close:'Close',
     ban_central:'Heating paused by the central mode',ban_mode:'mode: {m}',since:'since {t}',
     heat_n:'{n} heating',none_heat:'Nothing heats',warn:'Check: {r}',
     m_Auto:'Auto','m_Stopped':'Stopped','m_Heat only':'Heat only','m_Cool only':'Cool only','m_Frost protection':'Frost protection'},
   cs:{lens_overview:'Přehled',lens_heating:'Topení',house:'Topení · dům',mode:'Režim domu',boiler:'Kotel',b_on:'běží',b_off:'stojí',
+    hot_water:'Teplá voda',hw_heat:'ohřívá',hw_target:'cíl {t}',
     tariff:'Tarif',high:'vysoký (VT)',low:'nízký (NT)',supply:'Hlavní přívod',rooms:'Místnosti',close:'Zavřít',
     ban_central:'Topení pozastaveno centrálním režimem',ban_mode:'režim: {m}',since:'od {t}',
     heat_n:'Topí {n}',none_heat:'Nic netopí',warn:'Zkontroluj: {r}',
     m_Auto:'Automaticky','m_Stopped':'Zastaveno','m_Heat only':'Jen topení','m_Cool only':'Jen chlazení','m_Frost protection':'Proti mrazu'},
 };
 function rocHpT(lang,k,v){const t=ROC_HP_STR[lang]||ROC_HP_STR.en;let s=t[k]!=null?t[k]:(ROC_HP_STR.en[k]!=null?ROC_HP_STR.en[k]:k);if(v)for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s;}
-// The lenses of a plan page: floorplan.lenses (known names, in order), else overview + heating when a
-// plan room has a thermostat. One lens = no lens buttons.
+// The lenses of a plan page: floorplan.lenses (known names, in order), else overview, then lights
+// (a plan room with lights), heating (a thermostat) and cleaning (AnyVac on the plan) — each when
+// the plan has something for it. One lens = no lens buttons.
 function rocFpLenses(def){
   if(!def)return[];
   let l=Array.isArray(def.lenses)?def.lenses.map(String).filter(function(x,i,a){return ROC_LENSES[x]&&a.indexOf(x)===i;}):null;
-  if(!l){l=['overview'];if((Array.isArray(def.rooms)?def.rooms:[]).some(function(r){return r&&r.climate;}))l.push('heating');}
+  if(!l){
+    const R=(Array.isArray(def.rooms)?def.rooms:[]).filter(function(r){return r&&typeof r==='object';});
+    l=['overview'];
+    if(R.some(function(r){return Array.isArray(r.lights)?r.lights.length:!!r.lights;}))l.push('lights');
+    if(R.some(function(r){return r.climate;}))l.push('heating');
+    if((def.source&&def.source.anyvac)||(Array.isArray(def.vacuums)&&def.vacuums.length)||R.some(function(r){return r.anyvac_room;}))l.push('cleaning');
+  }
   return l;
 }
 // The lens shown now: the one picked on this page, else floorplan.lens, else the first. Null on a
@@ -66,8 +75,11 @@ function rocHpHouse(hass,cAll){
   const mode=typeof H.central_mode==='string'?H.central_mode:(H.central_mode===false?'':vt(function(id,st){const o=st.attributes&&st.attributes.options;return id.indexOf('select.')===0&&Array.isArray(o)&&o.indexOf('Auto')>=0&&o.indexOf('Stopped')>=0;}));
   const boiler=typeof H.boiler==='string'?H.boiler:(H.boiler===false?'':vt(function(id,st,e){return id.indexOf('binary_sensor.')===0&&(e.translation_key==='central_boiler_state'||/central_boiler/.test(id));}));
   const tf=H.tariff&&typeof H.tariff==='object'&&H.tariff.entity?{entity:String(H.tariff.entity),high:String(H.tariff.high_state!=null?H.tariff.high_state:'on')}:null;
+  // 7.4.0: the hot water (a water_heater — not the heating boiler): heating.water_heater, else the only one there is
+  const whs=Object.keys(S).filter(function(id){return id.indexOf('water_heater.')===0;});
+  const wh=typeof H.water_heater==='string'?H.water_heater:(H.water_heater===false?'':(whs.length===1?whs[0]:''));
   const sup=(Array.isArray(H.supply)?H.supply:[]).map(function(x){return x&&typeof x==='object'?{entity:String(x.entity||''),name:x.name||''}:{entity:String(x||''),name:''};}).filter(function(x){return x.entity;});
-  return{mode:mode,boiler:boiler,tariff:tf,supply:sup};
+  return{mode:mode,boiler:boiler,tariff:tf,supply:sup,water:wh};
 }
 // What the heating lens's badge and the banner say, from the thermostats' states (pure).
 function rocHeatSum(hass,rooms,house){
@@ -85,7 +97,7 @@ function rocHeatSum(hass,rooms,house){
   o.badge=o.warn.length?{t:'!',c:'var(--roc-alert-c)'}:(o.pause?{t:'II',c:'#f5b041'}:(o.high?{t:'VT',c:'#9aa3ad'}:(o.heat?{t:String(o.heat),c:''}:null)));
   return o;
 }
-const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:var(--roc-fpd-h,60px);display:flex;align-items:center;justify-content:center;gap:var(--roc-ov-dgap,14px);z-index:2;}'
+const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:var(--roc-fpd-h,60px);display:flex;align-items:center;justify-content:safe center;gap:var(--roc-ov-dgap,clamp(6px,2.2vw,14px));padding:0 10px;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;z-index:2;}.roc-fp-dk::-webkit-scrollbar{display:none}.roc-fp-dk>*{flex:none}'
   +'.roc-fp-dk .ico{position:relative!important;}.roc-fp-dk .ico.roc-lens-on{box-shadow:0 0 0 2px var(--roc-active-c);}'
   +'.roc-fp-sep{width:1px;height:26px;background:rgba(255,255,255,.18);}'
   +'.roc-fp-ban{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:3;max-width:calc(100% - 24px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:16px;background:rgba(40,30,10,.82);border:1px solid #f5b041;color:#ffe2b0;font:600 13px/1.3 var(--paper-font-body1_-_font-family,system-ui,sans-serif);cursor:pointer;flex-wrap:wrap;justify-content:center;text-align:center;-webkit-tap-highlight-color:transparent;}'
@@ -94,6 +106,7 @@ const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:v
 // through the card's icon pipeline (listeners, section ring and badge), like the overview's dock.
 function rocFpDockBuild(card,cAll,def){
   const lenses=rocFpLenses(def),lang=rocHcLang(card._hass),icons=[];
+  const lensName=function(l){return l==='lights'||l==='cleaning'?rocLcT(lang,'lens_'+l):rocHpT(lang,'lens_'+l);};
   const cur=rocFpLensCur(card,def);
   const dk=def.dock&&typeof def.dock==='object'?def.dock:(def.dock===true?{}:null);
   const isz=(dk&&dk.size)||'24px';
@@ -104,7 +117,7 @@ function rocFpDockBuild(card,cAll,def){
   };
   let h='';
   if(lenses.length>1)lenses.forEach(function(l){
-    const id='__fplens_'+l,ttl=rocHpT(lang,'lens_'+l);
+    const id='__fplens_'+l,ttl=lensName(l);
     icons.push({id:id,icon:ROC_LENSES[l].icon,size:isz,chip:true,tap_action:{action:'fp-lens',lens:l},_ovDock:true,_fpLens:l});
     h+=btn(id,ROC_LENSES[l].icon,ttl,l===cur?' roc-lens-on':'').replace('role="button"','role="button" aria-pressed="'+(l===cur)+'"');
   });
@@ -126,11 +139,21 @@ function rocFpDockUpdate(card){
   const sr=card.shadowRoot,cAll=card._config,hass=card._hass;if(!sr||!hass)return;
   const def=rocFpCfg(cAll,card._roomIdx);if(!def)return;
   const lenses=rocFpLenses(def),cur=rocFpLensCur(card,def),lang=rocHcLang(hass);
-  if(lenses.indexOf('heating')<0)return;
   const rooms=rocHpRooms(cAll,def),house=rocHpHouse(hass,cAll),sum=rocHeatSum(hass,rooms,house);
+  const other=lenses.some(function(l){return l==='lights'||l==='cleaning';})?rocFpLensBadges(card,def,lang):{};
   lenses.forEach(function(l){
     const el=sr.querySelector('[data-ico="__fplens_'+l+'"]');if(!el)return;
     el.classList.toggle('roc-lens-on',l===cur);el.setAttribute('aria-pressed',String(l===cur));
+    // 7.4.0: lights — how many rooms are lit; cleaning — ! / how many vacuums clean (ring: the room's progress) / how many rooms queued
+    const o=other[l];
+    if(o){
+      const b=el.querySelector('[data-ico-badge]'),ring=el.querySelector('[data-ico-ring]'),ic=el.querySelector('ha-icon'),bt=o.badge?o.badge.t:'';
+      if(b){if(b.textContent!==bt)b.textContent=bt;b.style.background=o.badge&&o.badge.c?o.badge.c:'';b.style.color=o.badge&&o.badge.c&&o.badge.t!=='!'?'#fff':'';}
+      if(ring){const on=o.ring>=0;ring.style.display=on?'block':'none';if(on)ring.style.setProperty('--p',Math.round(o.ring)+'%');}
+      if(ic)ic.style.color=o.active?'var(--roc-active-c)':'';
+      el.setAttribute('title',o.title);el.setAttribute('aria-label',o.title);
+      return;
+    }
     if(l!=='heating')return;
     const b=el.querySelector('[data-ico-badge]'),ring=el.querySelector('[data-ico-ring]'),ic=el.querySelector('ha-icon');
     const bt=sum.badge?sum.badge.t:'';
@@ -154,7 +177,7 @@ function rocFpDockUpdate(card){
 function rocFpLensTap(card,lens){
   const def=rocFpCfg(card._config,card._roomIdx);if(!def)return;
   const cur=rocFpLensCur(card,def);
-  if(lens===cur){if(lens==='heating')rocHpOpen(card);return;}
+  if(lens===cur){if(lens==='heating')rocHpOpen(card);else if(lens==='lights'||lens==='cleaning')rocXpOpen(card,lens);return;}
   if(rocFpLenses(def).indexOf(lens)<0)return;
   card._fpLensBy=Object.assign({},card._fpLensBy||{});card._fpLensBy[card._roomIdx]=lens;
   if(card._fpInst&&card._fpInst.setOptions)card._fpInst.setOptions({lens:lens});
@@ -176,7 +199,7 @@ const ROC_HP_CSS='.roc-hp-bd{position:absolute;inset:0;z-index:408;background:rg
   +'.roc-hp button:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
 function rocHpOpen(card){
   if(!card||!card._hass)return;
-  rocHpClose(card);if(card._heat)rocHcClose(card);
+  rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card);
   const sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
   const lang=rocHcLang(card._hass),T=function(k,v){return rocHcEsc(rocHpT(lang,k,v));};
   const bd=document.createElement('div');bd.className='roc-hp-bd';bd.addEventListener('click',function(){rocHpClose(card);});
@@ -221,6 +244,9 @@ function rocHpUpdate(card){
   const facts=[];
   const bs=house.boiler&&S[house.boiler];
   if(bs)facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'boiler'))+'</span> <b'+(bs.state==='on'?' class="hot"':'')+'>'+rocHcEsc(rocHpT(lang,bs.state==='on'?'b_on':'b_off'))+'</b></div>');
+  const ws=house.water&&S[house.water];
+  if(ws){const wa=ws.attributes||{},wc=rocHcNum(wa.current_temperature),wt=rocHcNum(wa.temperature),wh=wa.hvac_action==='heating'||ws.state==='heating';
+    facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'hot_water'))+'</span> <b'+(wh?' class="hot"':'')+'>'+rocHcEsc(rocHcFmt(lang,wc))+' °C</b>'+(isFinite(wt)?' <span>'+rocHcEsc(rocHpT(lang,'hw_target',{t:rocHcFmt(lang,wt,0)+' °C'}))+'</span>':'')+'</div>');}
   const ts=house.tariff&&S[house.tariff.entity];
   if(ts){const hi=String(ts.state)===house.tariff.high;facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'tariff'))+'</span> <b'+(hi?' class="hot"':'')+'>'+rocHcEsc(rocHpT(lang,hi?'high':'low'))+'</b></div>');}
   house.supply.forEach(function(x){

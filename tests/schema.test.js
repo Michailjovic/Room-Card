@@ -132,6 +132,8 @@ const HA_NAMES=new Set(['navigation_replace','browser_id','browser_mod','color_t
   'timed_preset_manager','is_active','end_time','safety_manager','safety_state',
   // …and the house panel (7.3.0): heating failure, the modes a thermostat has, the entity registry's display fields
   'heating_failure_detection_manager','heating_failure_state','hvac_modes','last_changed','translation_key',
+  // …the light controller (7.4.0): a light's colour temperature range; the cleaning lens: AnyVac's map sensor
+  'min_color_temp_kelvin','max_color_temp_kelvin','selected_rooms','status_state','vacuum_error','dock_status','dock_error',
   // AnyVac's map sensor attributes (the integration's contract, V7_PLAN §7a)
   'home_frame','home_room_id','in_cleaning','schema_version','vacuum_room_name','view_layers','base_points','path_points','progress_pct','last_dry','last_wet','frame_id','home_anchors']);
 const cardCode=src.slice(0,src.indexOf('class RoomOverlayCardEditor'));

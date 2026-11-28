@@ -33,7 +33,7 @@ heating where it is: on the floor plan.
     - *Overview* (default): everything subtle, tap = switch to the room (as today).
     - *Heating*: loops and feeds full, temperature / target chips, tap = room controller (A).
     - *Cleaning*: vacuums, trails, last cleaned, tap = clean this room (fix the AnyVac bug then).
-    - later *Lights & windows*.
+    - *Lights* (7.4.0): light pools, windows and blinds; tap = the room's light controller.
     Lenses are switched from the dock (the same button opens the lens's panel); dock badges show
     events in every lens; a lens never switches by itself. Config stays small: which lenses, their
     order, the default. A page that wants one lens only (a hall tablet) is another page with a
@@ -47,8 +47,8 @@ heating where it is: on the floor plan.
 | 7.1.0 | **Loops on the floor plan**: counter-flow loops per climate room, manifold + feeds routed through passes, states (heat by `power_percent` / idle / paused by `requested_state` / off), theme tokens `pipe.*`, Studio tools *Manifold* and *Passes* | done |
 | 7.2.0 | **Room controller (A)** — the `heating` action opens it from anything with a tap action; any `climate`, VTherm extras when present: status with power / pause reason / ETA, quick °C, ± step, ruler, duration (keep / 2 h / until evening / until morning via VTherm's timed preset on the boost preset number), 24 h chart from history; settings in `heating:` (Studio: Card settings → Heating controller) | done |
 | 7.3.0 | **Lenses on the plan** (decision 10) with *Overview* and *Heating*: dock buttons with ring + badge (heating count, `II` pause, `VT`, `!` sensor); the Heating lens dims other layers, shows target chips, a tap on a room opens A beside it; the pause banner; the bottom panel (C): rooms, house mode (VTherm central mode), boiler, main supply | done |
-| 7.3.x | **Cleaning lens** + the AnyVac bug on the plan | |
-| 7.4.0 | **Administration + phone**: settings check from VTherm attributes, event log from the HA logbook (filters, detail), simple mode (B) for phones | |
+| 7.4.0 | **Lights lens** with the light controller (L), **cleaning lens** (AnyVac's shared selection, the cleaning panel), the AnyVac vacuums fitted to the plan's rooms after AnyVac's shared home frame, hot water in the house panel | done |
+| 7.5.0 | **Administration + phone**: settings check from VTherm attributes, event log from the HA logbook (filters, detail), simple mode (B) for phones | |
 
 Every phase ships with its GUI (the larger part of the work), demo scenario, tests, AI_SPEC,
 CHANGELOG and English release notes.
@@ -71,7 +71,7 @@ CHANGELOG and English release notes.
   `specific_states.hvac_off_reason` (`hvac_off_central_mode`, …) says why.
 - `preset_temperatures`, `timed_preset_manager` (end time, remaining minutes),
   `safety_manager`, `auto_tpi_learning`, `is_heating_failure_detection_configured` — for the
-  settings check (7.4.0).
+  settings check (7.5.0).
 
 ## Prototypes
 

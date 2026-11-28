@@ -3,7 +3,7 @@
 // size); _apply() only touches the nodes that show state, and only when a room's state changed.
 // opts: {cfg (the floorplan block), cAll (the card config), hass, profile, lang, studio,
 //        interactive (default true), exec(action) (the card's action runner), onRender(view),
-//        lens (7.3.0: 'overview' | 'heating', null when the page has no lenses)}
+//        lens (7.3.0: 'overview' | 'heating', 7.4.0: | 'lights' | 'cleaning'; null when the page has no lenses)}
 const RFP_CSS='.rfp-heat .rfp-w,.rfp-heat .rfp-c{opacity:0;transition:opacity .8s ease}'
   +'.rfp-heat.is-heat .rfp-w{opacity:1}.rfp-heat.is-idle .rfp-c{opacity:.35}.rfp-heat.is-heat .rfp-c{opacity:.4}'
   +'.rfp-flow{animation:rfp-flow 3s linear infinite}@keyframes rfp-flow{to{stroke-dashoffset:-1.5}}'
@@ -133,7 +133,11 @@ class RfpView{
     o.cleaning=l.cleaning===true; // v6.50.0: last cleaned + the clean button, opt-in
     // the heating lens (7.3.0) shows the loops and the thermostats; what belongs to other topics
     // (light pools, media, vacuums, people, attention, cleaning) steps back
-    if(this.o.lens==='heating'){o.heating=true;o.lights=o.media=o.vacuum=o.trail=o.cleaning=o.attention=o.presence=false;}
+    const ln=this.o.lens;
+    if(ln==='heating'){o.heating=true;o.lights=o.media=o.vacuum=o.trail=o.cleaning=o.attention=o.presence=false;}
+    // 7.4.0: the lights lens (lights, windows and blinds) and the cleaning lens (vacuums, trails, when cleaned)
+    else if(ln==='lights'){o.lights=o.openings=true;o.heating=o.media=o.vacuum=o.trail=o.cleaning=o.attention=o.presence=false;}
+    else if(ln==='cleaning'){o.vacuum=o.trail=o.cleaning=true;o.heating=o.lights=o.media=o.attention=o.presence=false;}
     return o;
   }
   // ---- static render ----
@@ -150,7 +154,7 @@ class RfpView{
     const M=this.M=this._model();
     this.L=this._layers();
     this.svg.setAttribute('data-rfp-lens',this.o.lens||'');
-    this.items.style.opacity=this.o.lens==='heating'?'0.35':'';
+    this.items.style.opacity=this.o.lens&&this.o.lens!=='overview'?'0.35':'';
     this._st={};this._os={};this._og={};this._nodes=null;this._pSig='';
     if(!(W>2&&H>2)){this.svg.innerHTML='';this.items.innerHTML='';return;}
     this.svg.setAttribute('viewBox','0 0 '+rfpN(W)+' '+rfpN(H));
@@ -444,35 +448,61 @@ class RfpView{
     return v.map(function(x){return x&&typeof x==='object'?x:{entity:x};}).filter(function(x){return typeof x.entity==='string'&&x.entity;});
   }
   _robots(){
-    const fp=this.o.cfg||{},src=fp.source&&typeof fp.source==='object'?fp.source:null;
-    const S=(this.o.hass&&this.o.hass.states)||{},fr=src&&src.frame?String(src.frame):'',self=this;
-    const srcOk=!!(src&&Array.isArray(src.origin_px)&&rfpNum(src.mm_per_px)>0);
+    const S=(this.o.hass&&this.o.hass.states)||{},self=this;
     return this._anyvac().filter(function(id){
-      const a=S[id]&&S[id].attributes;if(!a||!a.vacuum_position_home_px)return false;
-      if(self._vacT(id))return true;
-      return srcOk&&(!fr||!a.home_frame||String(a.home_frame.id||'')===fr);
+      const a=S[id]&&S[id].attributes;return!!(a&&a.vacuum_position_home_px&&self._vacXf(id));
     });
   }
-  // a vacuum's own transform into the plan: {rotation (deg), x, y (m)} from floorplan.vacuums
+  // a vacuum's own transform from floorplan.vacuums: {rotation (deg), x, y (m), frame (7.4.0: the
+  // home frame it was fitted in)}
   _vacT(id){
     const l=this._vacList();if(!l)return null;
     const e=l.find(function(x){return x.entity===id;});
     const t=e&&e.transform&&typeof e.transform==='object'?e.transform:null;
-    return t&&isFinite(rfpNum(t.x))&&isFinite(rfpNum(t.y))?{r:(rfpNum(t.rotation)||0)*Math.PI/180,x:rfpNum(t.x),y:rfpNum(t.y)}:null;
+    return t&&isFinite(rfpNum(t.x))&&isFinite(rfpNum(t.y))?{r:(rfpNum(t.rotation)||0)*Math.PI/180,x:rfpNum(t.x),y:rfpNum(t.y),frame:t.frame?String(t.frame):''}:null;
+  }
+  // How a vacuum's home px land on the plan (7.4.0): {r, x, y, k} — p_plan = R(r)·(p·k) + (x, y).
+  //  1. its own transform fitted in the frame the map has now;
+  //  2. the plan's source mapping, when the map is in the frame the plan was imported from;
+  //  3. a fit by rooms (rfpVacFit) — a map whose frame changed since (AnyVac's shared home frame)
+  //     lands where its rooms are instead of somewhere off the plan;
+  //  4. its own transform from before 7.4.0 (no frame), when the rooms cannot be paired.
+  _vacXf(id){
+    const S=(this.o.hass&&this.o.hass.states)||{},a=S[id]&&S[id].attributes;if(!a)return null;
+    const hf=a.home_frame&&typeof a.home_frame==='object'?a.home_frame:{},fid=String(hf.id||'');
+    const k=(rfpNum(hf.cell_mm)>0&&rfpNum(hf.scale)>0?rfpNum(hf.cell_mm)/rfpNum(hf.scale):12.5)/1000;
+    const t=this._vacT(id);
+    if(t&&t.frame&&t.frame===fid)return{r:t.r,x:t.x,y:t.y,k:k,how:'transform'};
+    const src=this.o.cfg&&this.o.cfg.source;
+    if(src&&Array.isArray(src.origin_px)&&rfpNum(src.mm_per_px)>0&&src.frame&&fid&&String(src.frame)===fid){
+      const ks=rfpNum(src.mm_per_px)/1000;return{r:0,x:-rfpNum(src.origin_px[0])*ks,y:-rfpNum(src.origin_px[1])*ks,k:ks,how:'source'};
+    }
+    const M=this.M;
+    if(M&&Array.isArray(a.rooms)){
+      this._vacFits=this._vacFits||{};
+      const plan=M.rooms.map(function(r){return{i:r.i,key:r.cfg.anyvac_room?String(r.cfg.anyvac_room):'',name:r.name,poly:r.poly};});
+      const sig=fid+'|'+k+'|'+JSON.stringify(a.rooms.map(function(r){return r&&[r.home_room_id,r.name,r.bbox_home_px];}))+'|'+JSON.stringify(plan.map(function(p){return[p.key,p.name,p.poly];}));
+      let c=this._vacFits[id];
+      if(!c||c.sig!==sig){const f=rfpVacFit(plan,a.rooms,k);c=this._vacFits[id]={sig:sig,f:f&&f.rms<1?f:null};}
+      if(c.f)return{r:c.f.r,x:c.f.x,y:c.f.y,k:k,how:'rooms',n:c.f.n,rms:c.f.rms};
+    }
+    if(t&&!t.frame)return{r:t.r,x:t.x,y:t.y,k:k,how:'transform'};
+    if(src&&Array.isArray(src.origin_px)&&rfpNum(src.mm_per_px)>0&&(!src.frame||!fid)){
+      const ks=rfpNum(src.mm_per_px)/1000;return{r:0,x:-rfpNum(src.origin_px[0])*ks,y:-rfpNum(src.origin_px[1])*ks,k:ks,how:'source'};
+    }
+    return null;
   }
   // home px of vacuum `id` → plan metres
   _toPlan(p,id){
     const x=rfpNum(p&&p.x),y=rfpNum(p&&p.y);if(!(isFinite(x)&&isFinite(y)))return null;
-    const t=id?this._vacT(id):null;
-    if(t){
-      const S=(this.o.hass&&this.o.hass.states)||{},hf=(S[id]&&S[id].attributes&&S[id].attributes.home_frame)||{};
-      const k=(rfpNum(hf.cell_mm)>0&&rfpNum(hf.scale)>0?rfpNum(hf.cell_mm)/rfpNum(hf.scale):12.5)/1000;
-      const qx=x*k,qy=y*k,c=Math.cos(t.r),s=Math.sin(t.r);
-      return[c*qx-s*qy+t.x,s*qx+c*qy+t.y];
+    const t=id?this._vacXf(id):null;
+    if(!t){
+      // no vacuum given (the studio's door proposals): the plan's source mapping
+      const src=this.o.cfg.source;if(id||!src||!Array.isArray(src.origin_px))return null;
+      const ks=rfpNum(src.mm_per_px)/1000;return[(x-rfpNum(src.origin_px[0]))*ks,(y-rfpNum(src.origin_px[1]))*ks];
     }
-    const src=this.o.cfg.source;if(!src||!Array.isArray(src.origin_px))return null;
-    const k=rfpNum(src.mm_per_px)/1000;
-    return[(x-rfpNum(src.origin_px[0]))*k,(y-rfpNum(src.origin_px[1]))*k];
+    const qx=x*t.k,qy=y*t.k,c=Math.cos(t.r),s=Math.sin(t.r);
+    return[c*qx-s*qy+t.x,s*qx+c*qy+t.y];
   }
   // where the vacuum is and its trail: AnyVac's 3 s live update when it belongs to the snapshot
   // shown (live.base_points == path_points, AnyVac docs/48), else the snapshot
@@ -536,7 +566,7 @@ class RfpView{
       const el=(N.robot[i]||[])[0];if(!el)return;
       const v=vs[id]=self._vacState(id),p=self._toPlan(v.pos,id);
       if(!p){el.setAttribute('opacity','0');return;}
-      const q=P(p),t=self._vacT(id);
+      const q=P(p),t=self._vacXf(id);
       let ang=rfpNum(v.pos&&v.pos.a),deg=0;
       if(isFinite(ang)){if(t)ang+=t.r*180/Math.PI;const tt=ang*Math.PI/180,q2=P([p[0]+Math.cos(tt)*0.3,p[1]+Math.sin(tt)*0.3]);deg=Math.atan2(q2[1]-q[1],q2[0]-q[0])*180/Math.PI;}
       const tr='translate('+rfpN(q[0])+'px,'+rfpN(q[1])+'px)';
@@ -598,6 +628,13 @@ class RfpView{
       if(x)return x;
     }
     return null;
+  }
+  // AnyVac's shared room selection (the rooms queued to clean, as its card's dock shows them)
+  _avSelected(){
+    const S=(this.o.hass&&this.o.hass.states)||{},src=this.o.cfg&&this.o.cfg.source;
+    const ids=(src&&src.anyvac?[src.anyvac]:[]).concat(this._anyvac());
+    for(const id of ids){const a=S[id]&&S[id].attributes;if(a&&Array.isArray(a.selected_rooms))return a.selected_rooms.map(function(x){return String(x&&typeof x==='object'?x.name:x);});}
+    return[];
   }
   // Tap targets over the openings that have something to show or do (screen px, over the rooms)
   _openingHits(M,F,wallH){
@@ -712,18 +749,21 @@ class RfpView{
   // lens a veil over the floors of rooms without a thermostat. Only on a page with lenses.
   _lensSvg(T,M,part){
     if(!this.o.lens)return'';
-    const hl=this.o.lens==='heating';let s='<g pointer-events="none">';
+    const ln=this.o.lens,has=this._lensHas.bind(this);let s='<g pointer-events="none">';
+    const fc=ln==='lights'?(T.lightColor||'#ffcf6b'):((T.pipe&&T.pipe.c0)||'#ff7a5c');
     M.rooms.forEach(function(r,k){
-      if(part==='dim'){if(hl&&!r.climate)s+='<polygon class="rfp-lens-dim" points="'+rfpPts(r.poly)+'" fill="'+rfpEsc(T.bg||'#000')+'" opacity=".45"/>';}
-      else if(r.climate)s+='<polygon class="rfp-focus" data-rfp-focus="'+k+'" points="'+rfpPts(r.poly)+'" fill="none" stroke="'+rfpEsc((T.pipe&&T.pipe.c0)||'#ff7a5c')+'" stroke-width="0.07" stroke-linejoin="round" opacity="0"/>';
+      if(part==='dim'){if(ln!=='overview'&&!has(r))s+='<polygon class="rfp-lens-dim" points="'+rfpPts(r.poly)+'" fill="'+rfpEsc(T.bg||'#000')+'" opacity=".45"/>';}
+      else if(r.climate||r.lights.length)s+='<polygon class="rfp-focus" data-rfp-focus="'+k+'" points="'+rfpPts(r.poly)+'" fill="none" stroke="'+rfpEsc(fc)+'" stroke-width="0.07" stroke-linejoin="round" opacity="0"/>';
     });
     return s+'</g>';
   }
-  // the room of this climate outlined ('' for none) — the card calls it while the controller is open
+  // does room r have what the current lens is about (a thermostat, lights, an AnyVac room)
+  _lensHas(r){const ln=this.o.lens;return ln==='heating'?!!r.climate:(ln==='lights'?r.lights.length>0:(ln==='cleaning'?!!r.cfg.anyvac_room:true));}
+  // the room whose controller is open outlined ('' for none): its climate or one of its lights
   setFocus(entity){this._focus=entity||'';this._applyFocus();}
   _applyFocus(){
     const N=this._nodes,M=this.M,f=this._focus||'';if(!N||!N.focus||!M)return;
-    Object.keys(N.focus).forEach(function(k){const on=!!f&&M.rooms[+k]&&M.rooms[+k].climate===f;N.focus[k].forEach(function(el){el.setAttribute('opacity',on?'1':'0');});});
+    Object.keys(N.focus).forEach(function(k){const r=M.rooms[+k],on=!!f&&!!r&&(r.climate===f||r.lights.indexOf(f)>=0);N.focus[k].forEach(function(el){el.setAttribute('opacity',on?'1':'0');});});
   }
   // colour / grey / glow of one loop by its room's state; power (VTherm power_percent) sets the
   // strength and the speed of the flow
@@ -1004,9 +1044,10 @@ class RfpView{
     }
     const ts=r.temp&&S[r.temp];if(ts&&isFinite(rfpNum(ts.state)))st.t=rfpNum(ts.state);
     const hs=r.hum&&S[r.hum];if(hs&&isFinite(rfpNum(hs.state)))st.h=rfpNum(hs.state);
-    st.clean='';
+    st.clean='';st.sel=false;
     if(this.L&&this.L.cleaning&&r.cfg.anyvac_room){
       const x=this._avRoom(r);
+      if(x&&this.o.lens==='cleaning')st.sel=this._avSelected().indexOf(String(x.name))>=0; // 7.4.0: queued in AnyVac's shared selection
       if(x){
         const lang=this._lang(),self=this;
         const age=function(t){const ms=Date.now()-Date.parse(t);if(!isFinite(ms)||ms<0)return'';const m=Math.round(ms/60000);
@@ -1072,6 +1113,10 @@ class RfpView{
       const tn=isFinite(st.ct)?st.ct:st.t; // the thermostat's own reading, as in its controller
       if(hl&&r.climate)val=(isFinite(tn)?self._fmt(tn,1)+'°':'—')+(st.heat==='pause'?'  ❚❚':(st.heat==='off'?' · '+rfpT(lang,'off'):(isFinite(st.tg)?' → '+self._fmt(st.tg,st.tg%1?1:0)+'°':'')));
       else if(hl)val=isFinite(st.t)?self._fmt(st.t,1)+'°':'';
+      // 7.4.0: the lights lens — on (and how bright) / off; the cleaning lens — the clean row says it, the value is the selection
+      const ll=self.o.lens==='lights',cln=self.o.lens==='cleaning';
+      if(ll)val=r.lights.length?(st.on?rfpT(lang,'on')+(st.bri<0.995?' '+Math.round(st.bri*100)+' %':''):rfpT(lang,'off')):(isFinite(st.t)?self._fmt(st.t,1)+'°':'');
+      else if(cln)val=r.cfg.anyvac_room?(st.sel?'✓ '+rfpT(lang,'queued'):''):'';
       // lights
       const str=st.on?(0.35+0.65*st.bri):0;
       set(N.light[k],function(el){el.setAttribute('opacity',rfpN(str));});
@@ -1096,9 +1141,10 @@ class RfpView{
         const cb=self.items.querySelector('[data-rfp-cleanbtn="'+r.i+'"]');
         if(cb&&r.lp){cb.style.left=rfpN(r.lp[0]+w/2+18)+'px';cb.style.top=rfpN(r.lp[1]+y0+h/2)+'px';}
         set(N.chip[k],function(el){el.setAttribute('x',rfpN(-w/2));el.setAttribute('y',rfpN(y0));el.setAttribute('width',rfpN(w));el.setAttribute('height',rfpN(h));
-          const sc=hl&&r.climate?({heat:(T.pipe&&T.pipe.c0)||'#ff7a5c',pause:'#f5b041',idle:'rgba(255,255,255,.4)'}[st.heat]||''):'';
+          const sc=hl&&r.climate?({heat:(T.pipe&&T.pipe.c0)||'#ff7a5c',pause:'#f5b041',idle:'rgba(255,255,255,.4)'}[st.heat]||'')
+            :(ll&&r.lights.length&&st.on?st.color:(cln&&r.cfg.anyvac_room?(st.vac?(st.vacC||'#03a9f4'):(st.sel?'#03a9f4':'')):''));
           if(sc){el.setAttribute('stroke',sc);el.setAttribute('stroke-width','2');}else{el.removeAttribute('stroke');el.removeAttribute('stroke-width');}});
-        g.setAttribute('opacity',hl&&!r.climate?'0.6':'1');
+        g.setAttribute('opacity',self.o.lens&&self.o.lens!=='overview'&&!self._lensHas(r)?'0.6':'1');
         set(N.att[k],function(el){if(!el.hasAttribute('data-rfp-fixed'))el.setAttribute('transform','translate('+rfpN(w/2)+','+rfpN(y0)+')');});
         set(N.vac[k],function(el){if(!el.hasAttribute('data-rfp-fixed'))el.setAttribute('transform','translate('+rfpN(-w/2)+','+rfpN(y0)+')');});
       }
@@ -1204,6 +1250,10 @@ class RfpView{
     const c=r.cfg||{};
     // the heating lens (7.3.0): a room with a thermostat opens the heating controller; hold = its details
     if(this.o.lens==='heating'&&r.climate)return kind==='tap'?{action:'heating',entity:r.climate}:{action:'more-info',entity:r.climate};
+    // 7.4.0: the lights lens opens the room's light controller (hold toggles them, as always); the
+    // cleaning lens queues / unqueues the room in AnyVac's shared selection (hold: clean it now)
+    if(this.o.lens==='lights'&&r.lights.length&&kind==='tap'){const cr=r.link>=0?(this.o.cAll.rooms||[])[r.link]:null;return{action:'lights',entities:r.lights.slice(),name:r.name,room:cr&&cr.id!=null?String(cr.id):undefined};}
+    if(this.o.lens==='cleaning'&&r.cfg.anyvac_room){const x=this._avRoom(r);if(x&&x.name)return kind==='tap'?{action:'perform-action',perform_action:'anyvac.select_rooms',data:{rooms:[String(x.name)],mode:'toggle'}}:this._cleanAct(r,x);}
     if(kind==='tap'&&c.tap_action)return c.tap_action;
     if(kind==='hold'&&c.hold_action)return c.hold_action;
     if(kind==='tap'){
@@ -1214,6 +1264,12 @@ class RfpView{
     }
     if(r.lights.length)return{action:'perform-action',perform_action:'homeassistant.toggle',target:{entity_id:r.lights.length===1?r.lights[0]:r.lights.slice()}};
     return null;
+  }
+  // "clean this room": AnyVac's planner with the room's name on the map, confirmed first
+  _cleanAct(r,x){
+    const md=this.o.cfg&&this.o.cfg.clean_mode;
+    return{action:'perform-action',perform_action:'anyvac.clean',data:{rooms:[String(x.name)],mode:['dry','wet','both'].indexOf(md)>=0?md:'dry'},
+      confirmation:{text:rfpT(this._lang(),'clean_q').replace('{room}',r.name)}};
   }
   _act(t,kind,e){
     const M=this.M;if(!M)return;
@@ -1229,9 +1285,7 @@ class RfpView{
       // "clean this room": AnyVac's planner with the room's name on the map (confirmed first)
       if(kind!=='tap')return;
       const r=M.rooms.find(function(x){return x.i===t.clean;});const x=r&&this._avRoom(r);if(!x||!x.name)return;
-      const md=this.o.cfg&&this.o.cfg.clean_mode;
-      a={action:'perform-action',perform_action:'anyvac.clean',data:{rooms:[String(x.name)],mode:['dry','wet','both'].indexOf(md)>=0?md:'dry'},
-        confirmation:{text:rfpT(this._lang(),'clean_q').replace('{room}',r.name)}};
+      a=this._cleanAct(r,x);
     }else if(t.open!=null){
       const o=M.openings.find(function(x){return x.k===t.open;});if(!o)return;
       const c=o.cfg,mi=function(e){return e?{action:'more-info',entity:e}:null;};

@@ -132,6 +132,7 @@ class RoomOverlayCard extends HTMLElement{
     this._hass=h;if(!this._config)return;
     if(this._heat)rocHcUpdate(this); // the heating controller (7.2.0) follows its thermostat
     if(this._hp)rocHpUpdate(this); // …and the house panel (7.3.0)
+    if(this._lc)rocLcUpdate(this);if(this._xp)rocXpUpdate(this); // …the light controller and the lens panels (7.4.0)
     if(!this._rendered){this._render();return;}
     // Embedded cards do their own change detection — always forward hass
     // (even while off-screen, so they're current the moment the card scrolls back)
@@ -1448,7 +1449,7 @@ class RoomOverlayCard extends HTMLElement{
           attention:function(){return rocRoomSignals(cAll,(self._hass&&self._hass.states)||{},{sections:self._fpSections(def,cAll),presence:false,vacuum:false});},
           roomMatch:function(v){return roomMatch(cAll,v);},
           onRender:function(v){if(typeof self._rocFpSink==='function')try{self._rocFpSink(v);}catch(_){}}});
-        if(self._heat&&self._fpInst&&self._fpInst.setFocus)self._fpInst.setFocus(self._heat.entity); // 7.3.0: the room whose controller is open
+        if(self._fpInst&&self._fpInst.setFocus)self._fpInst.setFocus(self._heat?self._heat.entity:(self._lc?self._lc.ents[0]:'')); // 7.3.0: the room whose controller is open
       }catch(e){console.warn('[room-overlay-card] floor plan:',e);host.innerHTML='<div class="roc-fp-msg">'+escA(e&&e.message||String(e))+'</div>';}
     };
     const C=customElements.get('room-overlay-card');
@@ -3139,7 +3140,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const _L=_fpDef.layers&&typeof _fpDef.layers==='object'?_fpDef.layers:{};
       const _so={persons:_L.presence===false?[]:rocSigPersons(_fpDef.presence,this._roomEntityId()),anyvac:_L.vacuum===false?[]:this._sigAnyvac(_fpDef)};
       rocSigEntities(_so,_L.attention===false?[]:this._fpSections(_fpDef,cAll)).forEach(function(id){_ex.ids.add(id);});
-      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px','live','rooms','view_layers'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0)
+      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px','live','rooms','view_layers','selected_rooms','vacuum_error','status_state','battery','home_frame'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0); the cleaning lens's queue, errors, battery; a new home frame (7.4.0)
     }
     if(this._ovSig){
       const _sc=this._ovSig.cfg;
@@ -3475,6 +3476,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._sectionOpen)this._closeSection(); // COCKPIT_PLAN.md kap.7: panel closes on room switch
     if(this._heat)rocHcClose(this); // …and so does the heating controller (7.2.0)
     if(this._hp)rocHpClose(this); // …and the house panel (7.3.0)
+    if(this._lc)rocLcClose(this);if(this._xp)rocXpClose(this);
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
     // Editor preview instance (see _mountPreview): tell the editor GUI so its
@@ -4898,6 +4900,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       case'open-section':if(a.section)this._openSection(a.section);break;
       case'heating':rocHcOpen(this,a.entity||a.entity_id);break; // 7.2.0: the heating controller
       case'fp-lens':rocFpLensTap(this,a.lens);break; // 7.3.0: a lens button in the floor plan's dock
+      case'lights':rocLcOpen(this,a);break; // 7.4.0: the light controller
       // Standard Lovelace hook (browser_mod 2 popups, custom actions): HA's own
       // cards dispatch the whole action config as an `ll-custom` event.
       case'fire-dom-event':this.dispatchEvent(new CustomEvent('ll-custom',{bubbles:true,composed:true,detail:a}));break;
@@ -4944,6 +4947,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._secKeyHandler)document.removeEventListener('keydown',this._secKeyHandler);
     if(this._heat)rocHcClose(this);
     if(this._hp)rocHpClose(this);
+    if(this._lc)rocLcClose(this);if(this._xp)rocXpClose(this);
     if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart

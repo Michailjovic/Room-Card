@@ -167,13 +167,18 @@ the same plan, with one topic in front. A dock under the plan switches them.
 | Lens | What is in front | Tap on a room | Its dock button, tapped again |
 |---|---|---|---|
 | **Overview** (`mdi:floor-plan`) | everything, as the plan always looked | opens the room | — |
+| **Lights** (`mdi:lightbulb-group`) *(7.4.0)* | light pools, windows and blinds; every label says on (how bright) / off, outlined in the light's colour; rooms without lights step back | opens the room's [light controller](LIGHTS.md) beside the plan, the room outlined (hold toggles them, as always) | every room's lights, *All off* |
 | **Heating** (`mdi:heating-coil`) | loops, feeds and thermostats; every label says *now → target*, outlined in the state's colour (heating, paused, idle); rooms without a thermostat step back; lights, media, people, vacuums and cleaning are hidden | opens the room's [heating controller](HEATING.md) beside the plan, the room outlined | the [house panel](HEATING.md#the-house-panel) |
+| **Cleaning** (`mdi:broom`) *(7.4.0)* | vacuums, their trails and when each room was cleaned; queued rooms are outlined | queues / unqueues the room in AnyVac's shared selection (the one its own card's dock uses); hold cleans it now (after a confirmation) | the vacuums (state, battery, errors), the mode (vacuum / mop / both), the queue, *Clean n rooms* |
 
-A plan with at least one `climate` room gets both lenses by itself; a plan without one has only the
-overview and draws no dock. Every lens button carries a **badge in every lens**, so you see an
+Each lens comes by itself when the plan has something for it — lights when a room has `lights`,
+heating with a `climate`, cleaning with AnyVac on the plan; a plan with none of them has only the
+overview and draws no dock. On a narrow screen the dock scrolls sideways. Every lens button carries a **badge in every lens**, so you see an
 event without switching — the heating button shows `!` (a thermostat is unavailable, VTherm's
 safety mode, a heating failure), `II` (paused by the central mode), `VT` (high tariff, with
-`heating.tariff`) or how many rooms heat, and a ring with the strongest heating power. A lens
+`heating.tariff`) or how many rooms heat, and a ring with the strongest heating power; the lights
+button how many rooms are lit; the cleaning button `!` (a vacuum or dock error), how many vacuums
+clean (the ring: the room's progress) or how many rooms are queued. A lens
 never switches by itself; the one you picked stays until you pick another.
 
 When the central mode stops the heating, a **banner** at the top of the plan says so — with the
@@ -181,7 +186,7 @@ mode and since when; a tap on it opens the house panel.
 
 ```yaml
 floorplan:
-  lenses: [overview, heating]    # which lenses, in this order (default: both when a room has a climate)
+  lenses: [overview, lights, heating, cleaning]   # which, in this order (default: those the plan has something for)
   lens: overview                 # the one the page opens in
   dock:                          # section launchers next to the lenses (like overview.dock)
     sections: [appliances, climate]
@@ -220,10 +225,15 @@ The overview page can show the same signals on its tiles — opt-in with `overvi
 *Since v6.50.0.*
 
 - **`vacuums`** — which AnyVac maps this plan shows. Without it, every vacuum in the home frame
-  the plan was imported from. AnyVac keeps each vacuum in its own frame unless it registers one
-  into another. A vacuum from another frame needs a `transform` (its home px × its mm per px →
-  turned by `rotation`° → shifted by `x`, `y` metres). The studio's **Vacuums** panel finds it from
-  the rooms both maps share (same names in the Roborock app) and says how well it fits.
+  the plan was imported from. A vacuum from another frame needs a `transform` (its home px × its
+  mm per px → turned by `rotation`° → shifted by `x`, `y` metres). The studio's **Vacuums** panel
+  finds it from the plan's rooms (their `anyvac_room` keys, else the same names) and says how well
+  it fits; the transform remembers its `frame`.
+  *(7.4.0)* **When a map's home frame changes** — AnyVac moved every vacuum of a home into one
+  shared frame, which left the plan's source frame and the stored transforms behind (robots off
+  the plan or in the wrong rooms) — the plan fits that map to its rooms by itself, the same way,
+  and keeps drawing it where it is. A transform from before 7.4.0 (no `frame`) is used only when
+  the rooms cannot be paired.
 
   ```yaml
   vacuums:

@@ -376,7 +376,7 @@ condVal {
   value: any;
 }
 action {
-  action: "none"|"navigate"|"url"|"more-info"|"toggle"|"call-service"|"perform-action"|"browser-mod-popup"|"toggle-group"|"show-group"|"hide-group"|"switch-room"|"next-room"|"prev-room"|"follow-room"|"open-section"|"close-section"|"fire-dom-event"|"heating";
+  action: "none"|"navigate"|"url"|"more-info"|"toggle"|"call-service"|"perform-action"|"browser-mod-popup"|"toggle-group"|"show-group"|"hide-group"|"switch-room"|"next-room"|"prev-room"|"follow-room"|"open-section"|"close-section"|"fire-dom-event"|"heating"|"lights";
   entity: entity;
   entity_id: entity;
   navigation_path: str;
@@ -394,6 +394,8 @@ action {
   size: str;
   content: card;
   room: str | num;
+  entities: str[] @7.4.0;
+  name: str @7.4.0;
   section: str;
   group: str;
   confirmation: bool | map;
@@ -1012,6 +1014,7 @@ heating {
   morning: str = "06:00";
   rooms: hcRoom[];
   central_mode: entity | bool @7.3.0;
+  water_heater: entity | bool @7.4.0;
   boiler: entity | bool @7.3.0;
   tariff: hcTariff @7.3.0;
   supply: hcSupply[] @7.3.0;
@@ -1061,7 +1064,7 @@ floorplan {
   background: fpBackground @6.50.0;
   heating: fpHeating @7.1.0;
   lenses: str[] @7.3.0;
-  lens: "overview"|"heating" = "overview" @7.3.0;
+  lens: "overview"|"lights"|"heating"|"cleaning" = "overview" @7.3.0;
   dock: bool | ovDock @7.3.0;
   pause_banner: bool = true @7.3.0;
 }
@@ -1129,6 +1132,7 @@ fpTransform {
   y: num;
   rooms: num;
   rms: num;
+  frame: str @7.4.0;
 }
 fpHeating {
   pitch: num = 0.2;

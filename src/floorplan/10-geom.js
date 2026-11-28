@@ -587,3 +587,44 @@ function rfpHeatCircuits(polys,loops,o){
     return{k:it.L.k,field:f,sup:sup,ret:ret,routed:routed,missing:missing};
   });
 }
+// ---- a vacuum's map on the plan (7.4.0) ----------------------------------------------------------
+// AnyVac gives every map a home frame; it can change (AnyVac 1.6x moved all vacuums of a home into
+// one shared frame), and a frame-bound mapping then draws the robot in the wrong place or not at
+// all. This fits each map to the plan itself, by its rooms: the plan rooms with an `anyvac_room`
+// key (else the same name) pair with the map's rooms; a rigid fit (rotation + shift, both in mm)
+// of their centroids maps home px → plan metres. Returns {r (rad), x, y, k (m / px), n, rms} or null.
+function rfpCentroid(p){
+  let a=0,cx=0,cy=0;
+  for(let i=0;i<p.length;i++){const q=p[i],n=p[(i+1)%p.length],c=q[0]*n[1]-n[0]*q[1];a+=c;cx+=(q[0]+n[0])*c;cy+=(q[1]+n[1])*c;}
+  if(Math.abs(a)<1e-9){let x=0,y=0;p.forEach(function(q){x+=q[0];y+=q[1];});return p.length?[x/p.length,y/p.length]:null;}
+  return[cx/(3*a),cy/(3*a)];
+}
+function rfpVacRoomPts(r){
+  const ol=rfpPoly(r&&r.outline_home_px),b=r&&r.bbox_home_px;
+  const bb=b&&isFinite(b.x0)?[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]]:null;
+  if(ol.length>=3&&(!bb||Math.abs(rfpArea(ol))>=0.25*Math.abs(rfpArea(bb))))return ol;
+  return bb||[];
+}
+// plan: [{key, name, poly (m)}]; rooms: the map's `rooms` attribute; k: metres per home px
+function rfpVacFit(plan,rooms,k){
+  if(!Array.isArray(plan)||!Array.isArray(rooms)||!(k>0))return null;
+  const norm=function(v){return String(v==null?'':v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'');};
+  const pairs=[],used={};
+  rooms.forEach(function(vr){
+    if(!vr||typeof vr!=='object')return;
+    let pr=vr.home_room_id?plan.find(function(x){return x.key&&String(x.key)===String(vr.home_room_id);}):null;
+    if(!pr&&vr.name)pr=plan.find(function(x){return!x.key&&norm(x.name)===norm(vr.name);});
+    if(!pr||used[pr.i])return;
+    const cp=rfpCentroid(pr.poly),pts=rfpVacRoomPts(vr),cq=pts.length>=3?rfpCentroid(pts):null;if(!cp||!cq)return;
+    used[pr.i]=1;pairs.push({p:cp,q:[cq[0]*k,cq[1]*k]});
+  });
+  if(pairs.length<2)return null;
+  const n=pairs.length,mp=[0,0],mq=[0,0];
+  pairs.forEach(function(x){mp[0]+=x.p[0]/n;mp[1]+=x.p[1]/n;mq[0]+=x.q[0]/n;mq[1]+=x.q[1]/n;});
+  let num=0,den=0;
+  pairs.forEach(function(x){const qx=x.q[0]-mq[0],qy=x.q[1]-mq[1],px=x.p[0]-mp[0],py=x.p[1]-mp[1];num+=qx*py-qy*px;den+=qx*px+qy*py;});
+  const th=Math.atan2(num,den),c=Math.cos(th),s=Math.sin(th);
+  const tx=mp[0]-(c*mq[0]-s*mq[1]),ty=mp[1]-(s*mq[0]+c*mq[1]);
+  let e=0;pairs.forEach(function(x){const X=c*x.q[0]-s*x.q[1]+tx,Y=s*x.q[0]+c*x.q[1]+ty;e+=(X-x.p[0])*(X-x.p[0])+(Y-x.p[1])*(Y-x.p[1]);});
+  return{r:th,x:tx,y:ty,k:k,n:n,rms:Math.sqrt(e/n)};
+}

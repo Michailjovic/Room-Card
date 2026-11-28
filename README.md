@@ -97,7 +97,7 @@ aspect_ratio: "16/9"
 | **Cockpit sections** | Pop-up panels of status and control tiles (device photos with moving parts, quick buttons), opened from launcher icons that show what's running inside |
 | **Multi-room** | One card for the whole home — rooms, swipe, presence follow, an automatic room strip with live thumbnails |
 | **Overview page** | Every room on one screen as a live tile with state chips, plus your header, side cards and a dock of section launchers; tap a tile and the room zooms open ([guide](docs/OVERVIEW.md)) |
-| **Floor plan page** | Your home as a live vector plan, imported from the vacuum's map (AnyVac) or drawn in the studio: lit rooms glow, floor heating flows, windows, blinds and doors, who is where, what plays, the vacuums live with their trails, any entity as a marker; lenses — a heating lens with a controller per room and a house panel; seven themes ([guide](docs/FLOORPLAN.md)) |
+| **Floor plan page** | Your home as a live vector plan, imported from the vacuum's map (AnyVac) or drawn in the studio: lit rooms glow, floor heating flows, windows, blinds and doors, who is where, what plays, the vacuums live with their trails, any entity as a marker; lenses — lights, heating and cleaning, with a controller per room and a panel per lens; seven themes ([guide](docs/FLOORPLAN.md)) |
 
 ---
 
@@ -152,9 +152,10 @@ A page that draws your home as a **plan**: floors, walls, doors and windows, eac
 as a glow in their colour, floor heating, temperature and humidity; who is where, what plays,
 running appliances, any entity as a marker; open windows and blinds by their position. Tap a room
 and it zooms open; hold it to switch its lights.
-Since 7.3.0 a dock under the plan switches **lenses**: the heating lens puts the floor heating in
-front, opens a room's [heating controller](docs/HEATING.md) on a tap and the house panel (house
-mode, boiler, tariff, every room) from its button.
+Since 7.3.0 a dock under the plan switches **lenses**: the lights lens opens a room's
+[light controller](docs/LIGHTS.md), the heating lens its [heating controller](docs/HEATING.md) and
+the house panel (house mode, boiler, hot water, tariff, every room), the cleaning lens queues rooms
+for AnyVac's vacuums.
 
 - **From your robot vacuum:** in the studio, *Add a floor plan page* → **AnyVac** reads the room
   outlines from the vacuum's map, straightens the walls, links each room to your card's rooms,

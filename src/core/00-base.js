@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.3.0';
+const ROC_VERSION='7.4.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -74,7 +74,7 @@ const ROC_ID_ATTRS=['data-z-id','data-ico-id','data-lbl-id','data-b-id','data-bl
 const ROC_ED_NARROW_CSS='.roc-ed{container-type:inline-size;}'
   +'@container (max-width:500px){.roc-ed [style*="grid-template-columns:repeat(4,1fr)"],.roc-ed [style*="grid-template-columns:1fr 1fr 1fr"],.roc-ed [style*="grid-template-columns:repeat(3,1fr)"],.roc-ed [style*="grid-template-columns:2fr 1fr 1fr"]{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}'
   +'@container (max-width:300px){.roc-ed [style*="grid-template-columns:repeat(4,1fr)"],.roc-ed [style*="grid-template-columns:1fr 1fr"],.roc-ed [style*="grid-template-columns:repeat(3,1fr)"],.roc-ed [style*="grid-template-columns:repeat(2,1fr)"],.roc-ed [style*="grid-template-columns:2fr 1fr"],.roc-ed [style*="grid-template-columns:1fr 2fr"]{grid-template-columns:minmax(0,1fr)!important;}}';
-const ROC_ACT_TYPES=[['','— not set —'],['more-info','More info'],['toggle','Toggle'],['navigate','Navigate'],['url','Open URL'],['perform-action','Perform action'],['open-section','Open section'],['heating','Heating controller'],['close-section','Close section'],['switch-room','Switch room'],['next-room','Next room'],['prev-room','Previous room'],['follow-room','Follow room'],['toggle-group','Toggle group'],['show-group','Show group'],['hide-group','Hide group'],['none','Do nothing (none)'],['custom','Custom (YAML)']];
+const ROC_ACT_TYPES=[['','— not set —'],['more-info','More info'],['toggle','Toggle'],['navigate','Navigate'],['url','Open URL'],['perform-action','Perform action'],['open-section','Open section'],['heating','Heating controller'],['lights','Light controller'],['close-section','Close section'],['switch-room','Switch room'],['next-room','Next room'],['prev-room','Previous room'],['follow-room','Follow room'],['toggle-group','Toggle group'],['show-group','Show group'],['hide-group','Hide group'],['none','Do nothing (none)'],['custom','Custom (YAML)']];
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 // Default glyph for vacuum_widgets when no custom `icon:` is set — a compact top-down

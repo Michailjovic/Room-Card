@@ -101,7 +101,7 @@ const S={
   // the heating controller (7.2.0): defaults for every thermostat, and per-room settings
   heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'},
     // the house panel (7.3.0): VTherm's central mode and central boiler are found by themselves; false hides one
-    central_mode:{t:'entity|bool',since:'7.3.0'},boiler:{t:'entity|bool',since:'7.3.0'},tariff:{t:'obj:hcTariff',since:'7.3.0'},supply:{t:'list:hcSupply',since:'7.3.0'}}},
+    central_mode:{t:'entity|bool',since:'7.3.0'},water_heater:{t:'entity|bool',since:'7.4.0'},boiler:{t:'entity|bool',since:'7.3.0'},tariff:{t:'obj:hcTariff',since:'7.3.0'},supply:{t:'list:hcSupply',since:'7.3.0'}}},
   hcTariff:{keys:{entity:{t:'entity'},high_state:{t:'str',d:'on'}},scalar:'entity'},
   hcSupply:{keys:{entity:{t:'entity'},name:{t:'str'}},scalar:'entity'},
   hcRoom:{keys:{climate:{t:'entity'},name:{t:'str'},quick:{t:'list:num'},step:{t:'num'},range:{t:'list:num'},evening:{t:'str'},morning:{t:'str'}},scalar:'climate'},
@@ -117,10 +117,10 @@ const S={
     operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},above:{t:'num',since:'7.0.0'},below:{t:'num',since:'7.0.0'},and:{t:'cond'},or:{t:'cond'}}},
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
-  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event|heating'},
+  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event|heating|lights'},
     entity:{t:'entity'},entity_id:{t:'entity'},navigation_path:{t:'str'},navigation_replace:{t:'bool',since:'7.0.0'},path:{t:'str'},url:{t:'str'},url_path:{t:'str'},new_tab:{t:'bool'},
     service:{t:'str'},perform_action:{t:'str'},data:{t:'map'},service_data:{t:'map'},target:{t:'map'},
-    title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},section:{t:'str'},group:{t:'str'},
+    title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},entities:{t:'list:str',since:'7.4.0'},name:{t:'str',since:'7.4.0'},section:{t:'str'},group:{t:'str'},
     confirmation:{t:'bool|map'},haptic:{t:'str'},condition:{t:'cond'},then:{t:'action'},else:{t:'action'}},open:'fire-dom-event'},
   transform:{keys:{entity:{t:'entity'},attribute:{t:'str'},origin:{t:'str'},transition:{t:'str'},perspective:{t:'len'},map:{t:'map'},from:{t:'map'},to:{t:'map'},spin:{t:'obj:spin'}}},
   spin:{keys:{min_duration:{t:'num|str'},max_duration:{t:'num|str'},axis:{t:'enum:x|y|z'},reverse:{t:'bool'},min_value:{t:'num'},max_value:{t:'num'}}},
@@ -208,13 +208,13 @@ const S={
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'},
     vacuums:{t:'list:fpVacuum',since:'6.50.0'},attention_sections:{t:'list:str',since:'6.50.0'},clean_mode:{t:'enum:dry|wet|both',d:'dry',since:'6.50.0'},trail_mode:{t:'enum:always|cleaning',d:'always',since:'6.50.0'},
     background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'},
-    lenses:{t:'list:str',since:'7.3.0'},lens:{t:'enum:overview|heating',d:'overview',since:'7.3.0'},dock:{t:'bool|obj:ovDock',since:'7.3.0'},pause_banner:{t:'bool',d:true,since:'7.3.0'}}},
+    lenses:{t:'list:str',since:'7.3.0'},lens:{t:'enum:overview|lights|heating|cleaning',d:'overview',since:'7.3.0'},dock:{t:'bool|obj:ovDock',since:'7.3.0'},pause_banner:{t:'bool',d:true,since:'7.3.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
     rotate:{t:'prof:num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical|both',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
-    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'},lenses:{t:'list:str'},lens:{t:'enum:overview|heating',d:'overview'},dock:{t:'bool|obj:ovDock'},pause_banner:{t:'bool',d:true}},hide:['rooms','openings','source','items','vacuums']},
+    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'},lenses:{t:'list:str'},lens:{t:'enum:overview|lights|heating|cleaning',d:'overview'},dock:{t:'bool|obj:ovDock'},pause_banner:{t:'bool',d:true}},hide:['rooms','openings','source','items','vacuums']},
   // floor heating loops and feeds (7.1.0): pitch = pipe to pipe, margin = loop to wall (m); with a
   // manifold every loop gets its feed, which crosses a wall only at a pass
   fpHeating:{keys:{pitch:{t:'num',d:0.2},margin:{t:'num',d:0.25},flow:{t:'bool',d:true},manifold:{t:'list:num'},passes:{t:'list:fpPass'}}},
@@ -223,7 +223,7 @@ const S={
   fpPass:{keys:{at:{t:'list:num'}}},
   // an AnyVac map on the plan; transform = its home frame → plan metres (another frame, set by the studio)
   fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'},color:{t:'color',since:'6.51.0'},mop_color:{t:'color',since:'6.51.0'},mop_opacity:{t:'num',since:'6.51.0'}},scalar:'entity'},
-  fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'}}},
+  fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'},frame:{t:'str',since:'7.4.0'}}},
   // the photo background (D11): an image in plan metres
   fpBackground:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},rotation:{t:'num'},opacity:{t:'num'},
     floors:{t:'bool'},fiducials:{t:'list:any'},frame:{t:'str'}}},

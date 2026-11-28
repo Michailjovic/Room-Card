@@ -242,10 +242,13 @@
 "attributes": {
 "friendly_name": "Panel bedroom 1",
 "supported_color_modes": [
-"brightness"
+"color_temp",
+"hs"
 ],
 "color_mode": "brightness",
-"brightness": 170
+"brightness": 170,
+"min_color_temp_kelvin": 2700,
+"max_color_temp_kelvin": 6500
 }
 },
 "light.panel_bedroom_2": {
@@ -253,10 +256,13 @@
 "attributes": {
 "friendly_name": "Panel bedroom 2",
 "supported_color_modes": [
-"brightness"
+"color_temp",
+"hs"
 ],
 "color_mode": "brightness",
-"brightness": 170
+"brightness": 170,
+"min_color_temp_kelvin": 2700,
+"max_color_temp_kelvin": 6500
 }
 },
 "light.panel_bedroom_3": {
@@ -264,10 +270,13 @@
 "attributes": {
 "friendly_name": "Panel bedroom 3",
 "supported_color_modes": [
-"brightness"
+"color_temp",
+"hs"
 ],
 "color_mode": "brightness",
-"brightness": 170
+"brightness": 170,
+"min_color_temp_kelvin": 2700,
+"max_color_temp_kelvin": 6500
 }
 },
 "light.panel_hall": {
@@ -297,10 +306,13 @@
 "attributes": {
 "friendly_name": "Panel living room 1",
 "supported_color_modes": [
-"brightness"
+"color_temp",
+"hs"
 ],
 "color_mode": null,
-"brightness": null
+"brightness": null,
+"min_color_temp_kelvin": 2700,
+"max_color_temp_kelvin": 6500
 }
 },
 "light.panel_living_room_2": {
@@ -308,10 +320,13 @@
 "attributes": {
 "friendly_name": "Panel living room 2",
 "supported_color_modes": [
-"brightness"
+"color_temp",
+"hs"
 ],
 "color_mode": null,
-"brightness": null
+"brightness": null,
+"min_color_temp_kelvin": 2700,
+"max_color_temp_kelvin": 6500
 }
 },
 "light.panel_living_room_3": {
@@ -319,10 +334,13 @@
 "attributes": {
 "friendly_name": "Panel living room 3",
 "supported_color_modes": [
-"brightness"
+"color_temp",
+"hs"
 ],
 "color_mode": null,
-"brightness": null
+"brightness": null,
+"min_color_temp_kelvin": 2700,
+"max_color_temp_kelvin": 6500
 }
 },
 "light.sensor_light_5ch": {
@@ -497,15 +515,183 @@
 }
 },
 "sensor.kitchen_s6_kitchen_anyvac_map": {
-"state": "unknown",
+"state": "1",
 "attributes": {
-"friendly_name": "Kitchen s6 kitchen anyvac map"
+"friendly_name": "S6 - Kitchen AnyVac Map",
+"schema_version": 3,
+"home_frame": {
+"id": "32017223-29d7-4a12-a3da-ac19fc0eeb05",
+"cell_mm": 50,
+"scale": 4,
+"width_px": 1992,
+"height_px": 2892
+},
+"rooms": [
+{
+"name": "Living room",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_18",
+"bbox_home_px": {
+"x0": 812,
+"y0": 776,
+"x1": 1152,
+"y1": 1276
+},
+"last_dry": "2026-11-27T07:00:00+00:00",
+"last_wet": "2026-11-28T06:00:00+00:00"
+},
+{
+"name": "Corridor",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_20",
+"bbox_home_px": {
+"x0": 956,
+"y0": 1280,
+"x1": 1040,
+"y1": 1488
+},
+"last_dry": "2026-11-28T04:00:00+00:00",
+"last_wet": "2026-11-27T03:00:00+00:00"
+},
+{
+"name": "Bathroom",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_19",
+"bbox_home_px": {
+"x0": 852,
+"y0": 1284,
+"x1": 956,
+"y1": 1480
+},
+"last_dry": "2026-11-28T04:00:00+00:00",
+"last_wet": "2026-11-27T03:00:00+00:00"
+},
+{
+"name": "Kitchen",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_16",
+"bbox_home_px": {
+"x0": 808,
+"y0": 1492,
+"x1": 1144,
+"y1": 1748
+},
+"last_dry": "2026-11-28T07:00:00+00:00",
+"last_wet": "2026-11-27T07:00:00+00:00"
+},
+{
+"name": "Bedroom",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_17",
+"bbox_home_px": {
+"x0": 812,
+"y0": 1752,
+"x1": 1144,
+"y1": 2096
+},
+"last_dry": "2026-11-26T07:00:00+00:00",
+"last_wet": "2026-11-25T07:00:00+00:00"
+}
+],
+"vacuum_position_home_px": {
+"x": 1127.7,
+"y": 1723,
+"a": 357
+},
+"in_cleaning": false,
+"vacuum_room_name": "Kitchen",
+"battery": 100,
+"status_state": "charging",
+"selected_rooms": [],
+"view_layers": {
+"dry": true,
+"wet": true
+}
 }
 },
 "sensor.kitchen_s8_maxv_ultra_anyvac_map": {
-"state": "unknown",
+"state": "1",
 "attributes": {
-"friendly_name": "Kitchen s8 maxv ultra anyvac map"
+"friendly_name": "S8 MaxV Ultra - Kitchen AnyVac Map",
+"schema_version": 3,
+"home_frame": {
+"id": "32017223-29d7-4a12-a3da-ac19fc0eeb05",
+"cell_mm": 50,
+"scale": 4,
+"width_px": 1992,
+"height_px": 2892
+},
+"rooms": [
+{
+"name": "Living room",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_18",
+"bbox_home_px": {
+"x0": 812,
+"y0": 776,
+"x1": 1152,
+"y1": 1276
+},
+"last_dry": "2026-11-27T07:00:00+00:00",
+"last_wet": "2026-11-28T06:00:00+00:00"
+},
+{
+"name": "Corridor",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_20",
+"bbox_home_px": {
+"x0": 956,
+"y0": 1280,
+"x1": 1040,
+"y1": 1488
+},
+"last_dry": "2026-11-28T04:00:00+00:00",
+"last_wet": "2026-11-27T03:00:00+00:00"
+},
+{
+"name": "Bathroom",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_19",
+"bbox_home_px": {
+"x0": 852,
+"y0": 1284,
+"x1": 956,
+"y1": 1480
+},
+"last_dry": "2026-11-28T04:00:00+00:00",
+"last_wet": "2026-11-27T03:00:00+00:00"
+},
+{
+"name": "Kitchen",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_16",
+"bbox_home_px": {
+"x0": 808,
+"y0": 1492,
+"x1": 1144,
+"y1": 1748
+},
+"last_dry": "2026-11-28T07:00:00+00:00",
+"last_wet": "2026-11-27T07:00:00+00:00"
+},
+{
+"name": "Bedroom",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_17",
+"bbox_home_px": {
+"x0": 812,
+"y0": 1752,
+"x1": 1144,
+"y1": 2096
+},
+"last_dry": "2026-11-26T07:00:00+00:00",
+"last_wet": "2026-11-25T07:00:00+00:00"
+}
+],
+"vacuum_position_home_px": {
+"x": 840.9,
+"y": 1567.1,
+"a": 2
+},
+"in_cleaning": false,
+"vacuum_room_name": "Kitchen",
+"battery": 100,
+"status_state": "charging",
+"selected_rooms": [],
+"view_layers": {
+"dry": true,
+"wet": true
+}
 }
 },
 "sensor.kitchen_shelly_h_t_gen_3_kitchen_humidity": {
@@ -605,9 +791,93 @@
 }
 },
 "sensor.s7_maxv_anyvac_map": {
-"state": "unknown",
+"state": "1",
 "attributes": {
-"friendly_name": "S7 maxv anyvac map"
+"friendly_name": "S7 MaxV AnyVac Map",
+"schema_version": 3,
+"home_frame": {
+"id": "32017223-29d7-4a12-a3da-ac19fc0eeb05",
+"cell_mm": 50,
+"scale": 4,
+"width_px": 1992,
+"height_px": 2892
+},
+"rooms": [
+{
+"name": "Living room",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_18",
+"bbox_home_px": {
+"x0": 812,
+"y0": 776,
+"x1": 1152,
+"y1": 1276
+},
+"last_dry": "2026-11-27T07:00:00+00:00",
+"last_wet": "2026-11-28T06:00:00+00:00"
+},
+{
+"name": "Corridor",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_20",
+"bbox_home_px": {
+"x0": 956,
+"y0": 1280,
+"x1": 1040,
+"y1": 1488
+},
+"last_dry": "2026-11-28T04:00:00+00:00",
+"last_wet": "2026-11-27T03:00:00+00:00"
+},
+{
+"name": "Bathroom",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_19",
+"bbox_home_px": {
+"x0": 852,
+"y0": 1284,
+"x1": 956,
+"y1": 1480
+},
+"last_dry": "2026-11-28T04:00:00+00:00",
+"last_wet": "2026-11-27T03:00:00+00:00"
+},
+{
+"name": "Kitchen",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_16",
+"bbox_home_px": {
+"x0": 808,
+"y0": 1492,
+"x1": 1144,
+"y1": 1748
+},
+"last_dry": "2026-11-28T07:00:00+00:00",
+"last_wet": "2026-11-27T07:00:00+00:00"
+},
+{
+"name": "Bedroom",
+"home_room_id": "6iMFAFwSgbT2kz2rLcu9V0_17",
+"bbox_home_px": {
+"x0": 812,
+"y0": 1752,
+"x1": 1144,
+"y1": 2096
+},
+"last_dry": "2026-11-26T07:00:00+00:00",
+"last_wet": "2026-11-25T07:00:00+00:00"
+}
+],
+"vacuum_position_home_px": {
+"x": 1119,
+"y": 1566.5,
+"a": 359
+},
+"in_cleaning": false,
+"vacuum_room_name": "Kitchen",
+"battery": 99,
+"status_state": "charging",
+"selected_rooms": [],
+"view_layers": {
+"dry": true,
+"wet": true
+}
 }
 },
 "sensor.s7_maxv_status": {

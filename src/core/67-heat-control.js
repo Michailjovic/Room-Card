@@ -115,6 +115,7 @@ function rocHcOpen(card,entity){
   if(!card||!entity||!card._hass)return;
   rocHcClose(card);
   if(card._hp)rocHpClose(card); // 7.3.0: the house panel gives way to the room
+  if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card); // 7.4.0: and so do the light controller and the lens panels
   card._heat={entity:entity,dur:'always',pend:NaN,pendT:0,hist:null,histAt:0};
   if(!card._heatKey){card._heatKey=function(e){if(e.key==='Escape'&&card._heat)rocHcClose(card);};document.addEventListener('keydown',card._heatKey);}
   rocHcMount(card);rocHcUpdate(card);rocHcHistory(card);

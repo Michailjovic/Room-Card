@@ -15,6 +15,7 @@
         "core/65-floorplan.js",
         "core/67-heat-control.js",
         "core/68-heat-house.js",
+        "core/69-lights-clean.js",
         "core/70-format.js",
         "core/80-light-controls.js",
         "core/85-nav-live-blinds.js",

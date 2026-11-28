@@ -946,7 +946,7 @@ class RocStudio{
         const pair=function(l){return l.map(function(x){return[x,x];});};
         if(key==='section'||(key==='sections'&&schema==='ovDock'))return pair(ids(w.sections));
         if(key==='group')return pair(ids([].concat((room&&room.groups)||[],w.groups||[])));
-        if(key==='lenses'&&(schema==='fpPage'||schema==='floorplan'))return[['Overview','overview'],['Heating','heating']]; // 7.3.0
+        if(key==='lenses'&&(schema==='fpPage'||schema==='floorplan'))return[['Overview','overview'],['Lights','lights'],['Heating','heating'],['Cleaning','cleaning']]; // 7.3.0, 7.4.0
         if(key==='room'&&schema==='fpRoom')return rsFpPageRooms(w).map(function(x){return[String((x.r.overview_tile&&x.r.overview_tile.name)||x.r.name||x.r.id)+' ('+x.r.id+')',String(x.r.id)];});
         if(key==='rooms'||key==='focus')return pair(ids(self._rooms()));
         if(key==='area_match'){const a=(self.hass&&self.hass.areas)||{};return Object.keys(a).map(function(k){return[String(a[k].name||k),k];});}

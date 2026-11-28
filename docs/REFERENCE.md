@@ -243,7 +243,7 @@ With `action: fire-dom-event` the other keys are passed through unchecked. Guide
 
 | Key | Type | Default | Notes |
 |---|---|---|---|
-| `action` | `none` · `navigate` · `url` · `more-info` · `toggle` · `call-service` · `perform-action` · `browser-mod-popup` · `toggle-group` · `show-group` · `hide-group` · `switch-room` · `next-room` · `prev-room` · `follow-room` · `open-section` · `close-section` · `fire-dom-event` · `heating` |  |  |
+| `action` | `none` · `navigate` · `url` · `more-info` · `toggle` · `call-service` · `perform-action` · `browser-mod-popup` · `toggle-group` · `show-group` · `hide-group` · `switch-room` · `next-room` · `prev-room` · `follow-room` · `open-section` · `close-section` · `fire-dom-event` · `heating` · `lights` |  |  |
 | `entity` | entity id |  |  |
 | `entity_id` | entity id |  |  |
 | `navigation_path` | string |  |  |
@@ -261,6 +261,8 @@ With `action: fire-dom-event` the other keys are passed through unchecked. Guide
 | `size` | string |  |  |
 | `content` | Lovelace card config |  |  |
 | `room` | string **or** number |  |  |
+| `entities` | list of string |  | since 7.4.0 |
+| `name` | string |  | since 7.4.0 |
 | `section` | string |  |  |
 | `group` | string |  |  |
 | `confirmation` | boolean **or** object |  |  |
@@ -1239,6 +1241,7 @@ Guide: [HEATING.md](HEATING.md).
 | `morning` | string | `"06:00"` |  |
 | `rooms` | list of [`hcRoom`](#t-hcroom) |  |  |
 | `central_mode` | entity id **or** boolean |  | since 7.3.0 |
+| `water_heater` | entity id **or** boolean |  | since 7.4.0 |
 | `boiler` | entity id **or** boolean |  | since 7.3.0 |
 | `tariff` | [`hcTariff`](#t-hctariff) |  | since 7.3.0 |
 | `supply` | list of [`hcSupply`](#t-hcsupply) |  | since 7.3.0 |
@@ -1316,7 +1319,7 @@ Guide: [FLOORPLAN.md](FLOORPLAN.md).
 | `background` | [`fpBackground`](#t-fpbackground) |  | since 6.50.0 |
 | `heating` | [`fpHeating`](#t-fpheating) |  | since 7.1.0 |
 | `lenses` | list of string |  | since 7.3.0 |
-| `lens` | `overview` · `heating` | `"overview"` | since 7.3.0 |
+| `lens` | `overview` · `lights` · `heating` · `cleaning` | `"overview"` | since 7.3.0 |
 | `dock` | boolean **or** [`ovDock`](#t-ovdock) |  | since 7.3.0 |
 | `pause_banner` | boolean | `true` | since 7.3.0 |
 
@@ -1426,6 +1429,7 @@ Guide: [FLOORPLAN.md](FLOORPLAN.md).
 | `y` | number |  |  |
 | `rooms` | number |  |  |
 | `rms` | number |  |  |
+| `frame` | string |  | since 7.4.0 |
 
 <a id="t-fpheating"></a>
 

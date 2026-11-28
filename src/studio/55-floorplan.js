@@ -752,46 +752,25 @@ RocStudio.prototype._fpAutoDoors=function(){
   });
 };
 // ---- vacuums on the plan (v6.50.0) ----
-// Every AnyVac map has its own home frame unless AnyVac registered it into another one. A map in
-// the plan's own frame needs nothing; any other is aligned once, here, by its rooms: the rooms
-// with the same name (as named in the Roborock app) in both maps give pairs of centroids, and a
-// rigid fit (rotation + shift, no scale — both are millimetres) maps its home px → plan metres.
-function rsFpRoomPts(G,r){
-  const ol=G.poly(r&&r.outline_home_px),b=r&&r.bbox_home_px;
-  const bb=b&&isFinite(b.x0)?[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]]:null;
-  if(ol.length>=3&&(!bb||Math.abs(G.area(ol))>=0.25*Math.abs(G.area(bb))))return ol;
-  return bb||[];
-}
-function rsFpCentroid(p){
-  let a=0,cx=0,cy=0;
-  for(let i=0;i<p.length;i++){const q=p[i],n=p[(i+1)%p.length],c=q[0]*n[1]-n[0]*q[1];a+=c;cx+=(q[0]+n[0])*c;cy+=(q[1]+n[1])*c;}
-  if(Math.abs(a)<1e-9){let x=0,y=0;p.forEach(function(q){x+=q[0];y+=q[1];});return p.length?[x/p.length,y/p.length]:null;}
-  return[cx/(3*a),cy/(3*a)];
-}
+// Every AnyVac map has a home frame. A map in the plan's own frame needs nothing; any other is
+// aligned here by its rooms (G.vacFit: the plan rooms' anyvac_room keys, else the same names, give
+// pairs of centroids; a rigid fit maps its home px → plan metres). The plan does the same by itself
+// whenever a map's frame changes (7.4.0).
 function rsFpVacuumFit(G,hass,fp,sensorId){
-  const S=(hass&&hass.states)||{},src=fp&&fp.source;
-  if(!src||!src.anyvac||!Array.isArray(src.origin_px)||!(Number(src.mm_per_px)>0))return{err:'nosource'};
-  const A=S[src.anyvac]&&S[src.anyvac].attributes,T=S[sensorId]&&S[sensorId].attributes;
-  if(!A||!T)return{err:'nomap'};
-  if(sensorId===src.anyvac||(T.home_frame&&src.frame&&String(T.home_frame.id||'')===String(src.frame)))return{same:true};
-  const kS=Number(src.mm_per_px)/1000,ox=Number(src.origin_px[0]),oy=Number(src.origin_px[1]);
-  const hf=T.home_frame||{},kT=(Number(hf.cell_mm)>0&&Number(hf.scale)>0?Number(hf.cell_mm)/Number(hf.scale):12.5)/1000;
-  const pairs=[];
-  (T.rooms||[]).forEach(function(tr){
-    if(!tr||!tr.name)return;
-    const sr=(A.rooms||[]).find(function(x){return x&&x.name===tr.name;});if(!sr)return;
-    const cp=rsFpCentroid(rsFpRoomPts(G,sr)),cq=rsFpCentroid(rsFpRoomPts(G,tr));if(!cp||!cq)return;
-    pairs.push({p:[(cp[0]-ox)*kS,(cp[1]-oy)*kS],q:[cq[0]*kT,cq[1]*kT],name:tr.name});
-  });
-  if(pairs.length<2)return{err:'few',n:pairs.length};
-  const n=pairs.length,mp=[0,0],mq=[0,0];
-  pairs.forEach(function(x){mp[0]+=x.p[0]/n;mp[1]+=x.p[1]/n;mq[0]+=x.q[0]/n;mq[1]+=x.q[1]/n;});
-  let num=0,den=0;
-  pairs.forEach(function(x){const qx=x.q[0]-mq[0],qy=x.q[1]-mq[1],px=x.p[0]-mp[0],py=x.p[1]-mp[1];num+=qx*py-qy*px;den+=qx*px+qy*py;});
-  const th=Math.atan2(num,den),c=Math.cos(th),s=Math.sin(th);
-  const tx=mp[0]-(c*mq[0]-s*mq[1]),ty=mp[1]-(s*mq[0]+c*mq[1]);
-  let e=0;pairs.forEach(function(x){const X=c*x.q[0]-s*x.q[1]+tx,Y=s*x.q[0]+c*x.q[1]+ty;e+=(X-x.p[0])*(X-x.p[0])+(Y-x.p[1])*(Y-x.p[1]);});
-  return{transform:{rotation:Math.round(th*180/Math.PI*100)/100,x:rsFpR(tx),y:rsFpR(ty),rooms:n,rms:rsFpR(Math.sqrt(e/n))}};
+  // 7.4.0: fitted to the plan's own rooms (their anyvac_room keys, else their names), not to the
+  // source map — the source map's frame can change too (AnyVac's shared home frame); the transform
+  // remembers the frame it belongs to, and the plan refits by itself when that frame changes
+  const S=(hass&&hass.states)||{},src=fp&&fp.source,T=S[sensorId]&&S[sensorId].attributes;
+  if(!T)return{err:'nomap'};
+  const hf=T.home_frame||{};
+  if(src&&src.frame&&hf.id&&String(hf.id)===String(src.frame)&&Array.isArray(src.origin_px)&&Number(src.mm_per_px)>0)return{same:true};
+  const plan=(Array.isArray(fp&&fp.rooms)?fp.rooms:[]).map(function(r,i){return r&&typeof r==='object'?{i:i,key:r.anyvac_room?String(r.anyvac_room):'',name:String(r.name||r.room||''),poly:G.poly(r.polygon)}:null;}).filter(function(x){return x&&x.poly.length>=3;});
+  const kT=(Number(hf.cell_mm)>0&&Number(hf.scale)>0?Number(hf.cell_mm)/Number(hf.scale):12.5)/1000;
+  const f=G.vacFit?G.vacFit(plan,T.rooms||[],kT):null;
+  if(!f)return{err:'few',n:0};
+  const tr={rotation:Math.round(f.r*180/Math.PI*100)/100,x:rsFpR(f.x),y:rsFpR(f.y),rooms:f.n,rms:rsFpR(f.rms)};
+  if(hf.id)tr.frame=String(hf.id);
+  return{transform:tr};
 }
 // quick turn / flip of the drawing (v6.50.0): rotate in 90° steps from what is shown now (auto
 // included), mirror none → horizontal → vertical → both

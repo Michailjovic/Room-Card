@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.3.0';
+const ROC_VERSION='7.4.0';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -74,7 +74,7 @@ const ROC_ID_ATTRS=['data-z-id','data-ico-id','data-lbl-id','data-b-id','data-bl
 const ROC_ED_NARROW_CSS='.roc-ed{container-type:inline-size;}'
   +'@container (max-width:500px){.roc-ed [style*="grid-template-columns:repeat(4,1fr)"],.roc-ed [style*="grid-template-columns:1fr 1fr 1fr"],.roc-ed [style*="grid-template-columns:repeat(3,1fr)"],.roc-ed [style*="grid-template-columns:2fr 1fr 1fr"]{grid-template-columns:repeat(2,minmax(0,1fr))!important;}}'
   +'@container (max-width:300px){.roc-ed [style*="grid-template-columns:repeat(4,1fr)"],.roc-ed [style*="grid-template-columns:1fr 1fr"],.roc-ed [style*="grid-template-columns:repeat(3,1fr)"],.roc-ed [style*="grid-template-columns:repeat(2,1fr)"],.roc-ed [style*="grid-template-columns:2fr 1fr"],.roc-ed [style*="grid-template-columns:1fr 2fr"]{grid-template-columns:minmax(0,1fr)!important;}}';
-const ROC_ACT_TYPES=[['','— not set —'],['more-info','More info'],['toggle','Toggle'],['navigate','Navigate'],['url','Open URL'],['perform-action','Perform action'],['open-section','Open section'],['heating','Heating controller'],['close-section','Close section'],['switch-room','Switch room'],['next-room','Next room'],['prev-room','Previous room'],['follow-room','Follow room'],['toggle-group','Toggle group'],['show-group','Show group'],['hide-group','Hide group'],['none','Do nothing (none)'],['custom','Custom (YAML)']];
+const ROC_ACT_TYPES=[['','— not set —'],['more-info','More info'],['toggle','Toggle'],['navigate','Navigate'],['url','Open URL'],['perform-action','Perform action'],['open-section','Open section'],['heating','Heating controller'],['lights','Light controller'],['close-section','Close section'],['switch-room','Switch room'],['next-room','Next room'],['prev-room','Previous room'],['follow-room','Follow room'],['toggle-group','Toggle group'],['show-group','Show group'],['hide-group','Hide group'],['none','Do nothing (none)'],['custom','Custom (YAML)']];
 
 function escA(s){return String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/'/g,'&#39;');}
 // Default glyph for vacuum_widgets when no custom `icon:` is set — a compact top-down
@@ -1305,6 +1305,7 @@ function rocHcOpen(card,entity){
   if(!card||!entity||!card._hass)return;
   rocHcClose(card);
   if(card._hp)rocHpClose(card); // 7.3.0: the house panel gives way to the room
+  if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card); // 7.4.0: and so do the light controller and the lens panels
   card._heat={entity:entity,dur:'always',pend:NaN,pendT:0,hist:null,histAt:0};
   if(!card._heatKey){card._heatKey=function(e){if(e.key==='Escape'&&card._heat)rocHcClose(card);};document.addEventListener('keydown',card._heatKey);}
   rocHcMount(card);rocHcUpdate(card);rocHcHistory(card);
@@ -1439,26 +1440,35 @@ function rocHcChart(card){
 // tariff and the main supply. A banner on the plan says when the central mode stopped the heating.
 // Config: floorplan.lenses / lens / dock / pause_banner; the house entities in the card's
 // `heating:` block (central_mode, boiler, tariff, supply), the VTherm ones found by themselves.
-const ROC_LENSES={overview:{icon:'mdi:floor-plan'},heating:{icon:'mdi:heating-coil'}};
+const ROC_LENSES={overview:{icon:'mdi:floor-plan'},lights:{icon:'mdi:lightbulb-group'},heating:{icon:'mdi:heating-coil'},cleaning:{icon:'mdi:broom'}}; // 7.4.0: lights, cleaning (69-lights-clean.js)
 const ROC_HP_STR={
-  en:{lens_overview:'Overview',lens_heating:'Heating',house:'Heating · house',mode:'House mode',boiler:'Boiler',b_on:'running',b_off:'off',
+  en:{lens_overview:'Overview',lens_heating:'Heating',house:'Heating · house',mode:'House mode',boiler:'Heating boiler',b_on:'running',b_off:'off',
+    hot_water:'Hot water',hw_heat:'heating',hw_target:'target {t}',
     tariff:'Tariff',high:'high (VT)',low:'low (NT)',supply:'Main supply',rooms:'Rooms',close:'Close',
     ban_central:'Heating paused by the central mode',ban_mode:'mode: {m}',since:'since {t}',
     heat_n:'{n} heating',none_heat:'Nothing heats',warn:'Check: {r}',
     m_Auto:'Auto','m_Stopped':'Stopped','m_Heat only':'Heat only','m_Cool only':'Cool only','m_Frost protection':'Frost protection'},
   cs:{lens_overview:'Přehled',lens_heating:'Topení',house:'Topení · dům',mode:'Režim domu',boiler:'Kotel',b_on:'běží',b_off:'stojí',
+    hot_water:'Teplá voda',hw_heat:'ohřívá',hw_target:'cíl {t}',
     tariff:'Tarif',high:'vysoký (VT)',low:'nízký (NT)',supply:'Hlavní přívod',rooms:'Místnosti',close:'Zavřít',
     ban_central:'Topení pozastaveno centrálním režimem',ban_mode:'režim: {m}',since:'od {t}',
     heat_n:'Topí {n}',none_heat:'Nic netopí',warn:'Zkontroluj: {r}',
     m_Auto:'Automaticky','m_Stopped':'Zastaveno','m_Heat only':'Jen topení','m_Cool only':'Jen chlazení','m_Frost protection':'Proti mrazu'},
 };
 function rocHpT(lang,k,v){const t=ROC_HP_STR[lang]||ROC_HP_STR.en;let s=t[k]!=null?t[k]:(ROC_HP_STR.en[k]!=null?ROC_HP_STR.en[k]:k);if(v)for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s;}
-// The lenses of a plan page: floorplan.lenses (known names, in order), else overview + heating when a
-// plan room has a thermostat. One lens = no lens buttons.
+// The lenses of a plan page: floorplan.lenses (known names, in order), else overview, then lights
+// (a plan room with lights), heating (a thermostat) and cleaning (AnyVac on the plan) — each when
+// the plan has something for it. One lens = no lens buttons.
 function rocFpLenses(def){
   if(!def)return[];
   let l=Array.isArray(def.lenses)?def.lenses.map(String).filter(function(x,i,a){return ROC_LENSES[x]&&a.indexOf(x)===i;}):null;
-  if(!l){l=['overview'];if((Array.isArray(def.rooms)?def.rooms:[]).some(function(r){return r&&r.climate;}))l.push('heating');}
+  if(!l){
+    const R=(Array.isArray(def.rooms)?def.rooms:[]).filter(function(r){return r&&typeof r==='object';});
+    l=['overview'];
+    if(R.some(function(r){return Array.isArray(r.lights)?r.lights.length:!!r.lights;}))l.push('lights');
+    if(R.some(function(r){return r.climate;}))l.push('heating');
+    if((def.source&&def.source.anyvac)||(Array.isArray(def.vacuums)&&def.vacuums.length)||R.some(function(r){return r.anyvac_room;}))l.push('cleaning');
+  }
   return l;
 }
 // The lens shown now: the one picked on this page, else floorplan.lens, else the first. Null on a
@@ -1494,8 +1504,11 @@ function rocHpHouse(hass,cAll){
   const mode=typeof H.central_mode==='string'?H.central_mode:(H.central_mode===false?'':vt(function(id,st){const o=st.attributes&&st.attributes.options;return id.indexOf('select.')===0&&Array.isArray(o)&&o.indexOf('Auto')>=0&&o.indexOf('Stopped')>=0;}));
   const boiler=typeof H.boiler==='string'?H.boiler:(H.boiler===false?'':vt(function(id,st,e){return id.indexOf('binary_sensor.')===0&&(e.translation_key==='central_boiler_state'||/central_boiler/.test(id));}));
   const tf=H.tariff&&typeof H.tariff==='object'&&H.tariff.entity?{entity:String(H.tariff.entity),high:String(H.tariff.high_state!=null?H.tariff.high_state:'on')}:null;
+  // 7.4.0: the hot water (a water_heater — not the heating boiler): heating.water_heater, else the only one there is
+  const whs=Object.keys(S).filter(function(id){return id.indexOf('water_heater.')===0;});
+  const wh=typeof H.water_heater==='string'?H.water_heater:(H.water_heater===false?'':(whs.length===1?whs[0]:''));
   const sup=(Array.isArray(H.supply)?H.supply:[]).map(function(x){return x&&typeof x==='object'?{entity:String(x.entity||''),name:x.name||''}:{entity:String(x||''),name:''};}).filter(function(x){return x.entity;});
-  return{mode:mode,boiler:boiler,tariff:tf,supply:sup};
+  return{mode:mode,boiler:boiler,tariff:tf,supply:sup,water:wh};
 }
 // What the heating lens's badge and the banner say, from the thermostats' states (pure).
 function rocHeatSum(hass,rooms,house){
@@ -1513,7 +1526,7 @@ function rocHeatSum(hass,rooms,house){
   o.badge=o.warn.length?{t:'!',c:'var(--roc-alert-c)'}:(o.pause?{t:'II',c:'#f5b041'}:(o.high?{t:'VT',c:'#9aa3ad'}:(o.heat?{t:String(o.heat),c:''}:null)));
   return o;
 }
-const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:var(--roc-fpd-h,60px);display:flex;align-items:center;justify-content:center;gap:var(--roc-ov-dgap,14px);z-index:2;}'
+const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:var(--roc-fpd-h,60px);display:flex;align-items:center;justify-content:safe center;gap:var(--roc-ov-dgap,clamp(6px,2.2vw,14px));padding:0 10px;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;z-index:2;}.roc-fp-dk::-webkit-scrollbar{display:none}.roc-fp-dk>*{flex:none}'
   +'.roc-fp-dk .ico{position:relative!important;}.roc-fp-dk .ico.roc-lens-on{box-shadow:0 0 0 2px var(--roc-active-c);}'
   +'.roc-fp-sep{width:1px;height:26px;background:rgba(255,255,255,.18);}'
   +'.roc-fp-ban{position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:3;max-width:calc(100% - 24px);box-sizing:border-box;display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:16px;background:rgba(40,30,10,.82);border:1px solid #f5b041;color:#ffe2b0;font:600 13px/1.3 var(--paper-font-body1_-_font-family,system-ui,sans-serif);cursor:pointer;flex-wrap:wrap;justify-content:center;text-align:center;-webkit-tap-highlight-color:transparent;}'
@@ -1522,6 +1535,7 @@ const ROC_FPD_CSS='.roc-fp-dk{position:absolute;left:0;right:0;bottom:0;height:v
 // through the card's icon pipeline (listeners, section ring and badge), like the overview's dock.
 function rocFpDockBuild(card,cAll,def){
   const lenses=rocFpLenses(def),lang=rocHcLang(card._hass),icons=[];
+  const lensName=function(l){return l==='lights'||l==='cleaning'?rocLcT(lang,'lens_'+l):rocHpT(lang,'lens_'+l);};
   const cur=rocFpLensCur(card,def);
   const dk=def.dock&&typeof def.dock==='object'?def.dock:(def.dock===true?{}:null);
   const isz=(dk&&dk.size)||'24px';
@@ -1532,7 +1546,7 @@ function rocFpDockBuild(card,cAll,def){
   };
   let h='';
   if(lenses.length>1)lenses.forEach(function(l){
-    const id='__fplens_'+l,ttl=rocHpT(lang,'lens_'+l);
+    const id='__fplens_'+l,ttl=lensName(l);
     icons.push({id:id,icon:ROC_LENSES[l].icon,size:isz,chip:true,tap_action:{action:'fp-lens',lens:l},_ovDock:true,_fpLens:l});
     h+=btn(id,ROC_LENSES[l].icon,ttl,l===cur?' roc-lens-on':'').replace('role="button"','role="button" aria-pressed="'+(l===cur)+'"');
   });
@@ -1554,11 +1568,21 @@ function rocFpDockUpdate(card){
   const sr=card.shadowRoot,cAll=card._config,hass=card._hass;if(!sr||!hass)return;
   const def=rocFpCfg(cAll,card._roomIdx);if(!def)return;
   const lenses=rocFpLenses(def),cur=rocFpLensCur(card,def),lang=rocHcLang(hass);
-  if(lenses.indexOf('heating')<0)return;
   const rooms=rocHpRooms(cAll,def),house=rocHpHouse(hass,cAll),sum=rocHeatSum(hass,rooms,house);
+  const other=lenses.some(function(l){return l==='lights'||l==='cleaning';})?rocFpLensBadges(card,def,lang):{};
   lenses.forEach(function(l){
     const el=sr.querySelector('[data-ico="__fplens_'+l+'"]');if(!el)return;
     el.classList.toggle('roc-lens-on',l===cur);el.setAttribute('aria-pressed',String(l===cur));
+    // 7.4.0: lights — how many rooms are lit; cleaning — ! / how many vacuums clean (ring: the room's progress) / how many rooms queued
+    const o=other[l];
+    if(o){
+      const b=el.querySelector('[data-ico-badge]'),ring=el.querySelector('[data-ico-ring]'),ic=el.querySelector('ha-icon'),bt=o.badge?o.badge.t:'';
+      if(b){if(b.textContent!==bt)b.textContent=bt;b.style.background=o.badge&&o.badge.c?o.badge.c:'';b.style.color=o.badge&&o.badge.c&&o.badge.t!=='!'?'#fff':'';}
+      if(ring){const on=o.ring>=0;ring.style.display=on?'block':'none';if(on)ring.style.setProperty('--p',Math.round(o.ring)+'%');}
+      if(ic)ic.style.color=o.active?'var(--roc-active-c)':'';
+      el.setAttribute('title',o.title);el.setAttribute('aria-label',o.title);
+      return;
+    }
     if(l!=='heating')return;
     const b=el.querySelector('[data-ico-badge]'),ring=el.querySelector('[data-ico-ring]'),ic=el.querySelector('ha-icon');
     const bt=sum.badge?sum.badge.t:'';
@@ -1582,7 +1606,7 @@ function rocFpDockUpdate(card){
 function rocFpLensTap(card,lens){
   const def=rocFpCfg(card._config,card._roomIdx);if(!def)return;
   const cur=rocFpLensCur(card,def);
-  if(lens===cur){if(lens==='heating')rocHpOpen(card);return;}
+  if(lens===cur){if(lens==='heating')rocHpOpen(card);else if(lens==='lights'||lens==='cleaning')rocXpOpen(card,lens);return;}
   if(rocFpLenses(def).indexOf(lens)<0)return;
   card._fpLensBy=Object.assign({},card._fpLensBy||{});card._fpLensBy[card._roomIdx]=lens;
   if(card._fpInst&&card._fpInst.setOptions)card._fpInst.setOptions({lens:lens});
@@ -1604,7 +1628,7 @@ const ROC_HP_CSS='.roc-hp-bd{position:absolute;inset:0;z-index:408;background:rg
   +'.roc-hp button:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
 function rocHpOpen(card){
   if(!card||!card._hass)return;
-  rocHpClose(card);if(card._heat)rocHcClose(card);
+  rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);if(card._xp)rocXpClose(card);
   const sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
   const lang=rocHcLang(card._hass),T=function(k,v){return rocHcEsc(rocHpT(lang,k,v));};
   const bd=document.createElement('div');bd.className='roc-hp-bd';bd.addEventListener('click',function(){rocHpClose(card);});
@@ -1649,6 +1673,9 @@ function rocHpUpdate(card){
   const facts=[];
   const bs=house.boiler&&S[house.boiler];
   if(bs)facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'boiler'))+'</span> <b'+(bs.state==='on'?' class="hot"':'')+'>'+rocHcEsc(rocHpT(lang,bs.state==='on'?'b_on':'b_off'))+'</b></div>');
+  const ws=house.water&&S[house.water];
+  if(ws){const wa=ws.attributes||{},wc=rocHcNum(wa.current_temperature),wt=rocHcNum(wa.temperature),wh=wa.hvac_action==='heating'||ws.state==='heating';
+    facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'hot_water'))+'</span> <b'+(wh?' class="hot"':'')+'>'+rocHcEsc(rocHcFmt(lang,wc))+' °C</b>'+(isFinite(wt)?' <span>'+rocHcEsc(rocHpT(lang,'hw_target',{t:rocHcFmt(lang,wt,0)+' °C'}))+'</span>':'')+'</div>');}
   const ts=house.tariff&&S[house.tariff.entity];
   if(ts){const hi=String(ts.state)===house.tariff.high;facts.push('<div><span>'+rocHcEsc(rocHpT(lang,'tariff'))+'</span> <b'+(hi?' class="hot"':'')+'>'+rocHcEsc(rocHpT(lang,hi?'high':'low'))+'</b></div>');}
   house.supply.forEach(function(x){
@@ -1666,6 +1693,277 @@ function rocHpUpdate(card){
       +'<span class="s"><i></i>'+rocHcEsc(s.text)+'</span></button>';
   }).join('');
   if(q('[data-hp-rooms]').innerHTML!==rh)q('[data-hp-rooms]').innerHTML=rh;
+}
+// ---- The lights lens, the light controller and the cleaning lens (7.4.0) --------------------------
+// Two more lenses on the floor plan (68-heat-house.js has the lens machinery):
+//   lights   — the light pools, windows and blinds in front; each label says on (how bright) / off;
+//              a tap on a room opens its light controller (L) beside the plan, hold toggles them;
+//              the lens's panel: every room's lights, all off.
+//   cleaning — vacuums, trails and when each room was cleaned; a tap queues / unqueues the room in
+//              AnyVac's shared selection (the same one its own card's dock uses), hold cleans it now;
+//              the lens's panel: the vacuums, the mode, the queued rooms, start.
+// The light controller also opens on its own: {action: lights, entities: [light.a, …] | entity,
+// name, room} — the lights of a card room's light_controls when only `room` is given.
+const ROC_LC_STR={
+  en:{lens_lights:'Lights',lens_cleaning:'Cleaning',on_s:'on',off_s:'off',n_on:'{n} of {m} on',none_on:'All off',all_on:'All on',all_off:'All off',bright:'Brightness',
+    warm:'Warm',neutral:'Neutral',cold:'Cold',close:'Close',house_l:'Lights · house',off_q:'Turn off every light on the plan?',rooms:'Rooms',
+    house_c:'Cleaning',vacuums:'Vacuums',mode:'Mode',dry:'Vacuum',wet:'Mop',both:'Both',queue:'Rooms to clean',start:'Clean {n} rooms',start1:'Clean 1 room',clear:'Clear',
+    nothing:'Tap rooms on the plan or here to queue them',bat:'{n} %',cleaning_in:'cleaning {r}',
+    st_charging:'charging',st_cleaning:'cleaning',st_returning:'returning',st_idle:'idle',st_paused:'paused',st_error:'error',st_docked:'docked',st_charging_complete:'charged',
+    l_lit:'{n} lit',l_none:'No light on',c_run:'{n} cleaning',c_q:'{n} queued',c_err:'Vacuum error'},
+  cs:{lens_lights:'Světla',lens_cleaning:'Úklid',on_s:'zap.',off_s:'vyp.',n_on:'Svítí {n} z {m}',none_on:'Vše zhasnuto',all_on:'Rozsvítit vše',all_off:'Zhasnout vše',bright:'Jas',
+    warm:'Teplá',neutral:'Neutrální',cold:'Studená',close:'Zavřít',house_l:'Světla · dům',off_q:'Zhasnout všechna světla na půdorysu?',rooms:'Místnosti',
+    house_c:'Úklid',vacuums:'Vysavače',mode:'Režim',dry:'Vysát',wet:'Vytřít',both:'Obojí',queue:'Místnosti k úklidu',start:'Uklidit {n} místnosti',start1:'Uklidit 1 místnost',clear:'Zrušit výběr',
+    nothing:'Klepni na místnosti na plánu nebo tady a zařadí se',bat:'{n} %',cleaning_in:'uklízí {r}',
+    st_charging:'nabíjí',st_cleaning:'uklízí',st_returning:'vrací se',st_idle:'stojí',st_paused:'pozastaven',st_error:'chyba',st_docked:'v doku',st_charging_complete:'nabito',
+    l_lit:'Svítí {n}',l_none:'Nic nesvítí',c_run:'Uklízí {n}',c_q:'Ve frontě {n}',c_err:'Chyba vysavače'},
+};
+function rocLcT(lang,k,v){const t=ROC_LC_STR[lang]||ROC_LC_STR.en;let s=t[k]!=null?t[k]:(ROC_LC_STR.en[k]!=null?ROC_LC_STR.en[k]:k);if(v)for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s;}
+// What a light can do, from its supported_color_modes (a switch: on / off only).
+function rocLcCaps(st){
+  const a=(st&&st.attributes)||{},m=Array.isArray(a.supported_color_modes)?a.supported_color_modes:[];
+  const isLight=!!st&&String(st.entity_id||'').indexOf('light.')===0||m.length>0;
+  const col=m.some(function(x){return['hs','rgb','rgbw','rgbww','xy'].indexOf(x)>=0;});
+  return{dim:isLight&&m.length>0&&!(m.length===1&&m[0]==='onoff'),ct:m.indexOf('color_temp')>=0,col:col,
+    kmin:rocHcNum(a.min_color_temp_kelvin)||2200,kmax:rocHcNum(a.max_color_temp_kelvin)||6500};
+}
+// The lights a `lights` action means, each with the name the user gave it (a card room's
+// light_controls), and the room's name.
+function rocLcResolve(cAll,a){
+  const rooms=Array.isArray(cAll&&cAll.rooms)?cAll.rooms:[];
+  let ents=Array.isArray(a.entities)?a.entities.map(function(x){return x&&typeof x==='object'?x.entity:x;}):(a.entity||a.entity_id?[a.entity||a.entity_id]:[]);
+  ents=ents.filter(function(x,i,l){return typeof x==='string'&&x&&l.indexOf(x)===i;});
+  let room=a.room!=null&&a.room!==''?rooms.find(function(r){return r&&String(r.id)===String(a.room);}):null;
+  const lc=function(r){const c=r&&r.light_controls;return c&&Array.isArray(c.entities)?c.entities.map(function(x){return x&&typeof x==='object'?x:{entity:x};}).filter(function(x){return x.entity;}):[];};
+  if(!ents.length&&room)ents=lc(room).map(function(x){return x.entity;});
+  if(!room&&ents.length)room=rooms.find(function(r){return lc(r).some(function(x){return ents.indexOf(x.entity)>=0;});})||null;
+  const names={};lc(room).forEach(function(x){if(x.name)names[x.entity]=x.name;});
+  return{entities:ents,names:names,name:a.name||(room&&((room.overview_tile&&room.overview_tile.name)||room.name))||''};
+}
+const ROC_LC_CSS='.roc-lc-bd{position:absolute;inset:0;z-index:410;background:rgba(0,0,0,.4);}.roc-lc-bd.lc-lite{background:rgba(0,0,0,.12);}'
+  +'.roc-lc{position:absolute;z-index:411;top:0;right:0;bottom:0;width:min(380px,92%);box-sizing:border-box;overflow-y:auto;background:var(--card-background-color,#1c1f24);color:var(--primary-text-color,#f2f3f5);border-radius:14px 0 0 14px;box-shadow:0 8px 30px rgba(0,0,0,.5);padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;font:14px/1.4 var(--paper-font-body1_-_font-family,system-ui,sans-serif);}'
+  +'.roc-lc.lc-bottom{top:auto;left:0;width:auto;max-height:88%;border-radius:14px 14px 0 0;}'
+  +'.lc-hd{display:flex;align-items:flex-start;gap:10px}.lc-hd>div{flex:1;min-width:0}.lc-room{font-size:18px;font-weight:600}.lc-sum{font-size:13px;color:var(--secondary-text-color,#9aa3ad)}'
+  +'.lc-x{background:none;border:0;color:inherit;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:22px;line-height:1}'
+  +'.lc-all{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:inherit;font:inherit;font-weight:600;cursor:pointer}.lc-all.on{background:rgba(255,190,90,.16);border-color:#ffbe5a;color:#ffe0b0}'
+  +'.lc-lt{display:flex;flex-direction:column;gap:8px;border-radius:12px;border:1px solid rgba(255,255,255,.1);padding:10px 12px;background:rgba(255,255,255,.03)}'
+  +'.lc-lt.on{border-color:color-mix(in srgb,var(--lc-c,#ffbe5a) 60%,transparent);background:color-mix(in srgb,var(--lc-c,#ffbe5a) 10%,transparent)}'
+  +'.lc-r1{display:flex;align-items:center;gap:10px}.lc-r1 b{flex:1;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lc-r1 span{font-size:12px;color:var(--secondary-text-color,#9aa3ad);font-variant-numeric:tabular-nums}'
+  +'.lc-sw{position:relative;width:46px;height:26px;border-radius:13px;border:0;background:rgba(255,255,255,.18);cursor:pointer;flex:none}.lc-sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .2s ease}'
+  +'.lc-sw.on{background:var(--lc-c,#ffbe5a)}.lc-sw.on::after{transform:translateX(20px)}'
+  +'.lc-rng{width:100%;margin:0;accent-color:var(--lc-c,#ffbe5a)}'
+  +'.lc-chips{display:flex;flex-wrap:wrap;gap:6px}.lc-chips button{min-height:32px;min-width:32px;border-radius:16px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.05);color:inherit;font:12px/1 inherit;padding:0 10px;cursor:pointer}'
+  +'.lc-chips button.sw{padding:0;width:32px;border-color:rgba(255,255,255,.25)}'
+  +'.lc-lbl{font-size:11px;color:var(--secondary-text-color,#9aa3ad);margin-bottom:-8px}'
+  +'.roc-lc button:focus-visible,.roc-lc input:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
+const ROC_LC_COLORS=[[255,183,107],[255,110,80],[255,60,120],[170,90,255],[70,140,255],[60,220,160]];
+function rocLcOpen(card,a){
+  if(!card||!card._hass||!a)return;
+  const R=rocLcResolve(card._config,a);if(!R.entities.length)return;
+  rocLcClose(card);if(card._heat)rocHcClose(card);if(card._hp)rocHpClose(card);if(card._xp)rocXpClose(card);
+  card._lc={ents:R.entities,names:R.names,name:R.name};
+  if(!card._lcKey){card._lcKey=function(e){if(e.key==='Escape'&&card._lc)rocLcClose(card);};document.addEventListener('keydown',card._lcKey);}
+  rocLcMount(card);rocLcUpdate(card);
+  if(card._fpInst&&card._fpInst.setFocus)card._fpInst.setFocus(R.entities[0]);
+}
+function rocLcClose(card){
+  const L=card&&card._lc;if(!L)return;
+  if(L.el&&L.el.parentNode)L.el.parentNode.removeChild(L.el);
+  if(L.bd&&L.bd.parentNode)L.bd.parentNode.removeChild(L.bd);
+  card._lc=null;
+  if(card._fpInst&&card._fpInst.setFocus)card._fpInst.setFocus('');
+  if(card._lcKey){document.removeEventListener('keydown',card._lcKey);card._lcKey=null;}
+}
+function rocLcCall(card,d,s,data){try{const p=card._hass.callService(d,s,data);if(p&&p.catch)p.catch(function(e){console.warn('[room-overlay-card] lights',e);});}catch(e){console.warn('[room-overlay-card] lights',e);}}
+function rocLcOn(card,ids,data){
+  const L=ids.filter(function(x){return x.indexOf('light.')===0;}),O=ids.filter(function(x){return x.indexOf('light.')!==0;});
+  if(L.length)rocLcCall(card,'light','turn_on',Object.assign({entity_id:L.length===1?L[0]:L},data||{}));
+  if(O.length&&!data)rocLcCall(card,'homeassistant','turn_on',{entity_id:O.length===1?O[0]:O});
+}
+function rocLcOff(card,ids){if(ids.length)rocLcCall(card,'homeassistant','turn_off',{entity_id:ids.length===1?ids[0]:ids});}
+function rocLcMount(card){
+  const L=card._lc,sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
+  const lang=rocHcLang(card._hass);
+  const bd=document.createElement('div');bd.className='roc-lc-bd'+(card._fpActive?' lc-lite':'');bd.addEventListener('click',function(){rocLcClose(card);});
+  const el=document.createElement('div');el.className='roc-lc'+(wrap.clientWidth&&wrap.clientWidth<600?' lc-bottom':'');
+  el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
+  el.innerHTML='<style>'+ROC_LC_CSS+'</style><div class="lc-hd"><div><div class="lc-room" data-lc-name></div><div class="lc-sum" data-lc-sum></div></div><button class="lc-x" data-lc="close" aria-label="'+rocHcEsc(rocLcT(lang,'close'))+'">×</button></div>'
+    +'<button class="lc-all" data-lc="all"></button><div data-lc-mw><div class="lc-lbl">'+rocHcEsc(rocLcT(lang,'bright'))+'</div><input class="lc-rng" type="range" min="1" max="100" step="1" data-lc-master aria-label="'+rocHcEsc(rocLcT(lang,'bright'))+'" style="margin-top:12px"></div>'
+    +'<div data-lc-list style="display:flex;flex-direction:column;gap:8px"></div>';
+  el.addEventListener('click',function(e){
+    const b=e.target.closest&&e.target.closest('[data-lc]');if(!b)return;
+    const k=b.getAttribute('data-lc'),id=b.getAttribute('data-e'),S=card._hass.states;
+    if(k==='close')rocLcClose(card);
+    else if(k==='all'){const on=L.ents.some(function(x){return S[x]&&S[x].state==='on';});if(on)rocLcOff(card,L.ents);else rocLcOn(card,L.ents);}
+    else if(k==='sw'){if(S[id]&&S[id].state==='on')rocLcOff(card,[id]);else rocLcOn(card,[id]);}
+    else if(k==='ct')rocLcOn(card,[id],{color_temp_kelvin:+b.getAttribute('data-v')});
+    else if(k==='rgb')rocLcOn(card,[id],{rgb_color:b.getAttribute('data-v').split(',').map(Number)});
+  });
+  // sliders send on release (change), the label follows while dragging
+  el.addEventListener('change',function(e){
+    const t=e.target;if(!t||!t.matches)return;
+    if(t.matches('[data-lc-master]')){const S=card._hass.states,on=L.ents.filter(function(x){return S[x]&&S[x].state==='on'&&rocLcCaps(S[x]).dim;});rocLcOn(card,on.length?on:L.ents.filter(function(x){return rocLcCaps(S[x]).dim;}),{brightness_pct:+t.value});}
+    else if(t.matches('[data-lc-bri]'))rocLcOn(card,[t.getAttribute('data-e')],{brightness_pct:+t.value});
+  });
+  wrap.appendChild(bd);wrap.appendChild(el);
+  L.el=el;L.bd=bd;L.lang=lang;L.sig='';
+  const x=el.querySelector('[data-lc="close"]');if(x)try{x.focus();}catch(_){}
+}
+function rocLcUpdate(card){
+  const L=card._lc;if(!L)return;
+  if(!L.el||!L.el.isConnected){const sr=card.shadowRoot;if(sr&&sr.querySelector('.wrap')){L.el=null;rocLcMount(card);}if(!L.el)return;}
+  const S=card._hass.states,lang=L.lang,el=L.el,q=function(s){return el.querySelector(s);};
+  const on=L.ents.filter(function(x){return S[x]&&S[x].state==='on';});
+  q('[data-lc-name]').textContent=L.name||((S[L.ents[0]]&&S[L.ents[0]].attributes.friendly_name)||L.ents[0]);
+  el.setAttribute('aria-label',q('[data-lc-name]').textContent);
+  q('[data-lc-sum]').textContent=on.length?rocLcT(lang,'n_on',{n:on.length,m:L.ents.length}):rocLcT(lang,'none_on');
+  const all=q('[data-lc="all"]');all.textContent=rocLcT(lang,on.length?'all_off':'all_on');all.classList.toggle('on',!!on.length);
+  const dims=L.ents.filter(function(x){return rocLcCaps(S[x]).dim;});
+  q('[data-lc-mw]').style.display=dims.length>1?'':'none';
+  const mr=q('[data-lc-master]');
+  if(mr&&card.shadowRoot.activeElement!==mr){const b=on.map(function(x){return rocHcNum(S[x].attributes.brightness);}).filter(isFinite);mr.value=String(b.length?Math.round(Math.max.apply(null,b)/2.55):100);}
+  // the rows are rebuilt only when something they show changed (a slider being dragged keeps its place)
+  const sig=JSON.stringify(L.ents.map(function(x){const s=S[x];return s?[s.state,s.attributes.brightness,s.attributes.rgb_color,s.attributes.color_temp_kelvin,s.attributes.supported_color_modes]:null;}));
+  if(sig===L.sig)return;L.sig=sig;
+  const act=card.shadowRoot.activeElement;if(act&&act.matches&&act.matches('[data-lc-bri]')&&el.contains(act))return;
+  q('[data-lc-list]').innerHTML=L.ents.map(function(id){
+    const s=S[id],a=(s&&s.attributes)||{},c=rocLcCaps(s),isOn=!!s&&s.state==='on';
+    const bri=rocHcNum(a.brightness),pct=isFinite(bri)?Math.max(1,Math.round(bri/2.55)):(isOn?100:0);
+    const rgb=Array.isArray(a.rgb_color)?a.rgb_color:null,col=isOn?(rgb?'rgb('+rgb.join(',')+')':'#ffbe5a'):'#ffbe5a';
+    const nm=L.names[id]||a.friendly_name||id;
+    let h='<div class="lc-lt'+(isOn?' on':'')+'" style="--lc-c:'+col+'"><div class="lc-r1"><b>'+rocHcEsc(nm)+'</b><span>'+rocHcEsc(s?(isOn?(c.dim?pct+' %':rocLcT(lang,'on_s')):rocLcT(lang,'off_s')):'—')+'</span>'
+      +'<button class="lc-sw'+(isOn?' on':'')+'" data-lc="sw" data-e="'+rocHcEsc(id)+'" role="switch" aria-checked="'+isOn+'" aria-label="'+rocHcEsc(nm)+'"></button></div>';
+    if(c.dim)h+='<input class="lc-rng" type="range" min="1" max="100" step="1" value="'+(pct||1)+'" data-lc-bri data-e="'+rocHcEsc(id)+'" aria-label="'+rocHcEsc(nm+' · '+rocLcT(lang,'bright'))+'">';
+    if(c.ct||c.col){
+      h+='<div class="lc-chips">';
+      if(c.ct)[['warm',2700],['neutral',4000],['cold',6000]].forEach(function(t){const k=Math.max(c.kmin,Math.min(c.kmax,t[1]));h+='<button data-lc="ct" data-e="'+rocHcEsc(id)+'" data-v="'+k+'">'+rocHcEsc(rocLcT(lang,t[0]))+'</button>';});
+      if(c.col)ROC_LC_COLORS.forEach(function(v){h+='<button class="sw" data-lc="rgb" data-e="'+rocHcEsc(id)+'" data-v="'+v.join(',')+'" style="background:rgb('+v.join(',')+')" aria-label="rgb('+v.join(',')+')"></button>';});
+      h+='</div>';
+    }
+    return h+'</div>';
+  }).join('');
+}
+// ---- the lights lens's panel: every plan room's lights ----
+function rocFpPlanRooms(cAll,def){
+  const rooms=Array.isArray(cAll&&cAll.rooms)?cAll.rooms:[];
+  return(def&&Array.isArray(def.rooms)?def.rooms:[]).filter(function(r){return r&&typeof r==='object';}).map(function(r){
+    const cr=r.room!=null?rooms.find(function(x){return x&&String(x.id)===String(r.room);}):null;
+    const L=(Array.isArray(r.lights)?r.lights:(r.lights?[r.lights]:[])).map(function(x){return x&&typeof x==='object'?String(x.entity||''):String(x);}).filter(Boolean);
+    return{cfg:r,card:cr,name:r.name||(cr&&cr.overview_tile&&cr.overview_tile.name)||(cr&&cr.name)||r.room||'',lights:L};
+  });
+}
+const ROC_XP_CSS=ROC_HP_CSS.replace(/roc-hp/g,'roc-xp').replace(/hp-/g,'xp-')
+  +'.xp-room.lit{border-color:rgba(255,190,90,.6);background:rgba(255,190,90,.08)}.xp-room.lit .s i{background:#ffbe5a;box-shadow:0 0 6px #ffbe5a}'
+  +'.xp-room.q{border-color:#03a9f4;background:rgba(3,169,244,.1)}.xp-room.q .s i{background:#03a9f4}'
+  +'.xp-go{min-height:44px;border-radius:12px;border:0;background:var(--primary-color,#03a9f4);color:#fff;font:inherit;font-weight:600;cursor:pointer;flex:1}.xp-go:disabled{opacity:.4;cursor:default}'
+  +'.xp-sec{min-height:44px;border-radius:12px;border:1px solid rgba(255,255,255,.16);background:none;color:inherit;font:inherit;cursor:pointer;padding:0 16px}'
+  +'.xp-acts{display:flex;gap:8px}.xp-vac{display:flex;align-items:center;gap:10px;font-size:13px}.xp-vac i{width:10px;height:10px;border-radius:50%;flex:none;background:#7d8590}.xp-vac b{font-weight:600}.xp-vac span{color:var(--secondary-text-color,#9aa3ad)}.xp-vac.err span{color:var(--roc-alert-c,#ff7a6e)}'
+  +'.xp-hint{font-size:12px;color:var(--secondary-text-color,#9aa3ad)}';
+// one bottom panel at a time for the lights and cleaning lenses (the house panel has its own)
+function rocXpOpen(card,kind){
+  if(!card||!card._hass)return;
+  rocXpClose(card);if(card._hp)rocHpClose(card);if(card._heat)rocHcClose(card);if(card._lc)rocLcClose(card);
+  const sr=card.shadowRoot,wrap=sr&&sr.querySelector('.wrap');if(!wrap)return;
+  const lang=rocHcLang(card._hass),T=function(k,v){return rocHcEsc(rocLcT(lang,k,v));};
+  const bd=document.createElement('div');bd.className='roc-xp-bd';bd.addEventListener('click',function(){rocXpClose(card);});
+  const el=document.createElement('div');el.className='roc-xp';el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
+  const ttl=kind==='lights'?T('house_l'):T('house_c');el.setAttribute('aria-label',kind==='lights'?rocLcT(lang,'house_l'):rocLcT(lang,'house_c'));
+  el.innerHTML='<style>'+ROC_XP_CSS+'</style><div class="xp-hd"><h3>'+ttl+'</h3><button class="xp-x" data-xp="close" aria-label="'+T('close')+'">×</button></div><div data-xp-body style="display:flex;flex-direction:column;gap:14px"></div>';
+  el.addEventListener('click',function(e){
+    const b=e.target.closest&&e.target.closest('[data-xp]');if(!b)return;
+    const k=b.getAttribute('data-xp'),P=card._xp;if(!P)return;
+    if(k==='close')rocXpClose(card);
+    else if(k==='alloff'){const ids=P.lit||[];card._confirm(rocLcT(lang,'off_q')).then(function(ok){if(ok)rocLcOff(card,ids);});}
+    else if(k==='lroom'){const i=+b.getAttribute('data-v'),r=P.rooms[i];rocXpClose(card);if(r)rocLcOpen(card,{entities:r.lights,name:r.name,room:r.card&&r.card.id});}
+    else if(k==='mode'){P.mode=b.getAttribute('data-v');P.sig='';rocXpUpdate(card);}
+    else if(k==='q')card._hass.callService('anyvac','select_rooms',{rooms:[b.getAttribute('data-v')],mode:'toggle'});
+    else if(k==='clear')card._hass.callService('anyvac','select_rooms',{rooms:[],mode:'clear'});
+    else if(k==='go'&&P.sel&&P.sel.length)card._hass.callService('anyvac','clean',{rooms:P.sel.slice(),mode:P.mode});
+  });
+  wrap.appendChild(bd);wrap.appendChild(el);
+  const def=rocFpCfg(card._config,card._roomIdx)||{};
+  card._xp={kind:kind,el:el,bd:bd,lang:lang,sig:'',mode:['dry','wet','both'].indexOf(def.clean_mode)>=0?def.clean_mode:'dry'};
+  if(!card._xpKey){card._xpKey=function(e){if(e.key==='Escape'&&card._xp)rocXpClose(card);};document.addEventListener('keydown',card._xpKey);}
+  rocXpUpdate(card);
+  const x=el.querySelector('[data-xp="close"]');if(x)try{x.focus();}catch(_){}
+}
+function rocXpClose(card){
+  const P=card&&card._xp;if(!P)return;
+  if(P.el&&P.el.parentNode)P.el.parentNode.removeChild(P.el);
+  if(P.bd&&P.bd.parentNode)P.bd.parentNode.removeChild(P.bd);
+  card._xp=null;
+  if(card._xpKey){document.removeEventListener('keydown',card._xpKey);card._xpKey=null;}
+}
+// AnyVac: the map sensors of the plan and the shared selection (room names on the map)
+function rocAvSensors(card,def){return typeof card._sigAnyvac==='function'?card._sigAnyvac(def||{}):[];}
+function rocAvSel(S,ids){for(const id of ids){const a=S[id]&&S[id].attributes;if(a&&Array.isArray(a.selected_rooms))return a.selected_rooms.map(function(x){return String(x&&typeof x==='object'?x.name:x);});}return[];}
+function rocAvRoom(S,ids,key){for(const id of ids){const a=S[id]&&S[id].attributes;const x=a&&Array.isArray(a.rooms)?a.rooms.find(function(q){return q&&String(q.home_room_id||'')===String(key);}):null;if(x)return x;}return null;}
+function rocAvName(st,id){return String((st&&st.attributes&&st.attributes.friendly_name)||id).replace(/\s*-?\s*AnyVac Map$/i,'').trim()||id;}
+function rocXpUpdate(card){
+  const P=card._xp;if(!P)return;
+  if(!P.el.isConnected){rocXpClose(card);return;}
+  const S=card._hass.states,lang=P.lang,T=function(k,v){return rocHcEsc(rocLcT(lang,k,v));};
+  const def=rocFpCfg(card._config,card._roomIdx)||{};
+  const rooms=P.rooms=rocFpPlanRooms(card._config,def);
+  let h='';
+  if(P.kind==='lights'){
+    const lit=[];
+    const cells=rooms.map(function(r,i){
+      if(!r.lights.length)return'';
+      const on=r.lights.filter(function(x){return S[x]&&S[x].state==='on';});on.forEach(function(x){lit.push(x);});
+      const b=on.map(function(x){return rocHcNum(S[x].attributes.brightness);}).filter(isFinite);
+      return'<button class="xp-room'+(on.length?' lit':'')+'" data-xp="lroom" data-v="'+i+'"><span class="n">'+rocHcEsc(r.name)+'</span>'
+        +'<span class="t">'+on.length+'<small>/ '+r.lights.length+'</small></span>'
+        +'<span class="s"><i></i>'+rocHcEsc(on.length?rocLcT(lang,'n_on',{n:on.length,m:r.lights.length})+(b.length?' · '+Math.round(Math.max.apply(null,b)/2.55)+' %':''):rocLcT(lang,'none_on'))+'</span></button>';
+    }).join('');
+    P.lit=lit;
+    h='<div class="xp-acts"><button class="xp-go" data-xp="alloff"'+(lit.length?'':' disabled')+'>'+T('all_off')+'</button></div>'
+      +'<div class="xp-lbl">'+T('rooms')+'</div><div class="xp-rooms">'+cells+'</div>';
+  }else{
+    const ids=rocAvSensors(card,def),sel=rocAvSel(S,ids);
+    const vc=Array.isArray(def.vacuums)?def.vacuums:[];
+    const vac=ids.map(function(id){
+      const st=S[id],a=(st&&st.attributes)||{},e=vc.find(function(x){return x&&typeof x==='object'&&x.entity===id;})||{};
+      const err=a.vacuum_error||(a.dock_status&&a.dock_status.dock_error)||'';
+      const ss=String(a.status_state||'');let txt=ss?rocLcT(lang,'st_'+ss.replace(/[^a-z_]/gi,'_').toLowerCase()):'';if(txt.indexOf('st_')===0)txt=ss;
+      if(a.in_cleaning&&a.vacuum_room_name)txt=rocLcT(lang,'cleaning_in',{r:a.vacuum_room_name});
+      const bat=rocHcNum(a.battery);
+      const vcol=e.color||(card._fpInst&&card._fpInst._vacColors?card._fpInst._vacColors(id).robot:''); // the robot's colour on the plan
+      return'<div class="xp-vac'+(err?' err':'')+'"><i style="'+(vcol?'background:'+rocHcEsc(vcol):'')+'"></i><b>'+rocHcEsc(rocAvName(st,id))+'</b><span>'+rocHcEsc([err?String(err):txt,isFinite(bat)?rocLcT(lang,'bat',{n:Math.round(bat)}):''].filter(Boolean).join(' · '))+'</span></div>';
+    }).join('');
+    const av=rooms.map(function(r){const x=r.cfg.anyvac_room?rocAvRoom(S,ids,r.cfg.anyvac_room):null;return x&&x.name?{r:r,x:x}:null;}).filter(Boolean);
+    P.sel=av.filter(function(o){return sel.indexOf(String(o.x.name))>=0;}).map(function(o){return String(o.x.name);});
+    const ago=function(t){const ms=Date.now()-Date.parse(t);if(!isFinite(ms)||ms<0)return'';const m=Math.round(ms/60000);return m<60?Math.max(1,m)+' min':(m<2880?Math.round(m/60)+' h':Math.round(m/1440)+' d');};
+    const cells=av.map(function(o){
+      const q=sel.indexOf(String(o.x.name))>=0,lt=[o.x.last_dry?rocLcT(lang,'dry')+' '+ago(o.x.last_dry):'',o.x.last_wet?rocLcT(lang,'wet')+' '+ago(o.x.last_wet):''].filter(function(v){return v&&!/ $/.test(v);}).join(' · ');
+      return'<button class="xp-room'+(q?' q':'')+'" data-xp="q" data-v="'+rocHcEsc(o.x.name)+'" aria-pressed="'+q+'"><span class="n">'+rocHcEsc(o.r.name)+'</span><span class="s"><i></i>'+rocHcEsc(lt||'—')+'</span></button>';
+    }).join('');
+    const n=P.sel.length;
+    h=(vac?'<div class="xp-lbl">'+T('vacuums')+'</div><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">'+vac+'</div>':'')
+      +'<div class="xp-lbl">'+T('mode')+'</div><div class="xp-modes" style="margin-top:8px">'+['dry','wet','both'].map(function(m){return'<button data-xp="mode" data-v="'+m+'"'+(P.mode===m?' class="on" aria-pressed="true"':' aria-pressed="false"')+'>'+T(m)+'</button>';}).join('')+'</div>'
+      +'<div class="xp-lbl">'+T('queue')+'</div><div class="xp-rooms">'+cells+'</div>'
+      +(n?'':'<div class="xp-hint">'+T('nothing')+'</div>')
+      +'<div class="xp-acts"><button class="xp-go" data-xp="go"'+(n?'':' disabled')+'>'+(n===1?T('start1'):T('start',{n:n}))+'</button>'+(n?'<button class="xp-sec" data-xp="clear">'+T('clear')+'</button>':'')+'</div>';
+  }
+  if(h!==P.sig){P.el.querySelector('[data-xp-body]').innerHTML=h;P.sig=h;}
+}
+// ---- dock badges of the lights and cleaning lenses ----
+function rocFpLensBadges(card,def,lang){
+  const S=card._hass.states,out={};
+  const rooms=rocFpPlanRooms(card._config,def);
+  const lit=rooms.filter(function(r){return r.lights.some(function(x){return S[x]&&S[x].state==='on';});}).length;
+  out.lights={badge:lit?{t:String(lit),c:''}:null,active:lit>0,title:rocLcT(lang,'lens_lights')+' · '+(lit?rocLcT(lang,'l_lit',{n:lit}):rocLcT(lang,'l_none'))};
+  const ids=rocAvSensors(card,def);
+  let run=0,err=false,prog=-1;
+  ids.forEach(function(id){
+    const a=S[id]&&S[id].attributes;if(!a)return;
+    if(a.vacuum_error||(a.dock_status&&a.dock_status.dock_error))err=true;
+    if(a.in_cleaning){run++;const r=Array.isArray(a.rooms)?a.rooms.find(function(x){return x&&x.name===a.vacuum_room_name;}):null;const p=r?rocHcNum(r.progress_pct):NaN;if(isFinite(p))prog=Math.max(prog,p);}
+  });
+  const q=rocAvSel(S,ids).length;
+  out.cleaning={badge:err?{t:'!',c:'var(--roc-alert-c)'}:(run?{t:String(run),c:''}:(q?{t:String(q),c:'#03a9f4'}:null)),active:run>0,ring:run&&prog>=0?prog:-1,
+    title:rocLcT(lang,'lens_cleaning')+' · '+(err?rocLcT(lang,'c_err'):(run?rocLcT(lang,'c_run',{n:run}):(q?rocLcT(lang,'c_q',{n:q}):'—')))};
+  return out;
 }
 // ----- Value formatting (v6.16.0) ---------------------------------------------
 // One formatter for every place that prints an entity value: labels, nav
@@ -2377,6 +2675,7 @@ class RoomOverlayCard extends HTMLElement{
     this._hass=h;if(!this._config)return;
     if(this._heat)rocHcUpdate(this); // the heating controller (7.2.0) follows its thermostat
     if(this._hp)rocHpUpdate(this); // …and the house panel (7.3.0)
+    if(this._lc)rocLcUpdate(this);if(this._xp)rocXpUpdate(this); // …the light controller and the lens panels (7.4.0)
     if(!this._rendered){this._render();return;}
     // Embedded cards do their own change detection — always forward hass
     // (even while off-screen, so they're current the moment the card scrolls back)
@@ -3693,7 +3992,7 @@ class RoomOverlayCard extends HTMLElement{
           attention:function(){return rocRoomSignals(cAll,(self._hass&&self._hass.states)||{},{sections:self._fpSections(def,cAll),presence:false,vacuum:false});},
           roomMatch:function(v){return roomMatch(cAll,v);},
           onRender:function(v){if(typeof self._rocFpSink==='function')try{self._rocFpSink(v);}catch(_){}}});
-        if(self._heat&&self._fpInst&&self._fpInst.setFocus)self._fpInst.setFocus(self._heat.entity); // 7.3.0: the room whose controller is open
+        if(self._fpInst&&self._fpInst.setFocus)self._fpInst.setFocus(self._heat?self._heat.entity:(self._lc?self._lc.ents[0]:'')); // 7.3.0: the room whose controller is open
       }catch(e){console.warn('[room-overlay-card] floor plan:',e);host.innerHTML='<div class="roc-fp-msg">'+escA(e&&e.message||String(e))+'</div>';}
     };
     const C=customElements.get('room-overlay-card');
@@ -5384,7 +5683,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       const _L=_fpDef.layers&&typeof _fpDef.layers==='object'?_fpDef.layers:{};
       const _so={persons:_L.presence===false?[]:rocSigPersons(_fpDef.presence,this._roomEntityId()),anyvac:_L.vacuum===false?[]:this._sigAnyvac(_fpDef)};
       rocSigEntities(_so,_L.attention===false?[]:this._fpSections(_fpDef,cAll)).forEach(function(id){_ex.ids.add(id);});
-      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px','live','rooms','view_layers'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0)
+      _so.anyvac.forEach(function(id){['in_cleaning','vacuum_room_name','vacuum_position_home_px','path_dry_home_px','path_wet_home_px','live','rooms','view_layers','selected_rooms','vacuum_error','status_state','battery','home_frame'].forEach(function(at){_ex.attrs.add(id+' '+at);});}); // + the robot and its trail (v6.49.0); the cleaning lens's queue, errors, battery; a new home frame (7.4.0)
     }
     if(this._ovSig){
       const _sc=this._ovSig.cfg;
@@ -5720,6 +6019,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._sectionOpen)this._closeSection(); // COCKPIT_PLAN.md kap.7: panel closes on room switch
     if(this._heat)rocHcClose(this); // …and so does the heating controller (7.2.0)
     if(this._hp)rocHpClose(this); // …and the house panel (7.3.0)
+    if(this._lc)rocLcClose(this);if(this._xp)rocXpClose(this);
     this._roomIdx=idx;
     this._rememberRoom(); // record the room the user switched to (for the editor)
     // Editor preview instance (see _mountPreview): tell the editor GUI so its
@@ -7143,6 +7443,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
       case'open-section':if(a.section)this._openSection(a.section);break;
       case'heating':rocHcOpen(this,a.entity||a.entity_id);break; // 7.2.0: the heating controller
       case'fp-lens':rocFpLensTap(this,a.lens);break; // 7.3.0: a lens button in the floor plan's dock
+      case'lights':rocLcOpen(this,a);break; // 7.4.0: the light controller
       // Standard Lovelace hook (browser_mod 2 popups, custom actions): HA's own
       // cards dispatch the whole action config as an `ll-custom` event.
       case'fire-dom-event':this.dispatchEvent(new CustomEvent('ll-custom',{bubbles:true,composed:true,detail:a}));break;
@@ -7189,6 +7490,7 @@ navSelf._navChipInto(chipCont,chCfg,r);
     if(this._secKeyHandler)document.removeEventListener('keydown',this._secKeyHandler);
     if(this._heat)rocHcClose(this);
     if(this._hp)rocHpClose(this);
+    if(this._lc)rocLcClose(this);if(this._xp)rocXpClose(this);
     if(this._hlHandler)window.removeEventListener('roc-highlight',this._hlHandler); // kept — revived on reconnect
     if(this._camTimer){clearInterval(this._camTimer);this._camTimer=null;}
     if(this._relTimer){clearInterval(this._relTimer);this._relTimer=null;} // _relNeeded drives the restart

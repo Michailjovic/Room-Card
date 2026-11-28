@@ -1,6 +1,6 @@
 # Room Overlay Card — Roadmap
 
-Current release: **7.3.0** (2026-11-28). Verified against Home Assistant 2026.11.3, installed from
+Current release: **7.4.0** (2026-11-28). Verified against Home Assistant 2026.11.3, installed from
 its Marketplace.
 
 The full record of every release is [`CHANGELOG.md`](CHANGELOG.md). Finished plans live in
@@ -26,11 +26,12 @@ Left over from Phase 10:
   by name in the default catalog, all three files installed, the dashboard resource added by
   itself, *⋮ → Install another version* lists every release)
 
-## 🎯 Floor heating and the plan as the hub — 7.1–7.4
+## 🎯 Floor heating and the plan as the hub — 7.1–7.5
 
 Plan: [`HEATING_PLAN.md`](HEATING_PLAN.md). ✅ 7.1.0 loops and feeds on the plan · ✅ 7.2.0 the
 heating controller · ✅ 7.3.0 lenses (overview, heating), the house panel, the pause banner ·
-7.3.x the cleaning lens (and the AnyVac fix on the plan) · 7.4.0 administration and the phone mode.
+✅ 7.4.0 the lights lens with the light controller, the cleaning lens, the AnyVac fix on the plan ·
+7.5.0 administration and the phone mode.
 
 ## 🎯 Next — 7.x
 

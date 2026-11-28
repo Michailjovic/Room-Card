@@ -276,7 +276,7 @@ edits the plan instead of elements, with a toolbar above it:
 - **Passes** (7.1.0) — click a wall where the heating pipes pass under it; click a pass to remove
   it. The tool stays on for the next wall (Esc ends it). Feeds cross walls only at passes; the
   hint names a room no feed reaches.
-- **Lenses** (7.3.0) — in the page's Properties: *Lenses* (pick overview / heating, in order),
+- **Lenses** (7.3.0) — in the page's Properties: *Lenses* (pick overview / lights / heating / cleaning, in order),
   *Lens* (the one the page opens in), *Dock* (section launchers next to them) and *Pause banner*.
   The house panel's entities are in Card settings → *Heating controller*; the central mode and
   boiler fields show what the card found by itself. See [Lenses](FLOORPLAN.md#lenses).

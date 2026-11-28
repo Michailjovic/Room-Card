@@ -60,6 +60,14 @@ function callService(domain,service,data,target){data=data||{};const L=ids(data,
     case'versatile_thermostat':L.forEach(id=>{const n=states[id.replace('climate.','number.')+'_preset_boost_temp'];
       if(service==='set_timed_preset')put(id,null,{temperature:n?+n.state:states[id].attributes.temperature,timed_preset_manager:{is_active:true,end_time:new Date(Date.now()+(+data.duration_minutes||60)*60000).toISOString()}});
       if(service==='cancel_timed_preset')put(id,null,{timed_preset_manager:{is_active:false}});});break;
+    // AnyVac (7.4.0 demo): the shared room selection and a short pretend clean
+    case'anyvac':{const av=Object.keys(states).filter(k=>k.endsWith('_anyvac_map'));
+      if(service==='select_rooms'){const cur=(states[av[0]].attributes.selected_rooms||[]).slice();const rs=data.rooms||[];
+        const nx=data.mode==='clear'?[]:data.mode==='set'?rs.slice():data.mode==='toggle'?cur.filter(r=>!rs.includes(r)).concat(rs.filter(r=>!cur.includes(r))):cur;
+        av.forEach(id=>put(id,null,{selected_rooms:nx}));}
+      else if(service==='clean'){const id=av[0],r=(data.rooms||[])[0];put(id,null,{in_cleaning:true,vacuum_room_name:r,status_state:'cleaning',selected_rooms:[]});av.slice(1).forEach(x=>put(x,null,{selected_rooms:[]}));
+        setTimeout(()=>{put(id,null,{in_cleaning:false,status_state:'charging'});push();},8000);}
+      else toast('anyvac.'+service+' — not available in the demo');}break;
     case'vacuum':L.forEach(id=>{const st=id.replace('vacuum.','sensor.')+'_status';
       if(service==='start'){put(id,'cleaning');if(states[st])put(st,'cleaning');}
       else{put(id,'returning');if(states[st])put(st,'returning');setTimeout(()=>{put(id,'docked');if(states[st])put(st,'docked');push();},3000);}});break;

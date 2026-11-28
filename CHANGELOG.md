@@ -1,6 +1,47 @@
 # Changelog
 
-## [7.3.0] - 2026-11-28
+## [7.4.0] - 2026-11-28
+
+Two more lenses on the floor plan — lights and cleaning — with a light controller, and the AnyVac
+vacuums back on the plan after AnyVac's shared home frame. Step 4 of HEATING_PLAN.md.
+
+### Added
+
+- **Lights lens** — light pools, windows and blinds in front; every label says on (how bright) /
+  off, outlined in the light's colour; rooms without lights step back. A tap on a room opens its
+  light controller beside the plan with the room outlined (hold still toggles the lights). The
+  dock button shows how many rooms are lit; tapped again it opens a panel with every room's lights
+  and *All off* (confirmed first).
+- **The light controller** — `action: lights` with `room` (a card room's `light_controls`, with
+  their names), `entities` or `entity`, optional `name`: the room on / off, the whole room's
+  brightness, and per light a switch, a brightness slider, *Warm* / *Neutral* / *Cold* within the
+  light's range and six colours — by what each light supports. docs/LIGHTS.md. Studio: the action
+  form offers it (a light or a room).
+- **Cleaning lens** — vacuums, trails and when each room was cleaned in front. A tap queues /
+  unqueues the room in AnyVac's shared selection (the one AnyVac's own card's dock uses); hold
+  cleans it now (confirmed first); queued rooms are outlined. The dock button shows `!` (a vacuum
+  or dock error), how many vacuums clean (ring: the room's progress) or how many rooms are queued;
+  tapped again it opens the cleaning panel: every vacuum with its state, battery and errors, the
+  mode (vacuum / mop / both), the queue, *Clean n rooms*, *Clear*.
+- Lenses come by themselves when the plan has something for them: lights (a room with `lights`),
+  heating (a `climate`), cleaning (AnyVac on the plan). `floorplan.lenses` / `lens` accept
+  `lights` and `cleaning`.
+- **Hot water** in the house panel — the water heater's temperature and target
+  (`heating.water_heater`, else the only `water_heater` there is). The VTherm central boiler row
+  is the *heating boiler* (in Czech still *Kotel*).
+
+### Fixed
+
+- **AnyVac vacuums off the plan or in the wrong place.** AnyVac moved every vacuum of a home into
+  one shared home frame; the plan's source mapping (the old frame) dropped the source vacuum, and
+  the stored transforms (fitted in the old per-vacuum frames) put the others somewhere else. The
+  plan now fits a map whose frame is not the one its mapping was made in to its own rooms
+  (`anyvac_room` keys, else the same names) by itself; a transform remembers its `frame`, and one
+  from before 7.4.0 is used only when the rooms cannot be paired. The studio's Vacuums panel fits
+  to the plan's rooms too (it used the source map, whose frame can change as well).
+- The floor plan's dock scrolls sideways when the lenses and section launchers do not fit (phones).
+
+
 
 Lenses on the floor plan: the plan becomes the hub, with a heating lens, a house panel and a pause
 banner. Step 3 of HEATING_PLAN.md (decision 10).

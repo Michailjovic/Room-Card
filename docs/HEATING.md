@@ -58,7 +58,9 @@ the house panel at the bottom:
 - **House mode** — Versatile Thermostat's central mode (*Auto*, *Stopped*, *Heat only*,
   *Frost protection*; *Cool only* only when a thermostat can cool). A tap sets it. An automation
   that drives the central mode (by the tariff, say) keeps doing so — the panel shows what it set.
-- **Boiler** — running / off, from VTherm's central boiler.
+- **Heating boiler** (*Kotel*) — running / off, from VTherm's central boiler: what heats the floor.
+- **Hot water** *(7.4.0)* — the water heater (*bojler*): its temperature and target. The only
+  `water_heater` there is, or `water_heater:`.
 - **Tariff** — high (VT) / low (NT), with `tariff`.
 - **Main supply** — the sensors in `supply`, one row each.
 - **Rooms** — every thermostat of the plan (then `heating.rooms`): now → target and its status; a
@@ -70,7 +72,8 @@ the Studio shows what it found. Set them to use other entities, or `false` to le
 ```yaml
 heating:
   central_mode: select.central_mode            # found by itself; false = no house mode
-  boiler: binary_sensor.central_configuration_central_boiler
+  boiler: binary_sensor.central_configuration_central_boiler   # the heating boiler (VTherm's central boiler)
+  water_heater: water_heater.bojler            # hot water; found when there is only one; false = none
   tariff:
     entity: switch.hdo                         # the HDO signal
     high_state: 'off'                          # its state in the high tariff (default 'on')

@@ -49,7 +49,7 @@
  */
 (function(){
 'use strict';
-const ROC_STUDIO_VERSION='7.3.0';
+const ROC_STUDIO_VERSION='7.4.0';
 // The schema registry (src/schema/roc-schema.js) is bundled here for the validation status. Its
 // UMD footer exports to `module.exports` when `module` exists — this wrapper provides one, so the
 // registry stays private to the studio instead of becoming window globals.
@@ -157,7 +157,7 @@ const S={
   // the heating controller (7.2.0): defaults for every thermostat, and per-room settings
   heating:{keys:{quick:{t:'list:num'},step:{t:'num',d:0.5},range:{t:'list:num'},durations:{t:'list:str'},evening:{t:'str',d:'22:00'},morning:{t:'str',d:'06:00'},rooms:{t:'list:hcRoom'},
     // the house panel (7.3.0): VTherm's central mode and central boiler are found by themselves; false hides one
-    central_mode:{t:'entity|bool',since:'7.3.0'},boiler:{t:'entity|bool',since:'7.3.0'},tariff:{t:'obj:hcTariff',since:'7.3.0'},supply:{t:'list:hcSupply',since:'7.3.0'}}},
+    central_mode:{t:'entity|bool',since:'7.3.0'},water_heater:{t:'entity|bool',since:'7.4.0'},boiler:{t:'entity|bool',since:'7.3.0'},tariff:{t:'obj:hcTariff',since:'7.3.0'},supply:{t:'list:hcSupply',since:'7.3.0'}}},
   hcTariff:{keys:{entity:{t:'entity'},high_state:{t:'str',d:'on'}},scalar:'entity'},
   hcSupply:{keys:{entity:{t:'entity'},name:{t:'str'}},scalar:'entity'},
   hcRoom:{keys:{climate:{t:'entity'},name:{t:'str'},quick:{t:'list:num'},step:{t:'num'},range:{t:'list:num'},evening:{t:'str'},morning:{t:'str'}},scalar:'climate'},
@@ -173,10 +173,10 @@ const S={
     operator:{t:'enum:<|>|<=|>=|==|!='},value:{t:'any'},above:{t:'num',since:'7.0.0'},below:{t:'num',since:'7.0.0'},and:{t:'cond'},or:{t:'cond'}}},
   condVal:{keys:COND_VAL},
   gradStop:{keys:{value:{t:'num'},color:{t:'color'}}},
-  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event|heating'},
+  action:{keys:{action:{t:'enum:none|navigate|url|more-info|toggle|call-service|perform-action|browser-mod-popup|toggle-group|show-group|hide-group|switch-room|next-room|prev-room|follow-room|open-section|close-section|fire-dom-event|heating|lights'},
     entity:{t:'entity'},entity_id:{t:'entity'},navigation_path:{t:'str'},navigation_replace:{t:'bool',since:'7.0.0'},path:{t:'str'},url:{t:'str'},url_path:{t:'str'},new_tab:{t:'bool'},
     service:{t:'str'},perform_action:{t:'str'},data:{t:'map'},service_data:{t:'map'},target:{t:'map'},
-    title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},section:{t:'str'},group:{t:'str'},
+    title:{t:'str'},size:{t:'str'},content:{t:'card'},room:{t:'str|num'},entities:{t:'list:str',since:'7.4.0'},name:{t:'str',since:'7.4.0'},section:{t:'str'},group:{t:'str'},
     confirmation:{t:'bool|map'},haptic:{t:'str'},condition:{t:'cond'},then:{t:'action'},else:{t:'action'}},open:'fire-dom-event'},
   transform:{keys:{entity:{t:'entity'},attribute:{t:'str'},origin:{t:'str'},transition:{t:'str'},perspective:{t:'len'},map:{t:'map'},from:{t:'map'},to:{t:'map'},spin:{t:'obj:spin'}}},
   spin:{keys:{min_duration:{t:'num|str'},max_duration:{t:'num|str'},axis:{t:'enum:x|y|z'},reverse:{t:'bool'},min_value:{t:'num'},max_value:{t:'num'}}},
@@ -264,13 +264,13 @@ const S={
     presence:{t:'bool|entity|list:fpEntity',since:'6.48.0'},layers:{t:'obj:fpLayers',since:'6.48.0'},items:{t:'list:fpItem',since:'6.48.0'},
     vacuums:{t:'list:fpVacuum',since:'6.50.0'},attention_sections:{t:'list:str',since:'6.50.0'},clean_mode:{t:'enum:dry|wet|both',d:'dry',since:'6.50.0'},trail_mode:{t:'enum:always|cleaning',d:'always',since:'6.50.0'},
     background:{t:'obj:fpBackground',since:'6.50.0'},heating:{t:'obj:fpHeating',since:'7.1.0'},
-    lenses:{t:'list:str',since:'7.3.0'},lens:{t:'enum:overview|heating',d:'overview',since:'7.3.0'},dock:{t:'bool|obj:ovDock',since:'7.3.0'},pause_banner:{t:'bool',d:true,since:'7.3.0'}}},
+    lenses:{t:'list:str',since:'7.3.0'},lens:{t:'enum:overview|lights|heating|cleaning',d:'overview',since:'7.3.0'},dock:{t:'bool|obj:ovDock',since:'7.3.0'},pause_banner:{t:'bool',d:true,since:'7.3.0'}}},
   // the floor plan page's own settings as the studio's form shows them (rooms / doors are edited on the canvas)
   fpPage:{keys:{theme:{t:'enum:night|clay|neon|blueprint|thermal|tiles|sketch',d:'night'},theme_by:{t:'obj:fpThemeBy'},projection:{t:'enum:auto|top|oblique|iso',d:'auto'},
     rotate:{t:'prof:num|enum:auto',d:'auto'},mirror:{t:'enum:none|horizontal|vertical|both',d:'none'},quality:{t:'enum:auto|high|low',d:'auto'},wall:{t:'obj:fpWall'},temperature_range:{t:'list:num'},overrides:{t:'map'},
     transition:{t:'enum:zoom|fade|none'},transition_duration:{t:'num|str'},trace:{t:'obj:fpTrace'},
     presence:{t:'bool|entity|list:fpEntity'},layers:{t:'obj:fpLayers'},attention_sections:{t:'list:str'},clean_mode:{t:'enum:dry|wet|both',d:'dry'},trail_mode:{t:'enum:always|cleaning',d:'always'},
-    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'},lenses:{t:'list:str'},lens:{t:'enum:overview|heating',d:'overview'},dock:{t:'bool|obj:ovDock'},pause_banner:{t:'bool',d:true}},hide:['rooms','openings','source','items','vacuums']},
+    background:{t:'obj:fpBackground'},heating:{t:'obj:fpHeatPage'},lenses:{t:'list:str'},lens:{t:'enum:overview|lights|heating|cleaning',d:'overview'},dock:{t:'bool|obj:ovDock'},pause_banner:{t:'bool',d:true}},hide:['rooms','openings','source','items','vacuums']},
   // floor heating loops and feeds (7.1.0): pitch = pipe to pipe, margin = loop to wall (m); with a
   // manifold every loop gets its feed, which crosses a wall only at a pass
   fpHeating:{keys:{pitch:{t:'num',d:0.2},margin:{t:'num',d:0.25},flow:{t:'bool',d:true},manifold:{t:'list:num'},passes:{t:'list:fpPass'}}},
@@ -279,7 +279,7 @@ const S={
   fpPass:{keys:{at:{t:'list:num'}}},
   // an AnyVac map on the plan; transform = its home frame → plan metres (another frame, set by the studio)
   fpVacuum:{keys:{entity:{t:'entity'},transform:{t:'obj:fpTransform'},color:{t:'color',since:'6.51.0'},mop_color:{t:'color',since:'6.51.0'},mop_opacity:{t:'num',since:'6.51.0'}},scalar:'entity'},
-  fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'}}},
+  fpTransform:{keys:{rotation:{t:'num'},x:{t:'num'},y:{t:'num'},rooms:{t:'num'},rms:{t:'num'},frame:{t:'str',since:'7.4.0'}}},
   // the photo background (D11): an image in plan metres
   fpBackground:{keys:{image:{t:'url'},x:{t:'num'},y:{t:'num'},scale:{t:'num'},width_px:{t:'num'},height_px:{t:'num'},rotation:{t:'num'},opacity:{t:'num'},
     floors:{t:'bool'},fiducials:{t:'list:any'},frame:{t:'str'}}},
@@ -510,7 +510,7 @@ const ROC_STUDIO_STR={en:{
   props_card_hint:'Select an element on the canvas or in the outline to edit it here. Layout, sections and the rest of the card settings are in All settings.',
   props_global_hint:'These are the defaults every room falls back to. Select an element, or a room in the outline, to edit it here.',
   ent_missing:'Not found in Home Assistant',dflt:'default',not_set:'not set',choose:'choose',
-  f_entity:'Entity',f_path:'Path',f_service:'Action',f_target:'Target entity',f_data:'Data (YAML)',f_section:'Section',f_group:'Group',
+  f_entity:'Entity',f_room:'Room (its light controls)',f_path:'Path',f_service:'Action',f_target:'Target entity',f_data:'Data (YAML)',f_section:'Section',f_group:'Group',
   one_value:'One value for both profiles',as_simple:'Use a single value',per_profile:'Different per profile (portrait / landscape)',as_conditions:'Depends on a state…',
   g_main:'General',g_position:'Position & size',g_actions:'Actions',g_visibility:'Visibility',g_advanced:'Advanced (YAML)',g_room_more:'More (YAML)',
   adv_hint:'Profile overrides (portrait / landscape) and keys the form does not list — kept exactly as they are',
@@ -567,7 +567,7 @@ const ROC_STUDIO_STR={en:{
   fp_flip_none:'Mirror: none',fp_flip_horizontal:'Mirror: horizontal',fp_flip_vertical:'Mirror: vertical',fp_flip_both:'Mirror: both',
   fp_vacs:'Vacuums on this plan',fp_vacs_l:'Vacuums',fp_vacs_auto:'Automatic',fp_vac_color:'Colour of the vacuum (robot, dry line, badge)',fp_vac_mop:'Colour of its mop trail',
   fp_vacs_body:'Which AnyVac vacuums this plan shows (the robot, its trail, the badge). A vacuum mapped in another home frame is aligned to this plan by the rooms both maps share (same names in the Roborock app); the fit can be tuned in YAML (floorplan.vacuums[].transform). Automatic = every vacuum in the frame the plan was imported from.',
-  fp_vac_same:'the plan\'s own frame',fp_vac_fit:'aligned by {n} rooms, ± {e} m',fp_vac_few:'cannot be aligned — fewer than 2 rooms with the same name',fp_vac_nosrc:'cannot be aligned — the plan was not imported from AnyVac',
+  fp_vac_same:'the plan\'s own frame',fp_vac_fit:'aligned by {n} rooms, ± {e} m',fp_vac_few:'cannot be aligned — fewer than 2 of its rooms are on the plan',fp_vac_nosrc:'cannot be aligned — the plan was not imported from AnyVac',
   fp_bg:'Photo background',fp_bg_l:'Background',fp_bg_body:'An image under the plan (e.g. your render of the home). AnyVac snapshot: a picture of the vacuum map exactly in place — edit it outside (keep the canvas, or keep the PNG transparency for the markers) and use the edited file here. Fit by markers places an edited, cropped or resized snapshot by AnyVac\'s invisible markers.',
   fp_bg_snap:'AnyVac snapshot',fp_bg_fit:'Fit by markers',fp_bg_floors:'Draw the floors over it',fp_bg_working:'Working…',fp_bg_snapped:'Snapshot placed. Edit the file, then use it here.',
   fp_bg_fitted:'Placed by {n} markers.',fp_bg_bad:'AnyVac gave nothing to place the image by.',fp_bg_err:'Could not do that: {m}',t_fpwindow:'Window',fp_openings_h:'Doors and windows',
@@ -1363,6 +1363,7 @@ function rsActionWidget(ctx,value,onChange,o){
     body.innerHTML='';
     const a=A(),same=rsActType(ctx,cur)===t;
     if(t==='more-info'||t==='toggle')field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:(o&&o.entity)||'',null,function(v){set(t,'entity',v);}));
+    else if(t==='lights'){field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:'',['light','switch'],function(v){set(t,'entity',v);}));const rw=rsSimpleWidget(ctx,'str',same?a.room:'',function(v){set(t,'room',v);},{choices:(ctx.choices&&ctx.choices('rooms'))||null});field(ctx.t('f_room'),rw);} // 7.4.0: a light, or a room's light controls
     else if(t==='heating')field(ctx.t('f_entity'),rsEntityInput(ctx,same?a.entity:'',['climate'],function(v){set(t,'entity',v);})); // 7.2.0: the heating controller of this thermostat
     else if(t==='navigate'){const i=rsSimpleWidget(ctx,'str',same?(a.navigation_path!==undefined?a.navigation_path:a.path):'',function(v){const n=base(t);delete n.path;if(v)n.navigation_path=v;else delete n.navigation_path;commit(n);});i.placeholder='/lovelace/0';field(ctx.t('f_path'),i);}
     else if(t==='url'){const i=rsSimpleWidget(ctx,'str',same?(a.url_path!==undefined?a.url_path:a.url):'',function(v){const n=base(t);delete n.url;if(v)n.url_path=v;else delete n.url_path;commit(n);});i.placeholder='https://…';field('URL',i);}
@@ -1593,7 +1594,7 @@ function rsKeyField(ctx,key,def,value,onChange,o){
 //       sectionAct(act)}
 // root._rsRefresh(findings) re-pins the validation messages without rebuilding the form.
 // Entity pickers that suggest only the domains a key can use (schema.key)
-const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'heating.central_mode':['select'],'heating.boiler':['binary_sensor','switch'],'hcTariff.entity':['binary_sensor','switch','input_boolean','sensor'],'hcSupply.entity':['sensor'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
+const RS_KEY_DOMAINS={'hcRoom.climate':['climate'],'heating.central_mode':['select'],'heating.water_heater':['water_heater'],'heating.boiler':['binary_sensor','switch'],'hcTariff.entity':['binary_sensor','switch','input_boolean','sensor'],'hcSupply.entity':['sensor'],'fpRoom.lights':['light','switch'],'fpLight.entity':['light','switch'],'fpRoom.climate':['climate'],'fpRoom.temperature':['sensor'],'fpRoom.humidity':['sensor'],'fpSource.anyvac':['sensor'],'fpRoom.media':['media_player'],'fpPage.presence':['sensor','person','device_tracker','input_select'],'floorplan.presence':['sensor','person','device_tracker','input_select'],'ovSignals.presence':['sensor','person','device_tracker','input_select'],'fpOpening.entity':['binary_sensor'],'fpOpening.cover':['cover'],'fpVacuum.entity':['sensor']};
 // Keys the card fills by itself when left empty (7.3.0): the placeholder names what it found
 const RS_AUTO_ENT={
   'heating.central_mode':function(id,st,e){const o=st.attributes&&st.attributes.options;return e.platform==='versatile_thermostat'&&id.indexOf('select.')===0&&Array.isArray(o)&&o.indexOf('Auto')>=0&&o.indexOf('Stopped')>=0;},
@@ -2715,7 +2716,7 @@ class RocStudio{
         const pair=function(l){return l.map(function(x){return[x,x];});};
         if(key==='section'||(key==='sections'&&schema==='ovDock'))return pair(ids(w.sections));
         if(key==='group')return pair(ids([].concat((room&&room.groups)||[],w.groups||[])));
-        if(key==='lenses'&&(schema==='fpPage'||schema==='floorplan'))return[['Overview','overview'],['Heating','heating']]; // 7.3.0
+        if(key==='lenses'&&(schema==='fpPage'||schema==='floorplan'))return[['Overview','overview'],['Lights','lights'],['Heating','heating'],['Cleaning','cleaning']]; // 7.3.0, 7.4.0
         if(key==='room'&&schema==='fpRoom')return rsFpPageRooms(w).map(function(x){return[String((x.r.overview_tile&&x.r.overview_tile.name)||x.r.name||x.r.id)+' ('+x.r.id+')',String(x.r.id)];});
         if(key==='rooms'||key==='focus')return pair(ids(self._rooms()));
         if(key==='area_match'){const a=(self.hass&&self.hass.areas)||{};return Object.keys(a).map(function(k){return[String(a[k].name||k),k];});}
@@ -4397,46 +4398,25 @@ RocStudio.prototype._fpAutoDoors=function(){
   });
 };
 // ---- vacuums on the plan (v6.50.0) ----
-// Every AnyVac map has its own home frame unless AnyVac registered it into another one. A map in
-// the plan's own frame needs nothing; any other is aligned once, here, by its rooms: the rooms
-// with the same name (as named in the Roborock app) in both maps give pairs of centroids, and a
-// rigid fit (rotation + shift, no scale — both are millimetres) maps its home px → plan metres.
-function rsFpRoomPts(G,r){
-  const ol=G.poly(r&&r.outline_home_px),b=r&&r.bbox_home_px;
-  const bb=b&&isFinite(b.x0)?[[b.x0,b.y0],[b.x1,b.y0],[b.x1,b.y1],[b.x0,b.y1]]:null;
-  if(ol.length>=3&&(!bb||Math.abs(G.area(ol))>=0.25*Math.abs(G.area(bb))))return ol;
-  return bb||[];
-}
-function rsFpCentroid(p){
-  let a=0,cx=0,cy=0;
-  for(let i=0;i<p.length;i++){const q=p[i],n=p[(i+1)%p.length],c=q[0]*n[1]-n[0]*q[1];a+=c;cx+=(q[0]+n[0])*c;cy+=(q[1]+n[1])*c;}
-  if(Math.abs(a)<1e-9){let x=0,y=0;p.forEach(function(q){x+=q[0];y+=q[1];});return p.length?[x/p.length,y/p.length]:null;}
-  return[cx/(3*a),cy/(3*a)];
-}
+// Every AnyVac map has a home frame. A map in the plan's own frame needs nothing; any other is
+// aligned here by its rooms (G.vacFit: the plan rooms' anyvac_room keys, else the same names, give
+// pairs of centroids; a rigid fit maps its home px → plan metres). The plan does the same by itself
+// whenever a map's frame changes (7.4.0).
 function rsFpVacuumFit(G,hass,fp,sensorId){
-  const S=(hass&&hass.states)||{},src=fp&&fp.source;
-  if(!src||!src.anyvac||!Array.isArray(src.origin_px)||!(Number(src.mm_per_px)>0))return{err:'nosource'};
-  const A=S[src.anyvac]&&S[src.anyvac].attributes,T=S[sensorId]&&S[sensorId].attributes;
-  if(!A||!T)return{err:'nomap'};
-  if(sensorId===src.anyvac||(T.home_frame&&src.frame&&String(T.home_frame.id||'')===String(src.frame)))return{same:true};
-  const kS=Number(src.mm_per_px)/1000,ox=Number(src.origin_px[0]),oy=Number(src.origin_px[1]);
-  const hf=T.home_frame||{},kT=(Number(hf.cell_mm)>0&&Number(hf.scale)>0?Number(hf.cell_mm)/Number(hf.scale):12.5)/1000;
-  const pairs=[];
-  (T.rooms||[]).forEach(function(tr){
-    if(!tr||!tr.name)return;
-    const sr=(A.rooms||[]).find(function(x){return x&&x.name===tr.name;});if(!sr)return;
-    const cp=rsFpCentroid(rsFpRoomPts(G,sr)),cq=rsFpCentroid(rsFpRoomPts(G,tr));if(!cp||!cq)return;
-    pairs.push({p:[(cp[0]-ox)*kS,(cp[1]-oy)*kS],q:[cq[0]*kT,cq[1]*kT],name:tr.name});
-  });
-  if(pairs.length<2)return{err:'few',n:pairs.length};
-  const n=pairs.length,mp=[0,0],mq=[0,0];
-  pairs.forEach(function(x){mp[0]+=x.p[0]/n;mp[1]+=x.p[1]/n;mq[0]+=x.q[0]/n;mq[1]+=x.q[1]/n;});
-  let num=0,den=0;
-  pairs.forEach(function(x){const qx=x.q[0]-mq[0],qy=x.q[1]-mq[1],px=x.p[0]-mp[0],py=x.p[1]-mp[1];num+=qx*py-qy*px;den+=qx*px+qy*py;});
-  const th=Math.atan2(num,den),c=Math.cos(th),s=Math.sin(th);
-  const tx=mp[0]-(c*mq[0]-s*mq[1]),ty=mp[1]-(s*mq[0]+c*mq[1]);
-  let e=0;pairs.forEach(function(x){const X=c*x.q[0]-s*x.q[1]+tx,Y=s*x.q[0]+c*x.q[1]+ty;e+=(X-x.p[0])*(X-x.p[0])+(Y-x.p[1])*(Y-x.p[1]);});
-  return{transform:{rotation:Math.round(th*180/Math.PI*100)/100,x:rsFpR(tx),y:rsFpR(ty),rooms:n,rms:rsFpR(Math.sqrt(e/n))}};
+  // 7.4.0: fitted to the plan's own rooms (their anyvac_room keys, else their names), not to the
+  // source map — the source map's frame can change too (AnyVac's shared home frame); the transform
+  // remembers the frame it belongs to, and the plan refits by itself when that frame changes
+  const S=(hass&&hass.states)||{},src=fp&&fp.source,T=S[sensorId]&&S[sensorId].attributes;
+  if(!T)return{err:'nomap'};
+  const hf=T.home_frame||{};
+  if(src&&src.frame&&hf.id&&String(hf.id)===String(src.frame)&&Array.isArray(src.origin_px)&&Number(src.mm_per_px)>0)return{same:true};
+  const plan=(Array.isArray(fp&&fp.rooms)?fp.rooms:[]).map(function(r,i){return r&&typeof r==='object'?{i:i,key:r.anyvac_room?String(r.anyvac_room):'',name:String(r.name||r.room||''),poly:G.poly(r.polygon)}:null;}).filter(function(x){return x&&x.poly.length>=3;});
+  const kT=(Number(hf.cell_mm)>0&&Number(hf.scale)>0?Number(hf.cell_mm)/Number(hf.scale):12.5)/1000;
+  const f=G.vacFit?G.vacFit(plan,T.rooms||[],kT):null;
+  if(!f)return{err:'few',n:0};
+  const tr={rotation:Math.round(f.r*180/Math.PI*100)/100,x:rsFpR(f.x),y:rsFpR(f.y),rooms:f.n,rms:rsFpR(f.rms)};
+  if(hf.id)tr.frame=String(hf.id);
+  return{transform:tr};
 }
 // quick turn / flip of the drawing (v6.50.0): rotate in 90° steps from what is shown now (auto
 // included), mirror none → horizontal → vertical → both

@@ -696,14 +696,16 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const other=clone(DATA.anyvac);other.attributes.home_frame={id:'zz',cell_mm:50,scale:4};
     other.attributes.rooms.forEach(r=>{if(r.outline_home_px)r.outline_home_px=r.outline_home_px.map(rot);if(r.bbox_home_px){const b=r.bbox_home_px,a=rot([b.x0,b.y0]),c=rot([b.x1,b.y1]);r.bbox_home_px={x0:Math.min(a[0],c[0]),y0:Math.min(a[1],c[1]),x1:Math.max(a[0],c[0]),y1:Math.max(a[1],c[1])};}});
     const hz={states:{'sensor.s8_anyvac_map':DATA.anyvac,'sensor.zz_anyvac_map':other}};
-    const fit=ST.fpVacuumFit(G,hz,{source:src},'sensor.zz_anyvac_map');
+    // 7.4.0: fitted to the plan's own rooms (here: the source map's outlines in metres, by name)
+    const planRooms=DATA.anyvac.attributes.rooms.map(r=>({name:r.name,polygon:r.outline_home_px.map(p=>[(p[0]-800)*0.0125,(p[1]-752)*0.0125])}));
+    const fit=ST.fpVacuumFit(G,hz,{source:src,rooms:planRooms},'sensor.zz_anyvac_map');
     const T0=fit.transform,th=T0.rotation*Math.PI/180,k=0.0125;
     const map=p=>{const q=[p[0]*k,p[1]*k];return[Math.cos(th)*q[0]-Math.sin(th)*q[1]+T0.x,Math.sin(th)*q[0]+Math.cos(th)*q[1]+T0.y];};
     const back=map(rot([1600,1000]));
-    t('vacuum fit: another frame (turned 90°) is found by its 5 rooms, ± 0',T0.rooms===5&&T0.rms<0.02&&Math.abs(Math.abs(T0.rotation)-90)<0.5&&Math.abs(back[0]-10)<0.05&&Math.abs(back[1]-3.1)<0.05);
-    t('vacuum fit: the plan\'s own frame needs none; a hand-drawn plan cannot align',ST.fpVacuumFit(G,hz,{source:src},'sensor.s8_anyvac_map').same===true&&ST.fpVacuumFit(G,hz,{},'sensor.zz_anyvac_map').err==='nosource');
+    t('vacuum fit: another frame (turned 90°) is found by its 5 rooms, ± 0, and remembers the frame',T0.rooms===5&&T0.rms<0.02&&T0.frame==='zz'&&Math.abs(Math.abs(T0.rotation)-90)<0.5&&Math.abs(back[0]-10)<0.05&&Math.abs(back[1]-3.1)<0.05);
+    t('vacuum fit: the plan\'s own frame needs none; a plan without rooms cannot align',ST.fpVacuumFit(G,hz,{source:src,rooms:planRooms},'sensor.s8_anyvac_map').same===true&&ST.fpVacuumFit(G,hz,{},'sensor.zz_anyvac_map').err==='few');
     const one=clone(other);one.attributes.rooms=one.attributes.rooms.slice(0,1);
-    t('vacuum fit: one shared room is not enough',ST.fpVacuumFit(G,{states:{'sensor.s8_anyvac_map':DATA.anyvac,'sensor.zz_anyvac_map':one}},{source:src},'sensor.zz_anyvac_map').err==='few');
+    t('vacuum fit: one shared room is not enough',ST.fpVacuumFit(G,{states:{'sensor.s8_anyvac_map':DATA.anyvac,'sensor.zz_anyvac_map':one}},{source:src,rooms:planRooms},'sensor.zz_anyvac_map').err==='few');
     const bg=ST.fpSnapshotBg({source:src},{path:'/local/anyvac/room_card_plan.png?t=1',frame_id:'d4e8',crop:{x0:780,y0:732,x1:2100,y1:1150},fiducials:[{id:'tl'}]});
     t('snapshot: the crop box in home px is the background\'s place in metres',bg.x===-0.25&&bg.y===-0.25&&bg.scale===0.0125&&bg.width_px===1320&&bg.height_px===418&&bg.fiducials.length===1&&bg.frame==='d4e8');
     const an=[{home_px:{x:800,y:752},floor_pct:{x:10,y:10}},{home_px:{x:1600,y:752},floor_pct:{x:90,y:10}},{home_px:{x:800,y:1152},floor_pct:{x:10,y:90}}];
@@ -748,6 +750,46 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const e2=mk(c,h);await sleep(30);
     t('layers.heating: false → no loops at all',!sr(e2).querySelector('[data-rfp-hx]')&&!sr(e2).querySelector('[data-rfp-heatlayer]'));
   }
+  // ---- AnyVac's maps after a change of home frame (7.4.0) ------------------------------------
+  {
+    // the author's case: AnyVac moved every vacuum into one shared home frame — the plan's source
+    // frame and the vacuums' stored transforms no longer apply
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;
+    fp.source={anyvac:'sensor.s8_anyvac_map',frame:'d4e8',origin_px:[800,752],mm_per_px:12.5};
+    const ids={0:'7bUI4dOp7O1qnECi7UfFW3_16',1:'7bUI4dOp7O1qnECi7UfFW3_18',2:'7bUI4dOp7O1qnECi7UfFW3_17',3:'7bUI4dOp7O1qnECi7UfFW3_19',4:'7bUI4dOp7O1qnECi7UfFW3_20'};
+    Object.keys(ids).forEach(k=>{fp.rooms[k].anyvac_room=ids[k];});
+    fp.vacuums=['sensor.s8_anyvac_map',{entity:'sensor.s7_anyvac_map',transform:{rotation:91.75,x:14.57,y:-9.33,rooms:5,rms:0.19}}];
+    // the shared frame: the old one turned by 90° and shifted (home px, 12.5 mm)
+    const turn=(x,y)=>[3000-y,x+200];
+    const mv=a=>{a.home_frame={id:'shared',cell_mm:50,scale:4};a.rooms.forEach(r=>{
+      if(r.outline_home_px)r.outline_home_px=r.outline_home_px.map(p=>turn(p[0],p[1]));
+      const b=r.bbox_home_px;if(b){const A=turn(b.x0,b.y0),B=turn(b.x1,b.y1);r.bbox_home_px={x0:Math.min(A[0],B[0]),y0:Math.min(A[1],B[1]),x1:Math.max(A[0],B[0]),y1:Math.max(A[1],B[1])};}});return a;};
+    const av=clone(DATA.anyvac);mv(av.attributes);
+    const kit=DATA.anyvac.attributes.rooms.find(r=>r.name==='Kitchen').bbox_home_px,kc=[(kit.x0+kit.x1)/2,(kit.y0+kit.y1)/2],kt=turn(kc[0],kc[1]);
+    Object.assign(av.attributes,{vacuum_position_home_px:{x:kt[0],y:kt[1],a:0},in_cleaning:false});
+    const s7=clone(av);Object.assign(s7.attributes,{vacuum_position_home_px:{x:kt[0]+8,y:kt[1],a:0}});
+    const st=Object.assign(states(),{'sensor.s8_anyvac_map':av,'sensor.s7_anyvac_map':s7});
+    const e=mk(c,mkHass(st));await sleep(40);const v=e._fpInst,S=sr(e);
+    const xf=v._vacXf('sensor.s8_anyvac_map'),x7=v._vacXf('sensor.s7_anyvac_map');
+    t('a map in another frame than the plan\'s source is fitted by its rooms (keys from the plan)',xf&&xf.how==='rooms'&&xf.n===5&&xf.rms<0.4&&Math.abs(Math.abs(xf.r*180/Math.PI)-90)<3);
+    t('a stored transform without its frame (before 7.4.0) gives way to the fit',x7&&x7.how==='rooms');
+    const kp=v._toPlan(av.attributes.vacuum_position_home_px,'sensor.s8_anyvac_map'),kr=v.M.rooms[3].poly;
+    t('…so the robot in the kitchen lands in the plan\'s kitchen',!!kp&&F.geom.inPoly(kp[0],kp[1],kr));
+    t('both robots drawn',S.querySelectorAll('[data-rfp-robot]').length===2&&v._robots().length===2);
+    e.remove();
+    // a transform fitted in the frame the map has now wins; no rooms to pair → the old transform
+    const c2=clone(c);c2.rooms[0].floorplan.vacuums=[{entity:'sensor.s8_anyvac_map',transform:{rotation:0,x:1,y:2,frame:'shared'}},{entity:'sensor.s7_anyvac_map',transform:{rotation:0,x:3,y:4}}];
+    const s7b=clone(s7);s7b.attributes.rooms=[];
+    const e2=mk(c2,mkHass(Object.assign(states(),{'sensor.s8_anyvac_map':av,'sensor.s7_anyvac_map':s7b})));await sleep(40);
+    t('a transform with the current frame is used as it is; without rooms an old transform still is',e2._fpInst._vacXf('sensor.s8_anyvac_map').how==='transform'&&e2._fpInst._vacXf('sensor.s8_anyvac_map').x===1
+      &&e2._fpInst._vacXf('sensor.s7_anyvac_map').x===3);
+    e2.remove();
+    // the plan's own frame: the source mapping, exactly as before
+    const c3=clone(c);c3.rooms[0].floorplan.vacuums=['sensor.s8_anyvac_map'];
+    const e3=mk(c3,mkHass(Object.assign(states(),{'sensor.s8_anyvac_map':clone(DATA.anyvac)})));await sleep(40);
+    t('a map still in the plan\'s source frame uses the source mapping',e3._fpInst._vacXf('sensor.s8_anyvac_map').how==='source');
+    e3.remove();
+  }
   // ---- lenses on the plan + the house panel (7.3.0) -----------------------------------------
   {
     const vt=(o,a)=>Object.assign({state:'heat',attributes:Object.assign({hvac_modes:['heat','off'],hvac_action:'heating',current_temperature:21.4,temperature:22,power_percent:55,
@@ -764,14 +806,14 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const mkH=st=>Object.assign(mkHass(st||hs()),{language:'cs',locale:{language:'cs'},
       entities:{'select.central_mode':{platform:'versatile_thermostat'},'binary_sensor.central_configuration_central_boiler':{platform:'versatile_thermostat',translation_key:'central_boiler_state'}}});
     const L=w.eval('rocFpLenses');
-    t('lenses: a plan with thermostats gets overview + heating; without one only overview; floorplan.lenses picks and orders',
-      L(PLAN).join()==='overview,heating'&&L({rooms:[{polygon:[]}]}).join()==='overview'&&L({lenses:['heating','overview','x','heating']}).join()==='heating,overview');
+    t('lenses: a plan with lights and thermostats gets overview + lights + heating (+ cleaning with AnyVac); without them only overview; floorplan.lenses picks and orders',
+      L(PLAN).join()==='overview,lights,heating'&&L(Object.assign({},PLAN,{vacuums:['sensor.x']})).join()==='overview,lights,heating,cleaning'&&L({rooms:[{polygon:[]}]}).join()==='overview'&&L({lenses:['heating','overview','x','heating']}).join()==='heating,overview');
     const c=clone(BASE);c.heating={tariff:{entity:'switch.hdo',high_state:'off'},supply:[{entity:'sensor.supply_power',name:'Přívod'}]};
     c.rooms[0].floorplan.dock={sections:['s1']};c.sections=[{id:'s1',title:'Spotřebiče',icon:'mdi:washing-machine',tiles:[]}];
     const h=mkH();calls.length=0;
     const e=mk(c,h);await sleep(40);const S=sr(e),v=()=>e._fpInst;
     const btn=l=>S.querySelector('[data-ico="__fplens_'+l+'"]');
-    t('the dock under the plan: two lens buttons, then the section launchers',!!S.querySelector('[data-fp-dock]')&&!!btn('overview')&&!!btn('heating')&&!!S.querySelector('[data-ico="__fpdock_s1"]')&&!!S.querySelector('.roc-fp-sep')
+    t('the dock under the plan: the lens buttons, then the section launchers',!!S.querySelector('[data-fp-dock]')&&!!btn('overview')&&!!btn('heating')&&!!S.querySelector('[data-ico="__fpdock_s1"]')&&!!S.querySelector('.roc-fp-sep')
       &&S.querySelector('[data-fp-root]').style.bottom!=='');
     t('the default lens is overview: its button is on, the plan draws as before',btn('overview').classList.contains('roc-lens-on')&&v().o.lens==='overview'&&v().svg.getAttribute('data-rfp-lens')==='overview'&&v().L.lights===true);
     const badge=()=>btn('heating').querySelector('[data-ico-badge]').textContent;
@@ -837,6 +879,82 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const e2=mk(c2,mkH());await sleep(30);
     t('floorplan.lens: heating → the page opens in the heating lens',e2._fpInst.o.lens==='heating'&&sr(e2).querySelector('[data-ico="__fplens_heating"]').classList.contains('roc-lens-on'));
     e2.remove();
+  }
+  // ---- 7.4.0: the lights lens + light controller, the cleaning lens, hot water ------------------
+  {
+    const st=states();
+    st['light.living']={state:'on',attributes:{brightness:204,rgb_color:[255,180,100],supported_color_modes:['color_temp','hs'],min_color_temp_kelvin:2200,max_color_temp_kelvin:6500,friendly_name:'Living lamp'}};
+    st['light.kitchen']={state:'on',attributes:{brightness:128,color_temp_kelvin:3000,supported_color_modes:['color_temp'],friendly_name:'Kitchen panel'}};
+    st['light.bed']={state:'off',attributes:{supported_color_modes:['onoff'],friendly_name:'Bed lamp'}};
+    st['water_heater.bojler']={state:'eco',attributes:{current_temperature:47.5,temperature:53,friendly_name:'Bojler'}};
+    const av=clone(DATA.anyvac);Object.assign(av.attributes,{vacuum_position_home_px:{x:1600,y:900,a:0},in_cleaning:false,selected_rooms:['Kitchen'],battery:88,status_state:'charging',friendly_name:'S8 - Kitchen AnyVac Map'});
+    st['sensor.s8_anyvac_map']=av;
+    const h=Object.assign(mkHass(st),{language:'cs',locale:{language:'cs'}});
+    const c=clone(BASE);const fp=c.rooms[0].floorplan;
+    fp.source={anyvac:'sensor.s8_anyvac_map',frame:'d4e8',origin_px:[800,752],mm_per_px:12.5};
+    const ids={0:'7bUI4dOp7O1qnECi7UfFW3_16',1:'7bUI4dOp7O1qnECi7UfFW3_18',2:'7bUI4dOp7O1qnECi7UfFW3_17',3:'7bUI4dOp7O1qnECi7UfFW3_19',4:'7bUI4dOp7O1qnECi7UfFW3_20'};
+    Object.keys(ids).forEach(k=>{fp.rooms[k].anyvac_room=ids[k];});
+    fp.vacuums=['sensor.s8_anyvac_map'];
+    c.rooms[1].light_controls={entities:[{entity:'light.living',name:'Lampa'}]};
+    calls.length=0;
+    const e=mk(c,h);await sleep(40);const S=sr(e),v=()=>e._fpInst;
+    const btn=l=>S.querySelector('[data-ico="__fplens_'+l+'"]'),badge=l=>btn(l).querySelector('[data-ico-badge]').textContent;
+    t('four lenses with AnyVac on the plan: overview, lights, heating, cleaning',['overview','lights','heating','cleaning'].every(l=>!!btn(l)));
+    t('lights badge: how many rooms are lit; cleaning badge: the queued rooms',badge('lights')==='3'&&badge('cleaning')==='1'&&/Ve frontě 1/.test(btn('cleaning').getAttribute('title')));
+    btn('lights').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));await sleep(20);
+    const val=k=>S.querySelector('[data-rfp-val="'+k+'"]').textContent;
+    t('lights lens: lights and windows in front, heating and vacuums hidden; labels say on (how bright) / off',v().o.lens==='lights'&&v().L.lights&&v().L.openings&&!v().L.heating&&!v().L.vacuum
+      &&/zap\. 80 %/.test(val(0))&&/vyp\./.test(val(4)));
+    // tap: the light controller beside the plan, names from the card room's light_controls
+    const hit=S.querySelector('[data-rfp-hit="0"]');ev(hit,'pointerdown');ev(hit,'pointerup');await sleep(30);
+    const L=S.querySelector('.roc-lc');
+    t('lights lens: a tap opens the room\'s light controller, the room outlined, the plan visible',!!L&&e._lc&&e._lc.ents.join()==='light.living'&&S.querySelector('[data-rfp-focus="0"]').getAttribute('opacity')==='1'&&S.querySelector('.roc-lc-bd').classList.contains('lc-lite'));
+    t('…named as in light_controls, with brightness, colour temperatures and colours',L.querySelector('.lc-lt b').textContent==='Lampa'&&/Svítí 1 z 1/.test(L.querySelector('[data-lc-sum]').textContent)
+      &&L.querySelector('[data-lc-bri]').value==='80'&&L.querySelectorAll('[data-lc="ct"]').length===3&&L.querySelectorAll('[data-lc="rgb"]').length===6);
+    calls.length=0;L.querySelector('[data-lc="ct"]').click();
+    t('a colour temperature → light.turn_on with color_temp_kelvin',calls.length===1&&calls[0][0]==='light'&&calls[0][1]==='turn_on'&&calls[0][2].color_temp_kelvin===2700&&calls[0][2].entity_id==='light.living');
+    calls.length=0;const br=L.querySelector('[data-lc-bri]');br.value='35';br.dispatchEvent(new w.Event('change',{bubbles:true}));
+    t('the brightness slider sends on release',calls.length===1&&calls[0][2].brightness_pct===35);
+    calls.length=0;L.querySelector('[data-lc="all"]').click();
+    t('all off',calls.length===1&&calls[0][0]==='homeassistant'&&calls[0][1]==='turn_off');
+    L.querySelector('[data-lc="close"]').click();
+    t('closing clears the outline',!e._lc&&S.querySelector('[data-rfp-focus="0"]').getAttribute('opacity')==='0');
+    // the action on its own: a card room's light_controls
+    e._execAct({action:'lights',room:'living_room'});await sleep(10);
+    t('{action: lights, room} opens the room\'s light controls',e._lc&&e._lc.ents.join()==='light.living'&&e._lc.name==='T0');
+    S.querySelector('.roc-lc [data-lc="close"]').click();
+    // the lens's panel
+    btn('lights').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));await sleep(20);
+    const X=S.querySelector('.roc-xp');
+    t('the active lights button opens the house lights panel: lit rooms, all off',!!X&&X.querySelectorAll('[data-xp="lroom"]').length===5&&X.querySelectorAll('.xp-room.lit').length===3&&!X.querySelector('[data-xp="alloff"]').disabled);
+    X.querySelector('[data-xp="lroom"]').click();await sleep(10);
+    t('a room in the panel opens its light controller',!S.querySelector('.roc-xp')&&!!e._lc);
+    S.querySelector('.roc-lc [data-lc="close"]').click();
+    // cleaning lens
+    btn('cleaning').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));await sleep(20);
+    t('cleaning lens: vacuums, trails and when cleaned in front; lights and heating hidden; the queued room says so',v().o.lens==='cleaning'&&v().L.vacuum&&v().L.cleaning&&!v().L.lights&&!v().L.heating
+      &&/ve frontě/.test(val(3))&&S.querySelector('[data-rfp-chip="3"]').getAttribute('stroke')==='#03a9f4');
+    calls.length=0;const hk=S.querySelector('[data-rfp-hit="3"]');ev(hk,'pointerdown');ev(hk,'pointerup');await sleep(20);
+    t('cleaning lens: a tap queues / unqueues the room in AnyVac\'s shared selection',calls.length===1&&calls[0][0]==='anyvac'&&calls[0][1]==='select_rooms'&&JSON.stringify(calls[0][2])==='{"rooms":["Kitchen"],"mode":"toggle"}');
+    btn('cleaning').dispatchEvent(new w.MouseEvent('click',{bubbles:true,composed:true}));await sleep(20);
+    const C=S.querySelector('.roc-xp');
+    t('the cleaning panel: the vacuum with its state and battery, the mode, the queue',!!C&&/S8/.test(C.querySelector('.xp-vac b').textContent)&&/nabíjí · 88 %/.test(C.querySelector('.xp-vac span').textContent)
+      &&C.querySelectorAll('[data-xp="mode"]').length===3&&C.querySelectorAll('.xp-room.q').length===1&&/Uklidit 1 místnost/.test(C.querySelector('[data-xp="go"]').textContent));
+    calls.length=0;C.querySelector('[data-xp="mode"][data-v="both"]').click();C.querySelector('[data-xp="go"]').click();
+    t('start: anyvac.clean with the queued rooms and the mode',calls.length===1&&calls[0][1]==='clean'&&JSON.stringify(calls[0][2])==='{"rooms":["Kitchen"],"mode":"both"}');
+    C.querySelector('[data-xp="close"]').click();
+    // a vacuum cleans → its count; an error → !
+    const st2=clone(st);Object.assign(st2['sensor.s8_anyvac_map'].attributes,{in_cleaning:true,vacuum_room_name:'Kitchen'});
+    e.hass=Object.assign(mkHass(st2),{language:'cs',locale:{language:'cs'}});await sleep(30);
+    t('cleaning badge: how many vacuums clean',badge('cleaning')==='1'&&/Uklízí 1/.test(btn('cleaning').getAttribute('title')));
+    const st3=clone(st2);st3['sensor.s8_anyvac_map'].attributes.vacuum_error='main brush jammed';
+    e.hass=Object.assign(mkHass(st3),{language:'cs',locale:{language:'cs'}});await sleep(30);
+    t('…and ! on a vacuum error',badge('cleaning')==='!');
+    // the house panel: the heating boiler is the "Kotel", the hot water its own row
+    e._execAct({action:'fp-lens',lens:'heating'});await sleep(10);e._execAct({action:'fp-lens',lens:'heating'});await sleep(20);
+    const HP=S.querySelector('.roc-hp');
+    t('house panel: hot water from the only water heater, with its target',!!HP&&/Teplá voda 47,5 °C cíl 53 °C/.test(HP.querySelector('[data-hp-facts]').textContent.replace(/\s+/g,' ')));
+    e.remove();
   }
   console.log(fails?'\n'+fails+' FAILED':'\nall floor plan tests passed');
   process.exit(fails?1:0);
