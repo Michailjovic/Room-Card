@@ -1442,7 +1442,10 @@ class RoomOverlayCard extends HTMLElement{
         self._fpInst=F.mount(host,{cfg:def,cAll:cAll,hass:self._hass,profile:self._profile||'landscape',studio:!!cAll._roc_studio,
           lens:rocFpLensCur(self,def), // 7.3.0
           interactive:!(cAll._roc_studio&&cAll.test_mode), // the studio's Arrange mode edits the plan instead
-          exec:function(a,e){self._exec(a,e);},
+          // 7.4.1: without the pointer event — _exec stops its propagation, and a pointerup that never
+          // reached the wrap left the room swipe armed: the next mouse move dragged the card to
+          // another room (a tap that opens a controller does not re-render the card)
+          exec:function(a){self._exec(a,null);},
           // v6.48.0 cross-room signals: who is where, attention per card room, AnyVac vacuums
           persons:rocSigPersons(def.presence,self._roomEntityId()),
           anyvac:function(){return self._sigAnyvac(def);},
@@ -3816,13 +3819,17 @@ navSelf._navChipInto(chipCont,chCfg,r);
       // Slider zones, embedded HA cards (sliders, covers…) and an open cockpit
       // section sheet (a tile card's own percentage slider must never engage
       // the room-swipe running underneath it — v6.10.1) own their gestures.
-      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&(n.classList.contains('elcont')||n.classList.contains('roc-panel')||n.classList.contains('roc-ov-hd')||n.classList.contains('roc-ov-side')));}))return;
+      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&(n.classList.contains('elcont')||n.classList.contains('roc-panel')||n.classList.contains('roc-ov-hd')||n.classList.contains('roc-ov-side')
+        // 7.4.1: the heating / light controllers, the lens panels (their sliders) and the plan's dock (it scrolls sideways)
+        ||n.classList.contains('roc-hc')||n.classList.contains('roc-lc')||n.classList.contains('roc-hp')||n.classList.contains('roc-xp')||n.classList.contains('roc-fp-dk')));}))return;
       pid=e.pointerId;sx=e.clientX;sy=e.clientY;active=true;engaged=false;dx=0;
       lastX=e.clientX;lastT=Date.now();vx=0;
       w=wrap.getBoundingClientRect().width||1;
     });
     wrap.addEventListener('pointermove',function(e){
       if(!active||e.pointerId!==pid)return;
+      // a mouse with no button down has no drag in progress, whatever we missed (7.4.1)
+      if(e.pointerType==='mouse'&&e.buttons===0&&!engaged){active=false;return;}
       dx=e.clientX-sx;
       const now=Date.now();
       if(now>lastT){vx=(e.clientX-lastX)/(now-lastT);lastX=e.clientX;lastT=now;}

@@ -831,6 +831,10 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const hc=S.querySelector('.roc-hc');
     t('heating lens: a tap on a room opens its heating controller, the room is outlined, the plan stays visible',!!hc&&e._heat&&e._heat.entity==='climate.bed'
       &&S.querySelector('[data-rfp-focus="4"]').getAttribute('opacity')==='1'&&S.querySelector('[data-rfp-focus="0"]').getAttribute('opacity')==='0'&&S.querySelector('.roc-hc-bd').classList.contains('hc-lite'));
+    // 7.4.1: the tap that opened it does not leave the room swipe armed (the mouse dragged the card to another room)
+    const wrap=S.querySelector('.wrap');
+    wrap.dispatchEvent(new w.MouseEvent('pointermove',{bubbles:true,composed:true,clientX:400,clientY:10,buttons:1}));
+    t('the tap that opens a controller leaves no room swipe armed',!e._roomDragActive&&!S.querySelector('.wrap > div[style*="z-index:590"]'));
     hc.querySelector('[data-hc="close"]').click();await sleep(10);
     t('closing it clears the outline',!e._heat&&S.querySelector('[data-rfp-focus="4"]').getAttribute('opacity')==='0');
     // the active lens's button opens the house panel

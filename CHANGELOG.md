@@ -1,5 +1,23 @@
 # Changelog
 
+## [7.4.1] - 2026-11-28
+
+### Fixed
+
+- **A tap on a floor plan room that opens a controller left the room swipe armed.** The card
+  stopped the tap's pointer event before the card's own swipe handler saw the release, so with a
+  mouse the next move dragged the card towards another room. The plan's taps no longer pass the
+  event on; a mouse moving with no button down never drags; and the heating and light
+  controllers, the lens panels and the plan's dock no longer start a room swipe (their sliders and
+  the dock's sideways scroll are theirs).
+- **The heating controller's 24 h chart** drew Versatile Thermostat's own target, which drops to
+  10 °C in its safety mode and while the central mode stops the heating — a dashed line jumping up
+  and down and a range squeezed down to 10 °C. It now draws the wanted target (VTherm's
+  `requested_state`), the heating power per quarter hour as bars, pauses and the safety mode as
+  strips under them (with a legend), and the °C range on the side.
+- The e2e test of the studio's vacuum alignment still expected the 7.3.0 numbers (fitted to the
+  source map); since 7.4.0 the fit is to the plan's rooms, a few centimetres different.
+
 ## [7.4.0] - 2026-11-28
 
 Two more lenses on the floor plan — lights and cleaning — with a light controller, and the AnyVac

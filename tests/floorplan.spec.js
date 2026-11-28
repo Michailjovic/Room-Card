@@ -223,7 +223,11 @@ test('v6.50.0: the clean button starts AnyVac; the studio aligns a vacuum from a
   // (the colours are set afterwards, below)
   const v=(await fpc(page)).vacuums;
   expect(v[0]).toBe('sensor.kitchen_s8_anyvac_map');
-  expect([v[1].entity,v[1].transform.rotation,v[1].transform.x,v[1].transform.y,v[1].transform.rooms]).toEqual(['sensor.s7_maxv_anyvac_map',0,-3.75,-5.65,5]) // (−300, −452) px × 12.5 mm;
+  // (−300, −452) px × 12.5 mm; since 7.4.0 fitted to the plan's (cleaned) rooms, so within a few cm / tenths of a degree, and it remembers the frame
+  expect([v[1].entity,v[1].transform.rooms,v[1].transform.frame]).toEqual(['sensor.s7_maxv_anyvac_map',5,'other-frame']);
+  expect(Math.abs(v[1].transform.rotation)).toBeLessThan(0.2);
+  expect(Math.abs(v[1].transform.x+3.75)).toBeLessThan(0.06);
+  expect(Math.abs(v[1].transform.y+5.65)).toBeLessThan(0.06);
   // the canvas card now draws both robots
   expect(await page.evaluate(SG=>eval(SG)._card.shadowRoot.querySelectorAll('[data-rfp-robot]').length,SG)).toBe(2);
   // v6.51.0: a colour per vacuum from the same panel

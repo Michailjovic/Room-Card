@@ -5,7 +5,7 @@
  * GENERATED FILE — assembled from src/ by `npm run assemble` (tools/assemble.js).
  * Edit the parts under src/ and re-assemble; CI fails when this file is out of date.
  */
-const ROC_VERSION='7.4.0';
+const ROC_VERSION='7.4.1';
 console.info('%c ROOM-OVERLAY-CARD %c v'+ROC_VERSION+' ','background:#3a7d5a;color:#fff;font-weight:bold;border-radius:4px 0 0 4px;padding:2px 0;','background:#222;color:#aef;border-radius:0 4px 4px 0;padding:2px 0;');
 // Placeholder room sketch (v6.21.0) for the card picker preview and a freshly
 // added card — the old '/local/room.webp' stub doesn't exist on anyone's
@@ -1201,11 +1201,11 @@ const ROC_HC_STR={
   en:{close:'Close',target:'target',heat:'Heating',heat_pw:'Heating · {pw} %',eta:'target in ~{t}',hold:'Holding {t}',wait:'Not heating now',
     pause:'Paused',pause_central:'Paused by the central mode',pause_window:'Paused — window open',off:'Off',na:'Unavailable',safety:'Sensor silent — running at {pw} %',
     always:'Keep',h2:'For 2 h',evening:'Until {t}',morning:'Until morning',timed:'Temporarily until {t}',cancel:'Cancel',turn_off:'Turn off',turn_on:'Turn on',more:'Details',
-    ago:'24 h ago',now:'now',quick:'Quick temperatures',ruler:'Target temperature',dur:'How long',min:'{n} min',hr:'{h} h {m} min',hr0:'{h} h'},
+    ago:'24 h ago',now:'now',lg_t:'temperature',lg_g:'target',lg_p:'heating power',lg_z:'paused',lg_s:'safety mode',quick:'Quick temperatures',ruler:'Target temperature',dur:'How long',min:'{n} min',hr:'{h} h {m} min',hr0:'{h} h'},
   cs:{close:'Zavřít',target:'cíl',heat:'Topí',heat_pw:'Topí · {pw} %',eta:'cíl za ~{t}',hold:'Drží {t}',wait:'Teď netopí',
     pause:'Pozastaveno',pause_central:'Pozastaveno centrálním režimem',pause_window:'Pozastaveno – otevřené okno',off:'Vypnuto',na:'Nedostupné',safety:'Čidlo mlčí – nouzový chod {pw} %',
     always:'Trvale',h2:'Na 2 h',evening:'Do {t}',morning:'Do rána',timed:'Dočasně do {t}',cancel:'Zrušit',turn_off:'Vypnout',turn_on:'Zapnout',more:'Podrobnosti',
-    ago:'před 24 h',now:'teď',quick:'Rychlé teploty',ruler:'Cílová teplota',dur:'Jak dlouho',min:'{n} min',hr:'{h} h {m} min',hr0:'{h} h'},
+    ago:'před 24 h',now:'teď',lg_t:'teplota',lg_g:'cíl',lg_p:'výkon topení',lg_z:'pauza',lg_s:'nouzový režim',quick:'Rychlé teploty',ruler:'Cílová teplota',dur:'Jak dlouho',min:'{n} min',hr:'{h} h {m} min',hr0:'{h} h'},
 };
 function rocHcLang(h){return String((h&&((h.locale&&h.locale.language)||h.language))||'en').split('-')[0];}
 function rocHcT(lang,k,v){const t=ROC_HC_STR[lang]||ROC_HC_STR.en;let s=t[k]!=null?t[k]:ROC_HC_STR.en[k];if(v)for(const x in v)s=s.split('{'+x+'}').join(v[x]);return s;}
@@ -1297,7 +1297,10 @@ const ROC_HC_CSS='.roc-hc-bd{position:absolute;inset:0;z-index:410;background:rg
   +'.hc-lbl{font-size:11px;color:var(--secondary-text-color,#9aa3ad);margin-bottom:-6px}'
   +'.hc-timed{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;background:rgba(255,179,92,.1);border-radius:10px;padding:8px 10px}.hc-timed:empty{display:none}'
   +'.hc-timed button{background:none;border:1px solid rgba(255,255,255,.2);border-radius:8px;color:inherit;padding:5px 10px;cursor:pointer;min-height:32px}'
-  +'.hc-ch svg{display:block;width:100%;height:90px}.hc-chl{display:flex;justify-content:space-between;font-size:11px;color:var(--secondary-text-color,#9aa3ad)}'
+  +'.hc-ch{position:relative}.hc-ch svg{display:block;width:100%;height:110px}.hc-chl{display:flex;justify-content:space-between;font-size:11px;color:var(--secondary-text-color,#9aa3ad)}'
+  +'.hc-chy{position:absolute;left:2px;font-size:10px;color:var(--secondary-text-color,#9aa3ad);font-variant-numeric:tabular-nums;pointer-events:none;line-height:1}'
+  +'.hc-lg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:var(--secondary-text-color,#9aa3ad);margin-top:2px}.hc-lg i{display:inline-block;width:12px;height:0;vertical-align:middle;margin-right:4px;border-top:2px solid #ffb35c}'
+  +'.hc-lg i.g{border-top:2px dashed #9aa3ad}.hc-lg i.p{height:8px;border:0;background:#ff7a5c;opacity:.7}.hc-lg i.z{height:8px;border:0;background:#6d7480}.hc-lg i.s{height:8px;border:0;background:#f5b041}'
   +'.hc-ft{display:flex;gap:8px}.hc-ft button{flex:1;min-height:40px;border-radius:10px;border:1px solid rgba(255,255,255,.14);background:none;color:inherit;font:inherit;cursor:pointer}'
   +'.roc-hc button:focus-visible,.roc-hc input:focus-visible{outline:2px solid var(--primary-color,#03a9f4);outline-offset:2px}';
 function rocHcEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -1336,7 +1339,9 @@ function rocHcMount(card){
     +'<input class="hc-rng" type="range" data-hc-rng min="'+cfg.range[0]+'" max="'+cfg.range[1]+'" step="'+cfg.step+'" aria-label="'+T('ruler')+'"><div class="hc-rl"><span>'+rocHcEsc(rocHcFmt(lang,cfg.range[0],0))+'°</span><span>'+rocHcEsc(rocHcFmt(lang,cfg.range[1],0))+'°</span></div>'
     +'<div data-hc-durw><div class="hc-lbl">'+T('dur')+'</div><div class="hc-row" data-hc-dur style="margin-top:12px">'+cfg.durations.map(function(d){return'<button data-hc="d" data-v="'+d+'">'+durLbl[d]+'</button>';}).join('')+'</div></div>'
     +'<div class="hc-timed" data-hc-timed></div>'
-    +'<div class="hc-ch"><svg data-hc-ch viewBox="0 0 300 90" preserveAspectRatio="none" aria-hidden="true"></svg><div class="hc-chl"><span>'+T('ago')+'</span><span>'+T('now')+'</span></div></div>'
+    +'<div class="hc-ch"><svg data-hc-ch viewBox="0 0 300 110" preserveAspectRatio="none" aria-hidden="true"></svg><span class="hc-chy" data-hc-yhi style="top:2px"></span><span class="hc-chy" data-hc-ylo style="top:66px"></span>'
+    +'<div class="hc-chl"><span>'+T('ago')+'</span><span>'+T('now')+'</span></div>'
+    +'<div class="hc-lg" data-hc-lg><span><i></i>'+T('lg_t')+'</span><span><i class="g"></i>'+T('lg_g')+'</span><span><i class="p"></i>'+T('lg_p')+'</span><span data-lg="z" hidden><i class="z"></i>'+T('lg_z')+'</span><span data-lg="s" hidden><i class="s"></i>'+T('lg_s')+'</span></div></div>'
     +'<div class="hc-ft"><button data-hc="power"></button><button data-hc="more">'+T('more')+'</button></div>';
   el.addEventListener('click',function(e){
     const b=e.target.closest&&e.target.closest('[data-hc]');if(!b)return;
@@ -1404,7 +1409,19 @@ function rocHcHistory(card){
   Promise.resolve(card._hass.callWS({type:'history/history_during_period',start_time:start,entity_ids:[H.entity],minimal_response:false,no_attributes:false,significant_changes_only:false})).then(function(r){
     if(card._heat!==H)return;
     const rows=(r&&r[H.entity])||[];let last={};
-    H.hist=rows.map(function(x){const a=x.a||last;last=a;return{t:(x.lu||x.last_updated||0)*(typeof x.lu==='number'?1000:1),c:rocHcNum(a.current_temperature),g:rocHcNum(a.temperature),h:a.hvac_action==='heating'};}).filter(function(p){return p.t;});
+    // 7.4.0: what the user asked for (requested_state — VTherm's own target drops to 10 °C in its
+    // safety mode and when the central mode stops it), the power, a pause, the safety preset
+    H.hist=rows.map(function(x){
+      const a=x.a||last;last=a;const st=x.s||x.state||'';
+      const rq=a.requested_state&&typeof a.requested_state==='object'?a.requested_state:null;
+      const pp=rocHcNum(a.power_percent),op=rocHcNum(a.on_percent);
+      const pw=st==='off'||st==='unavailable'?0:(isFinite(pp)?pp:(isFinite(op)?op*100:(a.hvac_action==='heating'?100:0)));
+      const on=st!=='off'&&st!=='unavailable'&&st!=='unknown';
+      return{t:(x.lu||x.last_updated||0)*(typeof x.lu==='number'?1000:1),c:rocHcNum(a.current_temperature),
+        g:rq&&isFinite(rocHcNum(rq.target_temperature))?rocHcNum(rq.target_temperature):(on?rocHcNum(a.temperature):NaN),
+        wants:on||!!(rq&&rq.hvac_mode&&rq.hvac_mode!=='off'),pw:Math.max(0,Math.min(100,pw)),
+        z:st==='off'&&!!(rq&&rq.hvac_mode&&rq.hvac_mode!=='off'),sf:a.preset_mode==='safety'};
+    }).filter(function(p){return p.t;});
     rocHcChart(card);
   }).catch(function(){});
 }
@@ -1413,19 +1430,40 @@ function rocHcChart(card){
   const svg=H.el.querySelector('[data-hc-ch]');if(!svg)return;
   const now=Date.now(),t0=now-86400000,P=H.hist.filter(function(p){return isFinite(p.c);});
   if(P.length<2){svg.innerHTML='';return;}
-  let lo=Infinity,hi=-Infinity;H.hist.forEach(function(p){[p.c,p.g].forEach(function(v){if(isFinite(v)&&v>5){lo=Math.min(lo,v);hi=Math.max(hi,v);}});});
-  lo=Math.floor(lo-0.3);hi=Math.ceil(hi+0.3);
-  const X=function(t){return Math.max(0,Math.min(300,(t-t0)/86400000*300)).toFixed(1);},Y=function(v){return(86-(v-lo)/(hi-lo||1)*80).toFixed(1);};
-  let bands='',tl='',gl='',prevG=null;
+  // y range: the temperature and the wanted targets (a dropped 10 °C would flatten everything)
+  let lo=Infinity,hi=-Infinity;H.hist.forEach(function(p){[p.c,p.wants?p.g:NaN].forEach(function(v){if(isFinite(v)&&v>5){lo=Math.min(lo,v);hi=Math.max(hi,v);}});});
+  lo=Math.floor((lo-0.3)*2)/2;hi=Math.ceil((hi+0.3)*2)/2;if(hi-lo<2){const m=(hi+lo)/2;lo=Math.floor((m-1)*2)/2;hi=lo+2;}
+  const X=function(t){return Math.max(0,Math.min(300,(t-t0)/86400000*300));},Y=function(v){return(4+(hi-v)/(hi-lo)*68).toFixed(1);};
+  // the 24 h in 96 quarter-hour slots: the mean power (bar), any pause, any safety mode
+  const N=96,slot=86400000/N,pw=new Array(N).fill(0),cov=new Array(N).fill(0),zz=new Array(N).fill(false),sf=new Array(N).fill(false);
   H.hist.forEach(function(p,i){
-    const n=H.hist[i+1],te=n?n.t:now;
-    if(p.h)bands+='<rect x="'+X(p.t)+'" y="0" width="'+Math.max(0.5,X(te)-X(p.t)).toFixed(1)+'" height="90" fill="#ff7a5c" opacity=".14"/>';
-    if(isFinite(p.g)&&p.g>5){gl+=(prevG==null?'M':'L')+X(p.t)+' '+Y(p.g)+'H'+X(te);prevG=p.g;}
+    const a=Math.max(p.t,t0),b=Math.min(i+1<H.hist.length?H.hist[i+1].t:now,now);if(!(b>a))return;
+    for(let k=Math.floor((a-t0)/slot);k<=Math.min(N-1,Math.floor((b-1-t0)/slot));k++){
+      const s0=t0+k*slot,ov=Math.min(b,s0+slot)-Math.max(a,s0);if(ov<=0)continue;
+      pw[k]+=p.pw*ov;cov[k]+=ov;if(p.z)zz[k]=true;if(p.sf)sf[k]=true;
+    }
   });
-  P.forEach(function(p,i){tl+=(i?'L':'M')+X(p.t)+' '+Y(p.c);});
-  tl+='H300';
-  svg.innerHTML=bands+'<path d="'+gl+'" fill="none" stroke="#9aa3ad" stroke-width="1.2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>'
+  let bars='';const bw=300/N;
+  for(let k=0;k<N;k++){
+    const x=(k*bw).toFixed(2),m=cov[k]?pw[k]/cov[k]:0;
+    if(m>0.5){const h=(m/100*22).toFixed(1);bars+='<rect x="'+x+'" y="'+(102-h).toFixed(1)+'" width="'+(bw+0.05).toFixed(2)+'" height="'+h+'" fill="#ff7a5c" opacity="'+(0.35+0.5*m/100).toFixed(2)+'"/>';}
+    if(zz[k])bars+='<rect x="'+x+'" y="104" width="'+(bw+0.05).toFixed(2)+'" height="6" fill="#6d7480"/>';
+    if(sf[k])bars+='<rect x="'+x+'" y="104" width="'+(bw+0.05).toFixed(2)+'" height="6" fill="#f5b041"/>';
+  }
+  // the target: steps, broken where nothing was wanted (off without a request)
+  let gl='',open=false;
+  H.hist.forEach(function(p,i){
+    const te=i+1<H.hist.length?H.hist[i+1].t:now;
+    if(!p.wants||!isFinite(p.g)||p.g<=5||te<t0){open=false;return;}
+    gl+=(open?'L':'M')+X(Math.max(p.t,t0)).toFixed(1)+' '+Y(p.g)+'H'+X(te).toFixed(1);open=true;
+  });
+  let tl='';P.forEach(function(p,i){tl+=(i?'L':'M')+X(p.t).toFixed(1)+' '+Y(p.c);});tl+='H300';
+  const grid=[lo,hi].map(function(v){return'<line x1="0" x2="300" y1="'+Y(v)+'" y2="'+Y(v)+'" stroke="rgba(255,255,255,.08)" stroke-width="1" vector-effect="non-scaling-stroke"/>';}).join('');
+  svg.innerHTML=grid+bars+'<path d="'+gl+'" fill="none" stroke="#9aa3ad" stroke-width="1.2" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>'
     +'<path d="'+tl+'" fill="none" stroke="#ffb35c" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';
+  const q=function(s){return H.el.querySelector(s);};
+  q('[data-hc-yhi]').textContent=rocHcFmt(H.lang,hi)+'°';q('[data-hc-ylo]').textContent=rocHcFmt(H.lang,lo)+'°';
+  q('[data-lg="z"]').hidden=!zz.some(Boolean);q('[data-lg="s"]').hidden=!sf.some(Boolean);
 }
 // ---- Lenses on the floor plan + the house heating panel (7.3.0, HEATING_PLAN.md decision 10) -----
 // The floor plan page is the hub: one plan, switchable lenses. A lens is a preset over the plan's
@@ -3985,7 +4023,10 @@ class RoomOverlayCard extends HTMLElement{
         self._fpInst=F.mount(host,{cfg:def,cAll:cAll,hass:self._hass,profile:self._profile||'landscape',studio:!!cAll._roc_studio,
           lens:rocFpLensCur(self,def), // 7.3.0
           interactive:!(cAll._roc_studio&&cAll.test_mode), // the studio's Arrange mode edits the plan instead
-          exec:function(a,e){self._exec(a,e);},
+          // 7.4.1: without the pointer event — _exec stops its propagation, and a pointerup that never
+          // reached the wrap left the room swipe armed: the next mouse move dragged the card to
+          // another room (a tap that opens a controller does not re-render the card)
+          exec:function(a){self._exec(a,null);},
           // v6.48.0 cross-room signals: who is where, attention per card room, AnyVac vacuums
           persons:rocSigPersons(def.presence,self._roomEntityId()),
           anyvac:function(){return self._sigAnyvac(def);},
@@ -6359,13 +6400,17 @@ navSelf._navChipInto(chipCont,chCfg,r);
       // Slider zones, embedded HA cards (sliders, covers…) and an open cockpit
       // section sheet (a tile card's own percentage slider must never engage
       // the room-swipe running underneath it — v6.10.1) own their gestures.
-      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&(n.classList.contains('elcont')||n.classList.contains('roc-panel')||n.classList.contains('roc-ov-hd')||n.classList.contains('roc-ov-side')));}))return;
+      if(path.some(function(n){return(n.dataset&&n.dataset.rocSlider)||(n.classList&&(n.classList.contains('elcont')||n.classList.contains('roc-panel')||n.classList.contains('roc-ov-hd')||n.classList.contains('roc-ov-side')
+        // 7.4.1: the heating / light controllers, the lens panels (their sliders) and the plan's dock (it scrolls sideways)
+        ||n.classList.contains('roc-hc')||n.classList.contains('roc-lc')||n.classList.contains('roc-hp')||n.classList.contains('roc-xp')||n.classList.contains('roc-fp-dk')));}))return;
       pid=e.pointerId;sx=e.clientX;sy=e.clientY;active=true;engaged=false;dx=0;
       lastX=e.clientX;lastT=Date.now();vx=0;
       w=wrap.getBoundingClientRect().width||1;
     });
     wrap.addEventListener('pointermove',function(e){
       if(!active||e.pointerId!==pid)return;
+      // a mouse with no button down has no drag in progress, whatever we missed (7.4.1)
+      if(e.pointerType==='mouse'&&e.buttons===0&&!engaged){active=false;return;}
       dx=e.clientX-sx;
       const now=Date.now();
       if(now>lastT){vx=(e.clientX-lastX)/(now-lastT);lastX=e.clientX;lastT=now;}

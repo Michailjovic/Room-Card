@@ -92,6 +92,28 @@ const CFG={type:'custom:room-overlay-card',base_image:'/x.png',heating:{quick:[2
   el._execAct({action:'heating',entity:'climate.bed'});await sleep(10);
   S.querySelector('.roc-hc-bd').click();
   t('a tap beside it closes it',!P());
+  // 7.4.1: the 24 h chart — the wanted target (VTherm drops its own to 10 °C in the safety mode and
+  // when the central mode stops it), power as bars, pauses and the safety mode as strips
+  {
+    const n=Date.now()/1000,rq={hvac_mode:'heat',target_temperature:22};
+    const rows=[{s:'heat',lu:n-80000,a:{current_temperature:21.5,temperature:22,hvac_action:'heating',power_percent:100,requested_state:rq,preset_mode:'none'}},
+      {s:'heat',lu:n-60000,a:{current_temperature:21.7,temperature:10,hvac_action:'heating',power_percent:0,on_percent:0.25,requested_state:rq,preset_mode:'safety'}},
+      {s:'heat',lu:n-58000,a:{current_temperature:21.8,temperature:22,hvac_action:'heating',power_percent:60,requested_state:rq,preset_mode:'none'}},
+      {s:'off',lu:n-40000,a:{current_temperature:21.9,temperature:10,hvac_action:'off',power_percent:0,requested_state:rq,preset_mode:'none'}},
+      {s:'heat',lu:n-30000,a:{current_temperature:21.4,temperature:22,hvac_action:'heating',power_percent:80,requested_state:rq,preset_mode:'none'}}];
+    const h3=mkHass();h3.callWS=function(){return Promise.resolve({'climate.bed':rows});};
+    el.hass=h3;el._execAct({action:'heating',entity:'climate.bed'});await sleep(30);
+    const svg=q('[data-hc-ch]').innerHTML;
+    const dashed=(svg.match(/stroke-dasharray="4 3"[^>]*>|d="([^"]*)"[^>]*stroke-dasharray/)||[''])[0];
+    const gPath=(/<path d="([^"]*)" fill="none" stroke="#9aa3ad"/.exec(svg)||[])[1]||'';
+    const ys=gPath.match(/ ([\d.]+)H/g)||[];
+    t('chart: the target is the wanted 22 °C throughout — no dive to 10 °C in the safety mode or the pause',ys.length>=3&&new Set(ys.map(x=>x.trim())).size===1);
+    t('chart: the range follows the temperature and the target (at least 2 °C, not down to 10)',q('[data-hc-ylo]').textContent==='20,5°'&&q('[data-hc-yhi]').textContent==='22,5°');
+    t('chart: power as bars, the pause and the safety mode as strips, named in the legend',/fill="#ff7a5c"/.test(svg)&&/fill="#6d7480"/.test(svg)&&/fill="#f5b041"/.test(svg)
+      &&!q('[data-lg="z"]').hidden&&!q('[data-lg="s"]').hidden);
+    t('chart: bars per quarter hour, not one per state row',(svg.match(/fill="#ff7a5c"/g)||[]).length<=96);
+    S.querySelector('.roc-hc-bd').click();
+  }
   console.log(fails?'\n'+fails+' FAILED':'\nall heating controller tests passed');
   process.exit(fails?1:0);
 })().catch(e=>{console.error(e);process.exit(1);});

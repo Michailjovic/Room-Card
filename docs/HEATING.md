@@ -29,7 +29,9 @@ temperature for a while.
   boost preset and runs as VTherm's timed preset; when it ends VTherm brings back the target it
   had before. A running one shows *Temporarily until …* with *Cancel*. Shown only when the
   thermostat has a boost preset number entity.
-- **24 hours** — temperature, the target (dashed) and when it heated.
+- **24 hours** — temperature, the target you set (dashed; VTherm's own drops to 10 °C in its safety
+  mode and in a pause, the chart keeps yours), the heating power per quarter hour (bars), pauses
+  (grey) and the safety mode (amber) as strips under them, the °C range on the side.
 - **Turn off / on** and **Details** (Home Assistant's more-info).
 
 ## Settings
