@@ -1,5 +1,21 @@
 # Changelog
 
+## [7.4.2] - 2026-11-28
+
+### Fixed
+
+- **The light controller showed a stale level.** After a slider was let go it kept the focus, and
+  a focused slider blocked every update of the panel — the row kept saying 100 % until the panel
+  was opened again. Now the row's % follows the slider while dragging, shows the sent level until
+  the light reports one (5 s at most), then whatever the light says, also when it changes
+  elsewhere; only a slider under the finger is left alone.
+- **Heating loops started in the wrong corner.** A loop started in the corner of its field nearest
+  the manifold, so a feed coming into the room elsewhere ran along the wall to that corner — a
+  doubled pipe beside the first turn. Each loop now starts where its feed comes in: every corner
+  and both directions of the first run are routed and the cheapest wins, and the feed pair arrives
+  square to the field's edge, so the supply runs straight on into the outer turn and the return
+  straight out of it.
+
 ## [7.4.1] - 2026-11-28
 
 ### Fixed

@@ -731,6 +731,20 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     const seg=[];for(let i=1;i<r1.sup.length;i++){const a=r1.sup[i-1],b=r1.sup[i];if((a[1]-3)*(b[1]-3)<=0&&a[1]!==b[1])seg.push(a[0]);}
     t('feeds: …within 35 cm of the pass',seg.length>0&&seg.every(x=>Math.abs(x-2)<=0.35+0.15));
     t('feeds: supply starts and return ends at the manifold',Math.hypot(r1.sup[0][0]-1,r1.sup[0][1]-1)<0.2&&Math.hypot(r1.ret[r1.ret.length-1][0]-1,r1.ret[r1.ret.length-1][1]-1)<0.2);
+    // 7.4.2: the loop starts where its feed comes in — the feed crosses into the field square to its
+    // edge, at a corner, and in line with the spiral's first run (no doubled pipe along the wall)
+    const into=(c)=>{const F=c.field,onF=q=>q[0]>=F[0]-1e-6&&q[0]<=F[2]+1e-6&&q[1]>=F[1]-1e-6&&q[1]<=F[3]+1e-6;
+      // the segment that crosses into the field: it lies on a line of the field's edge (the feed and the first run are one straight pipe)
+      let i=c.sup.findIndex(onF);if(i<1)return null;const a=c.sup[i-1],b=c.sup[i];
+      const onEdgeLine=[a[0]-F[0],a[0]-F[2]].some(v=>Math.abs(v)<1e-6)&&Math.abs(a[0]-b[0])<1e-6||[a[1]-F[1],a[1]-F[3]].some(v=>Math.abs(v)<1e-6)&&Math.abs(a[1]-b[1])<1e-6;
+      const ent=[[F[0],F[1]],[F[2],F[1]],[F[0],F[3]],[F[2],F[3]]].find(q=>Math.abs(q[0]-a[0])<1e-6&&Math.abs(q[1]-b[1])<1e-6||Math.abs(q[1]-a[1])<1e-6&&Math.abs(q[0]-b[0])<1e-6||Math.abs(q[0]-a[0])<1e-6&&Math.abs(q[0]-b[0])<1e-6||Math.abs(q[1]-a[1])<1e-6&&Math.abs(q[1]-b[1])<1e-6);
+      return{cor:!!ent,straight:onEdgeLine,a:a};};
+    const e1=into(r1); // (room 0 holds the manifold inside its own field)
+    t('loops: the feed enters the field at a corner and runs straight on into the first turn',e1&&e1.cor&&e1.straight);
+    // a pass at the far end of a room: the loop starts at the corner beside it, not the one nearest the manifold
+    const c3=G.heatCircuits([A,B,Cr],[{k:1,poly:B}],{pitch:0.2,manifold:[1,1],passes:[[3.6,3]]});
+    const k3=into(c3[0]);
+    t('loops: …the corner beside the feed\'s pass, not the one nearest the manifold (the pipe crosses into the field on its far side)',k3&&k3.cor&&k3.straight&&k3.a[0]>2);
     const c2=G.heatCircuits([A,B,Cr],loops,{pitch:0.2});
     t('no manifold → loops only, no routing',c2.length===2&&c2.every(c=>!c.routed&&!c.missing));
     // the page: power, pause, loop: false, the manifold
@@ -919,6 +933,21 @@ const ev=(el,type,o)=>el.dispatchEvent(new w.MouseEvent(type,Object.assign({bubb
     t('a colour temperature → light.turn_on with color_temp_kelvin',calls.length===1&&calls[0][0]==='light'&&calls[0][1]==='turn_on'&&calls[0][2].color_temp_kelvin===2700&&calls[0][2].entity_id==='light.living');
     calls.length=0;const br=L.querySelector('[data-lc-bri]');br.value='35';br.dispatchEvent(new w.Event('change',{bubbles:true}));
     t('the brightness slider sends on release',calls.length===1&&calls[0][2].brightness_pct===35);
+    // 7.4.2: the row follows the light after the slider is let go (it waited for the panel to be reopened — the focused slider blocked every update)
+    br.focus();
+    t('…while the light has not answered, the row shows what was sent',/35 %/.test(S.querySelector('.roc-lc .lc-r1 span').textContent));
+    const stB=clone(st);stB['light.living']=Object.assign(clone(st['light.living']),{attributes:Object.assign({},st['light.living'].attributes,{brightness:90})});
+    e.hass=Object.assign(mkHass(stB),{language:'cs',locale:{language:'cs'}});await sleep(20);
+    const rowB=S.querySelector('.roc-lc .lc-lt');
+    t('…and when the light reports a level, the row and the slider show it at once (the slider still focused)',/35 %/.test(rowB.querySelector('.lc-r1 span').textContent)&&rowB.querySelector('[data-lc-bri]').value==='35');
+    const stC=clone(st);stC['light.living']=Object.assign(clone(st['light.living']),{attributes:Object.assign({},st['light.living'].attributes,{brightness:89})});
+    e.hass=Object.assign(mkHass(stC),{language:'cs',locale:{language:'cs'}});await sleep(20);
+    const rowC=S.querySelector('.roc-lc .lc-lt');
+    t('…the reported level replaces it (35 % sent, the light says 35 %)',/35 %/.test(rowC.querySelector('.lc-r1 span').textContent)&&!e._lc.pend['light.living']&&S.querySelector('.roc-lc').contains(e.shadowRoot.activeElement));
+    const stD=clone(st);stD['light.living']=Object.assign(clone(st['light.living']),{attributes:Object.assign({},st['light.living'].attributes,{brightness:51})});
+    e.hass=Object.assign(mkHass(stD),{language:'cs',locale:{language:'cs'}});await sleep(20);
+    t('…a change from elsewhere shows at once too (20 %)',/20 %/.test(S.querySelector('.roc-lc .lc-r1 span').textContent)&&S.querySelector('.roc-lc [data-lc-bri]').value==='20');
+    e.hass=h;await sleep(20);
     calls.length=0;L.querySelector('[data-lc="all"]').click();
     t('all off',calls.length===1&&calls[0][0]==='homeassistant'&&calls[0][1]==='turn_off');
     L.querySelector('[data-lc="close"]').click();

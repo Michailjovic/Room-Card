@@ -122,7 +122,8 @@ theme's colour for a material is `overrides: {'floor.vinyl': '#…'}`.
 *(7.1.0)* Every plan room with a `climate` gets a floor heating loop, drawn by the card — no
 rendered pictures. The loop is a counter-flow spiral (supply in, return out between its laps) in
 the biggest rectangle that fits the room `margin` from its walls; the colour runs along the pipe
-from the supply's red through violet in the middle to the return's blue.
+from the supply's red through violet in the middle to the return's blue. *(7.4.2)* With a manifold, each loop
+starts in the corner where its feed comes in, the feed running straight on into the outer turn.
 
 | State of the thermostat | Drawn as |
 |---|---|

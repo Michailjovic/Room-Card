@@ -104,13 +104,26 @@ function rocLcMount(card){
     else if(k==='rgb')rocLcOn(card,[id],{rgb_color:b.getAttribute('data-v').split(',').map(Number)});
   });
   // sliders send on release (change), the label follows while dragging
+  // 7.4.2: a slider being dragged keeps its place; the row's % follows it; when it is let go the
+  // panel follows the light again (it used to wait until the panel was opened anew — the slider kept
+  // the focus, and a focused slider blocked every update)
+  el.addEventListener('pointerdown',function(e){if(e.target&&e.target.matches&&e.target.matches('input[type=range]'))L.drag=true;});
+  const endDrag=function(){if(!L.drag)return;L.drag=false;setTimeout(function(){if(card._lc===L)rocLcUpdate(card);},0);};
+  el.addEventListener('pointerup',endDrag);el.addEventListener('pointercancel',endDrag);
+  el.addEventListener('input',function(e){
+    const t=e.target;if(!t||!t.matches||!t.matches('[data-lc-bri]'))return;
+    const sp=t.closest('.lc-lt')&&t.closest('.lc-lt').querySelector('.lc-r1 span');if(sp)sp.textContent=t.value+' %';
+  });
   el.addEventListener('change',function(e){
     const t=e.target;if(!t||!t.matches)return;
+    L.drag=false;
+    if(t.matches('[data-lc-bri]')){L.pend[t.getAttribute('data-e')]={v:+t.value,at:Date.now()};setTimeout(function(){if(card._lc===L){L.sig='';rocLcUpdate(card);}},5100);} // the light never answered: show what it says
     if(t.matches('[data-lc-master]')){const S=card._hass.states,on=L.ents.filter(function(x){return S[x]&&S[x].state==='on'&&rocLcCaps(S[x]).dim;});rocLcOn(card,on.length?on:L.ents.filter(function(x){return rocLcCaps(S[x]).dim;}),{brightness_pct:+t.value});}
     else if(t.matches('[data-lc-bri]'))rocLcOn(card,[t.getAttribute('data-e')],{brightness_pct:+t.value});
+    L.sig='';rocLcUpdate(card); // the row shows the sent level until the light reports
   });
   wrap.appendChild(bd);wrap.appendChild(el);
-  L.el=el;L.bd=bd;L.lang=lang;L.sig='';
+  L.el=el;L.bd=bd;L.lang=lang;L.sig='';L.drag=false;L.pend=L.pend||{};
   const x=el.querySelector('[data-lc="close"]');if(x)try{x.focus();}catch(_){}
 }
 function rocLcUpdate(card){
@@ -125,14 +138,18 @@ function rocLcUpdate(card){
   const dims=L.ents.filter(function(x){return rocLcCaps(S[x]).dim;});
   q('[data-lc-mw]').style.display=dims.length>1?'':'none';
   const mr=q('[data-lc-master]');
-  if(mr&&card.shadowRoot.activeElement!==mr){const b=on.map(function(x){return rocHcNum(S[x].attributes.brightness);}).filter(isFinite);mr.value=String(b.length?Math.round(Math.max.apply(null,b)/2.55):100);}
+  if(mr&&!L.drag){const b=on.map(function(x){return rocHcNum(S[x].attributes.brightness);}).filter(isFinite);mr.value=String(b.length?Math.round(Math.max.apply(null,b)/2.55):100);}
   // the rows are rebuilt only when something they show changed (a slider being dragged keeps its place)
   const sig=JSON.stringify(L.ents.map(function(x){const s=S[x];return s?[s.state,s.attributes.brightness,s.attributes.rgb_color,s.attributes.color_temp_kelvin,s.attributes.supported_color_modes]:null;}));
-  if(sig===L.sig)return;L.sig=sig;
-  const act=card.shadowRoot.activeElement;if(act&&act.matches&&act.matches('[data-lc-bri]')&&el.contains(act))return;
+  if(L.drag)return; // not under the finger; the drag's end brings it up to date
+  // a value just sent is shown until the light reports it (or 5 s pass)
+  const now=Date.now(),pv=function(id,real){const p=L.pend[id];if(!p)return real;if(now-p.at>5000||(isFinite(real)&&Math.abs(real-p.v)<=1)){delete L.pend[id];return real;}return p.v;};
+  const psig=JSON.stringify(L.pend);
+  if(sig+psig===L.sig)return;L.sig=sig+psig;
+  const act=card.shadowRoot.activeElement,refocus=act&&el.contains(act)&&act.getAttribute?[act.getAttribute('data-e'),act.hasAttribute('data-lc-bri')?'[data-lc-bri]':'[data-lc="sw"]']:null;
   q('[data-lc-list]').innerHTML=L.ents.map(function(id){
     const s=S[id],a=(s&&s.attributes)||{},c=rocLcCaps(s),isOn=!!s&&s.state==='on';
-    const bri=rocHcNum(a.brightness),pct=isFinite(bri)?Math.max(1,Math.round(bri/2.55)):(isOn?100:0);
+    const bri=rocHcNum(a.brightness),pct=pv(id,isFinite(bri)?Math.max(1,Math.round(bri/2.55)):(isOn?100:0));
     const rgb=Array.isArray(a.rgb_color)?a.rgb_color:null,col=isOn?(rgb?'rgb('+rgb.join(',')+')':'#ffbe5a'):'#ffbe5a';
     const nm=L.names[id]||a.friendly_name||id;
     let h='<div class="lc-lt'+(isOn?' on':'')+'" style="--lc-c:'+col+'"><div class="lc-r1"><b>'+rocHcEsc(nm)+'</b><span>'+rocHcEsc(s?(isOn?(c.dim?pct+' %':rocLcT(lang,'on_s')):rocLcT(lang,'off_s')):'—')+'</span>'
@@ -146,6 +163,8 @@ function rocLcUpdate(card){
     }
     return h+'</div>';
   }).join('');
+  // the keyboard keeps its place across the rebuild
+  if(refocus&&refocus[0]){const n=[].slice.call(el.querySelectorAll(refocus[1])).find(function(x){return x.getAttribute('data-e')===refocus[0];});if(n)try{n.focus();}catch(_){}}
 }
 // ---- the lights lens's panel: every plan room's lights ----
 function rocFpPlanRooms(cAll,def){

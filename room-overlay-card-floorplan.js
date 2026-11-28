@@ -22,7 +22,7 @@
  */
 (function(){
 'use strict';
-const ROC_FP_VERSION='7.4.1';
+const ROC_FP_VERSION='7.4.2';
 const RFP_NS='http://www.w3.org/2000/svg';
 let rfpUid=0;
 function rfpEsc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -588,7 +588,7 @@ function rfpRoute(G,a,b,occ){
   if(pts.length>1&&Math.abs(pts[1][0]-p0[0])<1e-6)pts[0]=[p0[0],a[1]];else pts[0]=[a[0],p0[1]];
   pts.unshift(a.slice());
   pts.push(pts.length>1&&Math.abs(pts[pts.length-2][1]-pe[1])<1e-6?[b[0],pe[1]]:[pe[0],b[1]]);pts.push(b.slice());
-  return{cells:cells,pts:rfpSimplify(pts)};
+  return{cells:cells,pts:rfpSimplify(pts),cost:dist[end]};
 }
 // The circuits of a plan. polys: every room's polygon; loops: [{k (room index), poly}];
 // o: {pitch (pipe to pipe, m), margin (m), manifold ([x,y] or null), passes ([[x,y]]), passR}.
@@ -596,31 +596,45 @@ function rfpRoute(G,a,b,occ){
 function rfpHeatCircuits(polys,loops,o){
   o=o||{};
   const p=rfpNum(o.pitch)>=0.08?Math.min(0.6,rfpNum(o.pitch)):0.2,mg=rfpNum(o.margin)>=0?rfpNum(o.margin):0.25,m=o.manifold;
+  // 7.4.2: a loop starts where its feed comes in. Each field has 8 ways to lay the spiral — which
+  // corner it starts in, and whether its first run follows the field's width or its height. The
+  // feed pair arrives square to the field's edge, in line with that first run, so the supply flows
+  // straight into the spiral's outer turn and the return straight out of it. With a manifold every
+  // way is routed and the cheapest wins (before, the corner nearest the manifold won, and a feed
+  // coming in elsewhere ran along the wall to it — a doubled pipe beside the first turn).
+  const way=function(f,cx,cy,t){
+    const map=function(q){const u=t?q[1]:q[0],v=t?q[0]:q[1];return[cx?f[2]-u:f[0]+u,cy?f[3]-v:f[1]+v];};
+    const W=f[2]-f[0],H=f[3]-f[1],ap=Math.min(0.15,Math.max(0.05,mg*0.6));
+    return{map:map,w:t?H:W,h:t?W:H,entry:map([0,p/2]),pre:map([-ap,p/2])};
+  };
   const items=loops.map(function(L){
     const f=rfpMaxRect(L.poly,mg);if(!f||f[2]-f[0]<3*p||f[3]-f[1]<3*p)return null;
-    const cx=m&&Math.abs(m[0]-f[2])<Math.abs(m[0]-f[0])?1:0,cy=m&&Math.abs(m[1]-f[3])<Math.abs(m[1]-f[1])?1:0;
-    const map=function(q){return[cx?f[2]-q[0]:f[0]+q[0],cy?f[3]-q[1]:f[1]+q[1]];};
-    const c0=map([0,0]);
-    return{L:L,f:f,map:map,entry:map([0,p/2]),dist:m?Math.abs(m[0]-c0[0])+Math.abs(m[1]-c0[1]):0};
+    const ways=[];[0,1].forEach(function(cx){[0,1].forEach(function(cy){[0,1].forEach(function(t){ways.push(way(f,cx,cy,t));});});});
+    const near=m?ways.reduce(function(b,w){const d=Math.abs(m[0]-w.entry[0])+Math.abs(m[1]-w.entry[1]);return d<b?d:b;},Infinity):0;
+    // without a manifold: the corner nearest the origin, first run along the width (as before)
+    return{L:L,f:f,ways:ways,dist:near};
   }).filter(Boolean).sort(function(a,b){return a.dist-b.dist;});
   const G=m?rfpHeatGrid(polys,items.map(function(x){return x.f;}),o.passes,o.passR||0.35):null;
   const occ=G?new Float32Array(G.nx*G.ny):null;
   return items.map(function(it){
-    const f=it.f,Sc=rfpSpiralIn(f[2]-f[0],f[3]-f[1],2*p),Rc=rfpOffset(Sc,p);
-    const Sp=Sc.map(it.map),Rp=Rc.map(it.map);
-    let sup=Sp,ret=[Sp[Sp.length-1]].concat(Rp.slice().reverse()),routed=false,missing=false;
+    const f=it.f;let w=it.ways[0],r=null,routed=false,missing=false;
     if(G){
-      const r=rfpRoute(G,m,it.entry,occ);
+      it.ways.forEach(function(x){const q=rfpRoute(G,m,x.pre,occ);if(q&&(!r||q.cost<r.cost)){r=q;w=x;}});
       if(!r)missing=true;
-      else{
-        routed=true;
-        const rr=Math.ceil(p*1.15/G.g);
-        r.cells.forEach(function(c){const i=c%G.nx,j=(c-i)/G.nx;
-          for(let dj=-rr;dj<=rr;dj++)for(let di=-rr;di<=rr;di++){const ii=i+di,jj=j+dj;if(ii>=0&&jj>=0&&ii<G.nx&&jj<G.ny)occ[jj*G.nx+ii]+=25;}});
-        const A=rfpOffset(r.pts,p/2),B=rfpOffset(r.pts,-p/2),e=Sp[0];
-        const da=Math.hypot(A[A.length-1][0]-e[0],A[A.length-1][1]-e[1]),db=Math.hypot(B[B.length-1][0]-e[0],B[B.length-1][1]-e[1]);
-        sup=(da<=db?A:B).concat(Sp);ret=ret.concat((da<=db?B:A).slice().reverse());
-      }
+    }
+    const Sc=rfpSpiralIn(w.w,w.h,2*p),Rc=rfpOffset(Sc,p);
+    const Sp=Sc.map(w.map),Rp=Rc.map(w.map);
+    let sup=Sp,ret=[Sp[Sp.length-1]].concat(Rp.slice().reverse());
+    if(r){
+      routed=true;
+      const rr=Math.ceil(p*1.15/G.g);
+      r.cells.forEach(function(c){const i=c%G.nx,j=(c-i)/G.nx;
+        for(let dj=-rr;dj<=rr;dj++)for(let di=-rr;di<=rr;di++){const ii=i+di,jj=j+dj;if(ii>=0&&jj>=0&&ii<G.nx&&jj<G.ny)occ[jj*G.nx+ii]+=25;}});
+      // the last step goes square into the field: pre → entry
+      const pts=rfpSimplify(r.pts.concat([w.entry]));
+      const A=rfpOffset(pts,p/2),B=rfpOffset(pts,-p/2),e=Sp[0];
+      const da=Math.hypot(A[A.length-1][0]-e[0],A[A.length-1][1]-e[1]),db=Math.hypot(B[B.length-1][0]-e[0],B[B.length-1][1]-e[1]);
+      sup=rfpSimplify((da<=db?A:B).concat(Sp));ret=rfpSimplify(ret.concat((da<=db?B:A).slice().reverse()));
     }
     return{k:it.L.k,field:f,sup:sup,ret:ret,routed:routed,missing:missing};
   });
